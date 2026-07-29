@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
+import { ArrowDown, ArrowUp, FolderKanban, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
 import { useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { formatShortCommitHashTag } from '#/web/lib/commit-hash.ts'
 import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { getBranchWorktreeState, type BranchWorktreeRepo } from '#/web/stores/repos/worktree-state.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
@@ -25,6 +26,7 @@ interface BranchSummaryInlineProps {
   repo: BranchSummaryInlineRepo
   branch: RepoBranchState
   displayName?: string
+  branchWorkspaceMember?: boolean
   selected?: boolean
   className?: string
 }
@@ -47,21 +49,19 @@ function Delta({ direction, count, label }: { direction: 'ahead' | 'behind'; cou
   )
 }
 
-function shortHashTag(hash: string): string | null {
-  const trimmed = hash.trim()
-  return trimmed ? `#${trimmed.slice(0, 7)}` : null
-}
-
 export function BranchSummaryInline({
   repo,
   branch,
   displayName,
+  branchWorkspaceMember,
   selected = false,
   className,
 }: BranchSummaryInlineProps) {
   const t = useT()
   const isCurrent = branch.name === repo.data.currentBranch
   const hasWorktree = !!branch.worktree?.path
+  const branchWorkspaceMemberLabel =
+    hasWorktree && branchWorkspaceMember === true ? t('workspace.branch-workspace.member-badge') : null
   const worktreeState = getBranchWorktreeState(repo, branch)
   const worktreeDirty = worktreeState?.dirty ?? false
   const worktreeChangeCount =
@@ -80,13 +80,14 @@ export function BranchSummaryInline({
   const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
   const terminalBellLabel = t('terminal.bell-unread')
   const terminalOutputActiveLabel = t('terminal.output-active')
-  const commitHashTag = shortHashTag(branch.lastCommitHash)
+  const commitHashTag = formatShortCommitHashTag(branch.lastCommitHash)
   const title = [
     displayName ?? branch.name,
     commitHashTag,
     isCurrent ? t('branch-status.current') : null,
     branch.isDefault ? t('branches.default') : null,
     hasWorktree ? (worktreeDirty ? worktreeDirtyLabel : t('branches.worktree')) : null,
+    branchWorkspaceMemberLabel,
     terminalCountLabel,
     hasTerminalBell ? terminalBellLabel : null,
     hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
@@ -100,7 +101,7 @@ export function BranchSummaryInline({
 
   return (
     <div title={title} className={cn('grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2', className)}>
-      <span className="flex w-4 shrink-0 items-center justify-center">
+      <span className="workspace-list-item-leading-icon flex w-4 shrink-0 items-center justify-center transition-[opacity,transform] duration-100">
         {hasWorktree ? (
           <FolderTree size={13} className={worktreeDirty ? 'text-attention' : 'text-brand-text'} />
         ) : (
@@ -111,7 +112,7 @@ export function BranchSummaryInline({
         <div className="flex min-w-0 items-center gap-1.5">
           <span
             className={cn(
-              'min-w-0 truncate text-[13px] leading-4 font-medium',
+              'min-w-0 truncate text-sm leading-4 font-medium',
               selected ? 'text-selected-foreground' : 'text-foreground',
             )}
           >
@@ -128,6 +129,17 @@ export function BranchSummaryInline({
               {commitHashTag}
             </span>
           )}
+          {branchWorkspaceMemberLabel ? (
+            <Badge
+              data-testid="branch-workspace-member-badge"
+              variant="outline"
+              aria-label={branchWorkspaceMemberLabel}
+              title={branchWorkspaceMemberLabel}
+              className="h-4 px-1 text-muted-foreground"
+            >
+              <FolderKanban size={10} aria-hidden="true" />
+            </Badge>
+          ) : null}
           {terminalCount > 0 && (
             <Badge
               data-testid="terminal-count-badge"

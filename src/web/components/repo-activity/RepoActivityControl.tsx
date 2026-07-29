@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { Check, Loader2, RefreshCw } from 'lucide-react'
+import { Check, FolderGit2, Loader2, RefreshCw } from 'lucide-react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoEvent, RepoState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -39,6 +39,7 @@ function repoActivityControlRepoEqual(a: RepoState | undefined, b: RepoState | u
       !!b &&
       a.id === b.id &&
       a.instanceToken === b.instanceToken &&
+      a.isGitRepo === b.isGitRepo &&
       a.resources === b.resources &&
       a.operations.fetch === b.operations.fetch &&
       a.operations.manualRefresh === b.operations.manualRefresh &&
@@ -134,6 +135,7 @@ function useRepoCompletion(repoId: string): RepoCompletion | null {
 
 function RepoRefreshButton({ repo, manualSyncBusy, compact }: { repo: RepoState; manualSyncBusy: boolean; compact: boolean }) {
   const t = useT()
+  const plainWorkspace = repo.isGitRepo === false
   const label = t('action.refresh')
 
   function handleSync() {
@@ -159,7 +161,15 @@ function RepoRefreshButton({ repo, manualSyncBusy, compact }: { repo: RepoState;
       >
         {({ busy }) => (
           <>
-            <RefreshCw className={busy ? 'animate-spin' : ''} />
+            {plainWorkspace ? (
+              busy ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <FolderGit2 />
+              )
+            ) : (
+              <RefreshCw className={busy ? 'animate-spin' : ''} />
+            )}
             {!compact && label}
           </>
         )}

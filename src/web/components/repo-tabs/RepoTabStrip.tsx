@@ -315,7 +315,6 @@ export function RepoTabStrip({
     focusRegistry.focus(nextId)
   }
 
-  const ids = repos.map((repo) => repo.id)
   const lastRepo = repos[repos.length - 1]
   const showOpenSeparator = !!lastRepo && lastRepo.id !== activeId && lastRepo.id !== hoveredId
 

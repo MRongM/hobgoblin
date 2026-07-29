@@ -13,6 +13,8 @@ import { Tip } from '#/web/components/Tip.tsx'
 import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
 import { runSettingsControllerAction, setProjectColorThemePreference } from '#/web/settings-write-paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { activeProjectId as selectActiveProjectId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface ProjectThemeMenuProps {
   repoId: string
@@ -59,7 +61,8 @@ export function ProjectThemeMenu({ repoId, projectColorTheme }: ProjectThemeMenu
 }
 
 export function ProjectThemeMenuConnected({ repoId }: { repoId: string }) {
+  const projectId = useReposStore((state) => selectActiveProjectId(state) ?? repoId)
   const { data } = useSettingsSnapshotQuery()
-  const projectColorTheme = repoSettingsEntryColorTheme(data?.repoSettings ?? [], repoId) ?? null
-  return <ProjectThemeMenu repoId={repoId} projectColorTheme={projectColorTheme} />
+  const projectColorTheme = repoSettingsEntryColorTheme(data?.repoSettings ?? [], projectId) ?? null
+  return <ProjectThemeMenu repoId={projectId} projectColorTheme={projectColorTheme} />
 }

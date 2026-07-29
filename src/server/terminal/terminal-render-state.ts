@@ -1,11 +1,33 @@
 import * as xtermHeadlessImport from '@xterm/headless'
 import type { SerializeAddon as XTermSerializeAddon } from '@xterm/addon-serialize'
 import { SerializeAddon } from '@xterm/addon-serialize'
-import { TERMINAL_SCROLLBACK_LINES, type TerminalSessionSnapshot, type TerminalWindowsPty } from '#/shared/terminal.ts'
+import {
+  TERMINAL_SCROLLBACK_LINES,
+  type TerminalOutputExcerpt,
+  type TerminalScreenSnapshot,
+  type TerminalScreenSnapshotInput,
+  type TerminalSessionSnapshot,
+  type TerminalWindowsPty,
+} from '#/shared/terminal.ts'
+import { normalizeTerminalOutputExcerpt, truncateTerminalOutputExcerpt } from '#/shared/terminal-output-excerpt.ts'
 
 const MAX_SESSION_BUFFER_CHARS = 16 * 1024 * 1024
 
+interface HeadlessBufferLineLike {
+  readonly isWrapped: boolean
+  translateToString(trimRight?: boolean, startColumn?: number, endColumn?: number): string
+}
+
+interface HeadlessBufferLike {
+  readonly length: number
+  readonly viewportY: number
+  getLine(y: number): HeadlessBufferLineLike | undefined
+}
+
 export interface HeadlessTerminalLike {
+  readonly buffer: { readonly active: HeadlessBufferLike }
+  readonly cols: number
+  readonly rows: number
   write(data: string | Uint8Array, callback?: () => void): void
   resize(cols: number, rows: number): void
   loadAddon(addon: XTermSerializeAddon): void
@@ -139,6 +161,76 @@ export async function snapshotTerminalRenderState(
     snapshot: state.model.serializeAddon.serialize({ excludeAltBuffer: false }),
     snapshotSeq,
   }
+}
+
+export async function readTerminalRenderOutputExcerpt(
+  sessionId: string,
+  state: TerminalRenderState,
+  maxCharacters: number,
+): Promise<TerminalOutputExcerpt | null> {
+  const model = state.model
+  if (!model || !Number.isInteger(maxCharacters) || maxCharacters < 1) return null
+  const sequence = state.sequence
+  try {
+    await model.chain
+  } catch {}
+  if (state.model !== model) return null
+
+  const buffer = model.term.buffer.active
+  let output: string | undefined
+  let wrappedParts: string[] = []
+
+  for (let index = buffer.length - 1; index >= 0; index -= 1) {
+    const line = buffer.getLine(index)
+    if (!line) continue
+    wrappedParts.unshift(line.translateToString(true))
+    if (line.isWrapped && index > 0) continue
+
+    const logicalLine = normalizeTerminalOutputExcerpt(wrappedParts.join(''))
+    wrappedParts = []
+    if (!logicalLine) continue
+    output = truncateTerminalOutputExcerpt(output ? `${logicalLine} ${output}` : logicalLine, maxCharacters)
+    if (output && Array.from(output).length >= maxCharacters) break
+  }
+
+  return { sessionId, output: output ?? '', sequence }
+}
+
+export async function readTerminalRenderScreenSnapshot(
+  sessionId: string,
+  state: TerminalRenderState,
+  input: TerminalScreenSnapshotInput,
+): Promise<TerminalScreenSnapshot | null> {
+  const model = state.model
+  if (
+    !model ||
+    input.sessionId !== sessionId ||
+    !Number.isInteger(input.maxColumns) ||
+    input.maxColumns < 1 ||
+    !Number.isInteger(input.maxRows) ||
+    input.maxRows < 1
+  ) {
+    return null
+  }
+  const sequence = state.sequence
+  try {
+    await model.chain
+  } catch {}
+  if (state.model !== model) return null
+
+  const buffer = model.term.buffer.active
+  const columns = Math.min(model.term.cols, input.maxColumns)
+  const rows = Math.min(model.term.rows, input.maxRows)
+  const viewportStart = Math.max(0, buffer.viewportY)
+  const viewportEnd = Math.min(buffer.length, viewportStart + model.term.rows)
+  const firstRow = Math.max(viewportStart, viewportEnd - rows)
+  const lines: string[] = []
+  for (let index = firstRow; index < viewportEnd; index += 1) {
+    lines.push(buffer.getLine(index)?.translateToString(true, 0, columns) ?? '')
+  }
+  while (lines.length < rows) lines.push('')
+
+  return { sessionId, lines, columns, rows, sequence }
 }
 
 export function resetTerminalRenderState(state: TerminalRenderState): void {

@@ -1,10 +1,32 @@
 import type { WorkspaceConfig, WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
 import type {
-  WorkspaceWorktreeBatchResult,
-  WorkspaceWorktreePlanRequest,
-  WorkspaceWorktreePlanResult,
-} from '#/shared/workspace-worktrees.ts'
+  BranchWorkspaceExecuteInput,
+  BranchWorkspaceExecuteResult,
+  BranchWorkspacePlanRequest,
+  BranchWorkspacePlanResult,
+  BranchWorkspaceReadResult,
+  BranchWorkspaceRegistryCleanupResult,
+  BranchWorkspaceReorderResult,
+} from '#/shared/branch-workspaces.ts'
+import type {
+  BranchWorkspaceGitActionExecuteInput,
+  BranchWorkspaceGitActionPlanRequest,
+  BranchWorkspaceGitActionPlanResult,
+  BranchWorkspaceGitActionResult,
+} from '#/shared/branch-workspace-git-actions.ts'
+import type {
+  BranchWorkspaceDependencyExecuteInput,
+  BranchWorkspaceDependencyExecuteResult,
+  BranchWorkspaceDependencyPlanRequest,
+  BranchWorkspaceDependencyPlanResult,
+  BranchWorkspaceDependencyReadResult,
+} from '#/shared/branch-workspace-dependencies.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
+import type {
+  WorkspacePullExecuteInput,
+  WorkspacePullPlanResult,
+  WorkspacePullResult,
+} from '#/shared/workspace-pull.ts'
 
 export async function discoverWorkspace(rootPath: string): Promise<WorkspaceDiscoveryResult> {
   return await postServerJson('/api/workspace/discover', { rootPath })
@@ -18,20 +40,100 @@ export async function configureWorkspace(rootPath: string, config: WorkspaceConf
   return await postServerJson('/api/workspace/configure', { rootPath, config })
 }
 
-export async function planWorkspaceWorktree(
-  rootPath: string,
-  request: WorkspaceWorktreePlanRequest,
-): Promise<WorkspaceWorktreePlanResult> {
-  return await postServerJson('/api/workspace/worktrees/plan', { rootPath, request })
+export async function readBranchWorkspaces(rootId: string, signal?: AbortSignal): Promise<BranchWorkspaceReadResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/read', { rootId }, { signal })
 }
 
-export async function executeWorkspaceWorktree(
-  rootPath: string,
-  input: { planToken: string; approveBootstrap: boolean },
-): Promise<WorkspaceWorktreeBatchResult> {
-  return await postServerJson('/api/workspace/worktrees/execute', { rootPath, ...input })
+export async function cleanupBranchWorkspaceRegistry(
+  rootId: string,
+): Promise<BranchWorkspaceRegistryCleanupResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/cleanup', { rootId })
 }
 
-export async function abortWorkspaceWorktree(rootPath: string): Promise<{ ok: boolean }> {
-  return await postServerJson('/api/workspace/worktrees/abort', { rootPath })
+export async function planBranchWorkspace(
+  rootId: string,
+  request: BranchWorkspacePlanRequest,
+): Promise<BranchWorkspacePlanResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/plan', { rootId, request })
+}
+
+export async function executeBranchWorkspace(
+  rootId: string,
+  input: BranchWorkspaceExecuteInput,
+): Promise<BranchWorkspaceExecuteResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/execute', { rootId, ...input })
+}
+
+export async function abortBranchWorkspace(rootId: string): Promise<{ ok: boolean }> {
+  return await postServerJson('/api/workspace/branch-workspaces/abort', { rootId })
+}
+
+export async function reorderBranchWorkspaces(
+  rootId: string,
+  orderedIds: string[],
+): Promise<BranchWorkspaceReorderResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/reorder', { rootId, orderedIds })
+}
+
+export async function readBranchWorkspaceDependencies(
+  rootId: string,
+  branchWorkspaceId: string,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceDependencyReadResult> {
+  return await postServerJson(
+    '/api/workspace/branch-workspaces/dependencies/read',
+    { rootId, branchWorkspaceId },
+    { signal },
+  )
+}
+
+export async function planBranchWorkspaceDependencies(
+  rootId: string,
+  request: BranchWorkspaceDependencyPlanRequest,
+): Promise<BranchWorkspaceDependencyPlanResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/dependencies/plan', { rootId, request })
+}
+
+export async function executeBranchWorkspaceDependencies(
+  rootId: string,
+  input: BranchWorkspaceDependencyExecuteInput,
+): Promise<BranchWorkspaceDependencyExecuteResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/dependencies/execute', { rootId, input })
+}
+
+export async function abortBranchWorkspaceDependencies(rootId: string): Promise<{ ok: boolean }> {
+  return await postServerJson('/api/workspace/branch-workspaces/dependencies/abort', { rootId })
+}
+
+export async function planBranchWorkspaceGitAction(
+  rootId: string,
+  request: BranchWorkspaceGitActionPlanRequest,
+): Promise<BranchWorkspaceGitActionPlanResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request })
+}
+
+export async function executeBranchWorkspaceGitAction(
+  rootId: string,
+  input: BranchWorkspaceGitActionExecuteInput,
+): Promise<BranchWorkspaceGitActionResult | { ok: false; message: string }> {
+  return await postServerJson('/api/workspace/branch-workspaces/git-actions/execute', { rootId, input })
+}
+
+export async function abortBranchWorkspaceGitAction(rootId: string): Promise<{ ok: boolean }> {
+  return await postServerJson('/api/workspace/branch-workspaces/git-actions/abort', { rootId })
+}
+
+export async function planWorkspacePull(rootId: string): Promise<WorkspacePullPlanResult> {
+  return await postServerJson('/api/workspace/pull/plan', { rootId })
+}
+
+export async function executeWorkspacePull(
+  rootId: string,
+  input: WorkspacePullExecuteInput,
+): Promise<WorkspacePullResult> {
+  return await postServerJson('/api/workspace/pull/execute', { rootId, ...input })
+}
+
+export async function abortWorkspacePull(rootId: string): Promise<{ ok: boolean }> {
+  return await postServerJson('/api/workspace/pull/abort', { rootId })
 }

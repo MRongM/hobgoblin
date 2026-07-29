@@ -57,6 +57,62 @@ export async function getDefaultBranch(cwd: string, options?: { signal?: AbortSi
   }
 }
 
+const BRANCH_CREATED_FROM_CONFIG_SUFFIX = '.hobgoblin-created-from'
+export const BRANCH_CREATED_FROM_CONFIG_PATTERN = '^branch\\..*\\.hobgoblin-created-from$'
+
+export function branchCreatedFromConfigKey(branch: string): string {
+  return `branch.${branch}${BRANCH_CREATED_FROM_CONFIG_SUFFIX}`
+}
+
+export async function recordBranchCreatedFrom(
+  cwd: string,
+  branch: string,
+  createdFrom: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isSafeBranchName(branch) || !isSafeBranchName(createdFrom) || signal?.aborted) return
+  try {
+    await git(cwd, ['config', '--local', branchCreatedFromConfigKey(branch), createdFrom], { signal })
+  } catch {
+    // Provenance is optional metadata; branch creation remains successful.
+  }
+}
+
+export function parseBranchCreatedFromConfig(output: string): Map<string, string> {
+  const result = new Map<string, string>()
+  for (const line of output.split('\n')) {
+    const separator = line.indexOf(' ')
+    if (separator <= 0) continue
+    const key = line.slice(0, separator)
+    const createdFrom = line.slice(separator + 1).trim()
+    if (!key.startsWith('branch.') || !key.endsWith(BRANCH_CREATED_FROM_CONFIG_SUFFIX)) continue
+    const branch = key.slice('branch.'.length, -BRANCH_CREATED_FROM_CONFIG_SUFFIX.length)
+    if (isSafeBranchName(branch) && isSafeBranchName(createdFrom)) result.set(branch, createdFrom)
+  }
+  return result
+}
+
+export function markBranchCreatedFrom(
+  branches: BranchSnapshotInfo[],
+  createdFromByBranch: ReadonlyMap<string, string>,
+): BranchSnapshotInfo[] {
+  if (createdFromByBranch.size === 0) return branches
+  return branches.map((branch) => {
+    const createdFrom = createdFromByBranch.get(branch.name)
+    return createdFrom ? { ...branch, createdFrom } : branch
+  })
+}
+
+async function getBranchCreatedFromConfig(cwd: string, signal?: AbortSignal): Promise<Map<string, string>> {
+  if (signal?.aborted) return new Map()
+  try {
+    const output = await git(cwd, ['config', '--local', '--get-regexp', BRANCH_CREATED_FROM_CONFIG_PATTERN], { signal })
+    return parseBranchCreatedFromConfig(output)
+  } catch {
+    return new Map()
+  }
+}
+
 export function prioritizeDefaultBranch(branches: BranchSnapshotInfo[], defaultBranch: string): BranchSnapshotInfo[] {
   if (!defaultBranch) return branches
   const idx = branches.findIndex((branch) => branch.name === defaultBranch)
@@ -72,37 +128,6 @@ export function markDefaultBranch(branches: BranchSnapshotInfo[], defaultBranch:
     const { isDefault: _isDefault, ...rest } = branch
     return rest
   })
-}
-
-export function markMergedToDefault(
-  branches: BranchSnapshotInfo[],
-  defaultBranch: string,
-  mergedBranches: Set<string>,
-): BranchSnapshotInfo[] {
-  if (!defaultBranch) return branches
-  return branches.map((branch) => ({
-    ...branch,
-    mergedToDefault: branch.name === defaultBranch || mergedBranches.has(branch.name),
-  }))
-}
-
-async function getMergedBranchNames(
-  cwd: string,
-  defaultBranch: string,
-  signal?: AbortSignal,
-): Promise<Set<string> | null> {
-  if (!isSafeBranchName(defaultBranch)) return null
-  try {
-    const output = await git(cwd, ['branch', '--format=%(refname:short)', '--merged', defaultBranch], { signal })
-    return new Set(
-      output
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
-    )
-  } catch {
-    return null
-  }
 }
 
 export async function getBranches(
@@ -121,19 +146,15 @@ export async function getBranches(
       '%(upstream:track)',
     ].join(FIELD_SEP)
 
-    const [output, currentBranch, defaultBranch] = await Promise.all([
+    const [output, currentBranch, defaultBranch, createdFromByBranch] = await Promise.all([
       git(cwd, ['for-each-ref', `--format=${format}`, 'refs/heads/'], { signal: options?.signal }),
       getCurrentBranch(cwd, { signal: options?.signal }),
       getDefaultBranch(cwd, { signal: options?.signal }),
+      getBranchCreatedFromConfig(cwd, options?.signal),
     ])
     if (options?.signal?.aborted) return []
-    const mergedBranchNames = await getMergedBranchNames(cwd, defaultBranch, options?.signal)
-    if (options?.signal?.aborted) return []
-    const branches = markDefaultBranch(parseBranches(output, currentBranch, worktrees), defaultBranch)
-    return prioritizeDefaultBranch(
-      mergedBranchNames ? markMergedToDefault(branches, defaultBranch, mergedBranchNames) : branches,
-      defaultBranch,
-    )
+    const branches = markBranchCreatedFrom(parseBranches(output, currentBranch, worktrees), createdFromByBranch)
+    return prioritizeDefaultBranch(markDefaultBranch(branches, defaultBranch), defaultBranch)
   } catch {
     return []
   }
@@ -152,7 +173,9 @@ export async function createBranch(
 ): Promise<ExecResult> {
   if (!isSafeBranchName(branch) || !isSafeBranchName(baseBranch))
     return { ok: false, message: 'error.invalid-arguments' }
-  return gitResultWithOptions(cwd, { signal }, 'branch', '--', branch, baseBranch)
+  const created = await gitResultWithOptions(cwd, { signal }, 'branch', '--', branch, baseBranch)
+  if (created.ok) await recordBranchCreatedFrom(cwd, branch, baseBranch, signal)
+  return created
 }
 
 export async function createTrackingBranch(
@@ -164,7 +187,9 @@ export async function createTrackingBranch(
   if (!isSafeBranchName(localBranch) || !isRemoteTrackingRef(remoteRef)) {
     return { ok: false, message: 'error.invalid-arguments' }
   }
-  return gitResultWithOptions(cwd, { signal }, 'branch', '--track', '--', localBranch, remoteRef)
+  const created = await gitResultWithOptions(cwd, { signal }, 'branch', '--track', '--', localBranch, remoteRef)
+  if (created.ok) await recordBranchCreatedFrom(cwd, localBranch, remoteRef, signal)
+  return created
 }
 
 export async function deleteBranch(

@@ -1,5 +1,4 @@
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
-import type { SettingsPage } from '#/shared/rpc.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 import type {
   SaveClipboardBinaryFilesInput,
@@ -11,7 +10,9 @@ import type {
   FileTreeClipboardWriteResult,
 } from '#/shared/file-tree-clipboard.ts'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
-const PROJECT_GITHUB_URL = 'https://github.com/nano-props/goblin'
+import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
+import { openWebDetachedFileAreaWindow } from '#/web/lib/web-detached-file-area.ts'
+const PROJECT_GITHUB_URL = 'https://github.com/MRongM/hobgoblin'
 
 function nativeShell() {
   try {
@@ -47,6 +48,32 @@ export function hasNativeFilePicker(): boolean {
 
 export function canUseGlobalShortcutSettings(): boolean {
   return canUseNativeRpcBridge()
+}
+
+export function canOpenDetachedFileAreaWindow(): boolean {
+  try {
+    const bridge = getRendererBridge()
+    return bridge.kind() === 'web' || bridge.hasCapability('open-detached-file-area-window')
+  } catch {
+    return false
+  }
+}
+
+export async function openDetachedFileAreaWindow(
+  input: DetachedFileAreaWindowRequest,
+): Promise<OpenDetachedFileAreaWindowResult> {
+  try {
+    const bridge = getRendererBridge()
+    if (bridge.kind() === 'web') return openWebDetachedFileAreaWindow(input)
+    return (
+      (await bridge.shell()?.openDetachedFileAreaWindow?.(input)) ?? {
+        ok: false,
+        message: 'error.unsupported-native-bridge',
+      }
+    )
+  } catch {
+    return { ok: false, message: 'error.unsupported-native-bridge' }
+  }
 }
 
 export function homeDirectory(): string {
@@ -118,10 +145,6 @@ async function openExternalUrlWithPolicy(url: string, allowHttp: boolean): Promi
   const shell = nativeShell()
   if (shell?.openExternalUrl) return await shell.openExternalUrl({ url, allowHttp })
   return openExternalUrlInBrowser(url, allowHttp)
-}
-
-export async function openAppSettings(page: SettingsPage = 'general'): Promise<boolean> {
-  return (await nativeShell()?.openSettingsWindow?.({ page })) ?? false
 }
 
 export async function openProjectGitHub(): Promise<ExecResult> {

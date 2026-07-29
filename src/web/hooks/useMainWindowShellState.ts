@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { createMainWindowNavigationActions } from '#/web/main-window-navigation-actions.ts'
 import { useAppOverlays } from '#/web/hooks/useAppOverlays.ts'
-import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import {
@@ -21,9 +20,8 @@ export function useMainWindowShellState({
   routeSettingsPage = null,
   onRouteSettingsPageChange,
 }: UseMainWindowShellStateOptions) {
-  const uiMode = useResponsiveUiMode()
   const [closeRepoCandidateId, setCloseRepoCandidateId] = useState<string | null>(null)
-  const { activeId, sessionReady, detailCollapsed, detailFocusMode, workspaceLayout, order } = useStoreWithEqualityFn(
+  const { activeId, sessionReady, detailCollapsed, workspaceLayout } = useStoreWithEqualityFn(
     useReposStore,
     mainWindowWorkspaceStateFromStore,
     mainWindowWorkspaceStateEqual,
@@ -37,7 +35,7 @@ export function useMainWindowShellState({
     mainWindowNavigationStoreActionsEqual,
   )
   const overlays = useAppOverlays()
-  const workspaceBehavior = repoWorkspaceBehavior(workspaceLayout, detailCollapsed, detailFocusMode)
+  const workspaceBehavior = repoWorkspaceBehavior(workspaceLayout, detailCollapsed)
   const visibleRepoId = activeId
   const settingsOpen = routeSettingsPage !== null
   const closeRepoConfirmationOpen = closeRepoCandidateId !== null
@@ -73,7 +71,6 @@ export function useMainWindowShellState({
     () =>
       createMainWindowNavigationActions({
         activeId,
-        order,
         setActive,
         activateProject,
         closeRepo: requestCloseRepo,
@@ -82,17 +79,7 @@ export function useMainWindowShellState({
         setDetailTab,
         onOpenSettings: openSettings,
       }),
-    [
-      activeId,
-      activateProject,
-      cycleActive,
-      openSettings,
-      order,
-      requestCloseRepo,
-      selectBranch,
-      setActive,
-      setDetailTab,
-    ],
+    [activeId, activateProject, cycleActive, openSettings, requestCloseRepo, selectBranch, setActive, setDetailTab],
   )
   const closeRepoConfirmation = useMemo(
     () => ({

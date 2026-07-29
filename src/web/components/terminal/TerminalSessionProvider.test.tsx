@@ -2,6 +2,7 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
 import { TerminalSessionProvider } from '#/web/components/terminal/TerminalSessionProvider.tsx'
@@ -28,7 +29,10 @@ import type {
 } from '#/web/components/terminal/types.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalCreateInput,
+  TerminalOpenTmuxSessionsResult,
+  TerminalOpenTmuxSessionsInput,
   TerminalExitEvent,
   TerminalAttachResult,
   TerminalOutputEvent,
@@ -58,6 +62,14 @@ const mockSessions = vi.hoisted(
 const runtimeTerminalSettingsMock = vi.hoisted(() => ({
   fontFamily: 'mono' as 'mono' | 'maple' | 'system',
   terminalThemeSyncEnabled: true,
+}))
+
+const branchWorkspaceMocks = vi.hoisted(() => ({
+  readBranchWorkspaces: vi.fn(),
+}))
+
+vi.mock('#/web/workspace-client.ts', () => ({
+  readBranchWorkspaces: branchWorkspaceMocks.readBranchWorkspaces,
 }))
 
 vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
@@ -246,7 +258,6 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
     fontFamily: runtimeTerminalSettingsMock.fontFamily,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtons: [],
     terminalFontSize: 14,
@@ -278,8 +289,11 @@ const listSessionsMock = vi.fn<(...args: Array<{ repoRoot: string }>) => Promise
 const getSessionSnapshotMock = vi.fn<
   (...args: Array<{ sessionId: string }>) => Promise<TerminalSessionSnapshot | null>
 >(async () => null)
-const closeMock = vi.fn(async () => true)
+const closeMock = vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true }))
 const createTerminalMock = vi.fn<(input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>>()
+const openTmuxSessionsMock = vi.fn<
+  (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalOpenTmuxSessionsResult>
+>()
 let managedServerSessions: TerminalSessionSummary[] = []
 
 function attachResult(): TerminalAttachResult {
@@ -317,8 +331,16 @@ beforeEach(() => {
   getSessionSnapshotMock.mockReset()
   getSessionSnapshotMock.mockResolvedValue(null)
   closeMock.mockReset()
-  closeMock.mockResolvedValue(true)
+  closeMock.mockResolvedValue({ ok: true })
   createTerminalMock.mockReset()
+  openTmuxSessionsMock.mockReset()
+  branchWorkspaceMocks.readBranchWorkspaces.mockReset()
+  branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({
+    ok: true,
+    rootId: REPO_ID,
+    items: [],
+    auxiliaryCandidates: [],
+  })
   createTerminalMock.mockImplementation(async (input) => {
     const currentSessions = await listSessionsMock({ repoRoot: input.repoRoot })
     const terminalId =
@@ -391,6 +413,7 @@ beforeEach(() => {
       sessions: managedServerSessions,
     }
   })
+  openTmuxSessionsMock.mockImplementation(async () => ({ ok: true, restored: 0, sessions: managedServerSessions }))
   resetReposStore()
   window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
   mainWindowQueryClient.clear()
@@ -531,6 +554,7 @@ beforeEach(() => {
       })),
       close: closeMock,
       create: createTerminalMock,
+      openTmuxSessions: openTmuxSessionsMock,
       pruneTerminals: vi.fn(async () => ({ pruned: 0, remaining: 0 })),
       listSessions: listSessionsMock,
       getSessionSnapshot: getSessionSnapshotMock,
@@ -590,7 +614,7 @@ describe('TerminalSessionProvider', () => {
       const base = { repoRoot: REPO_ID, branch: 'feature/worktree', worktreePath: WORKTREE_PATH }
       await act(async () => {
         await getContext().createTerminal(base)
-        await getContext().createTerminal(base)
+        await getContext().createTerminal(base, 'tmux-if-available')
       })
 
       expect(createTerminalMock).toHaveBeenCalledTimes(2)
@@ -600,10 +624,23 @@ describe('TerminalSessionProvider', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        launchMode: 'native',
       })
       expect(createTerminalMock).toHaveBeenNthCalledWith(2, {
         ...base,
         kind: 'additional',
+        attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
+        launchMode: 'tmux-if-available',
+      })
+      expect(openTmuxSessionsMock).not.toHaveBeenCalled()
+
+      await act(async () => {
+        await getContext().restoreTmuxSessions(base)
+      })
+      expect(openTmuxSessionsMock).toHaveBeenCalledWith({
+        ...base,
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
@@ -709,7 +746,7 @@ describe('TerminalSessionProvider', () => {
       detailTab: 'terminal',
     })
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
-    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+    const { getContext, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
 
     try {
       const base = { repoRoot: REPO_ID, branch: 'feature/worktree', worktreePath: WORKTREE_PATH }
@@ -962,7 +999,7 @@ describe('TerminalSessionProvider', () => {
       snapshotSeq: 5,
     })
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
-    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+    const { getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
 
     try {
       await act(async () => {
@@ -1113,6 +1150,80 @@ describe('TerminalSessionProvider', () => {
       ])
       expect(useReposStore.getState().selectedTerminalByWorktree).toMatchObject({
         [terminalWorktreeKey]: `${REPO_ID}\u0000${WORKTREE_PATH}\u0000terminal-1`,
+      })
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('reconciles server sessions for query-owned branch workspace folders', async () => {
+    const branchWorkspacePath = `${REPO_ID}/goblin-feature`
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+    branchWorkspaceMocks.readBranchWorkspaces.mockResolvedValue({
+      ok: true,
+      rootId: REPO_ID,
+      auxiliaryCandidates: [],
+      items: [
+        {
+          id: 'branch-1',
+          rootId: REPO_ID,
+          branch: 'feature/auth',
+          directoryName: 'goblin-feature',
+          path: branchWorkspacePath,
+          state: { kind: 'ready' },
+          available: true,
+          issues: [],
+          repositories: [],
+          auxiliaryEntries: [],
+        },
+      ],
+    })
+    managedServerSessions = [
+      {
+        sessionId: 'branch-session',
+        key: `${REPO_ID}\u0000${branchWorkspacePath}\u0000terminal-1`,
+        cwd: branchWorkspacePath,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        processName: 'zsh',
+        canonicalTitle: null,
+        cols: 80,
+        rows: 24,
+        displayOrder: 1,
+        phase: 'open',
+        message: null,
+      },
+    ]
+
+    const { getProbe, unmount } = await renderProviderWithProbe(
+      worktreeTerminalKey(REPO_ID, branchWorkspacePath),
+      REPO_ID,
+    )
+    try {
+      await vi.waitFor(() => expect(getProbe().count).toBe(1))
+      expect(mockSessions.at(-1)?.descriptor).toMatchObject({
+        repoRoot: REPO_ID,
+        branch: 'feature/auth',
+        worktreePath: branchWorkspacePath,
       })
     } finally {
       await unmount()
@@ -1369,6 +1480,53 @@ describe('TerminalSessionProvider', () => {
       const secondSession = mockSessions.find((session) => session.descriptor.worktreePath === SECOND_WORKTREE_PATH)
       if (!firstSession || !secondSession) throw new Error('missing terminal mock sessions')
       expect(firstSession.focus).not.toHaveBeenCalled()
+      expect(secondSession.focus).toHaveBeenCalledTimes(1)
+    } finally {
+      await unmount()
+    }
+  })
+
+  test('restores terminal detail after switching to a worktree with a running terminal', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } }),
+        createRepoBranch('feature/other', { worktree: { path: SECOND_WORKTREE_PATH } }),
+      ],
+      selectedBranch: 'feature/worktree',
+      detailTab: 'status',
+    })
+    managedServerSessions = [
+      {
+        sessionId: 'server_session_2',
+        key: `${REPO_ID}\u0000${SECOND_WORKTREE_PATH}\u0000terminal-1`,
+        cwd: SECOND_WORKTREE_PATH,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        processName: 'zsh',
+        canonicalTitle: null,
+        cols: 80,
+        rows: 24,
+        displayOrder: 1,
+        phase: 'open',
+        message: null,
+      },
+    ]
+    listSessionsMock.mockImplementation(async () => managedServerSessions)
+    const { unmount } = await renderProviderWithProbe(worktreeTerminalKey(REPO_ID, WORKTREE_PATH), REPO_ID)
+
+    try {
+      await vi.waitFor(() => expect(listSessionsMock).toHaveBeenCalledWith({ repoRoot: REPO_ID }))
+
+      await act(async () => {
+        useReposStore.getState().selectBranch(REPO_ID, 'feature/other')
+        await Promise.resolve()
+      })
+
+      await vi.waitFor(() => {
+        expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('terminal')
+      })
+      const secondSession = mockSessions.find((session) => session.descriptor.worktreePath === SECOND_WORKTREE_PATH)
+      if (!secondSession) throw new Error('missing target terminal mock session')
       expect(secondSession.focus).toHaveBeenCalledTimes(1)
     } finally {
       await unmount()
@@ -1699,7 +1857,7 @@ describe('TerminalSessionProvider', () => {
       snapshotSeq: 7,
     })
     const terminalWorktreeKey = worktreeTerminalKey(REPO_ID, WORKTREE_PATH)
-    const { getContext, getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
+    const { getProbe, unmount } = await renderProviderWithProbe(terminalWorktreeKey)
 
     try {
       await act(async () => {
@@ -1949,9 +2107,11 @@ async function renderProvider(currentRepoId: string | null = REPO_ID): Promise<{
 
   await act(async () => {
     root.render(
-      <TerminalSessionProvider currentRepoId={currentRepoId}>
-        <CaptureContext onContext={(value) => (context = value)} />
-      </TerminalSessionProvider>,
+      <QueryClientProvider client={mainWindowQueryClient}>
+        <TerminalSessionProvider currentRepoId={currentRepoId}>
+          <CaptureContext onContext={(value) => (context = value)} />
+        </TerminalSessionProvider>
+      </QueryClientProvider>,
     )
   })
 
@@ -2009,10 +2169,12 @@ async function renderProviderWithProbe(
 
   await act(async () => {
     root.render(
-      <TerminalSessionProvider currentRepoId={currentRepoId} syncTracker={syncTracker}>
-        <CaptureContext onContext={(value) => (context = value)} />
-        <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
-      </TerminalSessionProvider>,
+      <QueryClientProvider client={mainWindowQueryClient}>
+        <TerminalSessionProvider currentRepoId={currentRepoId} syncTracker={syncTracker}>
+          <CaptureContext onContext={(value) => (context = value)} />
+          <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
+        </TerminalSessionProvider>
+      </QueryClientProvider>,
     )
   })
 
@@ -2028,10 +2190,12 @@ async function renderProviderWithProbe(
     rerender: async (nextCurrentRepoId: string | null) => {
       await act(async () => {
         root.render(
-          <TerminalSessionProvider currentRepoId={nextCurrentRepoId} syncTracker={syncTracker}>
-            <CaptureContext onContext={(value) => (context = value)} />
-            <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
-          </TerminalSessionProvider>,
+          <QueryClientProvider client={mainWindowQueryClient}>
+            <TerminalSessionProvider currentRepoId={nextCurrentRepoId} syncTracker={syncTracker}>
+              <CaptureContext onContext={(value) => (context = value)} />
+              <CaptureGroupProbe worktreeTerminalKey={worktreeTerminalKey} onProbe={(value) => (probe = value)} />
+            </TerminalSessionProvider>
+          </QueryClientProvider>,
         )
       })
     },

@@ -92,6 +92,30 @@ describe('Toaster status colors', () => {
     expect(sonnerState.props?.toastOptions?.classNames?.toast).toContain('max-w-[calc(100vw-2rem)]')
     expect(sonnerState.props?.toastOptions?.classNames?.toast).toContain('caller-toast')
   })
+
+  test('makes toast text selectable and preserves caller text classes', () => {
+    render(
+      <Toaster
+        toastOptions={{
+          classNames: {
+            content: 'caller-content',
+            title: 'caller-title',
+            description: 'caller-description',
+          },
+        }}
+      />,
+    )
+
+    for (const [slot, callerClass] of [
+      ['content', 'caller-content'],
+      ['title', 'caller-title'],
+      ['description', 'caller-description'],
+    ] as const) {
+      expect(sonnerState.props?.toastOptions?.classNames?.[slot]).toContain('select-text')
+      expect(sonnerState.props?.toastOptions?.classNames?.[slot]).toContain('cursor-text')
+      expect(sonnerState.props?.toastOptions?.classNames?.[slot]).toContain(callerClass)
+    }
+  })
 })
 
 function render(element: ReactNode) {

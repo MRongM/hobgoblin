@@ -1,6 +1,31 @@
 import * as v from 'valibot'
 
 export const TERMINAL_SCROLLBACK_LINES = 50_000
+
+export interface TerminalOutputExcerptInput {
+  sessionId: string
+  maxCharacters: number
+}
+
+export interface TerminalOutputExcerpt {
+  sessionId: string
+  output: string
+  sequence: number
+}
+
+export interface TerminalScreenSnapshotInput {
+  sessionId: string
+  maxColumns: number
+  maxRows: number
+}
+
+export interface TerminalScreenSnapshot {
+  sessionId: string
+  lines: string[]
+  columns: number
+  rows: number
+  sequence: number
+}
 export const TERMINAL_SIZE_LIMITS = {
   minCols: 1,
   maxCols: 500,
@@ -13,6 +38,7 @@ export type TerminalSessionPhase = 'opening' | 'restarting' | 'open' | 'error' |
 export type TerminalControllerStatus = 'connected' | 'none'
 export type TerminalAttachmentRole = 'controller' | 'viewer' | 'unowned'
 export type TerminalWindowsPtyBackend = 'conpty' | 'winpty'
+export type TerminalLaunchMode = 'native' | 'tmux-if-available'
 
 export interface TerminalWindowsPty {
   backend?: TerminalWindowsPtyBackend
@@ -55,7 +81,21 @@ export interface TerminalCreateInput {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
   kind: 'primary' | 'additional'
+  launchMode?: TerminalLaunchMode
+  cols?: number
+  rows?: number
+  attachmentId?: string
+}
+
+export interface TerminalOpenTmuxSessionsInput {
+  repoRoot: string
+  branch: string
+  worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
   cols?: number
   rows?: number
   attachmentId?: string
@@ -101,6 +141,17 @@ export type TerminalCatalogMutationResult =
     })
   | { ok: false; message: string }
 
+export type TerminalOpenTmuxSessionsResult =
+  | (TerminalFirstFrame & {
+      ok: true
+      restored: number
+      action: TerminalCatalogAction
+      key: string
+      sessions: TerminalSessionSummary[]
+    })
+  | { ok: true; restored: 0; sessions: TerminalSessionSummary[] }
+  | { ok: false; message: string }
+
 export interface TerminalWriteInput {
   sessionId: string
   data: string
@@ -118,6 +169,18 @@ export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
   sessionId: string
+  closeTmuxSession?: boolean
+}
+
+export type TerminalCloseResult = { ok: true } | { ok: false; message: string }
+
+export interface TerminalCloseSessionsInput {
+  sessionIds: string[]
+}
+
+export interface TerminalCloseSessionsResult {
+  closed: string[]
+  missing: string[]
 }
 
 export interface TerminalNotifyBellInput {
@@ -152,6 +215,9 @@ export interface TerminalSessionSummary {
   phase: TerminalSessionPhase
   message: string | null
   windowsPty?: TerminalWindowsPty
+  tmuxBacked?: boolean
+  tmuxSessionName?: string
+  tmuxCloseSupported?: boolean
 }
 
 export interface TerminalSessionSnapshotInput {
@@ -207,6 +273,7 @@ export interface TerminalSocketRequestInputs {
   close: TerminalSessionInput
   'list-sessions': TerminalListSessionsInput
   create: TerminalCreateInput
+  'open-tmux-sessions': TerminalOpenTmuxSessionsInput
   prune: { repoRoot: string }
   'session-snapshot': TerminalSessionSnapshotInput
   reorder: TerminalReorderInput
@@ -218,9 +285,10 @@ export interface TerminalSocketResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
-  close: TerminalMutationResult
+  close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult
+  'open-tmux-sessions': TerminalOpenTmuxSessionsResult
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
   reorder: TerminalMutationResult
@@ -275,6 +343,7 @@ const TERMINAL_SOCKET_ACTIONS = [
   'close',
   'list-sessions',
   'create',
+  'open-tmux-sessions',
   'prune',
   'session-snapshot',
   'reorder',
@@ -325,6 +394,7 @@ const TerminalWriteInputSchema = v.object({
 const TerminalResizeInputSchema = TerminalAttachInputSchema
 const TerminalSessionInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
+  closeTmuxSession: v.optional(v.boolean()),
 })
 const TerminalListSessionsInputSchema = v.object({
   repoRoot: v.string(),
@@ -333,7 +403,20 @@ const TerminalCreateInputSchema = v.object({
   repoRoot: v.string(),
   branch: v.string(),
   worktreePath: v.string(),
+  targetKind: v.optional(v.literal('branch-workspace')),
+  branchWorkspaceId: v.optional(v.string()),
   kind: v.picklist(['primary', 'additional']),
+  launchMode: v.optional(v.unknown()),
+  cols: v.optional(TerminalColsSchema),
+  rows: v.optional(TerminalRowsSchema),
+  attachmentId: TerminalOptionalAttachmentIdSchema,
+})
+const TerminalOpenTmuxSessionsInputSchema = v.object({
+  repoRoot: v.string(),
+  branch: v.string(),
+  worktreePath: v.string(),
+  targetKind: v.optional(v.literal('branch-workspace')),
+  branchWorkspaceId: v.optional(v.string()),
   cols: v.optional(TerminalColsSchema),
   rows: v.optional(TerminalRowsSchema),
   attachmentId: TerminalOptionalAttachmentIdSchema,
@@ -362,6 +445,9 @@ const TerminalSessionSummarySchema = v.object({
   phase: TerminalSessionPhaseSchema,
   message: v.nullable(v.string()),
   windowsPty: v.optional(TerminalWindowsPtySchema),
+  tmuxBacked: v.optional(v.boolean()),
+  tmuxSessionName: v.optional(v.string()),
+  tmuxCloseSupported: v.optional(v.boolean()),
 })
 const TerminalSessionSnapshotSchema = v.object({
   sessionId: v.string(),
@@ -466,6 +552,12 @@ const TerminalClientMessageSchema = v.variant('type', [
   v.object({
     type: v.literal('request'),
     requestId: TerminalRequestIdSchema,
+    action: v.literal('open-tmux-sessions'),
+    input: TerminalOpenTmuxSessionsInputSchema,
+  }),
+  v.object({
+    type: v.literal('request'),
+    requestId: TerminalRequestIdSchema,
     action: v.literal('prune'),
     input: TerminalPruneInputSchema,
   }),
@@ -498,6 +590,10 @@ export function normalizeTerminalSize(cols: unknown, rows: unknown): { cols: num
     return null
   }
   return { cols: c, rows: r }
+}
+
+export function normalizeTerminalLaunchMode(value: unknown): TerminalLaunchMode {
+  return value === 'tmux-if-available' ? value : 'native'
 }
 
 export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
@@ -546,7 +642,15 @@ export function normalizeTerminalSocketServerMessage(value: unknown): TerminalSo
 
 export function normalizeTerminalClientMessage(value: unknown): TerminalClientMessage | null {
   const parsed = v.safeParse(TerminalClientMessageSchema, value)
-  return parsed.success ? parsed.output : null
+  if (!parsed.success) return null
+  if (parsed.output.action !== 'create') return parsed.output
+  return {
+    ...parsed.output,
+    input: {
+      ...parsed.output.input,
+      launchMode: normalizeTerminalLaunchMode(parsed.output.input.launchMode),
+    },
+  }
 }
 
 export function resolveTerminalAttachmentRole(

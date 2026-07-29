@@ -60,9 +60,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
     repoTabSummariesEqual,
   )
   const navigation = useMainWindowNavigation()
-  const currentProjectId = useReposStore((state) =>
-    activeProjectId({ activeId: currentRepoId, repos: state.repos }),
-  )
+  const currentProjectId = useReposStore((state) => activeProjectId(state) ?? currentRepoId)
   const { ensureWorkspaceOpen, reorderRepos } = useStoreWithEqualityFn(
     useReposStore,
     repoTabStoreActionsFromStore,

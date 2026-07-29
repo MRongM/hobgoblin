@@ -1,7 +1,10 @@
 import { execa } from 'execa'
+import type { ExecResult } from '#/shared/git-types.ts'
 import { statSync } from 'node:fs'
 import path from 'node:path'
+import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
 import { buildExternalRemoteTerminalInvocation, type ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
+import { normalizeTmuxSessionDescriptor, type TmuxSessionDescriptor } from '#/system/tmux-session.ts'
 
 const OPEN_TIMEOUT_MS = 10_000
 export const TERMINAL_APP_CANDIDATES = [
@@ -24,15 +27,27 @@ function isUsableDirectory(p: string): boolean {
  *  with its working directory set to `dir`. Works whether Terminal is
  *  already running or not — the path is passed as a native argument,
  *  so there are no escaping or injection concerns. */
-export async function openInAppleTerminal(p: string): Promise<{ ok: boolean; message: string }> {
-  if (!isUsableDirectory(p)) return { ok: false, message: 'error.invalid-path' }
+export async function openInAppleTerminal(
+  target: TmuxSessionDescriptor,
+  options: { useTmux?: boolean } = {},
+): Promise<{ ok: boolean; message: string }> {
+  const descriptor = normalizeTmuxSessionDescriptor(target)
+  if (!descriptor || !isUsableDirectory(descriptor.workingDirectory)) {
+    return { ok: false, message: 'error.invalid-path' }
+  }
+
+  if (options.useTmux === true) {
+    const invocation = buildManagedLocalTerminalInvocation(descriptor, options)
+    if (!invocation) return { ok: false, message: 'error.invalid-arguments' }
+    return await runCommandInAppleTerminal(invocation.shellCommand, descriptor.workingDirectory)
+  }
 
   try {
-    await execa('open', ['-a', 'Terminal', p], {
+    await execa('open', ['-a', 'Terminal', descriptor.workingDirectory], {
       timeout: OPEN_TIMEOUT_MS,
       forceKillAfterDelay: 500,
     })
-    return { ok: true, message: p }
+    return { ok: true, message: descriptor.workingDirectory }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) }
   }
@@ -40,10 +55,15 @@ export async function openInAppleTerminal(p: string): Promise<{ ok: boolean; mes
 
 export async function openRemoteInAppleTerminal(
   target: ExternalRemoteTerminalTarget,
+  options: { useTmux?: boolean } = {},
 ): Promise<{ ok: boolean; message: string }> {
-  const invocation = buildExternalRemoteTerminalInvocation(target)
+  const invocation = buildExternalRemoteTerminalInvocation(target, options)
   if (!invocation) return { ok: false, message: 'error.invalid-arguments' }
 
+  return await runCommandInAppleTerminal(invocation.shellCommand, target.workingDirectory)
+}
+
+async function runCommandInAppleTerminal(commandText: string, successMessage: string): Promise<ExecResult> {
   const script = `
     on run argv
       set commandText to item 1 of argv
@@ -55,11 +75,11 @@ export async function openRemoteInAppleTerminal(
   `
 
   try {
-    await execa('/usr/bin/osascript', ['-e', script, invocation.shellCommand], {
+    await execa('/usr/bin/osascript', ['-e', script, commandText], {
       timeout: OPEN_TIMEOUT_MS,
       forceKillAfterDelay: 500,
     })
-    return { ok: true, message: target.worktreePath }
+    return { ok: true, message: successMessage }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) }
   }

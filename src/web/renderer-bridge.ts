@@ -5,6 +5,7 @@ import { readNativeBridge } from '#/web/native-bridge.ts'
 import {
   emptyRendererBridgeBootstrap as emptyBootstrapSnapshot,
   normalizeRendererServerClientId,
+  normalizeRendererSurfaceBootstrap,
   readWebBootstrap,
 } from '#/web/renderer-bootstrap-bridge.ts'
 import {
@@ -65,18 +66,23 @@ function electronBridge(): RendererBridge {
     getBootstrap() {
       const bridge = readNativeBridge()
       const bootstrap = readWebBootstrap(readOrCreateWebTerminalClientId)
+      const runtime =
+        bridge?.runtime &&
+        (bridge.runtime.kind === 'electron' || bridge.runtime.kind === 'web') &&
+        typeof bridge.runtime.bridgeVersion === 'number' &&
+        Array.isArray(bridge.runtime.capabilities)
+          ? bridge.runtime
+          : bootstrap.runtime
       return {
-        runtime:
-          bridge?.runtime &&
-          (bridge.runtime.kind === 'electron' || bridge.runtime.kind === 'web') &&
-          typeof bridge.runtime.bridgeVersion === 'number' &&
-          Array.isArray(bridge.runtime.capabilities)
-            ? bridge.runtime
-            : bootstrap.runtime,
+        runtime,
         homeDir: typeof bridge?.homeDir === 'string' ? bridge.homeDir : bootstrap.homeDir,
+        ...(bridge?.hostPlatform || bootstrap.hostPlatform
+          ? { hostPlatform: bridge?.hostPlatform ?? bootstrap.hostPlatform }
+          : {}),
         initialI18n: bridge?.initialI18n ?? bootstrap.initialI18n ?? null,
         initialSettings: bridge?.initialSettings ?? bootstrap.initialSettings ?? null,
         initialServer: bridge?.initialServer ?? bootstrap.initialServer ?? null,
+        surface: normalizeRendererSurfaceBootstrap(bridge?.surface ?? bootstrap.surface, runtime.kind),
       }
     },
     invokeRpc(request) {

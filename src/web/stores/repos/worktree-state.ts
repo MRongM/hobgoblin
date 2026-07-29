@@ -8,6 +8,7 @@ export interface BranchWorktreeState {
   known: boolean
   isMain: boolean
   isLocked: boolean
+  isPrunable: boolean
 }
 
 export interface BranchWorktreeRepo {
@@ -40,6 +41,7 @@ export function worktreeStatesFromBranches(
       isDirty,
       changeCount,
       isLocked: snapshotWorktree.isLocked ?? prev?.isLocked,
+      isPrunable: snapshotWorktree.isPrunable ?? prev?.isPrunable,
     }
   }
   return next
@@ -70,6 +72,7 @@ export function applyStatusToWorktreeStates(
       isDirty: changeCount > 0,
       changeCount,
       isLocked: prev?.isLocked,
+      isPrunable: prev?.isPrunable,
     }
   }
   return next
@@ -91,6 +94,7 @@ export function getBranchWorktreeState(repo: BranchWorktreeRepo, branch: RepoBra
     known: status !== undefined || worktree?.isDirty !== undefined || changeCount > 0,
     isMain: worktree?.isMain ?? false,
     isLocked: worktree?.isLocked ?? false,
+    isPrunable: worktree?.isPrunable ?? false,
   }
 }
 

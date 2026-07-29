@@ -32,6 +32,7 @@ describe('renderer bootstrap seeding', () => {
     installBridge({
       initialSettings: {
         fetchIntervalSec: 300,
+        statusRefreshIntervalSec: 120,
         gitNetworkProxyEnabled: false,
         gitNetworkProxyUrl: '',
         gitNetworkTimeoutSec: 120,
@@ -39,7 +40,6 @@ describe('renderer bootstrap seeding', () => {
         shortcutsDisabled: true,
         globalShortcutDisabled: true,
         swapCloseShortcuts: true,
-        toggleDetailOnActionBarBlankClick: true,
         terminalThemeSyncEnabled: true,
         temporaryFilesDirectory: '',
         globalShortcut: 'CommandOrControl+Alt+G',
@@ -49,10 +49,8 @@ describe('renderer bootstrap seeding', () => {
         topbarHeightPx: 34,
         toolbarHeightPx: 34,
         fileTreeFontSize: 12,
-        fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
-        remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [],

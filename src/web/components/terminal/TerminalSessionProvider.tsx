@@ -13,9 +13,16 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { terminalSessionsQueryKey, terminalSessionsQueryOptions } from '#/web/terminal-session-queries.ts'
 import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessionRegistry.ts'
+import { notifyTerminalOutputCompletion } from '#/web/components/terminal/terminal-output-completion-controller.ts'
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import { repoIndexEqual, repoIndexFromRepos } from '#/web/components/terminal/terminal-repo-index.ts'
+import {
+  repoIndexEqual,
+  repoIndexFromRepos,
+  repoIndexWithBranchWorkspaces,
+} from '#/web/components/terminal/terminal-repo-index.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
@@ -27,18 +34,35 @@ interface TerminalSessionProviderProps {
   syncTracker?: RepoSyncTracker
 }
 
-export function TerminalSessionProvider({ currentRepoId, children, syncTracker: syncTrackerProp }: TerminalSessionProviderProps) {
-  const repoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
+const EMPTY_BRANCH_WORKSPACES = [] as const
+
+export function TerminalSessionProvider({
+  currentRepoId,
+  children,
+  syncTracker: syncTrackerProp,
+}: TerminalSessionProviderProps) {
+  const baseRepoIndex = useStoreWithEqualityFn(useReposStore, (s) => repoIndexFromRepos(s.repos), repoIndexEqual)
+  const workspaceRootId = useReposStore(activeWorkspaceRootId)
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspaceRootId ?? '')
+  const branchWorkspaces = branchWorkspaceQuery.data?.ok ? branchWorkspaceQuery.data.items : EMPTY_BRANCH_WORKSPACES
+  const repoIndex = useMemo(
+    () => repoIndexWithBranchWorkspaces(baseRepoIndex, branchWorkspaces),
+    [baseRepoIndex, branchWorkspaces],
+  )
   const { terminalFontSize, terminalThemeSyncEnabled = true } = useRuntimeTerminalSettings()
   const terminalThemeMode = terminalThemeSyncEnabled ? 'theme' : 'classic'
   const currentRepoInstanceToken = currentRepoId ? (repoIndex[currentRepoId]?.instanceToken ?? null) : null
+  const currentRepoTerminalPaths = currentRepoId ? (repoIndex[currentRepoId]?.branchByWorktreePath ?? null) : null
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
-  const visibleTerminalWorktreeKey = useReposStore(
+  const selectedBranchName = useReposStore(
+    useCallback((s) => (currentRepoId ? (s.repos[currentRepoId]?.ui.selectedBranch ?? null) : null), [currentRepoId]),
+  )
+  const selectedTerminalWorktreeKey = useReposStore(
     useCallback(
       (s) => {
         if (!currentRepoId) return null
         const repo = s.repos[currentRepoId]
-        if (!repo || repo.ui.detailTab !== 'terminal') return null
+        if (!repo) return null
         const branch = repo.data.branches.find((candidate) => candidate.name === repo.ui.selectedBranch)
         const worktreePath = branch?.worktree?.path
         return worktreePath ? worktreeTerminalKey(repo.id, worktreePath) : null
@@ -46,15 +70,19 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       [currentRepoId],
     ),
   )
+  const terminalDetailVisible = useReposStore(
+    useCallback((s) => !!currentRepoId && s.repos[currentRepoId]?.ui.detailTab === 'terminal', [currentRepoId]),
+  )
   const setSelectedTerminal = useReposStore((s) => s.setSelectedTerminal)
+  const setDetailTab = useReposStore((s) => s.setDetailTab)
   const dismissExitedTerminalDetail = useReposStore((s) => s.dismissExitedTerminalDetail)
   const parkingRootRef = useRef<HTMLDivElement | null>(null)
   const currentRepoIdRef = useRef(currentRepoId)
   currentRepoIdRef.current = currentRepoId
   const previousCurrentRepoIdRef = useRef<string | null>(null)
-  const previousVisibleTerminalWorktreeRef = useRef<{ repoRoot: string | null; worktreeTerminalKey: string | null }>({
+  const previousSelectedBranchRef = useRef<{ repoRoot: string | null; branch: string | null }>({
     repoRoot: null,
-    worktreeTerminalKey: null,
+    branch: null,
   })
   const repoIndexRef = useRef(repoIndex)
   repoIndexRef.current = repoIndex
@@ -65,9 +93,9 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
   const registryRef = useRef<TerminalSessionRegistry | null>(null)
   if (!registryRef.current) {
     registryRef.current = new TerminalSessionRegistry(
-      () => currentRepoIdRef.current,
       setSelectedTerminal,
       (repoRoot, worktreePath) => dismissExitedTerminalDetail(repoRoot, worktreePath),
+      notifyTerminalOutputCompletion,
     )
   }
   const registry = registryRef.current
@@ -118,16 +146,17 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
   }, [registry, repoIndex, selectedTerminalByWorktree])
 
   useEffect(() => {
-    const previous = previousVisibleTerminalWorktreeRef.current
-    previousVisibleTerminalWorktreeRef.current = {
+    const previous = previousSelectedBranchRef.current
+    previousSelectedBranchRef.current = {
       repoRoot: currentRepoId,
-      worktreeTerminalKey: visibleTerminalWorktreeKey,
+      branch: selectedBranchName,
     }
-    if (!currentRepoId || !visibleTerminalWorktreeKey) return
+    if (!currentRepoId || !selectedBranchName || !selectedTerminalWorktreeKey) return
     if (previous.repoRoot !== currentRepoId) return
-    if (!previous.worktreeTerminalKey || previous.worktreeTerminalKey === visibleTerminalWorktreeKey) return
-    registry.focusSelectedTerminalForWorktree(visibleTerminalWorktreeKey)
-  }, [currentRepoId, registry, visibleTerminalWorktreeKey])
+    if (!previous.branch || previous.branch === selectedBranchName) return
+    if (!registry.focusSelectedTerminalForWorktree(selectedTerminalWorktreeKey)) return
+    if (!terminalDetailVisible) setDetailTab(currentRepoId, 'terminal')
+  }, [currentRepoId, registry, selectedBranchName, selectedTerminalWorktreeKey, setDetailTab, terminalDetailVisible])
 
   // Parking DOM
   useEffect(() => {
@@ -163,6 +192,7 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       worktreeSnapshot: registry.worktreeSnapshot,
       createTerminal: registry.createTerminal,
       selectTerminal: registry.selectTerminal,
+      waitForInputReady: registry.waitForInputReady,
       writeInput: registry.writeInput,
     })
 
@@ -204,11 +234,12 @@ export function TerminalSessionProvider({ currentRepoId, children, syncTracker: 
       window.removeEventListener('focus', handleFocus)
       offSessionsChanged()
     }
-  }, [currentRepoId, currentRepoInstanceToken, registry, syncServerSessions, syncTracker])
+  }, [currentRepoId, currentRepoInstanceToken, currentRepoTerminalPaths, registry, syncServerSessions, syncTracker])
 
   const commandValue = useMemo<TerminalSessionContextValue>(
     () => ({
       createTerminal: registry.createTerminal,
+      restoreTmuxSessions: registry.restoreTmuxSessions,
       selectTerminal: registry.selectTerminal,
       scrollToBottom: registry.scrollToBottom,
       focusTerminal: registry.focusTerminal,

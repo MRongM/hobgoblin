@@ -4,7 +4,8 @@ import pLimit from 'p-limit'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { probeRepository as probeRepositoryDefault } from '#/server/modules/repo-read-paths.ts'
-import { runRemoteCommand } from '#/system/ssh/commands.ts'
+import { isPrimaryGitWorktree } from '#/system/git/repository-role.ts'
+import { REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER, runRemoteCommand } from '#/system/ssh/commands.ts'
 import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import {
@@ -24,6 +25,7 @@ import type {
 
 interface WorkspaceDiscoveryDependencies {
   probeRepository?: (cwd: string) => Promise<ProbeResult>
+  isPrimaryWorktree?: (cwd: string) => Promise<boolean>
   readConfig?: typeof readWorkspaceConfig
   resolveRemoteTarget?: typeof resolveSshRemoteTarget
   runRemote?: typeof runRemoteCommand
@@ -110,11 +112,20 @@ async function discoverLocalWorkspaceRepositories(
     .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
     .sort((left, right) => repositoryNameCollator.compare(left.name, right.name))
   const limit = pLimit(8)
+  const excludedRepositoryNames = new Set<string>()
   const results = await Promise.all(
     directoryCandidates.map((entry) =>
       limit(async (): Promise<WorkspaceRepositoryEntry | WorkspaceDiscoveryIssue | null> => {
         const candidatePath = path.join(rootId, entry.name)
-        if (!(await hasGitMarker(candidatePath))) return null
+        const marker = await gitMarkerKind(candidatePath)
+        if (!marker) return null
+        if (
+          marker === 'file' &&
+          !(await (dependencies.isPrimaryWorktree ?? isPrimaryGitWorktree)(candidatePath).catch(() => false))
+        ) {
+          excludedRepositoryNames.add(entry.name)
+          return null
+        }
 
         const probe = await probeRepository(candidatePath).catch(() => null)
         if (!probe) return { path: candidatePath, message: 'error.failed-read-repo' }
@@ -138,7 +149,14 @@ async function discoverLocalWorkspaceRepositories(
     if ('id' in result) repositories.push(result)
     else skipped.push(result)
   }
-  return await projectWorkspaceDiscovery(rootId, repositories, skipped, dependencies, configuration)
+  return await projectWorkspaceDiscovery(
+    rootId,
+    repositories,
+    skipped,
+    dependencies,
+    configuration,
+    excludedRepositoryNames,
+  )
 }
 
 async function discoverRemoteWorkspaceRepositories(
@@ -201,7 +219,34 @@ async function discoverRemoteWorkspaceRepositories(
     if ('id' in result) repositories.push(result)
     else skipped.push(result)
   }
-  return await projectWorkspaceDiscovery(rootId, repositories, skipped, dependencies, configuration)
+  const resolvedConfiguration = configuration ?? (await readWorkspaceConfiguration(rootId, dependencies))
+  const excludedRepositoryNames = new Set<string>()
+  if (resolvedConfiguration.kind === 'ready') {
+    const discoveredNames = new Set(repositories.map((repository) => repository.name))
+    await Promise.all(
+      resolvedConfiguration.config.repo.map((name) =>
+        limit(async () => {
+          if (discoveredNames.has(name)) return
+          const ref = remoteWorkspaceChildRef(rootRef, name)
+          if (!ref) return
+          const probe = await runRemote(target, { type: 'testWorkspaceGitDirectory', path: ref.remotePath }).catch(
+            () => null,
+          )
+          if (!probe?.ok && probe?.stdout === REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER) {
+            excludedRepositoryNames.add(name)
+          }
+        }),
+      ),
+    )
+  }
+  return await projectWorkspaceDiscovery(
+    rootId,
+    repositories,
+    skipped,
+    dependencies,
+    resolvedConfiguration,
+    excludedRepositoryNames,
+  )
 }
 
 async function restoreLocalConfiguredWorkspace(
@@ -297,6 +342,7 @@ async function projectWorkspaceDiscovery(
   skipped: WorkspaceDiscoveryIssue[],
   dependencies: WorkspaceDiscoveryDependencies,
   configurationOverride?: WorkspaceConfigSnapshot,
+  excludedRepositoryNames: ReadonlySet<string> = new Set(),
 ): Promise<WorkspaceDiscoveryResult> {
   const configuration = configurationOverride ?? (await readWorkspaceConfiguration(rootId, dependencies))
   if (configuration.kind === 'missing') {
@@ -328,7 +374,7 @@ async function projectWorkspaceDiscovery(
     available: true,
   }))
   for (const name of configuration.config.repo) {
-    if (availableByName.has(name)) continue
+    if (availableByName.has(name) || excludedRepositoryNames.has(name)) continue
     const id = workspaceRepositoryId(rootId, name)
     if (!id) continue
     const remoteRef = isRemoteRepoId(rootId) ? remoteWorkspaceRefForMember(rootId, name) : null
@@ -358,9 +404,7 @@ async function readWorkspaceConfiguration(
   rootId: string,
   dependencies: WorkspaceDiscoveryDependencies,
 ): Promise<WorkspaceConfigSnapshot> {
-  return dependencies.readConfig
-    ? await dependencies.readConfig(rootId)
-    : await readWorkspaceConfig(rootId)
+  return dependencies.readConfig ? await dependencies.readConfig(rootId) : await readWorkspaceConfig(rootId)
 }
 
 function remoteWorkspaceRefForMember(rootId: string, member: string) {
@@ -369,12 +413,14 @@ function remoteWorkspaceRefForMember(rootId: string, member: string) {
   return root ? remoteWorkspaceChildRef(root, member) : null
 }
 
-async function hasGitMarker(candidatePath: string): Promise<boolean> {
+async function gitMarkerKind(candidatePath: string): Promise<'directory' | 'file' | null> {
   try {
     const marker = await lstat(path.join(candidatePath, '.git'))
-    return marker.isDirectory() || marker.isFile()
+    if (marker.isDirectory()) return 'directory'
+    if (marker.isFile()) return 'file'
+    return null
   } catch {
-    return false
+    return null
   }
 }
 

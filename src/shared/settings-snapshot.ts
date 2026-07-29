@@ -8,6 +8,7 @@ import type {
   SettingsSnapshot,
   WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
+import type { TelegramNotificationSettingsSnapshot } from '#/shared/telegram-notifications.ts'
 
 export function buildRuntimeSettingsSnapshot(input: {
   prefs: SettingsPrefs
@@ -19,6 +20,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     colorTheme: input.prefs.colorTheme,
     fontFamily: input.prefs.fontFamily,
     fetchIntervalSec: input.prefs.fetchIntervalSec,
+    statusRefreshIntervalSec: input.prefs.statusRefreshIntervalSec,
     gitNetworkProxyEnabled: input.prefs.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: input.prefs.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: input.prefs.gitNetworkTimeoutSec,
@@ -26,7 +28,6 @@ export function buildRuntimeSettingsSnapshot(input: {
     shortcutsDisabled: input.prefs.shortcutsDisabled,
     globalShortcutDisabled: input.prefs.globalShortcutDisabled,
     swapCloseShortcuts: input.prefs.swapCloseShortcuts,
-    toggleDetailOnActionBarBlankClick: input.prefs.toggleDetailOnActionBarBlankClick,
     terminalThemeSyncEnabled: input.prefs.terminalThemeSyncEnabled,
     temporaryFilesDirectory: input.prefs.temporaryFilesDirectory,
     globalShortcut: input.prefs.globalShortcut,
@@ -36,10 +37,8 @@ export function buildRuntimeSettingsSnapshot(input: {
     topbarHeightPx: input.prefs.topbarHeightPx,
     toolbarHeightPx: input.prefs.toolbarHeightPx,
     fileTreeFontSize: input.prefs.fileTreeFontSize,
-    fileTreeTopbarFontSize: input.prefs.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: input.prefs.fileTreeClipboardMaxBytesMb,
     terminalFontSize: input.prefs.terminalFontSize,
-    remoteTerminalTmuxEnabled: input.prefs.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
     terminalCustomButtonSize: input.prefs.terminalCustomButtonSize,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
@@ -61,6 +60,7 @@ export function buildSettingsSnapshot(input: {
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
   webAccess: WebAccessSettingsSnapshot
+  telegramNotifications: TelegramNotificationSettingsSnapshot
 }): SettingsSnapshot {
   return {
     ...buildRuntimeSettingsSnapshot({
@@ -71,6 +71,7 @@ export function buildSettingsSnapshot(input: {
     session: input.session,
     repoSettings: input.repoSettings,
     webAccess: input.webAccess,
+    telegramNotifications: input.telegramNotifications,
   }
 }
 
@@ -82,6 +83,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'colorTheme'
     | 'fontFamily'
     | 'fetchIntervalSec'
+    | 'statusRefreshIntervalSec'
     | 'gitNetworkProxyEnabled'
     | 'gitNetworkProxyUrl'
     | 'gitNetworkTimeoutSec'
@@ -89,7 +91,6 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'shortcutsDisabled'
     | 'globalShortcutDisabled'
     | 'swapCloseShortcuts'
-    | 'toggleDetailOnActionBarBlankClick'
     | 'terminalThemeSyncEnabled'
     | 'temporaryFilesDirectory'
     | 'globalShortcut'
@@ -99,10 +100,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'topbarHeightPx'
     | 'toolbarHeightPx'
     | 'fileTreeFontSize'
-    | 'fileTreeTopbarFontSize'
     | 'fileTreeClipboardMaxBytesMb'
     | 'terminalFontSize'
-    | 'remoteTerminalTmuxEnabled'
     | 'terminalCustomButtonsVisible'
     | 'terminalCustomButtonSize'
     | 'terminalCustomButtons'
@@ -116,6 +115,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     colorTheme: snapshot.colorTheme,
     fontFamily: snapshot.fontFamily,
     fetchIntervalSec: snapshot.fetchIntervalSec,
+    statusRefreshIntervalSec: snapshot.statusRefreshIntervalSec,
     gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: snapshot.gitNetworkTimeoutSec,
@@ -123,7 +123,6 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     shortcutsDisabled: snapshot.shortcutsDisabled,
     globalShortcutDisabled: snapshot.globalShortcutDisabled,
     swapCloseShortcuts: snapshot.swapCloseShortcuts,
-    toggleDetailOnActionBarBlankClick: snapshot.toggleDetailOnActionBarBlankClick,
     terminalThemeSyncEnabled: snapshot.terminalThemeSyncEnabled,
     temporaryFilesDirectory: snapshot.temporaryFilesDirectory,
     globalShortcut: snapshot.globalShortcut,
@@ -133,10 +132,8 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     topbarHeightPx: snapshot.topbarHeightPx,
     toolbarHeightPx: snapshot.toolbarHeightPx,
     fileTreeFontSize: snapshot.fileTreeFontSize,
-    fileTreeTopbarFontSize: snapshot.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
-    remoteTerminalTmuxEnabled: snapshot.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,

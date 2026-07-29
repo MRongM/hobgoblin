@@ -7,7 +7,6 @@ import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import {
   getRepositoryPatch,
   openRepositoryEditor,
-  openRepositoryRemote,
   openRepositoryTerminal,
 } from '#/web/repo-client.ts'
 import { openRemoteRepositoryEditor, openRemoteRepositoryTerminal } from '#/web/remote-client.ts'
@@ -38,6 +37,7 @@ export interface BranchActionCapabilities {
   isCurrent: boolean
   checkedOutInAnotherWorktree: boolean
   canRemoveWorktree: boolean
+  canCleanupWorktree: boolean
   isRegularBranch: boolean
   canCopyPatch: boolean
   canPull: boolean
@@ -53,12 +53,18 @@ export function getBranchActionCapabilities(repo: BranchActionRepo, branch: Repo
   const isProtected = PROTECTED_BRANCHES.has(branch.name)
   const isRegularBranch = !isCurrent && !branch.worktree?.path && !isProtected
   const worktreeState = getBranchWorktreeState(repo, branch)
-  const canRemoveWorktree = checkedOutInAnotherWorktree && !worktreeState?.isMain
+  const canRemoveWorktree = checkedOutInAnotherWorktree && !worktreeState?.isMain && worktreeState?.isPrunable !== true
+  const canCleanupWorktree =
+    checkedOutInAnotherWorktree &&
+    !worktreeState?.isMain &&
+    !worktreeState?.isLocked &&
+    worktreeState?.isPrunable === true
   const canCopyPatch = !!branch.worktree?.path && (worktreeState?.dirty ?? false)
   return {
     isCurrent,
     checkedOutInAnotherWorktree,
     canRemoveWorktree,
+    canCleanupWorktree,
     isRegularBranch,
     canCopyPatch,
     canPull: !!branch.tracking,
@@ -83,8 +89,10 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
   const deleteConfirm = useRetainedDialogState<string>()
   const forceDeleteConfirm = useRetainedDialogState<string>()
   const removeConfirm = useRetainedDialogState<RemoveConfirm>()
+  const cleanupConfirm = useRetainedDialogState<RemoveConfirm>()
   const forceRemoveConfirm = useRetainedDialogState<RemoveConfirm>()
   const [removeAlsoDeletes, setRemoveAlsoDeletes] = useState(true)
+  const [removeForce, setRemoveForce] = useState(false)
   const [deleteAlsoUpstream, setDeleteAlsoUpstream] = useState(false)
   const [removeAlsoUpstream, setRemoveAlsoUpstream] = useState(false)
   const hasUpstream = !!branch.tracking && !branch.trackingGone
@@ -158,7 +166,9 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     if (repo.remote.target) {
       return runUiAction('externalTerminal', () => openRemoteRepositoryTerminal(repo.id, worktreePath))
     }
-    return runUiAction('externalTerminal', () => openRepositoryTerminal(worktreePath))
+    return runUiAction('externalTerminal', () =>
+      openRepositoryTerminal({ projectRoot: repo.id, workingDirectory: worktreePath }),
+    )
   }
 
   function openEditor() {
@@ -183,8 +193,14 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
   function requestRemoveWorktree() {
     if (guardBusy() || !branch.worktree?.path) return
     setRemoveAlsoDeletes(!PROTECTED_BRANCHES.has(branch.name))
+    setRemoveForce(false)
     setRemoveAlsoUpstream(false)
     removeConfirm.openWith({ branch: branch.name, path: branch.worktree.path })
+  }
+
+  function requestCleanupWorktree() {
+    if (guardBusy() || !branch.worktree?.path) return
+    cleanupConfirm.openWith({ branch: branch.name, path: branch.worktree.path })
   }
 
   function deleteBranch(target: string, force = false, alsoDeleteUpstream = false) {
@@ -205,23 +221,25 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
 
   function removeWorktree(
     target: RemoveConfirm,
-    alsoDeleteBranch: boolean,
-    forceDeleteBranch: boolean,
-    alsoDeleteUpstream = false,
+    options: {
+      alsoDeleteBranch: boolean
+      forceRemoveWorktree: boolean
+      forceDeleteBranch: boolean
+      alsoDeleteUpstream: boolean
+    },
   ) {
     void runRepoAction(
       {
         kind: 'removeWorktree',
         branch: target.branch,
         worktreePath: target.path,
-        alsoDeleteBranch,
-        forceDeleteBranch,
-        alsoDeleteUpstream,
+        ...options,
       },
       {
-        deferResultMessages: alsoDeleteBranch && !forceDeleteBranch ? ['error.cannot-remove-unpushed-worktree'] : [],
+        deferResultMessages:
+          options.alsoDeleteBranch && !options.forceDeleteBranch ? ['error.cannot-remove-unpushed-worktree'] : [],
         handleResult: (result) => {
-          if (removeWorktreeNeedsForceConfirm(result, alsoDeleteBranch, forceDeleteBranch)) {
+          if (removeWorktreeNeedsForceConfirm(result, options.alsoDeleteBranch, options.forceDeleteBranch)) {
             forceRemoveConfirm.openWith(target)
             return true
           }
@@ -229,6 +247,14 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
         },
       },
     )
+  }
+
+  function cleanupWorktree(target: RemoveConfirm) {
+    void runRepoAction({
+      kind: 'cleanupWorktree',
+      branch: target.branch,
+      worktreePath: target.path,
+    })
   }
 
   const capabilities = getBranchActionCapabilities(repo, branch)
@@ -242,12 +268,15 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       deleteConfirm={deleteConfirm}
       forceDeleteConfirm={forceDeleteConfirm}
       removeConfirm={removeConfirm}
+      cleanupConfirm={cleanupConfirm}
       forceRemoveConfirm={forceRemoveConfirm}
       deleteAlsoUpstream={deleteAlsoUpstream}
       removeAlsoDeletes={removeAlsoDeletes}
+      removeForce={removeForce}
       removeAlsoUpstream={removeAlsoUpstream}
       setDeleteAlsoUpstream={setDeleteAlsoUpstream}
       setRemoveAlsoDeletes={setRemoveAlsoDeletes}
+      setRemoveForce={setRemoveForce}
       setRemoveAlsoUpstream={setRemoveAlsoUpstream}
       onPushConfirm={(target) => {
         void runRepoAction({ kind: 'push', branch: target })
@@ -255,8 +284,11 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       onDeleteBranch={(target, force, alsoDeleteUpstream) => {
         void deleteBranch(target, force, alsoDeleteUpstream)
       }}
-      onRemoveWorktree={(target, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream) => {
-        void removeWorktree(target, alsoDeleteBranch, forceDeleteBranch, alsoDeleteUpstream)
+      onRemoveWorktree={(target, options) => {
+        void removeWorktree(target, options)
+      }}
+      onCleanupWorktree={(target) => {
+        void cleanupWorktree(target)
       }}
     />
   )
@@ -275,6 +307,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       openRemote,
       requestDeleteBranch,
       requestRemoveWorktree,
+      requestCleanupWorktree,
     },
     dialogs,
   }

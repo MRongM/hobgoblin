@@ -10,7 +10,11 @@ import {
   TerminalSessionContext,
   TerminalSessionReadContext,
 } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
@@ -60,7 +64,6 @@ const runtimeSettingsMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
-  useRuntimeTerminalCustomButtons: () => runtimeSettingsMocks.terminalCustomButtons,
   useRuntimeTerminalSettings: () => ({
     temporaryFilesDirectory: runtimeSettingsMocks.temporaryFilesDirectory,
     terminalFontSize: runtimeSettingsMocks.terminalFontSize,
@@ -89,6 +92,138 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('does not show a loading status while terminal creation is pending without a registered session', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    let worktreeSnapshot = {
+      worktreeTerminalKey: '/repo\0/worktree',
+      selectedDescriptor: null,
+      sessions: [],
+      count: 0,
+      creating: true,
+    }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+      subscribeSnapshot: () => () => {},
+    }
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={terminalContext()}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    worktreeSnapshot = { ...worktreeSnapshot, creating: false }
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  test('does not show a loading status while the terminal opens', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    let currentWorktreeSnapshot = { ...worktreeSnapshot, creating: false }
+    let currentSnapshot: TerminalSnapshot = { ...snapshot, phase: 'opening', attachment: null }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => currentWorktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => currentSnapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    const context = terminalContext()
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    currentSnapshot = snapshot
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    currentWorktreeSnapshot = { ...currentWorktreeSnapshot, creating: true }
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  test('defers desktop autofocus until ready without showing loading, and avoids mobile autofocus', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    let currentSnapshot: TerminalSnapshot = { ...snapshot, renderPending: true }
+    const attach = vi.fn((_descriptor: Parameters<TerminalSessionContextValue['attach']>[0], host: HTMLElement) => {
+      if (!host.querySelector('textarea')) host.appendChild(document.createElement('textarea'))
+    })
+    const context = terminalContext({ attach })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => currentSnapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    const textarea = container.querySelector('textarea')
+    expect(textarea).not.toBeNull()
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+    expect(document.activeElement).not.toBe(textarea)
+
+    currentSnapshot = snapshot
+    await act(async () => renderSlot())
+    expect(container.querySelector('.goblin-terminal-slot__status-overlay')).toBeNull()
+    expect(document.activeElement).toBe(textarea)
+
+    mobileDetectionMocks.isMobileDevice = true
+    ;(textarea as HTMLTextAreaElement).blur()
+    currentSnapshot = { ...snapshot, renderPending: true }
+    await act(async () => renderSlot())
+    currentSnapshot = snapshot
+    await act(async () => renderSlot())
+    expect(document.activeElement).not.toBe(textarea)
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
   test('keeps the terminal host mounted when progress appears and clears', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
@@ -109,7 +244,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -152,7 +287,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -195,12 +330,13 @@ describe('TerminalSlot', () => {
     const snapshot = { phase: 'open' as const, message: null, processName: 'zsh' }
     const context: TerminalSessionContextValue = {
       createTerminal: vi.fn(async () => 'terminal-1'),
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       clearBell: vi.fn(() => false),
-      closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+      closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
       attach,
       detach: vi.fn(),
@@ -227,7 +363,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" onRevealPath={onRevealPath} />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" onRevealPath={onRevealPath} />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -254,7 +390,7 @@ describe('TerminalSlot', () => {
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const attach = vi.fn()
-    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
     const context = terminalContext({ attach })
     const readContext: TerminalSessionReadContextValue = {
       worktreeSnapshot: () => worktreeSnapshot,
@@ -269,7 +405,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -341,12 +477,13 @@ describe('TerminalSlot', () => {
     }
     const context: TerminalSessionContextValue = {
       createTerminal: async () => 'terminal-1',
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       clearBell: vi.fn(() => false),
-      closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+      closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
       attach: vi.fn(),
       detach: vi.fn(),
@@ -373,7 +510,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -487,12 +624,13 @@ describe('TerminalSlot', () => {
     const emptySnapshot = { phase: 'opening' as const, message: null, processName: 'terminal' }
     const context: TerminalSessionContextValue = {
       createTerminal: vi.fn(async () => 'terminal-2'),
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       clearBell: vi.fn(() => false),
-      closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+      closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
       attach: vi.fn(),
       detach: vi.fn(),
@@ -519,7 +657,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -532,7 +670,7 @@ describe('TerminalSlot', () => {
         root.render(
           <TerminalSessionContext.Provider value={context}>
             <TerminalSessionReadContext.Provider value={readContext}>
-              <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+              <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
             </TerminalSessionReadContext.Provider>
           </TerminalSessionContext.Provider>,
         )
@@ -564,11 +702,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot
-              repoRoot={descriptor.repoRoot}
-              branch={descriptor.branch}
-              worktreePath={descriptor.worktreePath}
-            />
+            <TerminalSlot repoRoot={descriptor.repoRoot} worktreePath={descriptor.worktreePath} />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -601,12 +735,13 @@ describe('TerminalSlot', () => {
     }
     const context: TerminalSessionContextValue = {
       createTerminal: vi.fn(async () => 'terminal-1'),
+      restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       clearBell: vi.fn(() => false),
-      closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+      closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
       attach: vi.fn(),
       detach: vi.fn(),
@@ -652,7 +787,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -702,7 +837,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -747,7 +882,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -790,7 +925,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -832,7 +967,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -895,7 +1030,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -964,7 +1099,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot={REMOTE_REPO_ID} branch="feature" worktreePath="/srv/repo-feature" />
+            <TerminalSlot repoRoot={REMOTE_REPO_ID} worktreePath="/srv/repo-feature" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1034,7 +1169,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1081,7 +1216,7 @@ describe('TerminalSlot', () => {
       root.render(
         <TerminalSessionContext.Provider value={context}>
           <TerminalSessionReadContext.Provider value={readContext}>
-            <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
           </TerminalSessionReadContext.Provider>
         </TerminalSessionContext.Provider>,
       )
@@ -1166,7 +1301,7 @@ async function renderTerminalSlotFixture(
     root.render(
       <TerminalSessionContext.Provider value={context}>
         <TerminalSessionReadContext.Provider value={readContext}>
-          <TerminalSlot repoRoot="/repo" branch="feature" worktreePath="/worktree" />
+          <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
@@ -1196,7 +1331,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     clearBell: vi.fn(() => false),
-    closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
     registerWorktreeHost: vi.fn(),
     attach: vi.fn(),
     detach: vi.fn(),
@@ -1210,6 +1345,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     reorderSessions: vi.fn(async () => true),
     serialize: vi.fn(() => ''),
     ...overrides,
+    restoreTmuxSessions: overrides.restoreTmuxSessions ?? vi.fn(async () => 0),
   }
 }
 

@@ -5,6 +5,8 @@ export interface RepoWorkspacePresentation {
   initialLoading: boolean
 }
 
+export type CompactWorkspaceSurface = 'detail' | 'scope' | 'files'
+
 export function getRepoWorkspacePresentation(repo: RepoState | undefined): RepoWorkspacePresentation {
   return {
     exists: !!repo,

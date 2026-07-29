@@ -2,70 +2,15 @@ import { describe, expect, test } from 'vitest'
 import {
   buildExternalRemoteTerminalInvocation,
   buildManagedRemoteTerminalInvocation,
-  buildManagedRemoteTerminalSessionName,
 } from '#/system/remote-terminal.ts'
+import { TMUX_TERMINAL_NUMBER_OPTION } from '#/system/tmux-session.ts'
 
 const BASE_MANAGED_TARGET = {
   alias: 'prod',
-  endpoint: { user: 'alice', host: '192.168.1.20', port: 22 },
-  repoPath: '/srv/repo',
-  worktreePath: '/srv/repo-feature',
+  projectRoot: '/srv/projects/example',
+  workingDirectory: '/srv/projects/example/worktrees/feature',
   terminalNumber: 1,
 }
-
-describe('buildManagedRemoteTerminalSessionName', () => {
-  test('is stable for the same resolved endpoint, repo path, worktree path, and terminal number', () => {
-    expect(buildManagedRemoteTerminalSessionName(BASE_MANAGED_TARGET)).toBe(
-      buildManagedRemoteTerminalSessionName(BASE_MANAGED_TARGET),
-    )
-  })
-
-  test('does not change when only the ssh alias changes', () => {
-    expect(buildManagedRemoteTerminalSessionName({ ...BASE_MANAGED_TARGET, alias: 'renamed-prod' })).toBe(
-      buildManagedRemoteTerminalSessionName(BASE_MANAGED_TARGET),
-    )
-  })
-
-  test('changes when endpoint, paths, or terminal number change', () => {
-    const base = buildManagedRemoteTerminalSessionName(BASE_MANAGED_TARGET)
-
-    expect(
-      buildManagedRemoteTerminalSessionName({
-        ...BASE_MANAGED_TARGET,
-        endpoint: { user: 'bob', host: '192.168.1.20', port: 22 },
-      }),
-    ).not.toBe(base)
-    expect(
-      buildManagedRemoteTerminalSessionName({
-        ...BASE_MANAGED_TARGET,
-        endpoint: { user: 'alice', host: '192.168.1.21', port: 22 },
-      }),
-    ).not.toBe(base)
-    expect(
-      buildManagedRemoteTerminalSessionName({
-        ...BASE_MANAGED_TARGET,
-        endpoint: { user: 'alice', host: '192.168.1.20', port: 2222 },
-      }),
-    ).not.toBe(base)
-    expect(buildManagedRemoteTerminalSessionName({ ...BASE_MANAGED_TARGET, repoPath: '/srv/other' })).not.toBe(base)
-    expect(buildManagedRemoteTerminalSessionName({ ...BASE_MANAGED_TARGET, worktreePath: '/srv/repo-other' })).not.toBe(
-      base,
-    )
-    expect(buildManagedRemoteTerminalSessionName({ ...BASE_MANAGED_TARGET, terminalNumber: 2 })).not.toBe(base)
-  })
-
-  test('returns a short tmux-safe goblin-prefixed session name', () => {
-    expect(
-      buildManagedRemoteTerminalSessionName({
-        alias: 'prod',
-        endpoint: { user: 'alice', host: 'dev.example.com', port: 2222 },
-        repoPath: '/srv/repo with spaces',
-        worktreePath: "/srv/repo's-feature",
-        terminalNumber: 3,
-      }),
-    ).toMatch(/^goblin-[a-f0-9]{24}$/)
-  })
-})
 
 describe('buildManagedRemoteTerminalInvocation', () => {
   test('builds a plain ssh invocation by default', () => {
@@ -74,26 +19,41 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     expect(invocation).not.toBeNull()
     expect(invocation?.command).toBe('ssh')
     expect(invocation?.args).toEqual(['-tt', '--', 'prod', expect.stringContaining('sh -lc')])
-    expect(invocation?.script).toContain("cd '/srv/repo-feature' || exit")
+    expect(invocation?.script).toContain("cd '/srv/projects/example/worktrees/feature' || exit")
     expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
     expect(invocation?.script).not.toContain('tmux')
     expect(invocation?.shellCommand).not.toContain('tmux')
+    expect(invocation?.tmuxSessionName).toBeNull()
   })
 
-  test('builds a tmux-first ssh invocation with native shell fallback when enabled', () => {
+  test('builds a strict tmux ssh invocation without native fallback when enabled', () => {
     const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, { useTmux: true })
 
     expect(invocation).not.toBeNull()
     expect(invocation?.command).toBe('ssh')
     expect(invocation?.args).toEqual(['-tt', '--', 'prod', expect.stringContaining('sh -lc')])
-    expect(invocation?.script).toContain("cd '/srv/repo-feature' || exit")
+    expect(invocation?.script).toContain("cd '/srv/projects/example/worktrees/feature' || exit")
     expect(invocation?.script).toContain('command -v tmux >/dev/null 2>&1')
-    expect(invocation?.script).toContain("exec tmux new-session -A -s 'goblin-")
-    expect(invocation?.script).toContain("-c '/srv/repo-feature'")
-    expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).toContain(
+      "new-session -d -s 'hobgoblin-v1-aebf050981ac829e36100020' -c '/srv/projects/example/worktrees/feature'",
+    )
+    expect(invocation?.script).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_terminal_number '1'",
+    )
+    expect(invocation?.script).toContain(
+      "set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' @hobgoblin_init_path '/srv/projects/example/worktrees/feature'",
+    )
+    expect(invocation?.script).toContain("set-option -t '=hobgoblin-v1-aebf050981ac829e36100020:' mouse on")
+    expect(invocation?.script).not.toContain('set-option -g')
+    expect(invocation?.script).toContain('Use New terminal (Native).')
+    expect(invocation?.script).toContain('exit 127')
+    expect(invocation?.script).toContain('exit "$tmux_status"')
+    expect(invocation?.script).not.toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).not.toContain('\\;')
     expect(invocation?.shellCommand).toContain('ssh')
     expect(invocation?.shellCommand).toContain('prod')
     expect(invocation?.shellCommand).toContain('tmux')
+    expect(invocation?.tmuxSessionName).toBe('hobgoblin-v1-aebf050981ac829e36100020')
   })
 
   test('includes caller-provided ssh options before the destination', () => {
@@ -112,22 +72,58 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     ])
   })
 
+  test('attaches an existing remote tmux session by exact name without creating another session', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const invocation = buildManagedRemoteTerminalInvocation(
+      { ...BASE_MANAGED_TARGET, terminalNumber: 2 },
+      { useTmux: true, existingTmuxSessionName: sessionName },
+    )
+
+    expect(invocation?.tmuxSessionName).toBe(sessionName)
+    expect(invocation?.script).toContain(`tmux attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).not.toContain('tmux new-session')
+    expect(invocation?.script).not.toContain(TMUX_TERMINAL_NUMBER_OPTION)
+  })
+
+  test('attaches a recovered remote session through its validated project server', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const serverName = 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0'
+    const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+      useTmux: true,
+      existingTmuxSessionName: sessionName,
+      existingTmuxServerName: serverName,
+    })
+
+    expect(invocation?.script).toContain(`tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(
+      buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+        useTmux: true,
+        existingTmuxSessionName: sessionName,
+        existingTmuxServerName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+      }),
+    ).toBeNull()
+  })
+
   test('shell-quotes remote paths that contain single quotes', () => {
-    const invocation = buildManagedRemoteTerminalInvocation({
-      ...BASE_MANAGED_TARGET,
-      worktreePath: "/srv/repo's-feature",
-    }, { useTmux: true })
+    const invocation = buildManagedRemoteTerminalInvocation(
+      {
+        ...BASE_MANAGED_TARGET,
+        workingDirectory: "/srv/repo's-feature",
+      },
+      { useTmux: true },
+    )
 
     expect(invocation).not.toBeNull()
     expect(invocation?.script).toContain("cd '/srv/repo'\\''s-feature' || exit")
     expect(invocation?.script).toContain("-c '/srv/repo'\\''s-feature'")
+    expect(invocation?.script).toContain("@hobgoblin_init_path '/srv/repo'\\''s-feature'")
   })
 
   test('keeps non-ascii paths as quoted shell data', () => {
     const invocation = buildManagedRemoteTerminalInvocation({
       ...BASE_MANAGED_TARGET,
-      repoPath: '/srv/\u9879\u76ee',
-      worktreePath: '/srv/\u9879\u76ee/\u529f\u80fd',
+      projectRoot: '/srv/\u9879\u76ee',
+      workingDirectory: '/srv/\u9879\u76ee/\u529f\u80fd',
     })
 
     expect(invocation?.script).toContain("cd '/srv/\u9879\u76ee/\u529f\u80fd' || exit")
@@ -135,44 +131,46 @@ describe('buildManagedRemoteTerminalInvocation', () => {
 
   test('rejects unsafe managed target input', () => {
     expect(buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, alias: 'bad alias' })).toBeNull()
-    expect(buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, repoPath: 'relative/repo' })).toBeNull()
-    expect(buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, worktreePath: 'relative/repo' })).toBeNull()
-    expect(buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, worktreePath: '/srv/\u0000repo' })).toBeNull()
+    expect(buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, projectRoot: 'relative/repo' })).toBeNull()
     expect(
-      buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, endpoint: { user: '', host: 'host', port: 22 } }),
+      buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, workingDirectory: 'relative/repo' }),
     ).toBeNull()
     expect(
-      buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, endpoint: { user: 'alice', host: '', port: 22 } }),
-    ).toBeNull()
-    expect(
-      buildManagedRemoteTerminalInvocation({
-        ...BASE_MANAGED_TARGET,
-        endpoint: { user: 'alice', host: 'host', port: 0 },
-      }),
+      buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, workingDirectory: '/srv/\u0000repo' }),
     ).toBeNull()
     expect(buildManagedRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, terminalNumber: 0 })).toBeNull()
   })
 })
 
 describe('buildExternalRemoteTerminalInvocation', () => {
-  test('builds a plain ssh login-shell invocation without tmux', () => {
-    const invocation = buildExternalRemoteTerminalInvocation({
-      alias: 'prod',
-      worktreePath: '/srv/repo-feature',
-    })
+  test('builds a tmux-aware external ssh invocation when enabled', () => {
+    const invocation = buildExternalRemoteTerminalInvocation(
+      {
+        alias: 'prod',
+        projectRoot: '/srv/projects/example',
+        workingDirectory: '/srv/projects/example/worktrees/feature',
+        terminalNumber: 1,
+      },
+      { useTmux: true },
+    )
 
     expect(invocation).not.toBeNull()
     expect(invocation?.command).toBe('ssh')
     expect(invocation?.args).toEqual(['-tt', '--', 'prod', expect.stringContaining('sh -lc')])
-    expect(invocation?.script).toContain("cd '/srv/repo-feature' || exit")
-    expect(invocation?.script).toContain('exec "${SHELL:-/bin/sh}" -l')
-    expect(invocation?.script).not.toContain('tmux')
-    expect(invocation?.shellCommand).not.toContain('tmux')
+    expect(invocation?.script).toContain("cd '/srv/projects/example/worktrees/feature' || exit")
+    expect(invocation?.script).toContain("-s 'hobgoblin-v1-aebf050981ac829e36100020'")
+    expect(invocation?.script).not.toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(invocation?.script).toContain('tmux')
+    expect(invocation?.shellCommand).toContain('tmux')
   })
 
   test('rejects unsafe external target input', () => {
-    expect(buildExternalRemoteTerminalInvocation({ alias: 'bad alias', worktreePath: '/srv/repo' })).toBeNull()
-    expect(buildExternalRemoteTerminalInvocation({ alias: 'prod', worktreePath: 'relative/repo' })).toBeNull()
-    expect(buildExternalRemoteTerminalInvocation({ alias: 'prod', worktreePath: '/srv/\u0000repo' })).toBeNull()
+    expect(buildExternalRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, alias: 'bad alias' })).toBeNull()
+    expect(
+      buildExternalRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, workingDirectory: 'relative/repo' }),
+    ).toBeNull()
+    expect(
+      buildExternalRemoteTerminalInvocation({ ...BASE_MANAGED_TARGET, workingDirectory: '/srv/\u0000repo' }),
+    ).toBeNull()
   })
 })

@@ -8,23 +8,42 @@ import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
+const branchWorkspaceQueryState = vi.hoisted(() => ({
+  includeItem: true,
+  isFetching: false,
+  repositories: [] as Array<{
+    repositoryName: string
+    targetBranch: string
+    baseBranch: string
+    branchOrigin: 'created'
+    worktreePath: string
+    progress: 'complete'
+    ready: boolean
+  }>,
+}))
+
 vi.mock('#/web/components/BranchDetail.tsx', () => ({
   BranchDetail: ({
     collapsed,
+    detailFocusMode,
     compactFocusPresentation,
     onRevealPath,
     onShowCompactExplorer,
+    onExitTerminalFocus,
   }: {
     collapsed?: boolean
+    detailFocusMode?: boolean
     compactFocusPresentation?: boolean
     onRevealPath?: (relativePath: string) => void
     onShowCompactExplorer?: () => void
+    onExitTerminalFocus?: () => void
   }) => (
     <>
       <button
         type="button"
         data-testid="branch-detail"
         data-collapsed={String(collapsed)}
+        data-detail-focus-mode={String(detailFocusMode)}
         data-compact-focus-presentation={String(compactFocusPresentation)}
         onClick={() => onRevealPath?.('src/from-terminal.ts')}
       >
@@ -35,6 +54,11 @@ vi.mock('#/web/components/BranchDetail.tsx', () => ({
           show explorer
         </button>
       )}
+      {onExitTerminalFocus && (
+        <button type="button" data-testid="exit-terminal-focus" onClick={onExitTerminalFocus}>
+          restore workspace
+        </button>
+      )}
     </>
   ),
 }))
@@ -42,16 +66,21 @@ vi.mock('#/web/components/BranchDetail.tsx', () => ({
 vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () => ({
   PlainWorkspaceTerminalPanel: ({
     repoId,
+    focusMode,
     compactFocusPresentation,
     onShowCompactOverview,
+    onExitTerminalFocus,
   }: {
     repoId: string
+    focusMode?: boolean
     compactFocusPresentation?: boolean
     onShowCompactOverview?: () => void
+    onExitTerminalFocus?: () => void
   }) => (
     <div
       data-testid="plain-workspace-terminal-panel"
       data-repo-id={repoId}
+      data-focus-mode={String(focusMode)}
       data-compact-focus-presentation={String(compactFocusPresentation)}
     >
       {onShowCompactOverview && (
@@ -59,6 +88,67 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
           show overview
         </button>
       )}
+      {onExitTerminalFocus && (
+        <button type="button" data-testid="exit-plain-terminal-focus" onClick={onExitTerminalFocus}>
+          restore workspace
+        </button>
+      )}
+    </div>
+  ),
+}))
+
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceQuery: () => ({
+    data: {
+      ok: true,
+      rootId: REPO_ID,
+      auxiliaryCandidates: [],
+      items: branchWorkspaceQueryState.includeItem
+        ? [
+            {
+              id: 'branch-1',
+              rootId: REPO_ID,
+              branch: 'feature/auth',
+              directoryName: 'goblin-feature-auth',
+              path: `${REPO_ID}/goblin-feature-auth`,
+              state: { kind: 'ready' },
+              available: true,
+              issues: [],
+              repositories: branchWorkspaceQueryState.repositories,
+              auxiliaryEntries: [],
+            },
+          ]
+        : [],
+    },
+    isPending: false,
+    isFetching: branchWorkspaceQueryState.isFetching,
+  }),
+}))
+
+vi.mock('#/web/components/repo-workspace/BranchWorkspacePane.tsx', () => ({
+  BranchWorkspacePane: ({
+    workspace,
+    memberTarget,
+    fallbackNotice,
+    onOpenFileArea,
+  }: {
+    workspace: { branch: string; path: string }
+    memberTarget?: { repositoryId: string } | null
+    fallbackNotice?: { repositoryName: string; reason: string } | null
+    onOpenFileArea?: () => void
+  }) => (
+    <div
+      data-testid="branch-workspace-pane"
+      data-path={workspace.path}
+      data-member-repo-id={memberTarget?.repositoryId ?? ''}
+      data-fallback-member={fallbackNotice?.repositoryName ?? ''}
+    >
+      {workspace.branch}
+      {onOpenFileArea ? (
+        <button type="button" data-testid="open-member-file-area" onClick={onOpenFileArea}>
+          open member file area
+        </button>
+      ) : null}
     </div>
   ),
 }))
@@ -69,23 +159,33 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
     revealRequest,
     plainWorkspaceTerminalPanel,
     fileAreaCollapsed,
+    compactSurface,
     onToggleFileArea,
     onShowCompactDetail,
+    onShowCompactFiles,
     onBranchSelected,
+    onMaximizeTerminal,
+    terminalFocusMode,
   }: {
     showActions?: boolean
     revealRequest?: { relativePath: string } | null
     plainWorkspaceTerminalPanel?: ReactNode
     fileAreaCollapsed?: boolean
+    compactSurface?: 'scope' | 'files'
     onToggleFileArea?: () => void
     onShowCompactDetail?: () => void
+    onShowCompactFiles?: () => void
     onBranchSelected?: () => void
+    onMaximizeTerminal?: () => void
+    terminalFocusMode?: boolean
   }) => (
     <div
       data-testid="repo-explorer-pane"
       data-show-actions={String(showActions)}
       data-reveal-path={revealRequest?.relativePath ?? ''}
       data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
+      data-compact-surface={compactSurface ?? ''}
+      data-terminal-focus-mode={String(!!terminalFocusMode)}
     >
       {onToggleFileArea && (
         <button type="button" data-testid="toggle-file-area" onClick={onToggleFileArea}>
@@ -97,9 +197,19 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
           show detail
         </button>
       )}
+      {onShowCompactFiles && (
+        <button type="button" data-testid="show-compact-files" onClick={onShowCompactFiles}>
+          show files
+        </button>
+      )}
       {onBranchSelected && (
         <button type="button" data-testid="select-branch" onClick={onBranchSelected}>
           select branch
+        </button>
+      )}
+      {onMaximizeTerminal && (
+        <button type="button" data-testid="maximize-terminal" onClick={onMaximizeTerminal}>
+          maximize terminal
         </button>
       )}
       {plainWorkspaceTerminalPanel}
@@ -126,6 +236,9 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
+  branchWorkspaceQueryState.repositories = []
+  branchWorkspaceQueryState.includeItem = true
+  branchWorkspaceQueryState.isFetching = false
   setCompactUi(true)
 })
 
@@ -175,13 +288,32 @@ describe('RepoView', () => {
     })
 
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
-    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'scope',
+    )
     expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
-  test('keeps compact explorer actions visible when desktop focus preference is restored', async () => {
+  test('switches a compact Git repository from scope to files without mounting a split pane', async () => {
     seedRepoWithSelectedWorktree()
-    useReposStore.setState({ detailFocusMode: true })
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+    })
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-files"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'files',
+    )
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+  })
+
+  test('keeps compact explorer actions visible without a desktop focus preference', async () => {
+    seedRepoWithSelectedWorktree()
     renderRepoView()
 
     await act(async () => {
@@ -222,7 +354,9 @@ describe('RepoView', () => {
     renderRepoView()
 
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
-    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'scope',
+    )
     expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
@@ -235,6 +369,166 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+  })
+
+  test('maximizes only the terminal detail on desktop after an explicit maximize action', async () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="branch-detail"]')?.getAttribute('data-detail-focus-mode')).toBe(
+      'true',
+    )
+  })
+
+  test('restores the desktop split after terminal focus exits', async () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="exit-terminal-focus"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+  })
+
+  test('starts desktop in the split without an explicit maximize action', () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="branch-detail"]')?.getAttribute('data-detail-focus-mode')).toBe(
+      'false',
+    )
+  })
+
+  test('exits desktop terminal focus when the selected Git branch changes', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('main', { worktree: { path: REPO_ID } }),
+        createRepoBranch('feature/next', { worktree: { path: `${REPO_ID}/feature-next` } }),
+      ],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    setCompactUi(false)
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+
+    await act(async () => {
+      useReposStore.getState().selectBranch(REPO_ID, 'feature/next')
+    })
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+  })
+
+  test('returns to the desktop split after a compact responsive transition', async () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+    renderRepoView()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+
+    setCompactUi(true)
+    rerenderRepoView(REPO_ID)
+    setCompactUi(false)
+    rerenderRepoView(REPO_ID)
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+  })
+
+  test('does not restore stale focus after an unavailable destination recovers', async () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+    renderRepoView()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+
+    await act(async () => markTestRepoUnavailable())
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    await act(async () => {
+      useReposStore.setState((state) => ({
+        repos: {
+          ...state.repos,
+          [REPO_ID]: {
+            ...state.repos[REPO_ID]!,
+            availability: { phase: 'available' as const, checkedAt: 2 },
+          },
+        },
+      }))
+    })
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+  })
+
+  test('returns to the workspace overview split after the active branch workspace is deleted', async () => {
+    seedRepoState({ id: REPO_ID, isGitRepo: false, branches: [], currentBranch: '', selectedBranch: null })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [REPO_ID]: { kind: 'overview' } },
+    })
+    setCompactUi(false)
+    renderRepoView()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-terminal-focus-mode'),
+    ).toBe('true')
+
+    await act(async () => {
+      useReposStore.setState((state) => ({
+        workspaceActiveContextByRoot: {
+          ...state.workspaceActiveContextByRoot,
+          [REPO_ID]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+        },
+      }))
+    })
+    expect(container?.querySelector('[data-testid="branch-workspace-pane"]')).not.toBeNull()
+
+    branchWorkspaceQueryState.includeItem = false
+    rerenderRepoView(REPO_ID)
+    await act(async () => Promise.resolve())
+
+    expect(useReposStore.getState().workspaceActiveContextByRoot[REPO_ID]).toEqual({ kind: 'overview' })
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-terminal-focus-mode'),
+    ).toBe('false')
   })
 
   test('switches a compact non-git workspace root between terminal focus and overview', async () => {
@@ -274,7 +568,9 @@ describe('RepoView', () => {
     })
 
     expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).toBeNull()
-    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'scope',
+    )
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-detail"]')?.click()
@@ -282,6 +578,293 @@ describe('RepoView', () => {
 
     expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+  })
+
+  test('renders the selected branch workspace as a folder context instead of a nested repository', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [REPO_ID]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+    })
+
+    renderRepoView()
+
+    expect(container?.querySelector('[data-testid="branch-workspace-pane"]')?.textContent).toContain('feature/auth')
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).toBeNull()
+  })
+
+  test('resolves a selected branch workspace member without changing the active project', () => {
+    const memberRepoId = `${REPO_ID}/api`
+    const memberWorktreePath = `${REPO_ID}/goblin-feature-auth/api`
+    const rootRepo = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const memberRepo = seedRepoState({
+      id: memberRepoId,
+      branches: [createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } })],
+      currentBranch: 'main',
+      selectedBranch: 'feature/auth',
+    })
+    branchWorkspaceQueryState.repositories = [
+      {
+        repositoryName: 'api',
+        targetBranch: 'feature/auth',
+        baseBranch: 'main',
+        branchOrigin: 'created',
+        worktreePath: memberWorktreePath,
+        progress: 'complete',
+        ready: true,
+      },
+    ]
+    useReposStore.setState({
+      repos: { [REPO_ID]: rootRepo, [memberRepoId]: memberRepo },
+      activeId: REPO_ID,
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [memberRepoId],
+          candidates: [{ id: memberRepoId, name: 'api', selected: true, available: true }],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [REPO_ID]: {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'api',
+        },
+      },
+    })
+
+    renderRepoView()
+
+    const pane = container?.querySelector('[data-testid="branch-workspace-pane"]')
+    expect(pane, container?.innerHTML).not.toBeNull()
+    expect(pane?.getAttribute('data-member-repo-id')).toBe(memberRepoId)
+    expect(useReposStore.getState().activeId).toBe(REPO_ID)
+  })
+
+  test('captures an invalid member notice before falling back to the same branch workspace root', () => {
+    const memberWorktreePath = `${REPO_ID}/goblin-feature-auth/api`
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    branchWorkspaceQueryState.repositories = [
+      {
+        repositoryName: 'api',
+        targetBranch: 'feature/auth',
+        baseBranch: 'main',
+        branchOrigin: 'created',
+        worktreePath: memberWorktreePath,
+        progress: 'complete',
+        ready: true,
+      },
+    ]
+    const activateBranchWorkspace = vi.fn((rootId: string, branchWorkspaceId: string) => {
+      useReposStore.setState((state) => ({
+        activeId: rootId,
+        workspaceActiveContextByRoot: {
+          ...state.workspaceActiveContextByRoot,
+          [rootId]: { kind: 'branch-workspace', branchWorkspaceId },
+        },
+      }))
+    })
+    useReposStore.setState({
+      activeId: REPO_ID,
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [REPO_ID]: {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'api',
+        },
+      },
+      activateBranchWorkspace,
+    })
+
+    renderRepoView()
+
+    expect(activateBranchWorkspace).toHaveBeenCalledWith(REPO_ID, 'branch-1')
+    expect(
+      container?.querySelector('[data-testid="branch-workspace-pane"]')?.getAttribute('data-fallback-member'),
+    ).toBe('api')
+    expect(useReposStore.getState().workspaceActiveContextByRoot[REPO_ID]).toEqual({
+      kind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+    })
+  })
+
+  test('keeps the selected member while a stale not-ready snapshot is refetching', () => {
+    const memberRepoId = `${REPO_ID}/api`
+    const memberWorktreePath = `${REPO_ID}/goblin-feature-auth/api`
+    const rootRepo = seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    const memberRepo = seedRepoState({
+      id: memberRepoId,
+      branches: [createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } })],
+      currentBranch: 'main',
+      selectedBranch: 'feature/auth',
+    })
+    branchWorkspaceQueryState.repositories = [
+      {
+        repositoryName: 'api',
+        targetBranch: 'feature/auth',
+        baseBranch: 'main',
+        branchOrigin: 'created',
+        worktreePath: memberWorktreePath,
+        progress: 'complete',
+        ready: false,
+      },
+    ]
+    branchWorkspaceQueryState.isFetching = true
+    const activateBranchWorkspace = vi.fn((rootId: string, branchWorkspaceId: string) => {
+      useReposStore.setState((state) => ({
+        activeId: rootId,
+        workspaceActiveContextByRoot: {
+          ...state.workspaceActiveContextByRoot,
+          [rootId]: { kind: 'branch-workspace', branchWorkspaceId },
+        },
+      }))
+    })
+    useReposStore.setState({
+      repos: { [REPO_ID]: rootRepo, [memberRepoId]: memberRepo },
+      activeId: REPO_ID,
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [memberRepoId],
+          candidates: [{ id: memberRepoId, name: 'api', selected: true, available: true }],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [REPO_ID]: {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'api',
+        },
+      },
+      activateBranchWorkspace,
+    })
+
+    renderRepoView()
+
+    expect(activateBranchWorkspace).not.toHaveBeenCalled()
+    expect(useReposStore.getState().workspaceActiveContextByRoot[REPO_ID]).toMatchObject({
+      kind: 'branch-workspace',
+      memberRepositoryName: 'api',
+    })
+    expect(
+      container?.querySelector('[data-testid="branch-workspace-pane"]')?.getAttribute('data-fallback-member'),
+    ).toBe('')
+
+    branchWorkspaceQueryState.repositories[0]!.ready = true
+    branchWorkspaceQueryState.isFetching = false
+    rerenderRepoView(REPO_ID)
+
+    expect(container?.querySelector('[data-testid="branch-workspace-pane"]')?.getAttribute('data-member-repo-id')).toBe(
+      memberRepoId,
+    )
+  })
+
+  test('expands the persisted file area when a branch workspace member requests navigation', () => {
+    seedRepoState({
+      id: REPO_ID,
+      isGitRepo: false,
+      branches: [],
+      currentBranch: '',
+      selectedBranch: null,
+    })
+    useReposStore.setState({
+      workspaceProjects: {
+        [REPO_ID]: {
+          rootId: REPO_ID,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [REPO_ID]: { kind: 'overview' } },
+    })
+    setCompactUi(false)
+    renderRepoView()
+
+    act(() => container?.querySelector<HTMLButtonElement>('[data-testid="toggle-file-area"]')?.click())
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('true')
+
+    act(() => {
+      useReposStore.setState({
+        workspaceActiveContextByRoot: {
+          [REPO_ID]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+        },
+      })
+    })
+    act(() => container?.querySelector<HTMLButtonElement>('[data-testid="open-member-file-area"]')?.click())
+    act(() => {
+      useReposStore.setState({ workspaceActiveContextByRoot: { [REPO_ID]: { kind: 'overview' } } })
+    })
+
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('false')
   })
 
   test('keeps file-area collapse available without mounting branch detail for desktop non-git workspaces', () => {
@@ -292,7 +875,7 @@ describe('RepoView', () => {
       currentBranch: '',
       selectedBranch: null,
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: false })
     setCompactUi(false)
 
     renderRepoView()
@@ -313,7 +896,7 @@ describe('RepoView', () => {
     expect(container?.textContent).not.toContain('branches.empty')
   })
 
-  test('renders only the terminal focus presentation for compact non-git remote workspaces', () => {
+  test('switches a compact non-git remote workspace between terminal and files focus', async () => {
     seedRepoState({
       id: REMOTE_REPO_ID,
       isGitRepo: false,
@@ -332,7 +915,7 @@ describe('RepoView', () => {
         },
       },
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: false })
 
     renderRepoView(REMOTE_REPO_ID)
 
@@ -341,8 +924,18 @@ describe('RepoView', () => {
     const terminalPanel = container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')
     expect(terminalPanel?.getAttribute('data-repo-id')).toBe(REMOTE_REPO_ID)
     expect(terminalPanel?.getAttribute('data-compact-focus-presentation')).toBe('true')
-    expect(container?.querySelector('[data-testid="show-compact-overview"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="show-compact-overview"]')).not.toBeNull()
     expect(container?.textContent).not.toContain('branches.empty')
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-overview"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'files',
+    )
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
   test('does not render repository toolbar controls for non-git local workspaces', () => {
@@ -353,7 +946,7 @@ describe('RepoView', () => {
       currentBranch: '',
       selectedBranch: null,
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: true })
 
     renderRepoView()
 
@@ -363,14 +956,13 @@ describe('RepoView', () => {
     expect(container?.querySelector('button[aria-label="action.create-worktree-title"]')).toBeNull()
   })
 
-  test('keeps project navigation beside the unavailable view even when detail focus was active', () => {
+  test('keeps project navigation beside the unavailable view', () => {
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('main')],
       currentBranch: 'main',
       selectedBranch: 'main',
     })
-    useReposStore.setState({ detailFocusMode: true })
     markTestRepoUnavailable()
 
     renderRepoView()
@@ -389,7 +981,6 @@ describe('RepoView', () => {
       currentBranch: '',
       selectedBranch: null,
     })
-    useReposStore.setState({ detailFocusMode: true })
     markTestRepoUnavailable()
 
     renderRepoView()
@@ -409,7 +1000,7 @@ describe('RepoView', () => {
       currentBranch: 'main',
       selectedBranch: 'feature/a',
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: true })
 
     renderRepoView()
 
@@ -423,6 +1014,9 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
       'src/from-terminal.ts',
+    )
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'files',
     )
   })
 
@@ -489,7 +1083,7 @@ describe('RepoView', () => {
       currentBranch: 'main',
       selectedBranch: 'feature/a',
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: true })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: true })
     setCompactUi(false)
     renderRepoView()
 
@@ -541,7 +1135,7 @@ describe('RepoView', () => {
       currentBranch: '',
       selectedBranch: null,
     })
-    useReposStore.setState({ workspaceLayout: 'top-bottom', detailCollapsed: false })
+    useReposStore.setState({ workspaceLayout: 'left-right', detailCollapsed: false })
 
     renderRepoView()
 

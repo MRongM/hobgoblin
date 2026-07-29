@@ -70,4 +70,4 @@ function Badge({
 // be type-checked.
 export type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>
 
-export { Badge, badgeVariants }
+export { Badge }

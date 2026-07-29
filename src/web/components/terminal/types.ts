@@ -1,4 +1,10 @@
-import type { TerminalAttachmentRole, TerminalControllerStatus, TerminalSessionPhase } from '#/shared/terminal.ts'
+import type {
+  TerminalAttachmentRole,
+  TerminalCloseResult,
+  TerminalControllerStatus,
+  TerminalLaunchMode,
+  TerminalSessionPhase,
+} from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 export type TerminalPhase = TerminalSessionPhase
 
@@ -10,6 +16,10 @@ export interface TerminalDescriptor {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
+  tmuxBacked?: boolean
+  tmuxCloseSupported?: boolean
 }
 
 export interface TerminalProgressState {
@@ -20,10 +30,20 @@ export interface TerminalProgressState {
 }
 
 export interface TerminalBellEvent {
+  sessionId?: string
   processName: string
   /** Server-canonical terminal title from the headless session model. */
   canonicalTitle?: string | null
   visible: boolean
+}
+
+export interface TerminalOutputCompletionIntent {
+  descriptor: TerminalDescriptor
+  sessionId: string
+  finalOutputSeq: number
+  activityDurationMs: number
+  processName: string
+  canonicalTitle?: string | null
 }
 
 export interface TerminalAttachmentOwnershipViewModel {
@@ -48,6 +68,8 @@ export interface TerminalSnapshot {
   phase: TerminalPhase
   message: string | null
   processName: string
+  /** Renderer-local readiness; true until xterm has attached, replayed, and reached a paint opportunity. */
+  renderPending?: boolean
   /** Server-canonical terminal title from attach hydration or realtime title events. */
   canonicalTitle?: string | null
   attachment?: TerminalAttachmentSnapshot | null
@@ -67,7 +89,11 @@ export interface TerminalSessionBase {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
 }
+
+export type TerminalWorktreeScope = Pick<TerminalSessionBase, 'repoRoot' | 'worktreePath'>
 
 export interface TerminalSessionAttachHandlers {
   onRevealPath?: (relativePath: string) => void
@@ -93,6 +119,12 @@ export interface TerminalSessionSummary {
   isOutputActive?: boolean
   selected: boolean
   hasBell: boolean
+  tmuxBacked?: boolean
+  tmuxCloseSupported?: boolean
+}
+
+export interface TerminalCloseOptions {
+  closeTmuxSession?: boolean
 }
 
 export interface WorktreeTerminalSnapshot {
@@ -100,16 +132,23 @@ export interface WorktreeTerminalSnapshot {
   selectedDescriptor: TerminalDescriptor | null
   sessions: TerminalSessionSummary[]
   count: number
+  /** Renderer-local new-terminal request state. Omitted projections are treated as idle. */
+  creating?: boolean
 }
 
 export interface TerminalSessionContextValue {
-  createTerminal: (base: TerminalSessionBase) => Promise<string>
+  createTerminal: (base: TerminalSessionBase, launchMode?: TerminalLaunchMode) => Promise<string>
+  restoreTmuxSessions: (base: TerminalSessionBase) => Promise<number>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
   focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   clearBell: (key: string) => boolean
-  closeTerminalAndDismissDetailIfLast: (key: string, base: TerminalSessionBase) => void
+  closeTerminalAndDismissDetailIfLast: (
+    key: string,
+    scope: TerminalWorktreeScope,
+    options?: TerminalCloseOptions,
+  ) => void | Promise<TerminalCloseResult>
   registerWorktreeHost: (worktreeTerminalKey: string, host: HTMLElement | null) => void
   attach: (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers) => void
   detach: (key: string, host: HTMLElement) => void

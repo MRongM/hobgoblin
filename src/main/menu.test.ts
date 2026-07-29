@@ -6,7 +6,6 @@ interface MockMenuRuntimeState {
   shortcutsDisabled: boolean
   swapCloseShortcuts: boolean
   langPref: 'auto' | 'en' | 'zh' | 'ko' | 'ja'
-  workspaceLayout: 'top-bottom' | 'left-right' | 'branches'
 }
 
 function defaultMenuRuntimeState(): MockMenuRuntimeState {
@@ -15,7 +14,6 @@ function defaultMenuRuntimeState(): MockMenuRuntimeState {
     shortcutsDisabled: false,
     swapCloseShortcuts: false,
     langPref: 'auto',
-    workspaceLayout: 'top-bottom',
   }
 }
 
@@ -77,7 +75,6 @@ vi.mock('#/main/i18n/index.ts', () => ({
 vi.mock('#/main/menu-state.ts', () => ({
   readMenuRuntimeState: mocks.readMenuRuntimeState,
   applyMenuRuntimeState: vi.fn(),
-  setMenuWorkspaceLayout: vi.fn(),
 }))
 
 vi.mock('#/main/renderer-surface-events.ts', () => ({
@@ -176,7 +173,10 @@ describe('app menu actions', () => {
 
     const helpMenu = mocks.template.find((entry) => entry.label === 'menu.help')
     const shortcutsItem = helpMenu?.submenu?.find((entry: any) => entry.label === 'menu.help.shortcuts')
+    const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
+    const devToolsItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-dev-tools')
     expect(shortcutsItem?.enabled).not.toBe(false)
+    expect(devToolsItem?.accelerator).toBeUndefined()
     shortcutsItem.click()
     await Promise.resolve()
 
@@ -291,7 +291,17 @@ describe('app menu actions', () => {
     })
   })
 
-  test('wires Ctrl+Shift+I to toggle the web developer tools', async () => {
+  test('omits obsolete workspace layout and desktop detail toggle commands', async () => {
+    const { buildAppMenu } = await import('#/main/menu.ts')
+
+    buildAppMenu()
+
+    const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
+    expect(viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.workspace-layout')).toBeUndefined()
+    expect(viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-detail')).toBeUndefined()
+  })
+
+  test('wires the platform primary modifier to toggle the web developer tools', async () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
@@ -300,7 +310,7 @@ describe('app menu actions', () => {
     const devToolsItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-dev-tools')
 
     expect(devToolsItem?.role).toBe('toggleDevTools')
-    expect(devToolsItem?.accelerator).toBe('Ctrl+Shift+I')
+    expect(devToolsItem?.accelerator).toBe('CmdOrCtrl+Shift+I')
   })
 
   test('includes standard edit roles and full screen in the menu', async () => {

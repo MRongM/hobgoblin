@@ -25,11 +25,7 @@ import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/store
 import type { ExecResult } from '#/web/types.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
-import {
-  activeProjectId,
-  projectActivationTarget,
-  workspaceRootIdForRepo,
-} from '#/web/stores/repos/workspace-projects.ts'
+import { activeProjectId, projectActivationTarget } from '#/web/stores/repos/workspace-projects.ts'
 import {
   isRemoteRepoId,
   localRepoSessionEntry,
@@ -130,6 +126,10 @@ function orderedInsert(order: string[], id: string, rankById?: ReadonlyMap<strin
   return next
 }
 
+export function ensureProjectInOrder(order: string[], id: string, rankById?: ReadonlyMap<string, number>): string[] {
+  return order.includes(id) ? order : orderedInsert(order, id, rankById)
+}
+
 export function addResolvedRepo(
   s: Pick<ReposStore, 'repos' | 'restorableRepoCache' | 'order'>,
   resolvedRepo: ResolvedRepo,
@@ -170,7 +170,7 @@ export function addResolvedRepo(
         ...s.repos,
         [id]: nextRepo,
       },
-      order: resolvedRepo.workspaceRootId ? s.order.filter((entry) => entry !== id) : s.order,
+      order: s.order,
       changed: true,
     }
   }
@@ -283,8 +283,9 @@ function applyWorkspaceOpen(
   changed: boolean
   id: string
 } {
-  const { repos, order, changed } = addResolvedRepo(s, repo)
-  return { repos, order, changed, id: repo.id }
+  const opened = addResolvedRepo(s, repo)
+  const order = ensureProjectInOrder(opened.order, repo.id)
+  return { repos: opened.repos, order, changed: opened.changed || order !== opened.order, id: repo.id }
 }
 
 export function createRuntimeRepoLifecycleActions(
@@ -340,14 +341,22 @@ export function createRuntimeRepoLifecycleActions(
 
     closeRepo(id: string) {
       const state = get()
-      const projectId = workspaceRootIdForRepo(state, id) ?? id
+      const projectId = id
       const workspace = state.workspaceProjects[projectId]
       const workspaceChildIds = workspace
         ? Object.values(state.repos)
             .filter((repo) => repo.workspaceRootId === projectId)
             .map((repo) => repo.id)
         : []
-      const closingIds = workspace ? [projectId, ...workspaceChildIds] : [projectId]
+      const retainedWorkspaceChildIds = workspaceChildIds.filter((childId) => state.order.includes(childId))
+      const memberWorkspaceRootId = state.repos[projectId]?.workspaceRootId
+      const remainsWorkspaceMember =
+        !!memberWorkspaceRootId && !!state.workspaceProjects[memberWorkspaceRootId]?.repositoryIds.includes(projectId)
+      const closingIds = workspace
+        ? [projectId, ...workspaceChildIds.filter((childId) => !retainedWorkspaceChildIds.includes(childId))]
+        : remainsWorkspaceMember
+          ? []
+          : [projectId]
       for (const closingId of closingIds) {
         disposeRepoRuntime(closingId)
         void stopPortForwardSessionsForRepo(closingId).catch(() => {
@@ -373,22 +382,43 @@ export function createRuntimeRepoLifecycleActions(
             if (worktreeKey.startsWith(`${closingId}\0`)) delete selectedTerminalByWorktree[worktreeKey]
           }
         }
+        for (const retainedId of retainedWorkspaceChildIds) {
+          const retained = repos[retainedId]
+          if (!retained) continue
+          repos[retainedId] = replaceRepo(retained, (draft) => {
+            delete draft.workspaceRootId
+          })
+        }
         const order = s.order.filter((entry) => entry !== projectId)
         const currentProjectId = activeProjectId(s)
         const nextProjectId = nextActiveRepoIdAfterWorkspaceClose(s.order, currentProjectId, projectId)
-        const activeId = nextProjectId ? projectActivationTarget(s, nextProjectId) : null
         const workspaceProjects = { ...s.workspaceProjects }
-        const workspaceActiveRepoByRoot = { ...s.workspaceActiveRepoByRoot }
+        const workspaceActiveContextByRoot = { ...s.workspaceActiveContextByRoot }
+        const workspaceRepositoryListExpandedByRoot = { ...s.workspaceRepositoryListExpandedByRoot }
+        const workspaceRepositoryListHeightByRoot = { ...s.workspaceRepositoryListHeightByRoot }
         delete workspaceProjects[projectId]
-        delete workspaceActiveRepoByRoot[projectId]
+        delete workspaceActiveContextByRoot[projectId]
+        delete workspaceRepositoryListExpandedByRoot[projectId]
+        delete workspaceRepositoryListHeightByRoot[projectId]
+        const nextState = {
+          ...s,
+          repos,
+          order,
+          workspaceProjects,
+          workspaceActiveContextByRoot,
+        }
+        const activeId = nextProjectId ? projectActivationTarget(nextState, nextProjectId) : null
         return {
           repos,
           branchSearchQueries,
           selectedTerminalByWorktree,
           order,
           activeId,
+          activeProjectId: nextProjectId,
           workspaceProjects,
-          workspaceActiveRepoByRoot,
+          workspaceActiveContextByRoot,
+          workspaceRepositoryListExpandedByRoot,
+          workspaceRepositoryListHeightByRoot,
         }
       })
     },
@@ -552,6 +582,16 @@ function applyWorkspaceDiscoveryResult(
         : result.configuration.kind === 'ready'
           ? effectiveCandidates.map((candidate) => candidate.id)
           : []
+    const repositoryIdSet = new Set(repositoryIds)
+    for (const [repoId, repo] of Object.entries(repos)) {
+      if (repo.workspaceRootId !== rootId || repositoryIdSet.has(repoId)) continue
+      repos = {
+        ...repos,
+        [repoId]: replaceRepo(repo, (draft) => {
+          delete draft.workspaceRootId
+        }),
+      }
+    }
     const workspaceProjects = { ...state.workspaceProjects }
     if (
       repositoryIds.length === 0 &&
@@ -560,9 +600,17 @@ function applyWorkspaceDiscoveryResult(
       result.skipped.length === 0
     ) {
       delete workspaceProjects[rootId]
-      const workspaceActiveRepoByRoot = { ...state.workspaceActiveRepoByRoot }
-      delete workspaceActiveRepoByRoot[rootId]
-      return { repos, order, workspaceProjects, workspaceActiveRepoByRoot }
+      const workspaceActiveContextByRoot = { ...state.workspaceActiveContextByRoot }
+      const workspaceRepositoryListExpandedByRoot = { ...state.workspaceRepositoryListExpandedByRoot }
+      delete workspaceActiveContextByRoot[rootId]
+      delete workspaceRepositoryListExpandedByRoot[rootId]
+      return {
+        repos,
+        order,
+        workspaceProjects,
+        workspaceActiveContextByRoot,
+        workspaceRepositoryListExpandedByRoot,
+      }
     }
     workspaceProjects[rootId] = {
       rootId,
@@ -574,7 +622,7 @@ function applyWorkspaceDiscoveryResult(
       skipped: result.skipped,
       error: null,
     }
-    const activeBelongsToWorkspace = !!state.activeId && state.repos[state.activeId]?.workspaceRootId === rootId
+    const activeBelongsToWorkspace = state.activeProjectId === rootId
     if (activeBelongsToWorkspace && !repositoryIds.includes(state.activeId!)) {
       const nextRepositoryId = repositoryIds.find((repositoryId) => {
         return repos[repositoryId]?.availability.phase === 'available'
@@ -585,9 +633,12 @@ function applyWorkspaceDiscoveryResult(
         order,
         activeId,
         workspaceProjects,
-        workspaceActiveRepoByRoot: {
-          ...state.workspaceActiveRepoByRoot,
-          [rootId]: activeId === rootId ? null : activeId,
+        workspaceActiveContextByRoot: {
+          ...state.workspaceActiveContextByRoot,
+          [rootId]:
+            activeId === rootId
+              ? { kind: 'overview' as const }
+              : { kind: 'repository' as const, repositoryId: activeId },
         },
       }
     }

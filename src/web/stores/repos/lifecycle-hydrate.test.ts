@@ -19,6 +19,16 @@ import {
 beforeEach(resetLifecycleTest)
 
 describe('repo session hydration', () => {
+  test('restores workspace repository list heights into restorable store state', async () => {
+    installGoblin()
+
+    await useReposStore
+      .getState()
+      .hydrateSession([localRepoSessionEntry(REPO_A)], REPO_A, {}, {}, REPO_A, { [REPO_A]: 224 })
+
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [REPO_A]: 224 })
+  })
+
   test('restores configured remote workspace children before restoring an active child repository', async () => {
     const rootTarget = normalizeRemoteTarget({
       alias: 'example',
@@ -45,14 +55,16 @@ describe('repo session hydration', () => {
       }),
     })
 
-    await useReposStore
-      .getState()
-      .hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, { [rootTarget.id]: child.id })
+    await useReposStore.getState().hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, {
+      [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+    })
 
     expect(useReposStore.getState().order).toEqual([rootTarget.id])
     expect(useReposStore.getState().activeId).toBe(child.id)
     expect(useReposStore.getState().repos[child.id]?.remote.target).toEqual({ ...rootTarget, ...child })
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [rootTarget.id]: child.id })
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
+      [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+    })
     expect(calls.recent).toEqual([])
   })
 
@@ -76,13 +88,56 @@ describe('repo session hydration', () => {
       }),
     })
 
-    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, {
+      [root]: { kind: 'repository', repositoryId: child },
+    })
 
     expect(useReposStore.getState().order).toEqual([root])
     expect(useReposStore.getState().activeId).toBe(child)
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({ [root]: child })
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
+      [root]: { kind: 'repository', repositoryId: child },
+    })
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
     expect(calls.recent).toEqual([])
+  })
+
+  test.each([
+    { label: 'workspace', activeProject: '/tmp/gbl-workspace' },
+    { label: 'standalone repository', activeProject: '/tmp/gbl-workspace/api' },
+  ])('restores a shared repository with the $label project active', async ({ activeProject }) => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: child, name: 'api' }],
+        candidates: [{ id: child, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore
+      .getState()
+      .hydrateSession(
+        [localRepoSessionEntry(root), localRepoSessionEntry(child)],
+        child,
+        { [root]: { kind: 'repository', repositoryId: child } },
+        {},
+        activeProject,
+      )
+
+    expect(useReposStore.getState().order).toEqual([root, child])
+    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().activeProjectId).toBe(activeProject)
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
   })
 
   test('drops a stale child selection when the root is no longer a multi-repository workspace', async () => {
@@ -100,11 +155,13 @@ describe('repo session hydration', () => {
       }),
     })
 
-    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, { [root]: child })
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, {
+      [root]: { kind: 'repository', repositoryId: child },
+    })
 
     expect(useReposStore.getState().activeId).toBe(root)
     expect(useReposStore.getState().workspaceProjects).toEqual({})
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({})
   })
 
   test('hydrateSession restores tabs through the same initial local refresh path without recent-repo side effects', async () => {

@@ -8,6 +8,7 @@ import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { BranchWorkspaceMemberContext } from '#/web/components/repo-workspace/BranchWorkspaceMemberContext.tsx'
 
 const { openExternalUrlMock } = vi.hoisted(() => ({
   openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
@@ -115,6 +116,35 @@ afterEach(() => {
 })
 
 describe('StatusBar file area control', () => {
+  test('renders without a top divider while preserving its fixed height', () => {
+    act(() => root!.render(<StatusBar repoId={REPO_ID} />))
+
+    const statusBar = container?.querySelector<HTMLElement>('[data-testid="statusbar"]')
+    expect(statusBar?.className).toContain('h-7')
+    expect(statusBar?.className).not.toContain('border-t')
+    expect(statusBar?.className).not.toContain('border-topbar-border')
+  })
+
+  test('exposes a layout-neutral host for workspace actions', () => {
+    let actionHost: HTMLDivElement | null = null
+
+    act(() =>
+      root!.render(
+        <StatusBar
+          repoId={REPO_ID}
+          workspaceActionsHostRef={(element) => {
+            actionHost = element
+          }}
+        />,
+      ),
+    )
+
+    const renderedHost = container?.querySelector<HTMLDivElement>('[data-testid="statusbar-workspace-actions"]')
+    if (!renderedHost) throw new Error('missing status bar workspace action host')
+    expect(actionHost).toBe(renderedHost)
+    expect(renderedHost.className).toContain('contents')
+  })
+
   test('keeps the active settings trigger above the dialog scrim and toggles it closed', () => {
     const toggleSettings = vi.fn()
     shellOverlayMock.state = {
@@ -187,6 +217,34 @@ describe('StatusBar file area control', () => {
         worktreePath: WORKTREE_PATH,
         branch: 'main',
         terminalId: 'terminal-1',
+      }),
+    )
+  })
+
+  test('adds the active branch workspace member scope to terminal links', async () => {
+    act(() =>
+      root!.render(
+        <BranchWorkspaceMemberContext.Provider
+          value={{ workspaceRootId: '/workspace', branchWorkspaceId: 'branch-1', repositoryName: 'api' }}
+        >
+          <StatusBar repoId={REPO_ID} />
+        </BranchWorkspaceMemberContext.Provider>,
+      ),
+    )
+
+    act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')?.click())
+    await flush()
+
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
+        repoId: REPO_ID,
+        worktreePath: WORKTREE_PATH,
+        branch: 'main',
+        terminalId: 'terminal-1',
+        branchWorkspaceScope: {
+          workspaceRootId: '/workspace',
+          branchWorkspaceId: 'branch-1',
+        },
       }),
     )
   })

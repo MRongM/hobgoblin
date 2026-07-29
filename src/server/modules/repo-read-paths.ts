@@ -1,4 +1,9 @@
-import { resolveRemoteRepoTarget, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
+import {
+  isValidRepositoryWorktreePath,
+  resolveRemoteRepoTarget,
+  runWithRepoBackend,
+  type RepoSnapshotOptions,
+} from '#/server/modules/repo-backend.ts'
 import {
   getRepositoryFileTree as getRepositoryFileTreeRead,
   searchRepositoryFileTree as searchRepositoryFileTreeRead,
@@ -10,8 +15,17 @@ import {
 } from '#/system/commit-message-ai.ts'
 import { readLocalFileTreeTextFile } from '#/system/file-tree/local.ts'
 import { readLocalFileTreeBinaryFile } from '#/system/file-tree/local.ts'
-import { readRemoteFileTreeBinaryFile, readRemoteFileTreeTextFile } from '#/system/ssh/git.ts'
-import { isCommitMessageProvider, type CommitMessageGenerationResult, type CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
+import { getLocalWorktreeBootstrapPreflight } from '#/system/git/worktree-bootstrap-candidates.ts'
+import {
+  getRemoteWorktreeBootstrapPreflight,
+  readRemoteFileTreeBinaryFile,
+  readRemoteFileTreeTextFile,
+} from '#/system/ssh/git.ts'
+import {
+  isCommitMessageProvider,
+  type CommitMessageGenerationResult,
+  type CommitMessageProviderAvailability,
+} from '#/shared/commit-message-ai.ts'
 import type {
   RepoFileSearchResult,
   RepoFileTreeBinaryFileReadResult,
@@ -20,13 +34,24 @@ import type {
 } from '#/shared/file-tree.ts'
 import { type CommitDetail, type CommitHistoryEntry, type ExecResult, type WorktreeStatus } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
+import { isValidRepoLocator } from '#/shared/input-validation.ts'
+import type {
+  WorktreeBootstrapCandidateScope,
+  WorktreeBootstrapPreflightResult,
+} from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
 }
 
-export async function getRepositorySnapshot(cwd: string, signal?: AbortSignal): Promise<RepoSnapshot | null> {
-  return signal?.aborted ? null : await runWithRepoBackend(cwd, async (backend) => await backend.getSnapshot(signal))
+export async function getRepositorySnapshot(
+  cwd: string,
+  signal?: AbortSignal,
+  options?: RepoSnapshotOptions,
+): Promise<RepoSnapshot | null> {
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getSnapshot(signal, options))
 }
 
 export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
@@ -39,7 +64,9 @@ export async function getRepositoryHistory(
   input: { limit: number; skip: number },
   signal?: AbortSignal,
 ): Promise<CommitHistoryEntry[]> {
-  return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getHistory(branch, input, signal))
+  return signal?.aborted
+    ? []
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getHistory(branch, input, signal))
 }
 
 export async function getRepositoryCommitDetail(
@@ -47,7 +74,9 @@ export async function getRepositoryCommitDetail(
   commit: string,
   signal?: AbortSignal,
 ): Promise<CommitDetail | null> {
-  return signal?.aborted ? null : await runWithRepoBackend(cwd, async (backend) => await backend.getCommitDetail(commit, signal))
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getCommitDetail(commit, signal))
 }
 
 export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
@@ -56,6 +85,46 @@ export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal):
 
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.getPatch(worktreePath, signal))
+}
+
+export async function isRepositoryAncestor(
+  cwd: string,
+  ancestor: string,
+  descendant: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  return signal?.aborted
+    ? false
+    : await runWithRepoBackend(cwd, async (backend) => await backend.isAncestor(ancestor, descendant, signal))
+}
+
+export async function getRepositoryWorktreeBootstrapPreflight(
+  cwd: string,
+  signal?: AbortSignal,
+  candidateScope?: WorktreeBootstrapCandidateScope,
+  sourceWorktreePath?: string,
+): Promise<WorktreeBootstrapPreflightResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  if (sourceWorktreePath !== undefined) {
+    if (!isValidRepositoryWorktreePath(cwd, sourceWorktreePath)) {
+      return { ok: false, message: 'error.invalid-arguments' }
+    }
+    if (isRemoteRepoId(cwd)) {
+      const target = await resolveRemoteRepoTarget(cwd)
+      return await getRemoteWorktreeBootstrapPreflight(
+        { ...target, remotePath: sourceWorktreePath },
+        { signal, ...(candidateScope ? { candidateScope } : {}) },
+      )
+    }
+    return await getLocalWorktreeBootstrapPreflight(sourceWorktreePath, {
+      signal,
+      ...(candidateScope ? { candidateScope } : {}),
+    })
+  }
+  return await runWithRepoBackend(
+    cwd,
+    async (backend) => await backend.getWorktreeBootstrapPreflight(signal, candidateScope),
+  )
 }
 
 export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {

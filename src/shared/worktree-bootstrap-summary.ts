@@ -1,3 +1,5 @@
+import { MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
+
 export interface WorktreeBootstrapPathSummary {
   count: number
   paths: string[]
@@ -16,38 +18,93 @@ export interface WorktreeBootstrapSummary {
 export type WorktreeBootstrapDecision =
   | { kind: 'skip' }
   | {
-      kind: 'run'
-      configHash: string
-      /** Desired trust state for this exact config hash after a successful bootstrap run. */
-      configTrusted: boolean
+      kind: 'materialize'
+      selections: WorktreeBootstrapSelection[]
+      candidateScope?: WorktreeBootstrapCandidateScope
+      /** Worktree whose untracked files produced these selections. */
+      sourceWorktreePath?: string
     }
 
-export interface WorktreeBootstrapPreview {
-  hasConfig: boolean
-  hasOperations: boolean
-  configHash: string | null
-  copyCount: number
-  symlinkCount: number
-  hardlinkCount: number
-  excludeCount: number
-  setup?: {
-    command: string
-  }
+export type WorktreeBootstrapCandidateKind = 'file' | 'directory'
+export type WorktreeBootstrapCandidateScope = 'all-untracked' | 'ignored-only'
+export type WorktreeBootstrapSelectionMode = 'copy' | 'symlink'
+export type WorktreeBootstrapMaterializationMode = WorktreeBootstrapSelectionMode | 'hardlink'
+
+export interface WorktreeBootstrapTargetEntry {
+  path: string
+  mode: WorktreeBootstrapMaterializationMode
 }
 
-export type WorktreeBootstrapPreviewResult =
-  | { ok: true; preview: WorktreeBootstrapPreview }
+export interface WorktreeBootstrapTargetPreflight {
+  pending: WorktreeBootstrapTargetEntry[]
+  satisfied: WorktreeBootstrapTargetEntry[]
+  conflicts: WorktreeBootstrapTargetEntry[]
+  hasSetup: boolean
+}
+
+export type WorktreeBootstrapTargetPreflightResult =
+  | { ok: true; preflight: WorktreeBootstrapTargetPreflight }
   | { ok: false; message: string }
 
-interface WorktreeBootstrapConfigLike {
-  copy: readonly string[]
-  symlink: readonly string[]
-  hardlink: readonly string[]
-  exclude: readonly string[]
-  setup?: string
+export interface WorktreeBootstrapCandidate {
+  path: string
+  kind: WorktreeBootstrapCandidateKind
 }
 
+export interface WorktreeBootstrapSelection {
+  path: string
+  mode: WorktreeBootstrapSelectionMode
+}
+
+export type WorktreeBootstrapPreflight = { kind: 'candidates'; candidates: WorktreeBootstrapCandidate[] }
+
+export type WorktreeBootstrapPreflightResult =
+  | { ok: true; preflight: WorktreeBootstrapPreflight }
+  | { ok: false; message: string }
+
 export const WORKTREE_BOOTSTRAP_SUMMARY_PATH_LIMIT = 8
+
+export function normalizeWorktreeBootstrapSourcePath(value: unknown): string | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_IPC_PATH_LENGTH ||
+    /[\0-\x1f\x7f]/.test(value)
+  ) {
+    return null
+  }
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) ? value : null
+}
+
+export function isWorktreeBootstrapCandidatePath(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_IPC_PATH_LENGTH &&
+    value !== '.' &&
+    value !== '..' &&
+    value !== '.git' &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !/[\0-\x1f\x7f]/.test(value)
+  )
+}
+
+export function normalizeWorktreeBootstrapSelections(value: unknown): WorktreeBootstrapSelection[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const result: WorktreeBootstrapSelection[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (!item || typeof item !== 'object') return null
+    const raw = item as Record<string, unknown>
+    if (!isWorktreeBootstrapCandidatePath(raw.path)) return null
+    if (raw.mode !== 'copy' && raw.mode !== 'symlink') return null
+    if (seen.has(raw.path)) return null
+    seen.add(raw.path)
+    result.push({ path: raw.path, mode: raw.mode })
+  }
+  return result
+}
 
 export function compactWorktreeBootstrapPaths(paths: readonly string[]): WorktreeBootstrapPathSummary {
   return {
@@ -65,27 +122,6 @@ export function hasWorktreeBootstrapSummaryDetails(summary: WorktreeBootstrapSum
     summary.skippedMissing.count > 0 ||
     !!summary.setup
   )
-}
-
-export function worktreeBootstrapPreviewFromConfig(
-  config: WorktreeBootstrapConfigLike | undefined,
-  configHash?: string,
-): WorktreeBootstrapPreview {
-  const copyCount = config?.copy.length ?? 0
-  const symlinkCount = config?.symlink.length ?? 0
-  const hardlinkCount = config?.hardlink.length ?? 0
-  const excludeCount = config?.exclude.length ?? 0
-  const setup = config?.setup
-  return {
-    hasConfig: !!config,
-    hasOperations: copyCount + symlinkCount + hardlinkCount > 0 || !!setup,
-    configHash: config ? (configHash ?? null) : null,
-    copyCount,
-    symlinkCount,
-    hardlinkCount,
-    excludeCount,
-    ...(setup ? { setup: { command: setup } } : {}),
-  }
 }
 
 export function formatWorktreeBootstrapSummary(summary: WorktreeBootstrapSummary | undefined): string {

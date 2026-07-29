@@ -9,6 +9,8 @@ export type BranchActionItemId =
   | 'sync'
   | 'remote'
   | 'terminal'
+  | 'terminalTmux'
+  | 'restoreTmuxTerminals'
   | 'externalTerminal'
   | 'closeAllTerminals'
   | 'editor'
@@ -18,8 +20,10 @@ export type BranchActionItemId =
   | 'pullRemoteBranch'
   | 'deleteBranch'
   | 'removeWorktree'
+  | 'cleanupWorktree'
   | 'checkoutTo'
   | 'merge'
+  | 'mergeOut'
   | 'commit'
   | 'resetHard'
 
@@ -54,18 +58,26 @@ export function branchActionItemIdFromKind(kind: RepoBranchActionKind): BranchAc
       return 'deleteBranch'
     case 'removeWorktree':
       return 'removeWorktree'
+    case 'cleanupWorktree':
+      return 'cleanupWorktree'
     case 'createWorktree':
       return null
   }
 }
 
-export function branchActionBusyItemId(repo: Pick<BranchActionRepo, 'operations'>, branchName: string): BranchActionItemId | null {
+export function branchActionBusyItemId(
+  repo: Pick<BranchActionRepo, 'operations'>,
+  branchName: string,
+): BranchActionItemId | null {
   const action = repo.operations.branchAction
   if (action.phase === 'idle' || action.target !== branchName || !isBranchActionReason(action.reason)) return null
   return branchActionItemIdFromKind(branchActionKindFromReason(action.reason))
 }
 
-export function branchActionDisplayPhase(repo: Pick<BranchActionRepo, 'operations'>, branchName: string): 'queued' | 'running' | null {
+export function branchActionDisplayPhase(
+  repo: Pick<BranchActionRepo, 'operations'>,
+  branchName: string,
+): 'queued' | 'running' | null {
   const action = repo.operations.branchAction
   if (action.phase === 'idle' || action.target !== branchName) return null
   return action.phase

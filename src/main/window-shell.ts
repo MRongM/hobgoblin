@@ -23,12 +23,17 @@ import { getEmbeddedServerRuntime } from '#/main/server-manager.ts'
 import { getSettingsSnapshot } from '#/main/settings-server-client.ts'
 import type { InitialSettingsSnapshot, RendererBootstrapPayload } from '#/shared/bootstrap.ts'
 import { ELECTRON_RENDERER_CAPABILITIES } from '#/shared/bootstrap.ts'
-import { createRendererBootstrapPayload, createRendererRuntimeSnapshot, toInitialServerSnapshot } from '#/shared/bootstrap-builders.ts'
+import {
+  createRendererBootstrapPayload,
+  createRendererRuntimeSnapshot,
+  toInitialServerSnapshot,
+} from '#/shared/bootstrap-builders.ts'
 import { buildI18nSnapshot } from '#/shared/i18n/snapshot.ts'
 import { RENDERER_BOOTSTRAP_CHANNEL } from '#/shared/ipc-channels.ts'
 import type { LangPref } from '#/shared/rpc.ts'
 import { WINDOW_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
 import { DEFAULT_COLOR_THEME, initialSettingsFromSnapshot } from '#/shared/settings-defaults.ts'
+import type { RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 
 const webDevUrl = process.env.GOBLIN_WEB_DEV_URL?.trim()
 const WEB_DIST_DIR = path.join(app.getAppPath(), 'dist/web')
@@ -46,21 +51,24 @@ export function windowCanvasBackground(): string {
 function buildRendererBootstrapPayload(
   langPref: LangPref,
   initialSettings: InitialSettingsSnapshot,
+  surface: RendererSurfaceBootstrap,
 ): RendererBootstrapPayload {
   const runtime = getEmbeddedServerRuntime()
   return createRendererBootstrapPayload({
     runtime: createRendererRuntimeSnapshot('electron', ELECTRON_RENDERER_CAPABILITIES),
     homeDir: os.homedir(),
+    hostPlatform: process.platform,
     i18n: buildI18nSnapshot({ lang: getCurrentLang(), pref: langPref }),
     settings: initialSettings,
     server: toInitialServerSnapshot(runtime ? { ...runtime, url: webDevUrl || runtime.url } : null),
+    surface,
   })
 }
 
 function ensureRendererBootstrapIpc(): void {
   if (rendererBootstrapIpcWired) return
   ipcMain.on(RENDERER_BOOTSTRAP_CHANNEL, (event, bootstrapId) => {
-    event.returnValue = typeof bootstrapId === 'string' ? rendererBootstrapPayloads.get(bootstrapId) ?? null : null
+    event.returnValue = typeof bootstrapId === 'string' ? (rendererBootstrapPayloads.get(bootstrapId) ?? null) : null
   })
   rendererBootstrapIpcWired = true
 }
@@ -77,12 +85,17 @@ export function disposeRendererBootstrapForWebPreferences(
   if (bootstrapId) rendererBootstrapPayloads.delete(bootstrapId)
 }
 
-export async function createRendererWindowWebPreferences(): Promise<BrowserWindowConstructorOptions['webPreferences']> {
+export async function createRendererWindowWebPreferences(
+  surface: RendererSurfaceBootstrap = { kind: 'main' },
+): Promise<BrowserWindowConstructorOptions['webPreferences']> {
   ensureRendererBootstrapIpc()
   const settingsSnapshot = await getSettingsSnapshot()
   const initialSettings: InitialSettingsSnapshot = initialSettingsFromSnapshot(settingsSnapshot)
   const bootstrapId = randomUUID()
-  rendererBootstrapPayloads.set(bootstrapId, buildRendererBootstrapPayload(settingsSnapshot.lang, initialSettings))
+  rendererBootstrapPayloads.set(
+    bootstrapId,
+    buildRendererBootstrapPayload(settingsSnapshot.lang, initialSettings, surface),
+  )
   return {
     preload: PRELOAD_PATH,
     contextIsolation: true,

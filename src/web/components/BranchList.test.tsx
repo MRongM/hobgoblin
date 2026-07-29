@@ -4,10 +4,14 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchList } from '#/web/components/BranchList.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 
@@ -18,10 +22,15 @@ let originalScrollIntoView: typeof Element.prototype.scrollIntoView | undefined
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
+  sensorCount: 0,
 }))
 const navigationState = vi.hoisted(() => ({
   selectRepoBranch: vi.fn(),
   showRepoDetailTab: vi.fn(),
+}))
+const branchWorkspaceQueryState = vi.hoisted(() => ({
+  data: undefined as BranchWorkspaceReadResult | undefined,
+  rootId: '',
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -36,7 +45,15 @@ vi.mock('#/web/stores/i18n.ts', () => ({
     if (key === 'branches.default') return '默认'
     if (key === 'branches.gone') return '已失联'
     if (key === 'branch-status.current') return '当前'
+    if (key === 'workspace.branch-workspace.member-badge') return '子工作区'
     return key
+  },
+}))
+
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceQuery: (rootId: string) => {
+    branchWorkspaceQueryState.rootId = rootId
+    return { data: branchWorkspaceQueryState.data }
   },
 }))
 
@@ -92,8 +109,11 @@ vi.mock('@dnd-kit/core', async () => {
     },
     PointerSensor: vi.fn(),
     closestCenter: vi.fn(),
-    useSensor: () => ({}),
-    useSensors: () => [],
+    useSensor: (sensor: unknown) => ({ sensor }),
+    useSensors: (...sensors: unknown[]) => {
+      dndState.sensorCount = sensors.length
+      return sensors
+    },
   }
 })
 
@@ -122,8 +142,11 @@ beforeEach(() => {
   originalScrollIntoView = Element.prototype.scrollIntoView
   Element.prototype.scrollIntoView = vi.fn()
   dndState.lastDragEnd = null
+  dndState.sensorCount = 0
   navigationState.selectRepoBranch.mockReset()
   navigationState.showRepoDetailTab.mockReset()
+  branchWorkspaceQueryState.data = undefined
+  branchWorkspaceQueryState.rootId = ''
   resetReposStore()
 })
 
@@ -178,6 +201,31 @@ function terminalReadContextWithState(
   }
 }
 
+function terminalCommandContext(): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
 function seedWorktreeRepo() {
   seedRepoState({
     id: REPO_ID,
@@ -197,6 +245,7 @@ function renderList(
     countsByWorktreeKey?: Map<string, number>
     outputActiveWorktreeKeys?: string[]
     onBranchSelected?: () => void
+    onWorktreeDoubleClick?: () => void
     showActions?: boolean
   } = {},
 ) {
@@ -207,18 +256,123 @@ function renderList(
   )
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>
-        <BranchList
-          repoId={REPO_ID}
-          showActions={fixture.showActions ?? false}
-          onBranchSelected={fixture.onBranchSelected}
-        />
-      </TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommandContext()}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <BranchList
+            repoId={REPO_ID}
+            showActions={fixture.showActions ?? false}
+            onBranchSelected={fixture.onBranchSelected}
+            onWorktreeDoubleClick={fixture.onWorktreeDoubleClick}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
 }
 
+const WORKSPACE_ROOT_ID = '/tmp/workspace'
+const MEMBER_WORKTREE_PATH = '/tmp/workspace/hobgoblin-feature/member-repo'
+
+function successfulBranchWorkspaceRead(
+  progress: 'complete' | 'removed' = 'complete',
+): Extract<BranchWorkspaceReadResult, { ok: true }> {
+  return {
+    ok: true,
+    rootId: WORKSPACE_ROOT_ID,
+    auxiliaryCandidates: [],
+    items: [
+      {
+        id: 'branch-1',
+        rootId: WORKSPACE_ROOT_ID,
+        branch: 'feature/member',
+        directoryName: 'hobgoblin-feature',
+        path: '/tmp/workspace/hobgoblin-feature',
+        state: progress === 'removed' ? { kind: 'needs-action', action: 'continue-reduce' } : { kind: 'ready' },
+        available: true,
+        issues: [],
+        repositories: [
+          {
+            repositoryName: 'member-repo',
+            targetBranch: 'feature/member',
+            baseBranch: 'main',
+            branchOrigin: 'created',
+            worktreePath: MEMBER_WORKTREE_PATH,
+            progress,
+            ready: progress === 'complete',
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+    ],
+  }
+}
+
+function seedWorkspaceMembershipFixture(activeProjectId: string, progress: 'complete' | 'removed' = 'complete') {
+  const repo = seedRepoState({
+    id: REPO_ID,
+    branches: [
+      createRepoBranch('feature/member', { worktree: { path: MEMBER_WORKTREE_PATH } }),
+      createRepoBranch('feature/other', { worktree: { path: '/tmp/other-worktree' } }),
+    ],
+    currentBranch: 'main',
+    selectedBranch: 'feature/member',
+  })
+  repo.workspaceRootId = WORKSPACE_ROOT_ID
+  useReposStore.setState({
+    repos: { [REPO_ID]: repo },
+    activeId: REPO_ID,
+    activeProjectId,
+    workspaceProjects: {
+      [WORKSPACE_ROOT_ID]: {
+        rootId: WORKSPACE_ROOT_ID,
+        repositoryIds: [REPO_ID],
+        candidates: [{ id: REPO_ID, name: 'member-repo', selected: true, available: true }],
+        configured: true,
+        configurationError: null,
+        phase: 'ready',
+        skipped: [],
+        error: null,
+      },
+    },
+  })
+  branchWorkspaceQueryState.data = successfulBranchWorkspaceRead(progress)
+}
+
 describe('BranchList worktree drag ordering', () => {
+  test('marks only exact current branch workspace member worktrees', () => {
+    seedWorkspaceMembershipFixture(WORKSPACE_ROOT_ID)
+
+    renderList()
+
+    const rows = Array.from(container?.querySelectorAll('li') ?? [])
+    const memberRow = rows.find((row) => row.textContent?.includes('feature/member'))
+    const otherRow = rows.find((row) => row.textContent?.includes('feature/other'))
+    expect(branchWorkspaceQueryState.rootId).toBe(WORKSPACE_ROOT_ID)
+    const memberBadge = memberRow?.querySelector('[data-testid="branch-workspace-member-badge"]')
+    expect(memberBadge?.textContent).toBe('')
+    expect(memberBadge?.getAttribute('aria-label')).toBe('子工作区')
+    expect(memberBadge?.querySelector('.lucide-folder-kanban')).not.toBeNull()
+    expect(otherRow?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
+  })
+
+  test('does not mark removed branch workspace members', () => {
+    seedWorkspaceMembershipFixture(WORKSPACE_ROOT_ID, 'removed')
+
+    renderList()
+
+    expect(branchWorkspaceQueryState.rootId).toBe(WORKSPACE_ROOT_ID)
+    expect(container?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
+  })
+
+  test('does not mark workspace members when the repository is active standalone', () => {
+    seedWorkspaceMembershipFixture(REPO_ID)
+
+    renderList()
+
+    expect(branchWorkspaceQueryState.rootId).toBe('')
+    expect(container?.querySelector('[data-testid="branch-workspace-member-badge"]')).toBeNull()
+  })
+
   test('renders only the visible repository worktrees with ordinary repository actions', () => {
     seedRepoState({
       id: REPO_ID,
@@ -239,7 +393,7 @@ describe('BranchList worktree drag ordering', () => {
       row.textContent?.includes('feature/solo'),
     )
     expect(soloRow).not.toBeUndefined()
-    expect(soloRow?.querySelector<HTMLButtonElement>('[data-testid="ordinary-remove-worktree"]')).not.toBeNull()
+    expect(soloRow?.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')).not.toBeNull()
     expect(document.querySelector('button[aria-label="workspace.batch.remove-action"]')).toBeNull()
   })
 
@@ -251,13 +405,32 @@ describe('BranchList worktree drag ordering', () => {
     const featureRow = Array.from(container?.querySelectorAll('li') ?? []).find((row) =>
       row.textContent?.includes('feature/a'),
     )
-    act(() => featureRow?.click())
+    act(() => featureRow?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')?.click())
 
     expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
     expect(onBranchSelected).toHaveBeenCalledTimes(1)
     expect(navigationState.selectRepoBranch.mock.invocationCallOrder[0]).toBeLessThan(
       onBranchSelected.mock.invocationCallOrder[0]!,
     )
+  })
+
+  test('notifies the file area after worktree double clicks without opening status', () => {
+    seedWorktreeRepo()
+    const onWorktreeDoubleClick = vi.fn()
+    renderList({ onWorktreeDoubleClick })
+    const featureButton = Array.from(container?.querySelectorAll('li') ?? [])
+      .find((row) => row.textContent?.includes('feature/a'))
+      ?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')
+
+    act(() => {
+      featureButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      featureButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }))
+      featureButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(navigationState.selectRepoBranch).toHaveBeenCalledWith(REPO_ID, 'feature/a')
+    expect(onWorktreeDoubleClick).toHaveBeenCalledTimes(1)
+    expect(navigationState.showRepoDetailTab).not.toHaveBeenCalled()
   })
 
   test('renders branch names and exposes worktree directory names in row tooltips', () => {
@@ -276,7 +449,7 @@ describe('BranchList worktree drag ordering', () => {
     })
 
     expect(
-      Array.from(container?.querySelectorAll('.text-\\[13px\\].font-medium') ?? []).map((node) => node.textContent),
+      Array.from(container?.querySelectorAll('.text-sm.font-medium') ?? []).map((node) => node.textContent),
     ).toEqual(['main', 'feature/a'])
     expect(container?.querySelector('[data-testid="terminal-count-badge"]')?.textContent).toBe('2')
     expect(container?.querySelector('[title*="worktree-a"]')).not.toBeNull()
@@ -352,37 +525,37 @@ describe('BranchList worktree drag ordering', () => {
     expect(dirtyBadge?.getAttribute('aria-label')).toBe('有改动')
   })
 
-  test('hides worktree drag icons while keeping worktree rows sortable', () => {
+  test('binds sortable activators only to dedicated worktree drag handles', () => {
     seedWorktreeRepo()
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
-    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
-
-    const sortableRows = Array.from(container?.querySelectorAll<HTMLLIElement>('li[data-sortable-id]') ?? [])
-    expect(sortableRows.map((row) => row.getAttribute('data-sortable-id'))).toEqual(['/repo', '/tmp/worktree-a'])
-    expect(sortableRows.every((row) => !row.className.includes('1.75rem'))).toBe(true)
+    const handles = Array.from(
+      container?.querySelectorAll<HTMLButtonElement>('[data-workspace-list-item-drag-handle]') ?? [],
+    )
+    expect(handles.map((handle) => handle.getAttribute('data-sortable-id'))).toEqual(['/repo', '/tmp/worktree-a'])
+    expect(handles.every((handle) => handle.querySelector('.lucide-grip-vertical'))).toBe(true)
+    expect(container?.querySelectorAll('li[data-sortable-id]')).toHaveLength(0)
+    expect(container?.querySelectorAll('[data-workspace-list-item-main][data-sortable-id]')).toHaveLength(0)
   })
 
-  test('marks worktree branch rows as sortable', () => {
+  test('uses pointer and keyboard sensors for worktree sorting', () => {
     seedWorktreeRepo()
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
-    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
-    expect(container?.querySelectorAll('li[data-sortable-id]')).not.toHaveLength(0)
+    expect(dndState.sensorCount).toBe(2)
+    expect(container?.querySelectorAll('[data-workspace-list-item-drag-handle]')).toHaveLength(2)
   })
 
-  test('keeps worktree rows visible with stale branch search state without showing drag icons', () => {
+  test('keeps worktree rows and their drag handles visible with stale branch search state', () => {
     seedWorktreeRepo()
     useReposStore.getState().setBranchSearchQuery(REPO_ID, 'feature')
 
     renderList()
 
-    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(0)
-    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(0)
+    expect(document.querySelectorAll('[aria-label="重新排序工作树"]')).toHaveLength(2)
+    expect(document.querySelectorAll('.lucide-grip-vertical')).toHaveLength(2)
     expect(container?.textContent).toContain('main')
     expect(container?.textContent).toContain('feature/a')
   })

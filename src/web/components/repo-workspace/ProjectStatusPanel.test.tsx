@@ -68,6 +68,7 @@ describe('ProjectStatusPanel', () => {
           lastCommitMessage: 'feat: expose commit metadata',
           lastCommitAuthor: 'Test Author',
           lastCommitDate: '2026-06-26T09:30:00.000Z',
+          createdFrom: 'develop',
           worktree: { path: WORKTREE_PATH },
         }),
       ],
@@ -93,11 +94,29 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('branch-status.signal.commit-author')
     expect(container?.textContent).toContain('Test Author')
     expect(container?.textContent).toContain('branch-status.signal.commit-time')
+    expect(container?.textContent).toContain('branch-status.signal.created-from')
+    expect(container?.textContent).toContain('develop')
     expect(container?.textContent).toContain('2026')
-    const copyAllButton = container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')
-    expect(container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null)).toBe(
-      true,
+    const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
+    const statusRowLabels = Array.from(statusRows?.querySelectorAll('[role="listitem"]') ?? [], (row) =>
+      row.children.item(1)?.textContent,
     )
+    expect(statusRowLabels.slice(0, 5)).toEqual([
+      'branch-status.signal.folder',
+      'branch-status.signal.project',
+      'branch-status.signal.branch',
+      'branch-status.signal.created-from',
+      'branch-status.signal.worktree',
+    ])
+    const statusToolbar = container?.querySelector<HTMLElement>('[data-testid="project-status-toolbar"]')
+    expect(statusToolbar?.classList.contains('border-b')).toBe(false)
+    expect(statusToolbar?.classList.contains('border-toolbar-border')).toBe(false)
+    expect(statusRows?.className).not.toContain('divide-y')
+    expect(statusRows?.className).not.toContain('border-b')
+    const copyAllButton = container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')
+    expect(
+      container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null),
+    ).toBe(true)
     expect(copyAllButton?.textContent).toBe('')
 
     await act(async () => {
@@ -123,6 +142,7 @@ describe('ProjectStatusPanel', () => {
         'branch-status.signal.folder: gbl-project-status-repo',
         'branch-status.signal.project: Status Project',
         'branch-status.signal.branch: feature/worktree',
+        'branch-status.signal.created-from: develop',
         `branch-status.signal.worktree: ${WORKTREE_PATH}`,
         'branch-status.signal.upstream: branches.no-upstream',
         'branch-status.signal.sync: branches.no-upstream',
@@ -130,8 +150,40 @@ describe('ProjectStatusPanel', () => {
         'branch-status.signal.commit-message: feat: expose commit metadata',
         'branch-status.signal.commit-author: Test Author',
         'branch-status.signal.commit-time: 2026-06-26T09:30:00.000Z',
-        'branch-status.signal.merge: branch-status.merge-unknown',
       ].join('\n'),
     )
+  })
+
+  test('renders unknown when a non-default branch has no recorded creation source', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      name: 'Status Project',
+      branches: [createRepoBranch('feature/legacy')],
+      selectedBranch: 'feature/legacy',
+      statusLoaded: true,
+    })
+
+    await act(async () => {
+      root!.render(<ProjectStatusPanel repoId={REPO_ID} />)
+    })
+
+    expect(container?.textContent).toContain('branch-status.signal.created-from')
+    expect(container?.textContent).toContain('branch-status.created-from-unknown')
+  })
+
+  test('omits the creation source row for the default branch', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      name: 'Status Project',
+      branches: [createRepoBranch('main', { isDefault: true, createdFrom: 'develop' })],
+      selectedBranch: 'main',
+      statusLoaded: true,
+    })
+
+    await act(async () => {
+      root!.render(<ProjectStatusPanel repoId={REPO_ID} />)
+    })
+
+    expect(container?.textContent).not.toContain('branch-status.signal.created-from')
   })
 })

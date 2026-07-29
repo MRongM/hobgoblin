@@ -4,6 +4,10 @@ import { describe, expect, test } from 'vitest'
 const css = readFileSync(new URL('./terminal-session.css', import.meta.url), 'utf8')
 
 describe('terminal session CSS layout contract', () => {
+  test('keeps a 3px inset around the terminal canvas', () => {
+    expect(css).toMatch(/\.goblin-managed-terminal-frame\s*\{[^}]*padding:\s*3px;/)
+  })
+
   test('keeps the button dock flush with the terminal bottom edge', () => {
     expect(css).toContain('--goblin-terminal-bottom-dock-height: 44px;')
     expect(css).toContain('padding-bottom: var(--goblin-terminal-bottom-dock-height);')

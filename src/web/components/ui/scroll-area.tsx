@@ -62,7 +62,7 @@ interface ScrollBarProps extends ComponentPropsWithoutRef<typeof ScrollAreaPrimi
   mode?: ScrollbarMode
 }
 
-export const ScrollBar = forwardRef<ComponentRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>, ScrollBarProps>(
+const ScrollBar = forwardRef<ComponentRef<typeof ScrollAreaPrimitive.ScrollAreaScrollbar>, ScrollBarProps>(
   function ScrollBar({ className, orientation = 'vertical', mode = 'default', ...props }, ref) {
     return (
       <ScrollAreaPrimitive.Scrollbar
@@ -77,6 +77,7 @@ export const ScrollBar = forwardRef<ComponentRef<typeof ScrollAreaPrimitive.Scro
         {...props}
       >
         <ScrollAreaPrimitive.Thumb
+          data-slot="scroll-area-thumb"
           className={cn(
             'relative flex-1 rounded-full bg-muted-foreground/40 transition-[background-color,width,height] duration-150 ease-out hover:bg-muted-foreground/70 active:bg-muted-foreground/80',
             orientation === 'vertical' && 'mx-auto w-1 hover:w-1.5',

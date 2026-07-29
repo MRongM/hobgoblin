@@ -7,12 +7,16 @@ const SESSION_SAVE_DEBOUNCE_MS = 200
 
 export function useSessionPersistence() {
   const activeId = useReposStore((s) => s.activeId)
+  const activeProjectId = useReposStore((s) => s.activeProjectId)
   const order = useReposStore((s) => s.order)
-  const workspaceActiveRepoByRoot = useReposStore((s) => s.workspaceActiveRepoByRoot)
+  const workspaceActiveContextByRoot = useReposStore((s) => s.workspaceActiveContextByRoot)
+  const workspaceRepositoryListExpandedByRoot = useReposStore((s) => s.workspaceRepositoryListExpandedByRoot)
+  const workspaceRepositoryListHeightByRoot = useReposStore((s) => s.workspaceRepositoryListHeightByRoot)
   const projectListExpanded = useReposStore((s) => s.projectListExpanded)
   const detailCollapsed = useReposStore((s) => s.detailCollapsed)
-  const detailFocusMode = useReposStore((s) => s.detailFocusMode)
-  const workspaceLayout = useReposStore((s) => (s.activeId ? s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout : s.workspaceLayout))
+  const workspaceLayout = useReposStore((s) =>
+    s.activeId ? (s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout) : s.workspaceLayout,
+  )
   const detailPaneSizes = useReposStore((s) => s.detailPaneSizes)
   const fileTreePaneSizes = useReposStore((s) => s.fileTreePaneSizes)
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
@@ -30,10 +34,12 @@ export function useSessionPersistence() {
       repos,
       order,
       activeId,
-      workspaceActiveRepoByRoot,
+      activeProjectId,
+      workspaceActiveContextByRoot,
+      workspaceRepositoryListExpandedByRoot,
+      workspaceRepositoryListHeightByRoot,
       projectListExpanded,
       detailCollapsed,
-      detailFocusMode,
       workspaceLayout,
       detailPaneSizes,
       fileTreePaneSizes,
@@ -47,10 +53,11 @@ export function useSessionPersistence() {
     const immediateKey = JSON.stringify({
       openRepos: session.openRepos,
       activeRepo: session.activeRepo,
-      workspaceActiveRepoByRoot: session.workspaceActiveRepoByRoot,
+      activeProject: session.activeProject,
+      workspaceActiveContextByRoot: session.workspaceActiveContextByRoot,
+      workspaceRepositoryListExpandedByRoot: session.workspaceRepositoryListExpandedByRoot,
       projectListExpanded,
       detailCollapsed,
-      detailFocusMode,
       workspaceLayout: restorableWorkspaceState.workspaceLayout,
       selectedTerminalByWorktree: session.selectedTerminalByWorktree,
     })
@@ -74,10 +81,12 @@ export function useSessionPersistence() {
     sessionReady,
     order,
     activeId,
-    workspaceActiveRepoByRoot,
+    activeProjectId,
+    workspaceActiveContextByRoot,
+    workspaceRepositoryListExpandedByRoot,
+    workspaceRepositoryListHeightByRoot,
     projectListExpanded,
     detailCollapsed,
-    detailFocusMode,
     detailPaneSizes,
     fileTreePaneSizes,
     selectedTerminalByWorktree,

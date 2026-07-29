@@ -35,23 +35,21 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     shortcutsDisabled: false,
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
-    toggleDetailOnActionBarBlankClick: false,
     terminalThemeSyncEnabled: true,
     temporaryFilesDirectory: '',
     globalShortcut: '',
     terminalApp: 'auto',
     editorApp: 'auto',
     fileTreeFontSize: 12,
-    fileTreeTopbarFontSize: overrides.fileTreeTopbarFontSize ?? 13,
     fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? 30,
     terminalFontSize: 14,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
     lanEnabled: false,
     serverPort: 32200,
     ...overrides,
+    statusRefreshIntervalSec: overrides.statusRefreshIntervalSec ?? 120,
     topbarHeightPx: overrides.topbarHeightPx ?? 34,
     toolbarHeightPx: overrides.toolbarHeightPx ?? 34,
     fontFamily: overrides.fontFamily ?? 'mono',
@@ -162,13 +160,11 @@ vi.mock('#/main/shortcuts.ts', () => ({
 
 vi.mock('#/main/menu.ts', () => ({
   buildAppMenu: vi.fn(),
-  setMenuWorkspaceLayout: vi.fn(),
 }))
 
 vi.mock('#/main/i18n/index.ts', () => ({
   applyLangPref: vi.fn(),
   getCurrentLang: vi.fn(() => 'en'),
-  getDictionary: vi.fn(() => ({})),
   resolveLang: vi.fn((pref: string) => (pref === 'auto' ? 'en' : pref)),
   setCurrentLang: vi.fn(),
 }))
@@ -178,7 +174,6 @@ vi.mock('#/main/menu-state.ts', () => ({
 }))
 
 vi.mock('#/system/terminals.ts', () => ({
-  getResolvedTerminalApp: vi.fn(() => Promise.resolve(null)),
   getTerminalActionAvailability: vi.fn(() => ({ ghostty: false, terminal: true })),
   getTerminalAppAvailability: vi.fn(() => Promise.resolve({ ghostty: false, terminal: true })),
   openInPreferredTerminal: vi.fn(),
@@ -188,7 +183,6 @@ vi.mock('#/system/terminals.ts', () => ({
 }))
 
 vi.mock('#/system/editors.ts', () => ({
-  getResolvedEditorApp: vi.fn(() => null),
   getEditorAppAvailability: vi.fn(() => ({ vscode: false, cursor: false, windsurf: false })),
   openInPreferredEditor: vi.fn(),
   resolveEditorApp: vi.fn((_pref, availability) =>
@@ -198,7 +192,6 @@ vi.mock('#/system/editors.ts', () => ({
 
 vi.mock('#/main/renderer-surface-events.ts', () => ({
   broadcastRpcEvent: vi.fn(),
-  sendRpcEvent: vi.fn(),
 }))
 
 vi.mock('#/main/settings-server-client.ts', () => ({

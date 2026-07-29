@@ -2,7 +2,8 @@
 
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   ProjectTerminalStatus,
   projectTerminalWorktreeKeys,
@@ -19,6 +20,12 @@ import type {
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 
+const branchWorkspaceMocks = vi.hoisted(() => ({ read: vi.fn() }))
+
+vi.mock('#/web/workspace-client.ts', () => ({
+  readBranchWorkspaces: branchWorkspaceMocks.read,
+}))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -26,6 +33,8 @@ const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENV
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
+  branchWorkspaceMocks.read.mockReset()
+  branchWorkspaceMocks.read.mockResolvedValue({ ok: true, rootId: '', items: [], auxiliaryCandidates: [] })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -101,10 +110,128 @@ describe('project terminal switcher model', () => {
 
     act(() => root!.render(<ProjectSummariesProbe />))
 
-    expect(JSON.parse(container!.querySelector('output')?.textContent ?? '[]')).toEqual([
-      '/workspace-root\0/workspace-root',
-      '/workspace-root/repo-a\0/worktrees/feature-a',
+    expect(JSON.parse(container!.querySelector('output')?.textContent ?? '{}')).toEqual({
+      branchWorkspaceRootId: '/workspace-root',
+      changeCount: 0,
+      terminalWorktreeKeys: ['/workspace-root\0/workspace-root', '/workspace-root/repo-a\0/worktrees/feature-a'],
+    })
+  })
+
+  test('accumulates project changes across member repositories and worktrees', () => {
+    const rootRepo = replaceRepo(emptyRepo('/workspace-root', 'workspace'), (repo) => {
+      repo.isGitRepo = false
+    })
+    const repoA = replaceRepo(emptyRepo('/workspace-root/repo-a', 'repo-a'), (repo) => {
+      repo.workspaceRootId = rootRepo.id
+      repo.data.status = [
+        {
+          path: '/workspace-root/repo-a',
+          isMain: true,
+          entries: [
+            { x: ' ', y: 'M', path: 'src/a.ts' },
+            { x: '?', y: '?', path: 'src/b.ts' },
+          ],
+        },
+        {
+          path: '/worktrees/feature-a',
+          branch: 'feature/a',
+          isMain: false,
+          entries: [{ x: 'A', y: ' ', path: 'src/c.ts' }],
+        },
+      ]
+    })
+    const repoB = replaceRepo(emptyRepo('/workspace-root/repo-b', 'repo-b'), (repo) => {
+      repo.workspaceRootId = rootRepo.id
+      repo.data.status = [
+        {
+          path: '/workspace-root/repo-b',
+          isMain: true,
+          entries: [
+            { x: ' ', y: 'M', path: 'src/d.ts' },
+            { x: 'D', y: ' ', path: 'src/e.ts' },
+          ],
+        },
+      ]
+    })
+    useReposStore.setState({
+      repos: { [rootRepo.id]: rootRepo, [repoA.id]: repoA, [repoB.id]: repoB },
+      order: [rootRepo.id],
+      activeId: rootRepo.id,
+      workspaceProjects: {
+        [rootRepo.id]: {
+          rootId: rootRepo.id,
+          repositoryIds: [repoA.id, repoB.id],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+
+    act(() => root!.render(<ProjectSummariesProbe />))
+
+    expect(JSON.parse(container!.querySelector('output')?.textContent ?? '{}')).toEqual({
+      branchWorkspaceRootId: '/workspace-root',
+      changeCount: 5,
+      terminalWorktreeKeys: ['/workspace-root\0/workspace-root'],
+    })
+  })
+
+  test('includes branch workspace root sessions in configured workspace project status', async () => {
+    const rootId = '/workspace-root'
+    const projectKey = `${rootId}\0${rootId}`
+    const branchWorkspacePath = '/workspace-root/feature-auth'
+    const branchWorkspaceKey = `${rootId}\0${branchWorkspacePath}`
+    branchWorkspaceMocks.read.mockResolvedValue({
+      ok: true,
+      rootId,
+      items: [
+        {
+          id: 'branch-1',
+          rootId,
+          branch: 'feature/auth',
+          directoryName: 'feature-auth',
+          path: branchWorkspacePath,
+          state: { kind: 'ready' },
+          available: true,
+          issues: [],
+          repositories: [],
+          auxiliaryEntries: [],
+        },
+      ],
+      auxiliaryCandidates: [],
+    })
+    const snapshots = new Map<string, WorktreeTerminalSnapshot>([
+      [projectKey, worktreeSnapshot(projectKey, terminalSession(projectKey, { isOutputActive: true }))],
+      [
+        branchWorkspaceKey,
+        worktreeSnapshot(branchWorkspaceKey, terminalSession(branchWorkspaceKey, { hasBell: true })),
+      ],
     ])
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    await act(async () => {
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <TerminalSessionReadContext.Provider value={terminalReadContext(snapshots)}>
+            <ProjectTerminalStatus terminalWorktreeKeys={[projectKey]} branchWorkspaceRootId={rootId} />
+          </TerminalSessionReadContext.Provider>
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await vi.waitFor(() => {
+      expect(container!.querySelector('[data-testid="project-terminal-status"]')?.textContent).toContain('2')
+    })
+    const status = container!.querySelector('[data-testid="project-terminal-status"]')
+    expect(status?.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
+    expect(status?.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
+    queryClient.clear()
   })
 
   test('includes plain-workspace count and output activity in the aggregate project status', () => {
@@ -142,7 +269,16 @@ describe('project terminal switcher model', () => {
 
 function ProjectSummariesProbe() {
   const summaries = useProjectSummaries()
-  return <output>{JSON.stringify(summaries[0]?.terminalWorktreeKeys ?? [])}</output>
+  const project = summaries[0] as (typeof summaries)[number] & { branchWorkspaceRootId?: string | null }
+  return (
+    <output>
+      {JSON.stringify({
+        branchWorkspaceRootId: project?.branchWorkspaceRootId,
+        changeCount: project?.changeCount,
+        terminalWorktreeKeys: project?.terminalWorktreeKeys ?? [],
+      })}
+    </output>
+  )
 }
 
 function terminalRepo(
@@ -159,6 +295,7 @@ function terminalRepo(
     data: {
       branches: branchPaths.map((path) => ({ worktree: { path } })),
       worktreesByPath: Object.fromEntries(worktreePaths.map((path) => [path, {}])),
+      status: [],
     },
   }
 }

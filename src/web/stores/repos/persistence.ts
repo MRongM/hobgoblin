@@ -5,7 +5,11 @@ import { selectedBranchForBranchSet } from '#/web/stores/repos/branch-view-mode.
 import type { ExplorerTab, RestorableRepoSnapshot, RepoState } from '#/web/stores/repos/types.ts'
 import { finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { stripBranchWorktreeMetadata } from '#/web/stores/repos/worktree-state.ts'
-import { DEFAULT_WORKSPACE_LAYOUT, normalizeFileTreePaneSizes } from '#/shared/workspace-layout.ts'
+import {
+  DEFAULT_WORKSPACE_LAYOUT,
+  normalizeFileTreePaneSizes,
+  normalizeWorkspaceLayout,
+} from '#/shared/workspace-layout.ts'
 import type { BranchActionItemId } from '#/web/hooks/branch-action-state.ts'
 
 export const rememberedQuickActions = new Map<string, BranchActionItemId>()
@@ -31,32 +35,7 @@ const BranchSchema = v.object({
       path: v.string(),
     }),
   ),
-  mergedToDefault: v.optional(v.boolean()),
-})
-
-const StatusEntrySchema = v.object({
-  x: v.string(),
-  y: v.string(),
-  path: v.string(),
-})
-
-const WorktreeStatusSchema = v.object({
-  path: v.string(),
-  branch: v.optional(v.string()),
-  head: v.optional(v.string()),
-  isMain: v.boolean(),
-  entries: v.array(StatusEntrySchema),
-})
-
-const WorktreeStateSchema = v.object({
-  path: v.string(),
-  branch: v.optional(v.string()),
-  head: v.optional(v.string()),
-  isDetached: v.optional(v.boolean()),
-  isMain: v.boolean(),
-  isDirty: v.optional(v.boolean()),
-  changeCount: v.optional(FiniteNumber),
-  isLocked: v.optional(v.boolean()),
+  createdFrom: v.optional(v.string()),
 })
 
 const RepoEventActionSchema = v.union([
@@ -65,10 +44,17 @@ const RepoEventActionSchema = v.union([
   v.object({ kind: v.literal('push'), branch: v.string(), worktreePath: v.optional(v.string()) }),
   v.object({ kind: v.literal('commit'), branch: v.string(), message: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('merge'), branch: v.string(), sourceBranch: v.string(), worktreePath: v.string() }),
+  v.object({
+    kind: v.literal('mergeOut'),
+    branch: v.string(),
+    destinationBranch: v.string(),
+    worktreePath: v.string(),
+  }),
   v.object({ kind: v.literal('createWorktree'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('createBranch'), branch: v.string(), baseBranch: v.string() }),
   v.object({ kind: v.literal('trackRemoteBranch'), branch: v.string(), remoteRef: v.string() }),
   v.object({ kind: v.literal('deleteBranch'), branch: v.string() }),
+  v.object({ kind: v.literal('cleanupWorktree'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('removeWorktree'), branch: v.string(), worktreePath: v.string(), alsoDeleteBranch: v.boolean() }),
 ])
 
@@ -177,7 +163,7 @@ function restoreProjectionFromSnapshot(repo: RepoState, snapshot: RestorableRepo
       selectedBranch,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
       explorerTabByBranch: snapshot.ui.explorerTabByBranch ?? {},
-      workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
+      workspaceLayout: normalizeWorkspaceLayout(snapshot.ui.workspaceLayout),
       fileTreePaneSizes: snapshot.ui.fileTreePaneSizes,
       worktreePathOrder: snapshot.ui.worktreePathOrder,
     },
@@ -272,6 +258,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
     fileTreePaneSizes: _rawFileTreePaneSizes,
     explorerTab: rawExplorerTab,
     explorerTabByBranch: rawExplorerTabByBranch,
+    workspaceLayout: rawWorkspaceLayout,
     ...ui
   } = snapshot.ui
   const explorerTabByBranch = normalizeCachedExplorerTabByBranch(rawExplorerTabByBranch, rawExplorerTab)
@@ -285,7 +272,7 @@ function normalizeRestorableRepoSnapshotEntry(value: unknown): RestorableRepoSna
       ...ui,
       detailTab: normalizeCachedDetailTab(snapshot.ui.detailTab),
       ...(Object.keys(explorerTabByBranch).length > 0 ? { explorerTabByBranch } : {}),
-      workspaceLayout: snapshot.ui.workspaceLayout ?? DEFAULT_WORKSPACE_LAYOUT,
+      workspaceLayout: normalizeWorkspaceLayout(rawWorkspaceLayout),
       ...(fileTreePaneSizes ? { fileTreePaneSizes } : {}),
     },
   }

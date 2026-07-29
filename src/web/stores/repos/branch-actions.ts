@@ -21,19 +21,15 @@ import {
   evaluateBranchActionSchedule as evaluateBranchActionScheduleDecision,
   isNetworkBranchActionKind,
 } from '#/web/stores/repos/branch-action-scheduler.ts'
-import {
-  NON_GIT_REPO_OPERATION_RESULT,
-  repoSupportsGitData,
-} from '#/web/stores/repos/capabilities.ts'
+import { NON_GIT_REPO_OPERATION_RESULT, repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import type { RepoEventAction, RepoState, ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
-import {
-  runWithRepoInvalidationSource,
-} from '#/web/stores/repos/invalidation-sources.ts'
+import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import {
   checkoutRepositoryBranch,
+  cleanupRepositoryWorktree,
   createRepositoryBranch,
   createRepositoryWorktree,
   deleteRepositoryBranch,
@@ -53,6 +49,7 @@ const BRANCH_ACTION_REASON_BY_KIND: Record<RepoBranchActionKind, RepoBranchActio
   createBranch: 'branch:createBranch',
   trackRemoteBranch: 'branch:trackRemoteBranch',
   deleteBranch: 'branch:deleteBranch',
+  cleanupWorktree: 'branch:cleanupWorktree',
   removeWorktree: 'branch:removeWorktree',
 }
 type NetworkRepoBranchAction = Extract<RepoBranchAction, { kind: 'pull' | 'push' }>
@@ -91,6 +88,7 @@ function branchActionOperationTarget(action: RepoBranchAction): string | null {
     case 'pull':
     case 'push':
     case 'deleteBranch':
+    case 'cleanupWorktree':
     case 'removeWorktree':
       return action.branch
     case 'createWorktree':
@@ -113,12 +111,18 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
     case 'push':
     case 'deleteBranch':
       return { kind: action.kind, branch: action.branch }
+    case 'cleanupWorktree':
+      return { kind: action.kind, branch: action.branch, worktreePath: action.worktreePath }
     case 'createBranch':
       return { kind: action.kind, branch: action.branch, baseBranch: action.baseBranch }
     case 'trackRemoteBranch':
       return { kind: action.kind, branch: action.localBranch, remoteRef: action.remoteRef }
     case 'createWorktree':
-      return { kind: action.kind, branch: createWorktreeEventBranch(action.input), worktreePath: action.input.worktreePath }
+      return {
+        kind: action.kind,
+        branch: createWorktreeEventBranch(action.input),
+        worktreePath: action.input.worktreePath,
+      }
     case 'removeWorktree':
       return {
         kind: action.kind,
@@ -254,6 +258,8 @@ function runBranchActionRpc(
         signal,
         sourceToken,
       )
+    case 'cleanupWorktree':
+      return cleanupRepositoryWorktree(repoId, action.worktreePath, signal, sourceToken)
     case 'removeWorktree':
       return removeRepositoryWorktree(
         repoId,
@@ -261,6 +267,7 @@ function runBranchActionRpc(
           branch: action.branch,
           worktreePath: action.worktreePath,
           alsoDeleteBranch: action.alsoDeleteBranch,
+          forceRemoveWorktree: action.forceRemoveWorktree,
           forceDeleteBranch: action.forceDeleteBranch,
           alsoDeleteUpstream: action.alsoDeleteUpstream,
         },

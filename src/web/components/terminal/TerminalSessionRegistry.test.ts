@@ -3,11 +3,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessionRegistry.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import type { TerminalDescriptor, TerminalRepoIndex } from '#/web/components/terminal/types.ts'
+import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
+import type { TerminalCloseResult } from '#/shared/terminal.ts'
 
 const bridgeMocks = vi.hoisted(() => ({
   create: vi.fn(),
-  close: vi.fn(async () => true),
+  openTmuxSessions: vi.fn(),
+  close: vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true })),
   reorder: vi.fn(async () => true),
   setBadge: vi.fn(),
   takeover: vi.fn(async () => ({ ok: false as const, message: 'error.unavailable' })),
@@ -16,6 +18,7 @@ const bridgeMocks = vi.hoisted(() => ({
 vi.mock('#/web/terminal.ts', () => ({
   terminalBridge: {
     create: bridgeMocks.create,
+    openTmuxSessions: bridgeMocks.openTmuxSessions,
     close: bridgeMocks.close,
     reorder: bridgeMocks.reorder,
     setBadge: bridgeMocks.setBadge,
@@ -27,18 +30,7 @@ const REPO_ROOT = '/repo'
 const WORKTREE_PATH = '/repo'
 const BRANCH = 'main'
 const WORKTREE_KEY = worktreeTerminalKey(REPO_ROOT, WORKTREE_PATH)
-
-function makeDescriptor(terminalId: string, index: number): TerminalDescriptor {
-  return {
-    key: `${REPO_ROOT}\0${WORKTREE_PATH}\0${terminalId}`,
-    worktreeTerminalKey: WORKTREE_KEY,
-    terminalId,
-    index,
-    repoRoot: REPO_ROOT,
-    branch: BRANCH,
-    worktreePath: WORKTREE_PATH,
-  }
-}
+const BRANCH_WORKSPACE_PATH = '/repo/goblin-feature'
 
 function makeRepoIndex(): TerminalRepoIndex {
   return {
@@ -61,6 +53,7 @@ function makeServerSession(
     displayOrder: number
     phase: 'opening' | 'restarting' | 'open' | 'error' | 'closed'
     message: string | null
+    tmuxBacked: boolean
   }> = {},
 ) {
   return {
@@ -75,25 +68,64 @@ function makeServerSession(
     displayOrder: overrides.displayOrder ?? 1,
     phase: overrides.phase ?? 'open',
     message: overrides.message ?? null,
+    tmuxBacked: overrides.tmuxBacked ?? false,
   }
 }
 
 describe('TerminalSessionRegistry', () => {
   let registry: TerminalSessionRegistry
   let selectedChanges: Array<{ worktreeTerminalKey: string; key: string | null }>
+  let outputCompletions: unknown[]
 
   beforeEach(() => {
     selectedChanges = []
+    outputCompletions = []
     bridgeMocks.create.mockReset()
-    bridgeMocks.close.mockClear()
+    bridgeMocks.openTmuxSessions.mockReset()
+    bridgeMocks.close.mockReset()
+    bridgeMocks.close.mockResolvedValue({ ok: true })
     bridgeMocks.reorder.mockClear()
     bridgeMocks.setBadge.mockClear()
     bridgeMocks.takeover.mockClear()
     window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
     registry = new TerminalSessionRegistry(
-      () => REPO_ROOT,
       (worktreeTerminalKey, key) => selectedChanges.push({ worktreeTerminalKey, key }),
+      () => {},
+      (intent) => outputCompletions.push(intent),
     )
+  })
+
+  test('reconciles a branch workspace folder indexed under its parent root', () => {
+    registry.setRepoIndex({
+      [REPO_ROOT]: {
+        instanceToken: 1,
+        branchByWorktreePath: {
+          [WORKTREE_PATH]: BRANCH,
+          [BRANCH_WORKSPACE_PATH]: 'feature/auth',
+        },
+      },
+    })
+
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [
+        {
+          ...makeServerSession('branch-session', 'terminal-1'),
+          key: `${REPO_ROOT}\0${BRANCH_WORKSPACE_PATH}\0terminal-1`,
+          cwd: BRANCH_WORKSPACE_PATH,
+        },
+      ],
+      'attachment_local',
+      new Map(),
+    )
+
+    const snapshot = registry.worktreeSnapshot(worktreeTerminalKey(REPO_ROOT, BRANCH_WORKSPACE_PATH))
+    expect(snapshot.count).toBe(1)
+    expect(snapshot.selectedDescriptor).toMatchObject({
+      repoRoot: REPO_ROOT,
+      branch: 'feature/auth',
+      worktreePath: BRANCH_WORKSPACE_PATH,
+    })
   })
 
   afterEach(() => {
@@ -107,6 +139,65 @@ describe('TerminalSessionRegistry', () => {
 
       expect(() => registerWorktreeHost(WORKTREE_KEY, host)).not.toThrow()
       expect(() => registerWorktreeHost(WORKTREE_KEY, null)).not.toThrow()
+    })
+
+    test('publishes creation pending state until the create request succeeds', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      let resolveCreate: (value: unknown) => void = () => {}
+      bridgeMocks.create.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveCreate = resolve
+        }),
+      )
+
+      const creation = registry.createTerminal({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+      })
+
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(true)
+
+      resolveCreate({
+        ok: true,
+        action: 'created',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'session-created',
+        processName: 'zsh',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 1,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [makeServerSession('session-created', 'terminal-1')],
+      })
+
+      await creation
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(false)
+    })
+
+    test('clears creation pending state when the create request fails', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      let rejectCreate: (reason: Error) => void = () => {}
+      bridgeMocks.create.mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectCreate = reject
+        }),
+      )
+
+      const creation = registry.createTerminal({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+      })
+
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(true)
+      rejectCreate(new Error('create failed'))
+      await expect(creation).rejects.toThrow('create failed')
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(false)
     })
 
     test('sends measured geometry and hydrates the created session first frame', async () => {
@@ -152,6 +243,7 @@ describe('TerminalSessionRegistry', () => {
         attachmentId: 'attachment_local',
         cols: 95,
         rows: 28,
+        launchMode: 'native',
       })
       expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
       expect(registry.snapshot(key)).toMatchObject({
@@ -160,6 +252,47 @@ describe('TerminalSessionRegistry', () => {
       })
       const session = (registry as any).sessions.get(key)
       expect((session as any).hydratedSnapshot).toEqual({ snapshot: 'first-frame', snapshotSeq: 7 })
+    })
+
+    test('waits for a controller terminal to finish renderer startup before accepting input', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [
+          makeServerSession('session-created', 'terminal-1', {
+            controller: { attachmentId: 'attachment_local', status: 'connected' },
+          }),
+        ],
+        'attachment_local',
+        new Map(),
+      )
+      const key = `${REPO_ROOT}\u0000${WORKTREE_PATH}\u0000terminal-1`
+      const session = (registry as any).sessions.get(key)
+      const initialSnapshot = session.snapshot()
+      let renderPending = true
+      vi.spyOn(session, 'snapshot').mockImplementation(() =>
+        renderPending ? { ...initialSnapshot, renderPending: true } : { ...initialSnapshot, renderPending: undefined },
+      )
+      ;(registry as any).snapshotCache.delete(key)
+      const waitForInputReady = (
+        registry as TerminalSessionRegistry & {
+          waitForInputReady?: (sessionKey: string) => Promise<boolean>
+        }
+      ).waitForInputReady
+
+      expect(waitForInputReady).toBeTypeOf('function')
+      let settled = false
+      const readiness = waitForInputReady!(key).then((ready) => {
+        settled = true
+        return ready
+      })
+      await Promise.resolve()
+      expect(settled).toBe(false)
+
+      renderPending = false
+      ;(registry as any).notifySession(key)
+
+      await expect(readiness).resolves.toBe(true)
     })
 
     test('rejects malformed successful create responses', async () => {
@@ -188,6 +321,109 @@ describe('TerminalSessionRegistry', () => {
       await expect(
         registry.createTerminal({ repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH }),
       ).rejects.toThrow('error.terminal-create-failed')
+    })
+
+    test('creates one tmux terminal through the ordinary create request', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      bridgeMocks.create.mockResolvedValueOnce({
+        ok: true,
+        action: 'created',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'tmux-session-1',
+        processName: 'tmux',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 4,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [makeServerSession('tmux-session-1', 'terminal-1', { tmuxBacked: true })],
+      })
+
+      const key = await registry.createTerminal(
+        { repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH },
+        'tmux-if-available',
+      )
+
+      expect(bridgeMocks.create).toHaveBeenCalledWith({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+        kind: 'primary',
+        launchMode: 'tmux-if-available',
+        attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
+      })
+      expect(bridgeMocks.openTmuxSessions).not.toHaveBeenCalled()
+      expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
+    })
+
+    test('restores and reconciles detached tmux sessions through the batch request', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      bridgeMocks.openTmuxSessions.mockResolvedValueOnce({
+        ok: true,
+        restored: 2,
+        action: 'restored',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'tmux-session-1',
+        processName: 'tmux',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 4,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [
+          makeServerSession('tmux-session-1', 'terminal-1', { tmuxBacked: true }),
+          makeServerSession('tmux-session-2', 'terminal-2', { tmuxBacked: true }),
+        ],
+      })
+
+      const restoreTmuxSessions = (
+        registry as TerminalSessionRegistry & {
+          restoreTmuxSessions?: (base: { repoRoot: string; branch: string; worktreePath: string }) => Promise<number>
+        }
+      ).restoreTmuxSessions
+      expect(restoreTmuxSessions).toBeTypeOf('function')
+
+      const restored = await restoreTmuxSessions!({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+      })
+
+      expect(bridgeMocks.openTmuxSessions).toHaveBeenCalledWith({
+        repoRoot: REPO_ROOT,
+        branch: BRANCH,
+        worktreePath: WORKTREE_PATH,
+        attachmentId: 'attachment_local',
+        cols: 80,
+        rows: 24,
+      })
+      expect(bridgeMocks.create).not.toHaveBeenCalled()
+      expect(restored).toBe(2)
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toHaveLength(2)
+    })
+
+    test('treats an empty detached tmux scan as a successful no-op', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      bridgeMocks.openTmuxSessions.mockResolvedValueOnce({ ok: true, restored: 0, sessions: [] })
+      const restoreTmuxSessions = (
+        registry as TerminalSessionRegistry & {
+          restoreTmuxSessions?: (base: { repoRoot: string; branch: string; worktreePath: string }) => Promise<number>
+        }
+      ).restoreTmuxSessions
+      expect(restoreTmuxSessions).toBeTypeOf('function')
+
+      await expect(
+        restoreTmuxSessions!({ repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH }),
+      ).resolves.toBe(0)
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toHaveLength(0)
     })
   })
 
@@ -237,6 +473,49 @@ describe('TerminalSessionRegistry', () => {
 
         vi.advanceTimersByTime(1)
         expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.isOutputActive).toBe(false)
+        expect(outputCompletions).toEqual([
+          expect.objectContaining({
+            sessionId: 'session-a',
+            finalOutputSeq: 1_000,
+            activityDurationMs: 1_000,
+          }),
+        ])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    test('measures consecutive output activity periods independently', () => {
+      vi.useFakeTimers()
+      try {
+        registry.setRepoIndex(makeRepoIndex())
+        registry.reconcileServerSessions(
+          REPO_ROOT,
+          [makeServerSession('session-a', 'terminal-1')],
+          'attachment_local',
+          new Map(),
+        )
+
+        const emitBurst = (sequenceBase: number, durationMs: number) => {
+          for (let elapsed = 0; elapsed <= durationMs; elapsed += 1_000) {
+            registry.handleOutput({
+              sessionId: 'session-a',
+              data: 'tick',
+              seq: sequenceBase + elapsed,
+              processName: 'bash',
+            })
+            if (elapsed < durationMs) vi.advanceTimersByTime(1_000)
+          }
+          vi.advanceTimersByTime(1_200)
+        }
+
+        emitBurst(0, 10_000)
+        emitBurst(100_000, 30_000)
+
+        expect(outputCompletions).toEqual([
+          expect.objectContaining({ activityDurationMs: 10_000 }),
+          expect.objectContaining({ activityDurationMs: 30_000 }),
+        ])
       } finally {
         vi.useRealTimers()
       }
@@ -514,6 +793,58 @@ describe('TerminalSessionRegistry', () => {
       ;(registry as any).removeSession(activeKey, { dispose: false, closeSession: false })
 
       expect(registry.worktreeSnapshot(WORKTREE_KEY).selectedDescriptor?.terminalId).toBe('terminal-1')
+    })
+
+    test('projects tmux eligibility and closes a checked terminal without a duplicate request', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [makeServerSession('session-1', 'terminal-1', { tmuxBacked: true })],
+        'attachment_local',
+        new Map(),
+      )
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      expect(summary?.tmuxBacked).toBe(true)
+      if (!summary) return
+
+      await expect(
+        registry.closeTerminalAndDismissDetailIfLast(
+          summary.key,
+          {
+            repoRoot: REPO_ROOT,
+            worktreePath: WORKTREE_PATH,
+          },
+          { closeTmuxSession: true },
+        ),
+      ).resolves.toEqual({ ok: true })
+      expect(bridgeMocks.close).toHaveBeenCalledTimes(1)
+      expect(bridgeMocks.close).toHaveBeenCalledWith({ sessionId: 'session-1', closeTmuxSession: true })
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toEqual([])
+    })
+
+    test('retains a checked terminal when the tmux close request fails', async () => {
+      bridgeMocks.close.mockResolvedValueOnce({ ok: false, message: 'error.tmux-command-failed' })
+      registry.setRepoIndex(makeRepoIndex())
+      registry.reconcileServerSessions(
+        REPO_ROOT,
+        [makeServerSession('session-1', 'terminal-1', { tmuxBacked: true })],
+        'attachment_local',
+        new Map(),
+      )
+      const summary = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]
+      if (!summary) return
+
+      await expect(
+        registry.closeTerminalAndDismissDetailIfLast(
+          summary.key,
+          {
+            repoRoot: REPO_ROOT,
+            worktreePath: WORKTREE_PATH,
+          },
+          { closeTmuxSession: true },
+        ),
+      ).resolves.toEqual({ ok: false, message: 'error.tmux-command-failed' })
+      expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions).toHaveLength(1)
     })
   })
 

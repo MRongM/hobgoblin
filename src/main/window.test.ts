@@ -94,7 +94,6 @@ vi.mock('#/main/theme.ts', () => ({
 
 vi.mock('#/main/i18n/index.ts', () => ({
   getCurrentLang: () => 'en',
-  getDictionary: () => ({}),
 }))
 
 vi.mock('#/main/settings-server-client.ts', () => ({
@@ -267,7 +266,9 @@ describe('main window navigation boundaries', () => {
     const { getOrCreateMainWindow } = await import('#/main/window.ts')
     await getOrCreateMainWindow()
 
-    const renderProcessGone = mocks.webContentsOn.mock.calls.find(([eventName]) => eventName === 'render-process-gone')?.[1]
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
     expect(renderProcessGone).toBeTypeOf('function')
 
     renderProcessGone({}, { reason: 'launch-failed', exitCode: 18 })
@@ -280,7 +281,9 @@ describe('main window navigation boundaries', () => {
       )
     })
 
-    const startupErrorPageLogs = mocks.diagnosticsLog.mock.calls.filter(([eventName]) => eventName === 'startup-error-page')
+    const startupErrorPageLogs = mocks.diagnosticsLog.mock.calls.filter(
+      ([eventName]) => eventName === 'startup-error-page',
+    )
     expect(startupErrorPageLogs).toHaveLength(1)
     expect(mocks.loadURL).toHaveBeenCalledTimes(2)
   })

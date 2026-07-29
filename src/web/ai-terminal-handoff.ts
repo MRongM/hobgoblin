@@ -31,7 +31,8 @@ export async function prefillAiTerminalCommand(input: AiTerminalHandoffInput): P
   input.setDetailCollapsed(false)
 
   const snapshot = bridge.worktreeSnapshot(scope)
-  let key = snapshot.selectedDescriptor?.key ?? snapshot.sessions[0]?.key ?? null
+  const openSessions = snapshot.sessions.filter((session) => session.phase === 'open')
+  let key = openSessions.find((session) => session.selected)?.key ?? openSessions[0]?.key ?? null
   if (key) {
     bridge.selectTerminal(scope, key)
   } else {
@@ -42,8 +43,8 @@ export async function prefillAiTerminalCommand(input: AiTerminalHandoffInput): P
     })
   }
 
-  await Promise.resolve()
   if (!key) return false
+  if (!(await bridge.waitForInputReady(key))) return false
   bridge.writeInput(key, input.command)
   return true
 }

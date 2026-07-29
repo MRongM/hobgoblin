@@ -1,31 +1,39 @@
-import { type CSSProperties, type HTMLAttributes, type RefObject, useCallback, useMemo } from 'react'
+import { type CSSProperties, type RefObject, useCallback, useMemo } from 'react'
 import { Trash2 } from 'lucide-react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
-import { BranchActionsDropdown } from '#/web/components/BranchActionsMenu.tsx'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
-import { cn } from '#/web/lib/cn.ts'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
-import { useBranchActionItems, type BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
-import { useStoreWithEqualityFn } from 'zustand/traditional'
-import { useReposStore } from '#/web/stores/repos/store.ts'
+import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import {
+  WorkspaceListItemActionDock,
+  WorkspaceListItemFrame,
+  WorkspaceListItemMenu,
+  type WorkspaceListItemDragHandle,
+} from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
+import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
+import { useT } from '#/web/stores/i18n.ts'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
   style?: CSSProperties
   isDragging?: boolean
-  props?: HTMLAttributes<HTMLLIElement>
+  dragHandle: Pick<WorkspaceListItemDragHandle, 'setActivatorNodeRef' | 'props'>
 }
 
 interface BranchRowProps {
   repo: BranchActionRepo
   branch: RepoBranchState
   displayName?: string
+  branchWorkspaceMember?: boolean
   workspaceRemoveAction?: { label: string; onSelect: () => void }
   selected: string | null
   onSelectBranch: (branch: string) => void
-  onOpenBranchStatus: (branch: string) => void
+  onWorktreeDoubleClick?: () => void
   selectedRef: RefObject<HTMLLIElement | null>
   showActions?: boolean
   actionMenuOpen?: boolean
@@ -37,17 +45,34 @@ export function BranchRow({
   repo,
   branch,
   displayName,
+  branchWorkspaceMember,
   workspaceRemoveAction,
   selected,
   onSelectBranch,
-  onOpenBranchStatus,
+  onWorktreeDoubleClick,
   selectedRef,
   showActions = true,
   actionMenuOpen,
   onActionMenuOpenChange,
   sortable,
 }: BranchRowProps) {
+  const t = useT()
   const isSelected = branch.name === selected
+  const worktreePath = branch.worktree?.path
+  const terminalWorktreeKeys = useMemo(
+    () => (worktreePath ? [worktreeTerminalKey(repo.id, worktreePath)] : []),
+    [repo.id, worktreePath],
+  )
+  const actions = useBranchActionItems(repo, branch)
+  const tmuxCleanup = useAssociatedTmuxCleanup({
+    projectRoot: repo.id,
+    itemPath: worktreePath,
+    disabled: repo.operations.branchAction.phase !== 'idle',
+  })
+  const actionProjection = projectWorktreeListItemActions(actions, {
+    policy: 'ordinary-worktree',
+    hasWorktree: !!worktreePath,
+  })
   const setItemRef = useCallback(
     (node: HTMLLIElement | null) => {
       if (isSelected) {
@@ -58,101 +83,96 @@ export function BranchRow({
     [isSelected, selectedRef, sortable],
   )
 
-  return (
-    <li
-      {...sortable?.props}
-      ref={sortable || isSelected ? setItemRef : undefined}
-      style={sortable?.style}
-      onClick={() => onSelectBranch(branch.name)}
-      onDoubleClick={() => onOpenBranchStatus(branch.name)}
-      className={cn(
-        'relative mx-1.5 grid min-h-8 items-stretch cursor-pointer rounded-[var(--goblin-brand-radius-md,var(--radius-md))]',
-        showActions || workspaceRemoveAction ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1',
-        'transition-colors duration-100',
-        isSelected
-          ? 'bg-list-row-selected text-list-row-selected-foreground hover:bg-list-row-selected'
-          : 'hover:bg-list-row-hover',
-        sortable?.isDragging && 'z-10 bg-[var(--goblin-card-bg,var(--color-card))] text-foreground shadow-sm',
-      )}
-    >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center py-1 pl-2.5">
-        <BranchSummaryInline repo={repo} branch={branch} displayName={displayName} selected={isSelected} />
-      </div>
-      {showActions && (
-        <BranchRowActions
-          repo={repo}
-          branch={branch}
-          workspaceRemoveAction={workspaceRemoveAction}
-          onSelectBranch={onSelectBranch}
-          actionMenuOpen={actionMenuOpen}
-          onActionMenuOpenChange={onActionMenuOpenChange}
-        />
-      )}
-      {!showActions && workspaceRemoveAction ? (
-        <div className="relative z-20 flex items-center pr-2.5">
-          <WorkspaceRemoveButton action={workspaceRemoveAction} />
-        </div>
-      ) : null}
-    </li>
-  )
-}
-
-function BranchRowActions({
-  repo,
-  branch,
-  workspaceRemoveAction,
-  onSelectBranch,
-  actionMenuOpen,
-  onActionMenuOpenChange,
-}: {
-  repo: BranchActionRepo
-  branch: RepoBranchState
-  workspaceRemoveAction?: { label: string; onSelect: () => void }
-  onSelectBranch: (branch: string) => void
-  actionMenuOpen?: boolean
-  onActionMenuOpenChange?: (open: boolean) => void
-}) {
-  const actions = useBranchActionItems(repo, branch)
-  return (
-    <>
-      {/* Capture-phase so the buttons' stopPropagation can't skip it: any
-          row action must first move the selection (and thus the file tree)
-          to this branch, keeping the opened directory and the tree in sync. */}
-      <div
-        className="pointer-events-none relative z-20 flex shrink-0 items-center py-1 pr-2.5"
-        onClickCapture={() => onSelectBranch(branch.name)}
-      >
-        <div className="pointer-events-auto flex items-center gap-0.5">
-          {workspaceRemoveAction ? <WorkspaceRemoveButton action={workspaceRemoveAction} /> : null}
-          {branch.worktree?.path && (
-            <div className="hidden md:flex items-center gap-0.5">
-              <BranchRowExternalActions actions={actions} />
-              <BranchRowRecentActions repo={repo} branch={branch} />
-            </div>
-          )}
-          <BranchActionsDropdown
-            repoId={repo.id}
-            branchName={branch.name}
-            patchItems={actions.patchItems}
-            mainItems={actions.mainItems}
-            externalItems={actions.externalItems}
-            destructiveItems={actions.destructiveItems}
-            open={actionMenuOpen}
-            onOpenChange={onActionMenuOpenChange}
+  const row = (
+    <WorkspaceListItemFrame
+      selected={isSelected}
+      dragging={sortable?.isDragging}
+      itemRef={sortable || isSelected ? setItemRef : undefined}
+      itemStyle={sortable?.style}
+      itemProps={{ className: 'mx-1.5' }}
+      dragHandle={
+        sortable
+          ? {
+              label: t('branches.reorder-worktree'),
+              setActivatorNodeRef: sortable.dragHandle.setActivatorNodeRef,
+              props: sortable.dragHandle.props,
+            }
+          : undefined
+      }
+      buttonProps={{
+        'aria-current': isSelected ? 'page' : undefined,
+        className: !showActions
+          ? workspaceRemoveAction
+            ? 'pr-8'
+            : 'pr-2'
+          : workspaceRemoveAction
+            ? 'pr-[5.75rem]'
+            : undefined,
+        onClick: () => onSelectBranch(branch.name),
+        onDoubleClick: worktreePath ? onWorktreeDoubleClick : undefined,
+      }}
+      auxiliaryActions={workspaceRemoveAction ? <WorkspaceRemoveButton action={workspaceRemoveAction} /> : undefined}
+      actions={
+        showActions ? (
+          <WorkspaceListItemActionDock
+            editor={actionProjection.editor}
+            internalTerminal={actionProjection.internalTerminal}
+            moreMenu={
+              <WorkspaceListItemMenu
+                label={t('action.menu')}
+                groups={
+                  tmuxCleanup.visible
+                    ? [...actionProjection.menuGroups, [tmuxCleanup.action]]
+                    : actionProjection.menuGroups
+                }
+                open={actionMenuOpen}
+                onOpenChange={onActionMenuOpenChange}
+              />
+            }
           />
-        </div>
-      </div>
-      {actions.inlinePanel ? (
-        <div
-          className="col-span-full"
-          onClick={(event) => event.stopPropagation()}
-          onDoubleClick={(event) => event.stopPropagation()}
-        >
-          {actions.inlinePanel}
-        </div>
-      ) : null}
-      {actions.dialogs}
-    </>
+        ) : undefined
+      }
+      expandedContent={
+        <>
+          {showActions ? (
+            <>
+              {actions.inlinePanel ? (
+                <div onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                  {actions.inlinePanel}
+                </div>
+              ) : null}
+              {actions.dialogs}
+            </>
+          ) : null}
+          {tmuxCleanup.dialog}
+        </>
+      }
+    >
+      <BranchSummaryInline
+        repo={repo}
+        branch={branch}
+        displayName={displayName}
+        branchWorkspaceMember={branchWorkspaceMember}
+        selected={isSelected}
+        className="w-full"
+      />
+    </WorkspaceListItemFrame>
+  )
+
+  return worktreePath ? (
+    <WorkspaceItemContextMenu
+      editor={actionProjection.contextMenu.editor}
+      externalTerminal={actionProjection.contextMenu.externalTerminal}
+      internalTerminal={actionProjection.contextMenu.internalTerminal}
+      tmuxTerminal={actionProjection.contextMenu.tmuxTerminal}
+      restoreTmuxTerminals={actionProjection.contextMenu.restoreTmuxTerminals}
+      worktreeTerminalKeys={terminalWorktreeKeys}
+      additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
+    >
+      {row}
+    </WorkspaceItemContextMenu>
+  ) : (
+    row
   )
 }
 
@@ -174,125 +194,5 @@ function WorkspaceRemoveButton({ action }: { action: { label: string; onSelect: 
         </AsyncButton>
       </span>
     </Tip>
-  )
-}
-
-const REPEATABLE_ACTION_IDS = ['checkout', 'pull', 'push'] as const
-type RepeatableActionId = (typeof REPEATABLE_ACTION_IDS)[number]
-
-function BranchRowExternalActions({ actions }: { actions: ReturnType<typeof useBranchActionItems> }) {
-  const editorItem = actions.externalItems.find((item) => item.id === 'editor')
-  const terminalItem = actions.externalItems.find((item) => item.id === 'terminal')
-  return (
-    <>
-      {editorItem && (
-        <Tip label={editorItem.title ?? editorItem.label}>
-          <span className="inline-flex">
-            <AsyncButton
-              data-testid="branch-row-editor-btn"
-              variant="ghost"
-              size="icon-sm"
-              loading={editorItem.busy}
-              disabled={editorItem.disabled}
-              onClick={(e) => {
-                e.stopPropagation()
-                return editorItem.onSelect()
-              }}
-              aria-label={editorItem.ariaLabel ?? editorItem.label}
-            >
-              {() => editorItem.icon}
-            </AsyncButton>
-          </span>
-        </Tip>
-      )}
-      {terminalItem && (
-        <Tip label={terminalItem.title ?? terminalItem.label}>
-          <span className="inline-flex">
-            <AsyncButton
-              data-testid="branch-row-terminal-btn"
-              variant="ghost"
-              size="icon-sm"
-              loading={terminalItem.busy}
-              disabled={terminalItem.disabled}
-              onClick={(e) => {
-                e.stopPropagation()
-                return terminalItem.onSelect()
-              }}
-              aria-label={terminalItem.ariaLabel ?? terminalItem.label}
-            >
-              {() => terminalItem.icon}
-            </AsyncButton>
-          </span>
-        </Tip>
-      )}
-    </>
-  )
-}
-
-function BranchRowRecentActions({ repo, branch }: { repo: BranchActionRepo; branch: RepoBranchState }) {
-  const ids = useStoreWithEqualityFn(
-    useReposStore,
-    (s) => {
-      const r = s.repos[repo.id]
-      if (!r) return [] as RepeatableActionId[]
-      const found: RepeatableActionId[] = []
-      for (let i = r.events.length - 1; i >= 0 && found.length < 1; i--) {
-        const ev = r.events[i]
-        if (
-          ev.kind === 'result' &&
-          ev.action &&
-          (REPEATABLE_ACTION_IDS as readonly string[]).includes(ev.action.kind) &&
-          ev.action.branch === branch.name
-        ) {
-          const id = ev.action.kind as RepeatableActionId
-          if (!found.includes(id)) found.push(id)
-        }
-      }
-      return found
-    },
-    (a, b) => a.length === b.length && a.every((id, i) => id === b[i]),
-  )
-
-  if (ids.length === 0) return null
-  return <BranchRowRecentActionsInner repo={repo} branch={branch} ids={ids} />
-}
-
-function BranchRowRecentActionsInner({
-  repo,
-  branch,
-  ids,
-}: {
-  repo: BranchActionRepo
-  branch: RepoBranchState
-  ids: RepeatableActionId[]
-}) {
-  const actions = useBranchActionItems(repo, branch)
-  const itemMap = useMemo(() => new Map(actions.mainItems.map((item) => [item.id, item])), [actions.mainItems])
-
-  return (
-    <div className="flex items-center gap-0.5">
-      {ids
-        .map((id) => itemMap.get(id))
-        .filter((item): item is BranchActionItem => item !== undefined)
-        .map((item) => (
-          <Tip key={item.id} label={item.title ?? item.label}>
-            <span className="inline-flex">
-              <AsyncButton
-                variant="ghost"
-                size="icon-sm"
-                loading={item.busy}
-                disabled={item.disabled}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  return item.onSelect()
-                }}
-                aria-label={item.ariaLabel ?? item.label}
-              >
-                {() => item.icon}
-              </AsyncButton>
-            </span>
-          </Tip>
-        ))}
-    </div>
   )
 }

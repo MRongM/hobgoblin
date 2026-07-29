@@ -1,0 +1,73 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- Geometry and colors are adapted from assets/hobgoblin-icon.svg. -->
+    <group
+        android:pivotX="512"
+        android:pivotY="512"
+        android:scaleX="0.50"
+        android:scaleY="0.50"
+        android:translateX="-4"
+        android:translateY="-8">
+        <group
+            android:pivotX="512"
+            android:pivotY="512"
+            android:scaleX="0.8"
+            android:scaleY="0.8"
+            android:translateX="-26"
+            android:translateY="-36">
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M148,332l274,274l-274,274"
+                android:strokeColor="#FFF8FAFC"
+                android:strokeLineCap="round"
+                android:strokeLineJoin="round"
+                android:strokeWidth="118" />
+            <path
+                android:fillColor="#00000000"
+                android:pathData="M502,760h292"
+                android:strokeColor="#FFCBD5E1"
+                android:strokeLineCap="round"
+                android:strokeWidth="86" />
+            <group android:translateY="72">
+                <path
+                    android:fillColor="#00000000"
+                    android:pathData="M650,238v300c0,146 102,222 276,222"
+                    android:strokeLineCap="round"
+                    android:strokeLineJoin="round"
+                    android:strokeWidth="76">
+                    <aapt:attr name="android:strokeColor">
+                        <gradient
+                            android:startX="650"
+                            android:startY="238"
+                            android:endX="926"
+                            android:endY="760"
+                            android:type="linear">
+                            <item
+                                android:color="#FF38BDF8"
+                                android:offset="0" />
+                            <item
+                                android:color="#FF22C55E"
+                                android:offset="1" />
+                        </gradient>
+                    </aapt:attr>
+                </path>
+                <path
+                    android:fillColor="#FF38BDF8"
+                    android:pathData="M744,238a94,94 0,1 1,-188,0a94,94 0,1 1,188,0z" />
+                <path
+                    android:fillColor="#FFDBEAFE"
+                    android:pathData="M692,238a42,42 0,1 1,-84,0a42,42 0,1 1,84,0z" />
+                <path
+                    android:fillColor="#FF22C55E"
+                    android:pathData="M1020,760a94,94 0,1 1,-188,0a94,94 0,1 1,188,0z" />
+                <path
+                    android:fillColor="#FFDCFCE7"
+                    android:pathData="M968,760a42,42 0,1 1,-84,0a42,42 0,1 1,84,0z" />
+            </group>
+        </group>
+    </group>
+</vector>

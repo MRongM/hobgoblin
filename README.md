@@ -6,13 +6,6 @@ Hobgoblin is not just a branch management tool. It is a high-productivity worksp
 
 The core model is simple: **multi-project + multi-worktree / multi-branch + multi-terminal**. Open several repositories, isolate parallel branches in separate worktrees, attach terminals to the right context, and run AI CLI tools such as Codex or Claude without losing track of Git state. Work with local repositories, Git SSH remotes, or repositories reachable through SSH-config aliases.
 
-## Screenshots
-
-<p>
-  <img src="docs/screenshot-20260626-143532.png" alt="Hobgoblin workspace overview" width="49%" />
-  <img src="docs/screenshot-20260626-144523.png" alt="Hobgoblin repository workspace" width="49%" />
-</p>
-
 ## Productivity Formula
 
 ```text
@@ -44,12 +37,10 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
 - **Double-click file tree files:** Double-click a file in the file tree to open that exact file in the configured editor.
 - **File-content clipboard shortcuts:** Use `Cmd+Shift+C` on macOS or `Ctrl+Shift+C` elsewhere to copy the focused file's text or image content to the system clipboard. Use `Cmd+Shift+V` / `Ctrl+Shift+V` to replace that focused file from supported clipboard text or image content.
-- **Worktree bootstrap config generation:** Initialize a missing `goblin.toml` from the file tree toolbar, then define repo-relative `copy`, `symlink`, `hardlink`, `exclude`, and `setup` rules for preparing new worktrees.
-- **Worktree dependency tracking:** Treat `goblin.toml` as the tracked dependency list for new worktrees. Hobgoblin previews the current config hash, stops bootstrap if the file changes after confirmation, and otherwise applies the configured env-file copies, dependency/cache links, and setup command for local and SSH remote repositories.
 - **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
 - **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.
 - **Terminal path editor jump:** Double-click detected repository-relative paths in terminal output, including `path:line` and `path:line:column`, to open the configured editor at that file position.
-- **Tmux-backed session resume:** Detect and use tmux-backed remote terminal sessions when available, keeping remote terminal state resumable.
+- **Explicit tmux session reuse:** Internal terminals use the native login shell by default. Choose **New terminal with tmux** from terminal or item menus to create or attach to a stable local or SSH `hobgoblin-v1-*` session; if tmux is unavailable on the target, Hobgoblin falls back to the native login shell. External-terminal actions stay native, and legacy `goblin-*` sessions are not migrated.
 - **Browser project access:** Run server mode and open the project workspace from a web browser.
 - **Mobile terminal takeover:** Use browser-accessible mode from a phone browser to take over terminal sessions when you need to continue from mobile.
 

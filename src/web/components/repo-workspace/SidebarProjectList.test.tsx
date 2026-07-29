@@ -5,8 +5,20 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SidebarProjectList } from '#/web/components/repo-workspace/SidebarProjectList.tsx'
 import type { ProjectSummary } from '#/web/components/repo-workspace/project-switcher-model.tsx'
+import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+  WorktreeTerminalSnapshot,
+} from '#/web/components/terminal/types.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
+type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
 
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
@@ -28,6 +40,21 @@ const projectExternalActionState = vi.hoisted(() => ({
   editorBusy: false,
   terminalDisabled: false,
   terminalBusy: false,
+  internalTerminalOnSelect: vi.fn(),
+  internalTerminalDisabled: false,
+  internalTerminalBusy: false,
+}))
+
+const tmuxCleanupState = vi.hoisted(() => ({
+  calls: [] as Array<{ projectRoot?: string; itemPath?: string; disabled?: boolean }>,
+  onSelect: vi.fn(),
+  visible: true,
+}))
+
+const hostTmuxInventoryState = vi.hoisted(() => ({
+  calls: [] as Array<{ projectRoot?: string; disabled?: boolean }>,
+  onSelect: vi.fn(),
+  visible: true,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -104,6 +131,60 @@ vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
   },
 }))
 
+vi.mock('#/web/hooks/useProjectInternalTerminalAction.ts', () => ({
+  useProjectInternalTerminalAction: (projectId: string) => ({
+    disabled: projectExternalActionState.internalTerminalDisabled,
+    busy: projectExternalActionState.internalTerminalBusy,
+    onSelect: () => projectExternalActionState.internalTerminalOnSelect(projectId),
+  }),
+}))
+
+vi.mock('#/web/hooks/useAssociatedTmuxCleanup.tsx', () => ({
+  useAssociatedTmuxCleanup: (options: { projectRoot?: string; itemPath?: string; disabled?: boolean }) => {
+    tmuxCleanupState.calls.push(options)
+    return {
+      visible: tmuxCleanupState.visible,
+      action: {
+        id: 'cleanupTmuxSessions',
+        label: 'tmux.cleanup.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: true,
+        onSelect: tmuxCleanupState.onSelect,
+      },
+      contextAction: {
+        label: 'tmux.cleanup.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: true,
+        separated: true,
+        onSelect: tmuxCleanupState.onSelect,
+      },
+      dialog: <div data-testid="project-tmux-cleanup-dialog" />,
+    }
+  },
+}))
+
+vi.mock('#/web/hooks/useHostTmuxInventory.tsx', () => ({
+  useHostTmuxInventory: (options: { projectRoot?: string; disabled?: boolean }) => {
+    hostTmuxInventoryState.calls.push(options)
+    return {
+      visible: hostTmuxInventoryState.visible,
+      contextAction: {
+        label: 'tmux.host-inventory.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: false,
+        onSelect: hostTmuxInventoryState.onSelect,
+      },
+      dialog: <div data-testid="project-host-tmux-inventory-dialog" />,
+    }
+  },
+}))
+
 vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
   TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
@@ -117,8 +198,24 @@ vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', async () =
 })
 
 const projects: ProjectSummary[] = [
-  { id: '/repo-a', name: 'Repo A', unavailable: false, isGitRepo: true, terminalWorktreeKeys: [] },
-  { id: '/repo-b', name: 'Repo B', unavailable: false, isGitRepo: false, terminalWorktreeKeys: [] },
+  {
+    id: '/repo-a',
+    name: 'Repo A',
+    unavailable: false,
+    isGitRepo: true,
+    changeCount: 5,
+    terminalWorktreeKeys: [],
+    branchWorkspaceRootId: null,
+  },
+  {
+    id: '/repo-b',
+    name: 'Repo B',
+    unavailable: false,
+    isGitRepo: false,
+    changeCount: 0,
+    terminalWorktreeKeys: [],
+    branchWorkspaceRootId: null,
+  },
 ]
 
 let container: HTMLDivElement | null = null
@@ -140,6 +237,15 @@ beforeEach(() => {
   projectExternalActionState.editorBusy = false
   projectExternalActionState.terminalDisabled = false
   projectExternalActionState.terminalBusy = false
+  projectExternalActionState.internalTerminalOnSelect.mockReset()
+  projectExternalActionState.internalTerminalDisabled = false
+  projectExternalActionState.internalTerminalBusy = false
+  tmuxCleanupState.calls = []
+  tmuxCleanupState.onSelect.mockReset()
+  tmuxCleanupState.visible = true
+  hostTmuxInventoryState.calls = []
+  hostTmuxInventoryState.onSelect.mockReset()
+  hostTmuxInventoryState.visible = true
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -153,27 +259,39 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-function renderList() {
+function renderList(
+  fixture: {
+    projects?: ProjectSummary[]
+    snapshots?: ReadonlyMap<string, WorktreeTerminalSnapshot>
+    closeTerminal?: CloseTerminalMock
+  } = {},
+) {
   const onActivate = vi.fn()
   const onClose = vi.fn()
   const onReorder = vi.fn()
+  const closeTerminal =
+    fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   act(() => {
     root!.render(
-      <SidebarProjectList
-        id="project-list"
-        projects={projects}
-        activeRepoId="/repo-a"
-        onActivate={onActivate}
-        onClose={onClose}
-        onReorder={onReorder}
-      />,
+      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+        <TerminalSessionReadContext.Provider value={terminalReadContext(fixture.snapshots ?? new Map())}>
+          <SidebarProjectList
+            id="project-list"
+            projects={fixture.projects ?? projects}
+            activeRepoId="/repo-a"
+            onActivate={onActivate}
+            onClose={onClose}
+            onReorder={onReorder}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onClose, onReorder }
+  return { onActivate, onClose, onReorder, closeTerminal }
 }
 
 describe('SidebarProjectList', () => {
-  test('registers each full project row as a sortable item', () => {
+  test('registers each project row with a dedicated sortable activator', () => {
     renderList()
 
     expect(
@@ -186,6 +304,7 @@ describe('SidebarProjectList', () => {
         node.getAttribute('data-sortable-activator-id'),
       ),
     ).toEqual(['/repo-a', '/repo-b'])
+    expect(container!.querySelectorAll('[data-workspace-list-item-main][data-sortable-id]')).toHaveLength(0)
   })
 
   test('uses the shared pointer threshold and keyboard coordinates', () => {
@@ -211,7 +330,7 @@ describe('SidebarProjectList', () => {
     expect(dndState.sortableStrategy).toBe(dndState.verticalStrategy)
   })
 
-  test('attaches sortable accessibility attributes and listeners to the project button', () => {
+  test('attaches sortable accessibility attributes and listeners only to the project grip', () => {
     renderList()
     const firstRow = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
 
@@ -228,20 +347,53 @@ describe('SidebarProjectList', () => {
     expect(firstRow?.className).not.toContain('touch-none')
   })
 
-  test('gives project names enough line height for letter descenders', () => {
+  test('renders project names one font size above supporting text', () => {
     renderList()
     const projectName = Array.from(container!.querySelectorAll('span')).find(
       (element) => element.textContent === 'Repo A' && element.children.length === 0,
     )
 
+    expect(projectName?.className).toContain('text-sm')
     expect(projectName?.className).toContain('leading-4')
     expect(projectName?.className).not.toContain('leading-none')
   })
 
+  test('prefixes only remote project row names and labels with their SSH alias', async () => {
+    const remoteId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/kooky' })
+    const prefixedRemoteId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
+    renderList({
+      projects: [
+        { ...projects[0]!, id: remoteId, name: 'kooky' },
+        { ...projects[1]!, id: '/workspace', name: 'workspace' },
+        { ...projects[1]!, id: prefixedRemoteId, name: 'prod:workspace' },
+      ],
+    })
+
+    expect(projectRow(remoteId).textContent).toContain('prod:kooky')
+    expect(
+      projectRow(remoteId).querySelector('[data-workspace-list-item-action="editor"]')?.getAttribute('aria-label'),
+    ).toBe('worktrees.open-in-editor-label prod:kooky')
+    expect((await openProjectMenu(remoteId)).map((item) => item.textContent?.trim())).toContain('Close prod:kooky')
+    expect(projectRow('/workspace').textContent).toContain('workspace')
+    expect(projectRow('/workspace').textContent).not.toContain(':workspace')
+    expect(projectRow(prefixedRemoteId).querySelector('[data-workspace-list-item-main]')?.textContent).toBe(
+      'prod:workspace',
+    )
+  })
+
+  test('shows the cumulative project change count and omits a zero count', () => {
+    renderList()
+
+    const changeBadge = projectRow('/repo-a').querySelector('[data-testid="project-change-count-badge"]')
+    expect(changeBadge?.textContent).toBe('5')
+    expect(changeBadge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
+    expect(projectRow('/repo-b').querySelector('[data-testid="project-change-count-badge"]')).toBeNull()
+  })
+
   test('uses a folder icon for plain projects and a Git folder icon for repositories', () => {
     renderList()
-    const gitProject = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
-    const plainProject = container!.querySelector('[data-sortable-activator-id="/repo-b"]')
+    const gitProject = projectRow('/repo-a').querySelector('[data-workspace-list-item-main]')
+    const plainProject = projectRow('/repo-b').querySelector('[data-workspace-list-item-main]')
 
     expect(gitProject?.getAttribute('data-project-kind')).toBe('git')
     expect(gitProject?.querySelector('svg.lucide-folder-git-2')).not.toBeNull()
@@ -252,80 +404,177 @@ describe('SidebarProjectList', () => {
 
   test('activates a project from its row', () => {
     const { onActivate } = renderList()
-    const firstRow = container!.querySelector('[data-sortable-activator-id="/repo-a"]')
+    const firstRow = projectRow('/repo-a').querySelector('[data-workspace-list-item-main]')
 
     act(() => firstRow?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 
     expect(onActivate).toHaveBeenCalledWith('/repo-a')
   })
 
-  test('closes a project without activating it', () => {
+  test('closes a project from More without activating it', async () => {
     const { onActivate, onClose } = renderList()
-    const close = container!.querySelector('[aria-label="Close Repo A"]')
+    const items = await openProjectMenu('/repo-a')
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      'terminal.new-with-tmux',
+      'terminal.external',
+      'Close Repo A',
+      'tmux.cleanup.action',
+    ])
+    const close = items.find((item) => item.textContent?.includes('Close Repo A'))
+    expect(close?.getAttribute('data-variant')).toBe('default')
 
-    act(() => close?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    await act(async () => {
+      close?.click()
+      await Promise.resolve()
+    })
 
     expect(onClose).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
   })
 
-  test('renders project actions at the right side immediately before Close', () => {
+  test('offers destructive tmux cleanup from More without activating or closing the project', async () => {
+    const { onActivate, onClose } = renderList()
+    const cleanup = (await openProjectMenu('/repo-a')).find((item) => item.textContent?.includes('tmux.cleanup.action'))
+
+    expect(cleanup?.getAttribute('data-variant')).toBe('destructive')
+    await act(async () => {
+      cleanup?.click()
+      await Promise.resolve()
+    })
+
+    expect(tmuxCleanupState.onSelect).toHaveBeenCalledTimes(1)
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('targets only each local or remote project root for tmux cleanup', () => {
+    const remoteId = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/kooky' })
+    renderList({ projects: [projects[0]!, { ...projects[1]!, id: remoteId, name: 'kooky' }] })
+
+    expect(tmuxCleanupState.calls).toEqual([
+      { projectRoot: '/repo-a', itemPath: '/repo-a', disabled: false },
+      { projectRoot: remoteId, itemPath: '/srv/kooky', disabled: false },
+    ])
+    expect(container!.querySelectorAll('[data-testid="project-tmux-cleanup-dialog"]')).toHaveLength(2)
+  })
+
+  test('renders every project through the shared frame and three-slot dock', () => {
     renderList()
 
     expect(projectExternalActionState.requestedProjectIds).toEqual(['/repo-a', '/repo-b'])
     for (const project of projects) {
       const row = projectRow(project.id)
-      const actions = row.querySelector<HTMLElement>('[data-testid="project-row-external-actions"]')
-      const close = row.querySelector<HTMLButtonElement>(`[aria-label="Close ${project.name}"]`)
-      const projectButton = row.querySelector<HTMLElement>('[data-sortable-activator-id]')
-      const editor = actions?.querySelector('[data-testid="project-editor-btn"]')
-      const terminal = actions?.querySelector('[data-testid="project-external-terminal-btn"]')
+      const projectButton = row.querySelector<HTMLElement>('[data-workspace-list-item-main]')
+      const dock = row.querySelector('[data-workspace-list-item-action-dock]')
+      const editor = row.querySelector('[data-workspace-list-item-action="editor"]')
+      const terminal = row.querySelector('[data-workspace-list-item-action="terminal"]')
 
-      expect(actions?.nextElementSibling).toBe(close)
-      expect(actions?.className).toContain('right-8')
-      expect(actions?.className).toContain('group-hover:opacity-100')
-      expect(actions?.className).toContain('focus-within:opacity-100')
-      expect(projectButton?.className).toContain('pr-20')
-      expect(close?.className).toContain('right-2')
-      expect(close?.className).toContain('focus-visible:opacity-100')
+      expect(row.getAttribute('data-size')).toBe('project')
+      expect(dock?.children).toHaveLength(3)
+      expect(projectButton?.className).toContain('pr-[4.25rem]')
       expect(editor?.getAttribute('aria-label')).toBe(`worktrees.open-in-editor-label ${project.name}`)
-      expect(terminal?.getAttribute('aria-label')).toBe(`terminal.external ${project.name}`)
+      expect(terminal?.getAttribute('aria-label')).toBe('terminal.internal')
       expect(editor?.querySelector('[data-testid="mock-editor-app-icon"]')?.getAttribute('data-pref')).toBe('cursor')
-      expect(terminal?.querySelector('[data-testid="mock-terminal-app-icon"]')?.getAttribute('data-pref')).toBe(
-        'ghostty',
-      )
+      expect(row.querySelector('[aria-label="action.menu"]')).not.toBeNull()
     }
   })
 
-  test('opens item external apps without activating or closing the project', () => {
+  test('opens quick and menu actions without activating or closing the project', async () => {
     const { onActivate, onClose } = renderList()
     const row = projectRow('/repo-a')
-    const editor = row.querySelector<HTMLButtonElement>('[data-testid="project-editor-btn"]')
-    const terminal = row.querySelector<HTMLButtonElement>('[data-testid="project-external-terminal-btn"]')
+    const editor = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
+    const internalTerminal = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
 
     act(() => {
       editor?.click()
-      terminal?.click()
+      internalTerminal?.click()
+    })
+    const externalTerminal = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('terminal.external'),
+    )
+    await act(async () => {
+      externalTerminal?.click()
+      await Promise.resolve()
     })
 
     expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  test('forwards disabled and busy state to item external actions', () => {
+  test('keeps disabled project actions visible in their stable positions', async () => {
     projectExternalActionState.editorDisabled = true
     projectExternalActionState.terminalDisabled = true
     projectExternalActionState.terminalBusy = true
     renderList()
 
     const row = projectRow('/repo-a')
-    const editor = row.querySelector<HTMLButtonElement>('[data-testid="project-editor-btn"]')
-    const terminal = row.querySelector<HTMLButtonElement>('[data-testid="project-external-terminal-btn"]')
+    const editor = row.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
     expect(editor?.disabled).toBe(true)
-    expect(terminal?.disabled).toBe(true)
-    expect(terminal?.getAttribute('aria-busy')).toBe('true')
+    const externalTerminal = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('terminal.external'),
+    )
+    expect(externalTerminal?.hasAttribute('data-disabled')).toBe(true)
+  })
+
+  test('closes terminals from the project root and member repositories through the row context menu', async () => {
+    const rootKey = '/repo-a\0/repo-a'
+    const memberKey = '/repo-a/api\0/repo-a/api'
+    const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+    renderList({
+      projects: [{ ...projects[0]!, terminalWorktreeKeys: [rootKey, memberKey] }, projects[1]!],
+      snapshots: new Map([
+        [rootKey, worktreeSnapshot(rootKey, [terminalSession(rootKey, 1)])],
+        [memberKey, worktreeSnapshot(memberKey, [terminalSession(memberKey, 1)])],
+      ]),
+      closeTerminal,
+    })
+
+    await requestCloseAllFromContextMenu(projectRow('/repo-a'))
+
+    expect(closeTerminal).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-body')
+    await confirmCloseAll()
+    expect(closeTerminal.mock.calls).toEqual([
+      [`${rootKey}\0terminal-1`, { repoRoot: '/repo-a', worktreePath: '/repo-a' }],
+      [`${memberKey}\0terminal-1`, { repoRoot: '/repo-a/api', worktreePath: '/repo-a/api' }],
+    ])
+  })
+
+  test('offers host inventory only from the row context menu without activating the project', async () => {
+    renderList()
+    const row = projectRow('/repo-a')
+
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal',
+      'terminal.new-with-tmux',
+      'terminal.close-all',
+      'tmux.host-inventory.action',
+      'tmux.cleanup.action',
+    ])
+
+    await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
+    await clickContextMenuItem(row, 'terminal.external')
+    await clickContextMenuItem(row, 'terminal.internal')
+    await clickContextMenuItem(row, 'tmux.host-inventory.action')
+    await clickContextMenuItem(row, 'tmux.cleanup.action')
+
+    expect(projectExternalActionState.editorOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.terminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(projectExternalActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/repo-a')
+    expect(hostTmuxInventoryState.onSelect).toHaveBeenCalledTimes(1)
+    expect(tmuxCleanupState.onSelect).toHaveBeenCalledTimes(1)
+    expect(hostTmuxInventoryState.calls).toEqual([
+      { projectRoot: '/repo-a', disabled: false },
+      { projectRoot: '/repo-b', disabled: false },
+    ])
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).not.toContain(
+      'tmux.host-inventory.action',
+    )
   })
 
   test('reorders when dropped over a different project', () => {
@@ -350,4 +599,106 @@ function projectRow(projectId: string): HTMLLIElement {
   const row = container!.querySelector(`[data-sortable-node-id="${projectId}"]`)
   if (!(row instanceof HTMLLIElement)) throw new Error(`missing project row: ${projectId}`)
   return row
+}
+
+async function openProjectMenu(projectId: string): Promise<HTMLElement[]> {
+  const trigger = projectRow(projectId).querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+  await act(async () => {
+    trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes('terminal.close-all'))
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function confirmCloseAll(): Promise<void> {
+  const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all-confirm-confirm'),
+  )
+  if (!confirm) throw new Error('missing close all terminals confirmation')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
+  })
+}
+
+function terminalReadContext(
+  snapshots: ReadonlyMap<string, WorktreeTerminalSnapshot>,
+): TerminalSessionReadContextValue {
+  return {
+    worktreeSnapshot: (key) =>
+      snapshots.get(key) ?? { worktreeTerminalKey: key, selectedDescriptor: null, sessions: [], count: 0 },
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
+    subscribeSnapshot: () => () => {},
+  }
+}
+
+function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: closeTerminal,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
+function worktreeSnapshot(worktreeTerminalKey: string, sessions: TerminalSessionSummary[]): WorktreeTerminalSnapshot {
+  return { worktreeTerminalKey, selectedDescriptor: null, sessions, count: sessions.length }
+}
+
+function terminalSession(worktreeTerminalKey: string, index: number): TerminalSessionSummary {
+  return {
+    key: `${worktreeTerminalKey}\0terminal-${index}`,
+    worktreeTerminalKey,
+    terminalId: `terminal-${index}`,
+    index,
+    title: `terminal ${index}`,
+    phase: 'open',
+    selected: index === 1,
+    hasBell: false,
+  }
 }

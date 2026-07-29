@@ -25,12 +25,14 @@ function branchWorktreeSnapshot(wtInfo: {
   isPrimary: boolean
   changeCount?: number
   isLocked?: boolean
+  isPrunable?: boolean
 }): NonNullable<BranchSnapshotInfo['worktree']> {
   const hasSummary = wtInfo.isDirty !== undefined || wtInfo.changeCount !== undefined
   return {
     path: wtInfo.path,
     isPrimary: wtInfo.isPrimary,
     ...(wtInfo.isLocked !== undefined ? { isLocked: wtInfo.isLocked } : {}),
+    ...(wtInfo.isPrunable !== undefined ? { isPrunable: wtInfo.isPrunable } : {}),
     ...(hasSummary
       ? {
           summary: {
@@ -54,7 +56,14 @@ export function parseBranches(
 ): BranchSnapshotInfo[] {
   const worktreeMap = new Map<
     string,
-    { path: string; isDirty?: boolean; isPrimary: boolean; changeCount?: number; isLocked?: boolean }
+    {
+      path: string
+      isDirty?: boolean
+      isPrimary: boolean
+      changeCount?: number
+      isLocked?: boolean
+      isPrunable?: boolean
+    }
   >()
   for (const wt of worktrees) {
     if (wt.branch) {
@@ -64,6 +73,7 @@ export function parseBranches(
         isPrimary: wt.isPrimary,
         changeCount: wt.changeCount,
         isLocked: wt.isLocked,
+        isPrunable: wt.isPrunable,
       })
     }
   }
@@ -288,6 +298,7 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
     let head: string | undefined
     let isBare = false
     let isLocked = false
+    let isPrunable = false
 
     for (const line of lines) {
       if (line.startsWith('worktree ')) {
@@ -301,10 +312,22 @@ export function parseWorktrees(output: string): WorktreeInfo[] {
         isBare = true
       } else if (line === 'locked' || line.startsWith('locked ')) {
         isLocked = true
+      } else if (line === 'prunable' || line.startsWith('prunable ')) {
+        isPrunable = true
       }
     }
 
-    if (path) worktrees.push({ path, branch, head, isBare, isPrimary: worktrees.length === 0, isLocked })
+    if (path) {
+      worktrees.push({
+        path,
+        branch,
+        head,
+        isBare,
+        isPrimary: worktrees.length === 0,
+        isLocked,
+        ...(isPrunable ? { isPrunable: true } : {}),
+      })
+    }
   }
 
   return worktrees

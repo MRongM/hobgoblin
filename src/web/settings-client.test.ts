@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { RendererBootstrapSnapshot } from '#/shared/bootstrap.ts'
 import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
-import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 
 function webBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): RendererBootstrapSnapshot {
@@ -45,24 +44,6 @@ function installWebBootstrap(bootstrap: RendererBootstrapSnapshot): void {
   })
 }
 
-function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
-  return {
-    kind: () => 'web',
-    hasCapability: () => false,
-    getBootstrap: () => electronBootstrap(),
-    invokeRpc: vi.fn(),
-    abortRpc: vi.fn(async () => false),
-    onRpcEvent: () => () => {},
-    onEffectIntent: () => () => {},
-    pathForFile: () => '',
-    shell: () => null,
-    terminal: (() => {
-      throw new Error('unused terminal bridge')
-    }) as never,
-    ...overrides,
-  }
-}
-
 describe('settings-client', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -84,24 +65,22 @@ describe('settings-client', () => {
           shortcutsDisabled: false,
           globalShortcutDisabled: false,
           swapCloseShortcuts: false,
-          toggleDetailOnActionBarBlankClick: false,
           globalShortcut: 'CommandOrControl+Shift+G',
           globalShortcutRegistered: false,
           terminalApp: 'auto',
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
           session: {
             openRepos: [],
             activeRepo: null,
-            detailCollapsed: true,
+            detailCollapsed: false,
             detailFocusMode: false,
-            workspaceLayout: 'top-bottom',
-            detailPaneSizes: { 'top-bottom': 50, 'left-right': 50 },
+            workspaceLayout: 'left-right',
+            detailPaneSizes: { 'left-right': 50 },
           },
           recentRepos: [],
         }),
@@ -127,13 +106,11 @@ describe('settings-client', () => {
           shortcutsDisabled: false,
           globalShortcutDisabled: false,
           swapCloseShortcuts: false,
-          toggleDetailOnActionBarBlankClick: false,
           globalShortcut: 'CommandOrControl+Shift+G',
           terminalApp: 'auto',
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -276,35 +253,31 @@ describe('settings-client', () => {
         matchMedia: vi.fn(() => ({ matches: true })),
       },
     })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
         ok: true,
-        json: async () => ({
-          ok: true,
-          settings: {
-            lang: 'ja',
-            theme: 'auto',
-            colorTheme: 'macos',
-            fetchIntervalSec: 120,
-            terminalNotificationsEnabled: false,
-            shortcutsDisabled: false,
-            globalShortcutDisabled: false,
-            swapCloseShortcuts: false,
-            toggleDetailOnActionBarBlankClick: false,
-            globalShortcut: 'CommandOrControl+Shift+G',
-            terminalApp: 'auto',
-            editorApp: 'auto',
-            fileTreeFontSize: 12,
-            terminalFontSize: 14,
-            remoteTerminalTmuxEnabled: false,
-            terminalCustomButtonsVisible: true,
-            terminalCustomButtons: [],
-            lanEnabled: false,
-          },
-          i18n: { lang: 'ja', pref: 'ja', dict: { hello: 'こんにちは' } },
-        }),
-      })
+        settings: {
+          lang: 'ja',
+          theme: 'auto',
+          colorTheme: 'macos',
+          fetchIntervalSec: 120,
+          terminalNotificationsEnabled: false,
+          shortcutsDisabled: false,
+          globalShortcutDisabled: false,
+          swapCloseShortcuts: false,
+          globalShortcut: 'CommandOrControl+Shift+G',
+          terminalApp: 'auto',
+          editorApp: 'auto',
+          fileTreeFontSize: 12,
+          terminalFontSize: 14,
+          terminalCustomButtonsVisible: true,
+          terminalCustomButtons: [],
+          lanEnabled: false,
+        },
+        i18n: { lang: 'ja', pref: 'ja', dict: { hello: 'こんにちは' } },
+      }),
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const { setI18nPref } = await import('#/web/settings-client.ts')
@@ -462,13 +435,11 @@ describe('settings-client', () => {
           shortcutsDisabled: false,
           globalShortcutDisabled: false,
           swapCloseShortcuts: false,
-          toggleDetailOnActionBarBlankClick: false,
           globalShortcut: 'CommandOrControl+Shift+G',
           terminalApp: 'ghostty',
           editorApp: 'auto',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -519,13 +490,11 @@ describe('settings-client', () => {
           shortcutsDisabled: false,
           globalShortcutDisabled: false,
           swapCloseShortcuts: false,
-          toggleDetailOnActionBarBlankClick: false,
           globalShortcut: 'CommandOrControl+Shift+G',
           terminalApp: 'auto',
           editorApp: 'cursor',
           fileTreeFontSize: 12,
           terminalFontSize: 14,
-          remoteTerminalTmuxEnabled: false,
           terminalCustomButtonsVisible: true,
           terminalCustomButtons: [],
           lanEnabled: false,
@@ -600,7 +569,9 @@ describe('settings-client', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const { addRecentRepo } = await import('#/web/settings-client.ts')
-    await expect(addRecentRepo({ kind: 'local', id: '/bad\0repo' } as unknown as { kind: 'local'; id: string })).resolves.toMatchObject({
+    await expect(
+      addRecentRepo({ kind: 'local', id: '/bad\0repo' } as unknown as { kind: 'local'; id: string }),
+    ).resolves.toMatchObject({
       recentRepos: [{ kind: 'local', id: '/existing' }],
       addedRepo: null,
     })

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     worktreeSnapshot: vi.fn(),
     createTerminal: vi.fn(),
     selectTerminal: vi.fn(),
+    waitForInputReady: vi.fn(),
     writeInput: vi.fn(),
   },
   showRepoBranchDetailTab: vi.fn(),
@@ -43,6 +44,7 @@ beforeEach(() => {
     worktreeTerminalKey: '/repo\u0000/worktree',
   })
   mocks.bridge.createTerminal.mockResolvedValue('/repo\u0000/worktree\u0000terminal-1')
+  mocks.bridge.waitForInputReady.mockResolvedValue(true)
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -76,14 +78,14 @@ describe('useMergeConflictAiActions', () => {
       '/repo\u0000/worktree\u0000terminal-1',
       expect.stringContaining('codex exec'),
     )
-    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toContain('\r')
+    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toMatch(/[\r\n]$/)
   })
 
   test('uses the selected terminal when one already exists', async () => {
     mocks.bridge.worktreeSnapshot.mockReturnValue({
       count: 1,
       selectedDescriptor: { key: '/repo\u0000/worktree\u0000terminal-1' },
-      sessions: [{ key: '/repo\u0000/worktree\u0000terminal-1' }],
+      sessions: [{ key: '/repo\u0000/worktree\u0000terminal-1', phase: 'open', selected: true }],
       worktreeTerminalKey: '/repo\u0000/worktree',
     })
     let actions: ReturnType<typeof useMergeConflictAiActions> | null = null
@@ -105,7 +107,7 @@ describe('useMergeConflictAiActions', () => {
       '/repo\u0000/worktree\u0000terminal-1',
       expect.stringContaining('claude --print'),
     )
-    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toContain('\r')
+    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toMatch(/[\r\n]$/)
   })
 })
 

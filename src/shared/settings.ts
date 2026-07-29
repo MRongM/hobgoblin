@@ -14,8 +14,8 @@ export type EditorAppAvailability = Record<ResolvedEditorApp, boolean>
 
 export const MIN_FILE_TREE_FONT_SIZE = 10
 export const MAX_FILE_TREE_FONT_SIZE = 18
-export const MIN_FILE_TREE_TOPBAR_FONT_SIZE = 10
-export const MAX_FILE_TREE_TOPBAR_FONT_SIZE = 18
+export const MIN_APP_FONT_SIZE = MIN_FILE_TREE_FONT_SIZE
+export const MAX_APP_FONT_SIZE = MAX_FILE_TREE_FONT_SIZE
 export const DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB = 30
 export const MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB = 1
 export const MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB = 100
@@ -48,6 +48,7 @@ export interface SettingsPrefs {
   fontFamily: FontFamilyPref
   lang: LangPref
   fetchIntervalSec: number
+  statusRefreshIntervalSec: number
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
   gitNetworkTimeoutSec: number
@@ -55,7 +56,6 @@ export interface SettingsPrefs {
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
-  toggleDetailOnActionBarBlankClick: boolean
   terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string
@@ -64,10 +64,8 @@ export interface SettingsPrefs {
   topbarHeightPx: number
   toolbarHeightPx: number
   fileTreeFontSize: number
-  fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
-  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]

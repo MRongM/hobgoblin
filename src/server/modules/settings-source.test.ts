@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { defaultSessionState } from '#/shared/settings-defaults.ts'
 import { COLOR_THEMES } from '#/shared/color-theme.ts'
+import { normalizeRemoteRepoRef, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
 
 let tmp: string | null = null
 let previousDataDir = process.env.GOBLIN_SERVER_DATA_DIR
@@ -17,6 +18,21 @@ function useTempServerSettingsDir(): void {
 function writeSettingsFile(partial: Record<string, unknown>): void {
   if (!tmp) throw new Error('temporary settings directory was not initialized')
   writeFileSync(path.join(tmp, 'server-settings.json'), JSON.stringify(partial), 'utf-8')
+}
+
+function telegramSettingsUpdate(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: false,
+    botToken: '',
+    chatId: '',
+    proxyEnabled: true,
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 400,
+    ...overrides,
+  }
 }
 
 afterEach(async () => {
@@ -44,14 +60,14 @@ test('initializes server-settings.json with defaults when no persisted settings 
     theme: 'auto',
     colorTheme: 'macos',
     fontFamily: 'mono',
+    statusRefreshIntervalSec: 120,
     gitNetworkProxyEnabled: false,
     gitNetworkProxyUrl: '',
     gitNetworkTimeoutSec: 120,
-    terminalNotificationsEnabled: false,
+    terminalNotificationsEnabled: true,
     shortcutsDisabled: false,
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
-    toggleDetailOnActionBarBlankClick: false,
     terminalThemeSyncEnabled: true,
     temporaryFilesDirectory: '',
     globalShortcut: 'Alt+G',
@@ -60,9 +76,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     topbarHeightPx: 34,
     toolbarHeightPx: 34,
     fileTreeFontSize: 14,
-    fileTreeTopbarFontSize: 13,
     terminalFontSize: 14,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
@@ -77,6 +91,350 @@ test('initializes server-settings.json with defaults when no persisted settings 
   vi.resetModules()
   const reloaded = await import('#/server/modules/settings-source.ts')
   expect(await reloaded.getServerFetchIntervalSec()).toBe(120)
+})
+
+test('normalizes and persists the scheduled status refresh interval', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ statusRefreshIntervalSec: 'invalid' })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ statusRefreshIntervalSec: 120 })
+  await expect(mod.updateServerSettingsPrefs({ statusRefreshIntervalSec: 300 })).resolves.toMatchObject({
+    statusRefreshIntervalSec: 300,
+  })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ statusRefreshIntervalSec: 300 })
+})
+
+test('retains the 30 most recently opened repositories', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  for (let index = 0; index <= 30; index += 1) {
+    await mod.addServerRecentRepo({ kind: 'local', id: `/repo-${index}` })
+  }
+
+  expect(await mod.getServerRecentRepos()).toEqual(
+    Array.from({ length: 30 }, (_, index) => ({ kind: 'local', id: `/repo-${30 - index}` })),
+  )
+})
+
+test('defaults a missing terminal notification preference on and preserves explicit off', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const missingPreferenceModule = await import('#/server/modules/settings-source.ts')
+
+  await expect(missingPreferenceModule.getServerSettingsPrefs()).resolves.toMatchObject({
+    terminalNotificationsEnabled: true,
+  })
+
+  missingPreferenceModule.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  writeSettingsFile({ terminalNotificationsEnabled: false })
+  const explicitOptOutModule = await import('#/server/modules/settings-source.ts')
+
+  await expect(explicitOptOutModule.getServerSettingsPrefs()).resolves.toMatchObject({
+    terminalNotificationsEnabled: false,
+  })
+})
+
+test('defaults missing Telegram completion activity duration to ten seconds', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+    outputCompletionMinimumActivitySeconds: 10,
+  })
+})
+
+test('defaults a missing Telegram proxy preference on and persists explicit opt-out', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({ proxyEnabled: true })
+
+  await mod.updateServerTelegramNotificationSettings(telegramSettingsUpdate({ proxyEnabled: false }))
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({ proxyEnabled: false })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerTelegramNotificationSettings()).resolves.toMatchObject({ proxyEnabled: false })
+})
+
+test.each([0, 3_601, 1.5, Number.NaN, '10', null])(
+  'normalizes corrupt persisted Telegram completion activity duration %p to ten seconds',
+  async (persisted) => {
+    useTempServerSettingsDir()
+    writeSettingsFile({ telegramOutputCompletionMinimumActivitySeconds: persisted })
+    const mod = await import('#/server/modules/settings-source.ts')
+
+    await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+      outputCompletionMinimumActivitySeconds: 10,
+    })
+  },
+)
+
+test.each([1, 10, 30, 3_600])('persists valid Telegram completion activity duration %i', async (seconds) => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await mod.updateServerTelegramNotificationSettings(
+    telegramSettingsUpdate({ outputCompletionMinimumActivitySeconds: seconds }),
+  )
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+    outputCompletionMinimumActivitySeconds: seconds,
+  })
+})
+
+test.each([0, 3_601, 1.5, Number.NaN])('rejects invalid Telegram completion activity duration %p', async (seconds) => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings(
+      telegramSettingsUpdate({ outputCompletionMinimumActivitySeconds: seconds }),
+    ),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+})
+
+test('keeps Telegram Bot Token server-only and retains it on a blank update', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: true,
+      botToken: '123456:test-token-value',
+      chatId: '-1001234567890',
+      bellEnabled: false,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
+      includeTerminalOutput: true,
+      outputTailLength: 4096,
+    }),
+  ).resolves.toEqual({
+    enabled: true,
+    botTokenConfigured: true,
+    chatId: '-1001234567890',
+    proxyEnabled: true,
+    bellEnabled: false,
+    outputCompletionEnabled: true,
+    outputCompletionMinimumActivitySeconds: 30,
+    includeTerminalOutput: true,
+    outputTailLength: 4096,
+  })
+
+  expect(JSON.stringify(await mod.getServerTelegramNotificationSettings())).not.toContain('test-token-value')
+
+  await mod.updateServerTelegramNotificationSettings({
+    enabled: false,
+    botToken: '',
+    chatId: '-1001234567890',
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 200,
+  })
+  expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token-value')
+})
+
+test('does not enable Telegram notifications without a Bot Token and Chat ID', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: true,
+      botToken: '',
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+      outputTailLength: 400,
+    }),
+  ).rejects.toMatchObject({ code: 'configuration-incomplete' })
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
+    enabled: false,
+    botTokenConfigured: false,
+    chatId: '',
+    proxyEnabled: true,
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 400,
+  })
+})
+
+test('normalizes persisted Telegram output length and rejects invalid writes', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ telegramOutputTailLength: 9000 })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({ outputTailLength: 4096 })
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+      outputTailLength: 0,
+    }),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+      outputTailLength: 1.5,
+    }),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+      outputTailLength: 1,
+    }),
+  ).resolves.toMatchObject({ outputTailLength: 1 })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerTelegramNotificationSettings()).resolves.toMatchObject({ outputTailLength: 1 })
+})
+
+test('tracks a saved Bot Token independently from the Chat ID while disabled', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      botToken: '123456:test-token',
+      chatId: '',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+      outputTailLength: 200,
+    }),
+  ).resolves.toEqual({
+    enabled: false,
+    botTokenConfigured: true,
+    chatId: '',
+    proxyEnabled: true,
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 200,
+  })
+  expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token')
+})
+
+test('rejects malformed Telegram channel usernames', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings({
+      enabled: false,
+      botToken: '123456:test-token',
+      chatId: '@1starts_with_digit',
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+      outputTailLength: 200,
+    }),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+})
+
+test('normalizes missing and invalid persisted Telegram notification settings', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    telegramNotificationsEnabled: true,
+    telegramOutputTailLength: 'invalid',
+    telegramBotToken: 'token\u0000material',
+    telegramChatId: 'invalid chat id',
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
+    enabled: false,
+    botTokenConfigured: false,
+    chatId: '',
+    proxyEnabled: true,
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 400,
+  })
+  expect(JSON.stringify(await mod.getServerSettingsPrefs())).not.toContain('telegramBotToken')
+})
+
+test('migrates legacy Telegram settings to bell-only delivery', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    telegramNotificationsEnabled: true,
+    telegramBotToken: '123456:test-token',
+    telegramChatId: '-100123',
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toEqual({
+    enabled: true,
+    botTokenConfigured: true,
+    chatId: '-100123',
+    proxyEnabled: true,
+    bellEnabled: true,
+    outputCompletionEnabled: false,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: false,
+    outputTailLength: 400,
+  })
+})
+
+test('discards persisted tmux preferences from normalized settings', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    localTerminalTmuxEnabled: true,
+    remoteTerminalTmuxEnabled: true,
+    internalTerminalTmuxEnabled: true,
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const prefs = await mod.getServerSettingsPrefs()
+
+  expect(prefs).not.toHaveProperty('localTerminalTmuxEnabled')
+  expect(prefs).not.toHaveProperty('remoteTerminalTmuxEnabled')
+  expect(prefs).not.toHaveProperty('internalTerminalTmuxEnabled')
+
+  const persisted = JSON.parse(readFileSync(path.join(tmp!, 'server-settings.json'), 'utf-8'))
+  expect(persisted).not.toHaveProperty('localTerminalTmuxEnabled')
+  expect(persisted).not.toHaveProperty('remoteTerminalTmuxEnabled')
+  expect(persisted).not.toHaveProperty('internalTerminalTmuxEnabled')
 })
 
 test('persists web access credentials without exposing password material in public settings', async () => {
@@ -181,7 +539,6 @@ test('persists updates and notifies subscribers from the server settings store',
     shortcutsDisabled: true,
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
-    toggleDetailOnActionBarBlankClick: true,
     terminalThemeSyncEnabled: false,
     temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'CommandOrControl+Alt+G',
@@ -190,9 +547,7 @@ test('persists updates and notifies subscribers from the server settings store',
     topbarHeightPx: 41.2,
     toolbarHeightPx: 42.8,
     fileTreeFontSize: 13.4,
-    fileTreeTopbarFontSize: 12.2,
     terminalFontSize: 15.6,
-    remoteTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
     terminalCustomButtonSize: 'large',
     terminalCustomButtons: [
@@ -231,7 +586,6 @@ test('persists updates and notifies subscribers from the server settings store',
     shortcutsDisabled: true,
     globalShortcutDisabled: true,
     swapCloseShortcuts: true,
-    toggleDetailOnActionBarBlankClick: true,
     terminalThemeSyncEnabled: false,
     temporaryFilesDirectory: path.join(tmp, 'terminal-paste'),
     globalShortcut: 'Alt+G',
@@ -240,9 +594,7 @@ test('persists updates and notifies subscribers from the server settings store',
     topbarHeightPx: 41,
     toolbarHeightPx: 43,
     fileTreeFontSize: 13,
-    fileTreeTopbarFontSize: 12,
     terminalFontSize: 16,
-    remoteTerminalTmuxEnabled: true,
     terminalCustomButtonsVisible: false,
     terminalCustomButtonSize: 'large',
     terminalCustomButtons: [
@@ -462,45 +814,19 @@ test('accepts current design color themes and normalizes legacy apple plus unkno
   expect(await mod.getServerSettingsPrefs()).toMatchObject({ colorTheme: 'macos' })
 })
 
-test('trusts and untrusts a repo worktree bootstrap config hash', async () => {
-  useTempServerSettingsDir()
-  const mod = await import('#/server/modules/settings-source.ts')
-  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-
-  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
-  await expect(mod.getServerRepoSettings()).resolves.toEqual([
-    {
-      repoId: '/repo-a',
-      worktreeBootstrapTrust: {
-        configHash,
-        trustedAt: expect.any(String),
-      },
-    },
-  ])
-
-  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
-  await expect(mod.getServerRepoSettings()).resolves.toEqual([])
-})
-
-test('drops invalid persisted worktree bootstrap trust entries', async () => {
+test('drops legacy worktree bootstrap trust while preserving project color themes', async () => {
   useTempServerSettingsDir()
   await writeSettingsFile({
     repoSettings: [
       {
         repoId: '/repo-a',
-        worktreeBootstrapTrust: { configHash: 'sha256:bad', trustedAt: '2026-07-08T00:00:00.000Z' },
+        worktreeBootstrapTrust: { configHash: 'sha256:legacy', trustedAt: '2026-07-08T00:00:00.000Z' },
       },
       {
         repoId: '/repo-b',
+        colorTheme: 'github',
         worktreeBootstrapTrust: {
           configHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-          trustedAt: 123,
-        },
-      },
-      {
-        repoId: '/repo-c',
-        worktreeBootstrapTrust: {
-          configHash: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
           trustedAt: '2026-07-08T00:00:00.000Z',
         },
       },
@@ -508,15 +834,7 @@ test('drops invalid persisted worktree bootstrap trust entries', async () => {
   })
 
   const mod = await import('#/server/modules/settings-source.ts')
-  await expect(mod.getServerRepoSettings()).resolves.toEqual([
-    {
-      repoId: '/repo-c',
-      worktreeBootstrapTrust: {
-        configHash: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-        trustedAt: '2026-07-08T00:00:00.000Z',
-      },
-    },
-  ])
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-b', colorTheme: 'github' }])
 })
 
 test('normalizes persisted project color themes and drops invalid project color themes', async () => {
@@ -529,10 +847,6 @@ test('normalizes persisted project color themes and drops invalid project color 
       {
         repoId: '/repo-d',
         colorTheme: 'github',
-        worktreeBootstrapTrust: {
-          configHash: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-          trustedAt: '2026-07-08T00:00:00.000Z',
-        },
       },
     ],
   })
@@ -540,41 +854,18 @@ test('normalizes persisted project color themes and drops invalid project color 
   const mod = await import('#/server/modules/settings-source.ts')
   await expect(mod.getServerRepoSettings()).resolves.toEqual([
     { repoId: '/repo-a', colorTheme: 'tokyo-night' },
-    {
-      repoId: '/repo-d',
-      colorTheme: 'github',
-      worktreeBootstrapTrust: {
-        configHash: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-        trustedAt: '2026-07-08T00:00:00.000Z',
-      },
-    },
+    { repoId: '/repo-d', colorTheme: 'github' },
   ])
 })
 
-test('sets and clears project color themes while preserving bootstrap trust', async () => {
+test('sets and clears project color themes', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
-  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
-  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
   await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
-  await expect(mod.getServerRepoSettings()).resolves.toEqual([
-    {
-      repoId: '/repo-a',
-      colorTheme: 'cursor',
-      worktreeBootstrapTrust: { configHash, trustedAt: expect.any(String) },
-    },
-  ])
+  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
 
   await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: null })
-  await expect(mod.getServerRepoSettings()).resolves.toEqual([
-    {
-      repoId: '/repo-a',
-      worktreeBootstrapTrust: { configHash, trustedAt: expect.any(String) },
-    },
-  ])
-
-  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
   await expect(mod.getServerRepoSettings()).resolves.toEqual([])
 })
 
@@ -589,30 +880,84 @@ test('ignores invalid project color theme writes', async () => {
   await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
 })
 
-test('untrusting bootstrap config preserves project color theme', async () => {
-  useTempServerSettingsDir()
-  const mod = await import('#/server/modules/settings-source.ts')
-  const configHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-
-  await mod.trustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })
-  await mod.setServerRepoColorTheme({ repoId: '/repo-a', colorTheme: 'cursor' })
-
-  await expect(mod.untrustServerRepoWorktreeBootstrapConfig({ repoId: '/repo-a', configHash })).resolves.toBe(true)
-  await expect(mod.getServerRepoSettings()).resolves.toEqual([{ repoId: '/repo-a', colorTheme: 'cursor' }])
-})
-
 test('persists file tree pane sizes through session save and reload', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
 
   const saved = await mod.setServerSessionState({
     ...defaultSessionState(),
-    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+    fileTreePaneSizes: { 'left-right': 32.5 },
   })
-  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 40, 'left-right': 32.5 })
+  expect(saved.fileTreePaneSizes).toEqual({ 'left-right': 32.5 })
 
   await expect(mod.getServerSessionState()).resolves.toMatchObject({
-    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 32.5 },
+    fileTreePaneSizes: { 'left-right': 32.5 },
+  })
+})
+
+test('persists and normalizes workspace-specific repository list heights', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    openRepos: [{ kind: 'local', id: root }],
+    activeRepo: root,
+    workspaceRepositoryListHeightByRoot: {
+      [root]: 212.4,
+      '/tmp/closed-workspace': 240,
+    },
+  } as never)
+  expect(saved.workspaceRepositoryListHeightByRoot).toEqual({ [root]: 212 })
+  await expect(mod.getServerSessionState()).resolves.toMatchObject({
+    workspaceRepositoryListHeightByRoot: { [root]: 212 },
+  })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceRepositoryListHeightByRoot: { [root]: 0 },
+    } as never),
+  ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: { [root]: 96 } })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceRepositoryListHeightByRoot: { [root]: 10_000 },
+    } as never),
+  ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: { [root]: 4096 } })
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceRepositoryListHeightByRoot: { [root]: 'invalid' },
+    } as never),
+  ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: {} })
+})
+
+test('normalizes legacy top-bottom sessions to left-right without restoring terminal focus', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  const saved = await mod.setServerSessionState({
+    ...defaultSessionState(),
+    workspaceLayout: 'top-bottom',
+    detailCollapsed: true,
+    detailFocusMode: true,
+    detailPaneSizes: { 'top-bottom': 40, 'left-right': 72 },
+    fileTreePaneSizes: { 'top-bottom': 40, 'left-right': 64 },
+  } as never)
+
+  expect(saved).toMatchObject({
+    workspaceLayout: 'left-right',
+    detailCollapsed: false,
+    detailFocusMode: false,
+    detailPaneSizes: { 'left-right': 72 },
+    fileTreePaneSizes: { 'left-right': 64 },
   })
 })
 
@@ -635,7 +980,7 @@ test('persists and normalizes the global project list expansion preference', asy
   ).resolves.toMatchObject({ projectListExpanded: false })
 })
 
-test('persists an active child repository for an open multi-repository workspace root', async () => {
+test('migrates an active child repository for an open multi-repository workspace root', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
   const root = '/tmp/workspace'
@@ -650,7 +995,50 @@ test('persists an active child repository for an open multi-repository workspace
     }),
   ).resolves.toMatchObject({
     activeRepo: child,
-    workspaceActiveRepoByRoot: { [root]: child },
+    workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+  })
+})
+
+test('preserves the active project when one repository is also an open workspace member', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+  const child = '/tmp/workspace/api'
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [
+        { kind: 'local', id: root },
+        { kind: 'local', id: child },
+      ],
+      activeRepo: child,
+      activeProject: root,
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+    }),
+  ).resolves.toMatchObject({
+    activeRepo: child,
+    activeProject: root,
+    workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+  })
+})
+
+test('migrates an active child repository for an open remote workspace root', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace' })!
+  const child = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/api' })!
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [remoteRepoSessionEntry(root)],
+      activeRepo: child.id,
+      workspaceActiveRepoByRoot: { [root.id]: child.id },
+    }),
+  ).resolves.toMatchObject({
+    activeRepo: child.id,
+    workspaceActiveContextByRoot: { [root.id]: { kind: 'repository', repositoryId: child.id } },
   })
 })
 
@@ -671,7 +1059,41 @@ test('drops workspace selections that are not immediate children of an open loca
     }),
   ).resolves.toMatchObject({
     activeRepo: null,
-    workspaceActiveRepoByRoot: {},
+    workspaceActiveContextByRoot: {},
+  })
+})
+
+test('normalizes tagged workspace contexts and prunes per-root expansion state', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+  const root = '/tmp/workspace'
+
+  await expect(
+    mod.setServerSessionState({
+      ...defaultSessionState(),
+      openRepos: [{ kind: 'local', id: root }],
+      workspaceActiveContextByRoot: {
+        [root]: {
+          kind: 'branch-workspace',
+          branchWorkspaceId: 'branch-1',
+          memberRepositoryName: 'web',
+        },
+        '/tmp/closed': { kind: 'overview' },
+      },
+      workspaceRepositoryListExpandedByRoot: {
+        [root]: false,
+        '/tmp/closed': false,
+      },
+    }),
+  ).resolves.toMatchObject({
+    workspaceActiveContextByRoot: {
+      [root]: {
+        kind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
+        memberRepositoryName: 'web',
+      },
+    },
+    workspaceRepositoryListExpandedByRoot: { [root]: false },
   })
 })
 
@@ -682,5 +1104,5 @@ test('normalizes missing or invalid file tree pane sizes to defaults', async () 
   const session = defaultSessionState()
   delete session.fileTreePaneSizes
   const saved = await mod.setServerSessionState(session)
-  expect(saved.fileTreePaneSizes).toEqual({ 'top-bottom': 66.7, 'left-right': 66.7 })
+  expect(saved.fileTreePaneSizes).toEqual({ 'left-right': 66.7 })
 })

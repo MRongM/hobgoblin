@@ -66,7 +66,3 @@ export function t(key: DictKey, params?: Record<string, string | number>): strin
     return v == null ? m : String(v)
   })
 }
-
-export function getDictionary(): Record<DictKey, string> {
-  return DICTS[currentLang]
-}

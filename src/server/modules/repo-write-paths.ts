@@ -1,13 +1,14 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
-import { publishRepoQueryInvalidation, publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
+import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
+import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
-import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import {
-  getServerRepoSettings,
-  getServerSettingsPrefs,
-  trustServerRepoWorktreeBootstrapConfig,
-  untrustServerRepoWorktreeBootstrapConfig,
-} from '#/server/modules/settings-source.ts'
+  isValidRepositoryWorktreePath,
+  resolveRemoteRepoTarget,
+  resolveRepoBackend,
+  runWithRepoBackend,
+} from '#/server/modules/repo-backend.ts'
+import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { initRepository as gitInit } from '#/system/git/init.ts'
 import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag } from '#/system/git/tags.ts'
@@ -23,9 +24,7 @@ import {
 import {
   createRemoteFileTreeDirectory,
   createRemoteFileTreeFile,
-  createRemoteFileTreeTextFile,
   deleteRemoteFileTreeEntries,
-  getRemoteWorktreeBootstrapPreview,
   moveRemoteFileTreeEntries,
   replaceRemoteFileTreeBinaryFile,
   renameRemoteFileTreeEntry,
@@ -38,7 +37,7 @@ import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
 import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
-import { isValidCwd, isValidRepoLocator, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
+import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { type CloneRepoResult } from '#/shared/rpc.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
@@ -50,13 +49,7 @@ import {
   normalizeCreateWorktreeInput,
   type CreateWorktreeInput,
 } from '#/shared/worktree-create.ts'
-import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
-import {
-  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
-  getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
-  initializeWorktreeBootstrapConfig,
-} from '#/system/git/worktree-bootstrap.ts'
+import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
@@ -129,20 +122,6 @@ function isValidCloneOperationId(value: unknown): value is string {
 
 function normalizeInvalidationSourceToken(value: unknown): string | undefined {
   return typeof value === 'string' && INVALIDATION_SOURCE_TOKEN_RE.test(value) ? value : undefined
-}
-
-function isValidRemoteWorktreePath(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= MAX_IPC_PATH_LENGTH &&
-    !value.includes('\0') &&
-    path.posix.isAbsolute(value)
-  )
-}
-
-function isValidRepositoryWorktreePath(repoId: string, worktreePath: unknown): worktreePath is string {
-  return isRemoteRepoId(repoId) ? isValidRemoteWorktreePath(worktreePath) : isValidCwd(worktreePath)
 }
 
 function repoSnapshotInvalidationEvent(cwd: string, sourceToken?: string) {
@@ -345,66 +324,12 @@ export async function createRepositoryWorktree(
   if (!normalized) return { ok: false, message: 'error.invalid-arguments' }
   return await runCreateWorktreeServiceOperation(cwd, async () => {
     const result = await runWithRepoBackend(cwd, async (backend) => {
-      const createResult = await backend.createWorktree(normalized, signal, { worktreeBootstrap })
-      return await syncWorktreeBootstrapTrustAfterSuccessfulRun(cwd, worktreeBootstrap, createResult)
+      return await backend.createWorktree(normalized, signal, { worktreeBootstrap })
     })
     return result.ok || result.repoChanged
       ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken)
       : result
   })
-}
-
-export async function getRepositoryWorktreeBootstrapPreview(
-  cwd: string,
-  signal?: AbortSignal,
-  worktreePath?: string,
-): Promise<WorktreeBootstrapPreviewResult> {
-  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
-  if (worktreePath !== undefined) {
-    if (!isValidRepositoryWorktreePath(cwd, worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-    if (isRemoteRepoId(cwd)) {
-      const target = await resolveRemoteRepoTarget(cwd)
-      return await getRemoteWorktreeBootstrapPreview(
-        { ...target, remotePath: path.posix.normalize(worktreePath) },
-        { signal },
-      )
-    }
-    return await getLocalWorktreeBootstrapPreview(worktreePath, { signal })
-  }
-  return await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeBootstrapPreview(signal))
-}
-
-export async function initializeRepositoryWorktreeBootstrapConfig(
-  repoId: string,
-  worktreePath: string,
-  signal?: AbortSignal,
-  sourceToken?: string,
-): Promise<ExecResult> {
-  if (!isValidRepoLocator(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-  if (!isValidRepositoryWorktreePath(repoId, worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-  const result = isRemoteRepoId(repoId)
-    ? await initializeRemoteWorktreeBootstrapConfig(repoId, worktreePath, signal)
-    : await initializeWorktreeBootstrapConfig(worktreePath, { signal })
-  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
-  return result
-}
-
-async function initializeRemoteWorktreeBootstrapConfig(
-  repoId: string,
-  worktreePath: string,
-  signal?: AbortSignal,
-): Promise<ExecResult> {
-  const target = await resolveRemoteRepoTarget(repoId)
-  const sourceRoot = path.posix.normalize(worktreePath)
-  const result = await createRemoteFileTreeTextFile(
-    target,
-    sourceRoot,
-    sourceRoot,
-    'goblin.toml',
-    DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
-    { signal },
-  )
-  return result.ok ? { ok: true, message: 'goblin.toml created' } : result
 }
 
 async function runCreateWorktreeServiceOperation<T>(repoId: string, task: () => Promise<T>): Promise<T> {
@@ -430,31 +355,6 @@ function scheduleCreateWorktreeOperationQueueCleanup(repoId: string, queue: PQue
     if (createWorktreeOperationQueuesByRepo.get(repoId) !== queue) return
     if (queue.size === 0 && queue.pending === 0) createWorktreeOperationQueuesByRepo.delete(repoId)
   })
-}
-
-async function syncWorktreeBootstrapTrustAfterSuccessfulRun(
-  repoId: string,
-  decision: WorktreeBootstrapDecision,
-  result: ExecResult,
-): Promise<ExecResult> {
-  if (!result.ok || decision.kind !== 'run') return result
-  try {
-    const repoSettings = await getServerRepoSettings()
-    const currentlyTrusted = isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, decision.configHash)
-    if (decision.configTrusted) {
-      if (currentlyTrusted) return result
-      await trustServerRepoWorktreeBootstrapConfig({ repoId, configHash: decision.configHash })
-      publishSettingsInvalidation(['settings-snapshot'])
-      return result
-    }
-    if (!currentlyTrusted) return result
-    if (await untrustServerRepoWorktreeBootstrapConfig({ repoId, configHash: decision.configHash })) {
-      publishSettingsInvalidation(['settings-snapshot'])
-    }
-    return result
-  } catch {
-    return { ...result, ok: false, message: 'error.settings-write-title', repoChanged: true }
-  }
 }
 
 export async function createRepositoryBranch(
@@ -505,11 +405,6 @@ export async function getRepositoryRemoteTags(cwd: string, signal?: AbortSignal)
   const backend = await resolveRepoBackend(cwd)
   const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
   return await backend.getRemoteTags(signal, networkOptions)
-}
-
-export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
-  if (!isValidRepoLocator(cwd)) return []
-  return await runWithRepoBackend(cwd, async (backend) => await backend.getLocalTags(signal))
 }
 
 export async function deleteRepositoryBranch(
@@ -619,6 +514,7 @@ export async function removeRepositoryWorktree(
     branch: string
     worktreePath: string
     alsoDeleteBranch: boolean
+    forceRemoveWorktree?: boolean
     forceDeleteBranch?: boolean
     alsoDeleteUpstream?: boolean
   },
@@ -630,14 +526,35 @@ export async function removeRepositoryWorktree(
   })
 }
 
+export async function cleanupRepositoryWorktree(
+  cwd: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await runWithRepoBackend(cwd, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.cleanupWorktree(worktreePath, signal),
+      sourceToken,
+    )
+  })
+}
+
 export async function openRepositoryRemote(cwd: string, branch?: string, signal?: AbortSignal): Promise<ExecResult> {
   const url = await runWithRepoBackend(cwd, async (backend) => await backend.getBrowserRemoteUrl(branch, signal))
   return url ? { ok: true, message: url } : { ok: false, message: 'error.no-remote-url' }
 }
 
-export async function openRepositoryTerminal(path: string): Promise<ExecResult> {
+export async function openRepositoryTerminal(input: {
+  projectRoot: string
+  workingDirectory: string
+}): Promise<ExecResult> {
+  if (!isValidCwd(input.projectRoot) || !isValidCwd(input.workingDirectory)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
   const prefs = await getServerSettingsPrefs()
-  return await openInPreferredTerminal(path, prefs.terminalApp)
+  return await openInPreferredTerminal({ ...input, terminalNumber: 1 }, prefs.terminalApp)
 }
 
 export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {
@@ -658,6 +575,14 @@ export async function renameRepositoryFileTreeEntry(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
+  const allowed = await assertBranchWorkspaceFileMutationAllowed({
+    rootId: repoId,
+    kind: 'rename',
+    worktreePath,
+    paths: [oldPath],
+    newName,
+  })
+  if (!allowed.ok) return allowed
   const result = isRemoteRepoId(repoId)
     ? await renameRemoteFileTreeEntry(await resolveRemoteRepoTarget(repoId), worktreePath, oldPath, newName, { signal })
     : await renameLocalFileTreeEntry(worktreePath, oldPath, newName)
@@ -746,6 +671,13 @@ export async function deleteRepositoryFileTreeEntries(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
+  const allowed = await assertBranchWorkspaceFileMutationAllowed({
+    rootId: repoId,
+    kind: 'delete',
+    worktreePath,
+    paths,
+  })
+  if (!allowed.ok) return allowed
   const result = isRemoteRepoId(repoId)
     ? await deleteRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, { signal })
     : await deleteLocalFileTreeEntries(worktreePath, paths)
@@ -761,6 +693,14 @@ export async function moveRepositoryFileTreeEntries(
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
+  const allowed = await assertBranchWorkspaceFileMutationAllowed({
+    rootId: repoId,
+    kind: 'move',
+    worktreePath,
+    paths,
+    targetDirPath,
+  })
+  if (!allowed.ok) return allowed
   const result = isRemoteRepoId(repoId)
     ? await moveRemoteFileTreeEntries(await resolveRemoteRepoTarget(repoId), worktreePath, paths, targetDirPath, {
         signal,

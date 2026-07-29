@@ -1,12 +1,9 @@
-import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
 
 /**
- * 根据响应式 UI 模式返回固定的工作区布局。
- * - compact 模式（移动设备）→ top-bottom（上下布局）
- * - default 模式（桌面设备）→ left-right（左右布局）
+ * 返回唯一的可持久化工作区布局。
+ * 紧凑模式使用独立的单焦点页面状态，不再映射成另一种分屏布局。
  */
 export function useEffectiveWorkspaceLayout(): WorkspaceLayout {
-  const uiMode = useResponsiveUiMode()
-  return uiMode === 'compact' ? 'top-bottom' : 'left-right'
+  return 'left-right'
 }

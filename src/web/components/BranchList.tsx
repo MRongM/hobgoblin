@@ -7,9 +7,10 @@
 // name. We avoid tinting the whole row so selection, hover, and status
 // semantics don't compete for background colour.
 
-import { type ComponentProps, useCallback, useEffect, useRef, useState } from 'react'
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
+  KeyboardSensor,
   type DragEndEvent,
   type Modifier,
   PointerSensor,
@@ -17,7 +18,12 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FolderTree, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
@@ -34,12 +40,14 @@ import type { RepoBranchState, RepoWorktreeState } from '#/web/stores/repos/type
 import { formatWorktreeListPath } from '#/web/lib/paths.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
-import { detailPanelStoreActionsEqual, detailPanelStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 
 interface Props {
   repoId: string
   showActions?: boolean
   onBranchSelected?: () => void
+  onWorktreeDoubleClick?: () => void
 }
 
 type OpenActionMenu = { repoId: string; branch: string }
@@ -81,18 +89,16 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
   )
 }
 
-export function BranchList({ repoId, showActions = true, onBranchSelected }: Props) {
+export function BranchList({ repoId, showActions = true, onBranchSelected, onWorktreeDoubleClick }: Props) {
   const t = useT()
-  const { setDetailCollapsed } = useStoreWithEqualityFn(
-    useReposStore,
-    detailPanelStoreActionsFromStore,
-    detailPanelStoreActionsEqual,
-  )
   const reorderWorktrees = useReposStore((s) => s.reorderWorktrees)
   const navigation = useMainWindowNavigation()
   const selectedRef = useRef<HTMLLIElement | null>(null)
   const [openActionMenu, setOpenActionMenu] = useState<OpenActionMenu | null>(null)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
   const handleSelectBranch = useCallback(
     (branch: string) => {
       navigation.selectRepoBranch(repoId, branch)
@@ -100,19 +106,31 @@ export function BranchList({ repoId, showActions = true, onBranchSelected }: Pro
     },
     [navigation, onBranchSelected, repoId],
   )
-  const handleOpenBranchStatus = useCallback(
-    (branch: string) => {
-      handleSelectBranch(branch)
-      navigation.showRepoDetailTab(repoId, 'status')
-      setDetailCollapsed(false)
-    },
-    [repoId, handleSelectBranch, navigation, setDetailCollapsed],
-  )
   const repo = useStoreWithEqualityFn(
     useReposStore,
     (s) => branchListRepoFromState(s.repos[repoId]),
     branchListRepoEqual,
   )
+  const workspaceRootId = useReposStore(activeWorkspaceRootId)
+  const workspaceRepositoryName = useReposStore((state) => {
+    if (!workspaceRootId) return null
+    const workspace = state.workspaceProjects[workspaceRootId]
+    if (!workspace?.repositoryIds.includes(repoId)) return null
+    return workspace.candidates.find((candidate) => candidate.id === repoId && candidate.selected)?.name ?? null
+  })
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspaceRootId ?? '')
+  const branchWorkspaceMemberPaths = useMemo(() => {
+    const paths = new Set<string>()
+    if (!workspaceRepositoryName || !branchWorkspaceQuery.data?.ok) return paths
+    for (const item of branchWorkspaceQuery.data.items) {
+      for (const member of item.repositories) {
+        if (member.repositoryName === workspaceRepositoryName && member.progress !== 'removed') {
+          paths.add(member.worktreePath)
+        }
+      }
+    }
+    return paths
+  }, [branchWorkspaceQuery.data, workspaceRepositoryName])
   // Keep the selected row in view as the user navigates with j/k.
   useEffect(() => {
     const selectedEl = selectedRef.current
@@ -153,9 +171,10 @@ export function BranchList({ repoId, showActions = true, onBranchSelected }: Pro
     const rowProps = {
       repo,
       branch,
+      branchWorkspaceMember: branch.worktree?.path ? branchWorkspaceMemberPaths.has(branch.worktree.path) : false,
       selected: repo.ui.selectedBranch,
       onSelectBranch: handleSelectBranch,
-      onOpenBranchStatus: handleOpenBranchStatus,
+      onWorktreeDoubleClick,
       selectedRef,
       showActions,
       actionMenuOpen: openActionMenu?.repoId === repoId && openActionMenu.branch === branch.name,
@@ -243,7 +262,7 @@ function branchListRepoFromState(
 
 function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: string }) {
   const { id, ...rowProps } = props
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id,
   })
   const verticalTransform = transform ? { ...transform, x: 0, scaleX: 1, scaleY: 1 } : null
@@ -257,7 +276,10 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
           transition,
         },
         isDragging,
-        props: { ...attributes, ...listeners },
+        dragHandle: {
+          setActivatorNodeRef,
+          props: { ...attributes, ...listeners },
+        },
       }}
     />
   )

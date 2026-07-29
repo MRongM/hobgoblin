@@ -36,3 +36,28 @@ export function resolveRemovableWorktree(
   }
   return { ok: true, target }
 }
+
+export type PrunableWorktreeResult =
+  | { ok: true; target: WorktreeInfo }
+  | {
+      ok: false
+      message:
+        | 'error.worktree-not-prunable'
+        | 'error.cannot-remove-main-worktree'
+        | 'error.cannot-remove-locked-worktree'
+    }
+
+export function resolvePrunableWorktree(
+  worktrees: WorktreeInfo[],
+  worktreePath: string,
+  repoRoot: string,
+): PrunableWorktreeResult {
+  const target = worktrees.find((wt) => path.resolve(wt.path) === path.resolve(worktreePath))
+  if (!target) return { ok: false, message: 'error.worktree-not-prunable' }
+  if (!repoRoot || !target.path || target.isPrimary || path.resolve(target.path) === path.resolve(repoRoot)) {
+    return { ok: false, message: 'error.cannot-remove-main-worktree' }
+  }
+  if (target.isLocked) return { ok: false, message: 'error.cannot-remove-locked-worktree' }
+  if (target.isPrunable !== true) return { ok: false, message: 'error.worktree-not-prunable' }
+  return { ok: true, target }
+}

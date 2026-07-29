@@ -6,7 +6,6 @@ import {
   matchRendererKeyboardShortcut,
   rendererMenuCommandById,
   resolveRendererMenuCommandAccelerator,
-  resolveRendererMenuCommandEnabled,
 } from '#/shared/shortcut-definitions.ts'
 
 describe('shortcut definitions', () => {
@@ -42,27 +41,13 @@ describe('shortcut definitions', () => {
     expect(
       resolveRendererMenuCommandAccelerator(rendererMenuCommandById('file-close-tab'), {
         swapCloseShortcuts: false,
-        workspaceLayout: 'top-bottom',
       }),
     ).toBe('CmdOrCtrl+Shift+W')
     expect(
       resolveRendererMenuCommandAccelerator(rendererMenuCommandById('file-close-tab'), {
         swapCloseShortcuts: true,
-        workspaceLayout: 'top-bottom',
       }),
     ).toBe('CmdOrCtrl+W')
-    expect(
-      resolveRendererMenuCommandEnabled(rendererMenuCommandById('view-toggle-detail'), {
-        swapCloseShortcuts: false,
-        workspaceLayout: 'top-bottom',
-      }),
-    ).toBe(true)
-    expect(
-      resolveRendererMenuCommandEnabled(rendererMenuCommandById('view-toggle-detail'), {
-        swapCloseShortcuts: false,
-        workspaceLayout: 'left-right',
-      }),
-    ).toBe(false)
   })
 
   test('defines indexed terminal selection shortcuts in the shared shortcut model', () => {

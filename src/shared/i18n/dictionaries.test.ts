@@ -72,12 +72,333 @@ describe('i18n dictionaries', () => {
     expect(zh['action.create-branch-title']).toBe('从本地新建分支')
     expect(zh['action.pull-remote-branch']).toBe('从远程新建分支')
     expect(zh['action.pull-remote-branch-title']).toBe('从远程分支创建本地分支')
-    expect(zh['action.merge-and-push-confirm']).toBe('拉合推')
+    expect(zh['action.merge-in-and-push-confirm']).toBe('拉取、合并入并推送')
+  })
+
+  test('uses direction-specific repository merge copy in every locale', () => {
+    const keys = [
+      'action.merge-in',
+      'action.merge-in-title',
+      'action.merge-in-label',
+      'action.merge-in-placeholder',
+      'action.merge-in-confirm',
+      'action.merge-in-and-push-confirm',
+      'action.merge-out',
+      'action.merge-out-title',
+      'action.merge-out-source-label',
+      'action.merge-out-destination-label',
+      'action.merge-out-destination-placeholder',
+      'action.merge-out-destination-dirty',
+      'action.merge-out-destination-unavailable',
+      'action.merge-out-destination-upstream-required',
+      'action.merge-out-loading',
+      'action.merge-out-confirm',
+      'action.merge-out-pull-merge-push-confirm',
+      'error.merge-out-source-dirty',
+      'error.merge-out-source-worktree-unavailable',
+      'error.merge-out-destination-dirty',
+      'error.merge-out-destination-worktree-unavailable',
+      'error.merge-out-destination-upstream-required',
+      'error.merge-out-plan-changed',
+      'error.merge-out-temporary-worktree-unavailable',
+    ] as const satisfies readonly DictKey[]
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['action.merge-in']).toBe('合并入')
+    expect(zh['action.merge-out']).toBe('合并出')
+    expect(en['action.merge-in']).toContain('into this branch')
+    expect(en['action.merge-out']).toContain('this branch into')
+  })
+
+  test('uses detection copy for local branch and status refreshes', () => {
+    expect(zh['action.fetch-local-title']).toBe('检测分支和状态')
   })
 
   test('distinguishes Chinese destructive branch actions', () => {
     expect(zh['action.remove-worktree']).toBe('删除工作树')
     expect(zh['action.delete-branch']).toBe('删除分支')
+  })
+
+  test('includes host tmux inventory and selected-close copy in every locale', () => {
+    const keys = [
+      'tmux.host-inventory.action',
+      'tmux.host-inventory.none',
+      'tmux.host-inventory.preview-failed',
+      'tmux.host-inventory.execute-failed',
+      'tmux.host-inventory.title',
+      'tmux.host-inventory.description',
+      'tmux.host-inventory.select-session',
+      'tmux.host-inventory.terminal-number',
+      'tmux.host-inventory.detached',
+      'tmux.host-inventory.attached',
+      'tmux.host-inventory.warning',
+      'tmux.host-inventory.close-selected',
+      'tmux.host-inventory.partial',
+      'tmux.host-inventory.success',
+      'tmux.host-inventory.missing',
+      'error.tmux-invalid-socket-directory',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['tmux.host-inventory.action']).toBe('扫描主机 tmux 会话')
+    expect(zh['tmux.host-inventory.close-selected']).toContain('关闭所选会话')
+  })
+
+  test('includes invalid worktree cleanup copy in every locale', () => {
+    const keys = [
+      'action.cleanup-invalid-worktree',
+      'action.cleanup-invalid-worktree-cleaning-title',
+      'action.cleanup-invalid-worktree-queued-title',
+      'action.cleanup-invalid-worktree-cleaned-title',
+      'action.confirm-cleanup-invalid-worktree-title',
+      'action.confirm-cleanup-invalid-worktree-body',
+      'action.confirm-cleanup-invalid-worktree-note',
+      'action.confirm-cleanup-invalid-worktree-confirm',
+      'error.worktree-not-prunable',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['action.cleanup-invalid-worktree']).toBe('清理无效工作树')
+    expect(zh['action.confirm-cleanup-invalid-worktree-body']).toContain('不会删除分支')
+    expect(zh['action.confirm-cleanup-invalid-worktree-note']).toContain('磁盘')
+  })
+
+  test('warns that branch workspace removal discards uncommitted changes in every locale', () => {
+    expect(en['workspace.branch-workspace.delete-warning']).toContain('uncommitted changes')
+    expect(zh['workspace.branch-workspace.delete-warning']).toContain('未提交改动')
+    expect(ja['workspace.branch-workspace.delete-warning']).toContain('未コミットの変更')
+    expect(ko['workspace.branch-workspace.delete-warning']).toContain('커밋하지 않은 변경 사항')
+  })
+
+  test('includes branch workspace lifecycle progress copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.progress.create',
+      'workspace.branch-workspace.progress.remove',
+      'workspace.branch-workspace.progress.summary',
+      'workspace.branch-workspace.progress.pending',
+      'workspace.branch-workspace.progress.active',
+      'workspace.branch-workspace.progress.complete',
+      'workspace.branch-workspace.progress.failed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.progress.summary']).toBe('已完成 {completed}/{total}')
+  })
+
+  test('includes branch workspace member management copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.add-members',
+      'workspace.branch-workspace.remove-members',
+      'workspace.branch-workspace.continue-reduce',
+      'workspace.branch-workspace.reduce-retains-branches',
+      'workspace.branch-workspace.approval.discard-member-changes',
+      'workspace.branch-workspace.dialog.extend.title',
+      'workspace.branch-workspace.dialog.extend.description',
+      'workspace.branch-workspace.dialog.extend.confirm',
+      'workspace.branch-workspace.dialog.reduce.title',
+      'workspace.branch-workspace.dialog.reduce.description',
+      'workspace.branch-workspace.dialog.reduce.confirm',
+      'workspace.branch-workspace.lifecycle.reduce-incomplete',
+      'workspace.branch-workspace.member-required',
+      'workspace.branch-workspace.dirty-state-unknown',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.reduce-retains-branches']).toContain('保留')
+  })
+
+  test('uses the agreed branch workspace terminology in Chinese product copy', () => {
+    for (const [key, value] of Object.entries(zh)) {
+      expect(value, key).not.toContain('子仓库')
+    }
+    expect(en['workspace.branch-workspace.member.open-worktree']).toBe('Open this member worktree')
+    expect(zh['workspace.branch-workspace.member.open-worktree']).toBe('打开此成员工作树')
+  })
+
+  test('uses concise branch workspace member badge copy in every locale', () => {
+    expect(en['workspace.branch-workspace.member-badge']).toBe('branch workspace')
+    expect(zh['workspace.branch-workspace.member-badge']).toBe('子工作区')
+    expect(ja['workspace.branch-workspace.member-badge']).toBe('ブランチワークスペース')
+    expect(ko['workspace.branch-workspace.member-badge']).toBe('브랜치 워크스페이스')
+  })
+
+  test('localizes selectable branch workspace batch merge directions in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.git-action.batch-merge-in',
+      'workspace.branch-workspace.git-action.batch-merge-in-description',
+      'workspace.branch-workspace.git-action.batch-merge-out',
+      'workspace.branch-workspace.git-action.batch-merge-out-description',
+      'workspace.branch-workspace.git-action.selected-count',
+      'workspace.branch-workspace.git-action.select-member',
+      'workspace.branch-workspace.git-action.not-selected',
+      'workspace.branch-workspace.git-action.progress',
+      'workspace.branch-workspace.git-action.source-branch',
+      'workspace.branch-workspace.git-action.select-source',
+      'workspace.branch-workspace.git-action.source-branch-required',
+      'workspace.branch-workspace.git-action.destination-branch',
+      'workspace.branch-workspace.git-action.select-destination',
+      'workspace.branch-workspace.git-action.destination-branch-required',
+      'workspace.branch-workspace.git-action.temporary-worktree',
+      'workspace.branch-workspace.git-action.destination-worktree-dirty',
+      'workspace.branch-workspace.git-action.destination-worktree-unavailable',
+      'workspace.branch-workspace.git-action.destination-upstream-required',
+      'workspace.branch-workspace.git-action.merge-in',
+      'workspace.branch-workspace.git-action.pull-merge-in-push',
+      'workspace.branch-workspace.git-action.merge-out',
+      'workspace.branch-workspace.git-action.pull-merge-out-push',
+      'workspace.branch-workspace.git-action.step.prepare',
+      'workspace.branch-workspace.git-action.step.cleanup',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en['workspace.branch-workspace.git-action.batch-merge-in']).toBe('Batch merge in')
+    expect(en['workspace.branch-workspace.git-action.batch-merge-out']).toBe('Batch merge out')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-in']).toBe('批量合入')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-out']).toBe('批量合出')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-in-description']).toContain('成员工作树')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-in-description']).toContain('来源分支')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-out-description']).toContain('目标分支')
+    expect(zh['workspace.branch-workspace.git-action.batch-merge-out-description']).not.toContain('基准分支')
+  })
+
+  test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {
+    const keys = [
+      'workspace.branch-workspace.cleanup',
+      'workspace.branch-workspace.cleanup-title',
+      'workspace.branch-workspace.cleanup-description',
+      'workspace.branch-workspace.cleanup-confirm',
+      'workspace.branch-workspace.cleanup-success.repaired',
+      'workspace.branch-workspace.cleanup-success.reset',
+      'workspace.branch-workspace.cleanup-success.unchanged',
+      'workspace.branch-workspace.cleanup-failed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.cleanup-description']).toContain('不会删除')
+    expect(zh['workspace.branch-workspace.cleanup-description']).toContain('工作树')
+    expect(zh['workspace.branch-workspace.cleanup-description']).toContain('分支')
+  })
+
+  test('localizes branch workspace reload and remote read failures in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.reload',
+      'workspace.branch-workspace.remote-operation-failed',
+      'workspace.branch-workspace.remote-invalid-response',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
+  })
+
+  test('localizes scheduled status refresh settings in every locale', () => {
+    const keys = ['settings.group.status-refresh', 'settings.status-refresh', 'settings.status-refresh-hint'] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['settings.group.status-refresh']).toBe('状态刷新')
+    expect(zh['settings.status-refresh']).toBe('定时刷新改动')
+  })
+
+  test('uses branch workspace dependency copy and includes member sync actions in every locale', () => {
+    expect(zh['workspace.branch-workspace.auxiliary']).toBe('子工作区依赖')
+    expect(zh['workspace.branch-workspace.auxiliary-refresh']).toBe('刷新子工作区依赖')
+    expect(zh['workspace.branch-workspace.auxiliary-named']).toBe('包含子工作区依赖 {name}')
+    expect(zh['workspace.branch-workspace.auxiliary-empty']).toBe('没有可选择的子工作区依赖。')
+
+    const keys = [
+      'workspace.branch-workspace.member.open-worktree',
+      'workspace.branch-workspace.git-action.pull',
+      'workspace.branch-workspace.git-action.pull-description',
+      'workspace.branch-workspace.git-action.push',
+      'workspace.branch-workspace.git-action.push-description',
+      'workspace.branch-workspace.git-action.target-upstream-required',
+      'workspace.branch-workspace.git-action.remote-required',
+    ] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+  })
+
+  test('includes branch workspace dependency maintenance copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.dependency.add.action',
+      'workspace.branch-workspace.dependency.remove.action',
+      'workspace.branch-workspace.dependency.add.title',
+      'workspace.branch-workspace.dependency.add.description',
+      'workspace.branch-workspace.dependency.add.available',
+      'workspace.branch-workspace.dependency.add.available-description',
+      'workspace.branch-workspace.dependency.add.empty',
+      'workspace.branch-workspace.dependency.add.confirm',
+      'workspace.branch-workspace.dependency.add.replaces-target',
+      'workspace.branch-workspace.dependency.add.replace-confirm',
+      'workspace.branch-workspace.dependency.remove.title',
+      'workspace.branch-workspace.dependency.remove.description',
+      'workspace.branch-workspace.dependency.remove.available',
+      'workspace.branch-workspace.dependency.remove.available-description',
+      'workspace.branch-workspace.dependency.remove.empty',
+      'workspace.branch-workspace.dependency.remove.confirm',
+      'workspace.branch-workspace.dependency.preview-title',
+      'workspace.branch-workspace.dependency.operation.add',
+      'workspace.branch-workspace.dependency.operation.replace',
+      'workspace.branch-workspace.dependency.operation.remove',
+      'workspace.branch-workspace.dependency.approval.outside-root-source',
+      'workspace.branch-workspace.dependency.planning',
+      'workspace.branch-workspace.dependency.not-ready',
+      'workspace.branch-workspace.dependency.read-failed',
+      'workspace.branch-workspace.dependency.target-exists',
+      'workspace.branch-workspace.dependency.target-missing',
+      'workspace.branch-workspace.dependency.unavailable',
+      'workspace.branch-workspace.dependency.operation-in-progress',
+      'workspace.branch-workspace.dependency.approval-required',
+      'workspace.branch-workspace.dependency.plan-stale',
+      'workspace.branch-workspace.dependency.plan-failed',
+      'workspace.branch-workspace.dependency.execute-failed',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.dependency.add.action']).toBe('添加依赖项')
+    expect(zh['workspace.branch-workspace.dependency.remove.action']).toBe('移除依赖项')
+  })
+
+  test('includes transient one-time dependency warning copy in every locale', () => {
+    const key = 'workspace.branch-workspace.dependency-warning' as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict[key], `${lang}.${key}`).toContain('{count}')
+    }
+    expect(zh[key]).toContain('子工作区已成功创建')
+  })
+
+  test('identifies repository dependency sources in every locale', () => {
+    const keys = [
+      'worktree-bootstrap.source-primary',
+      'worktree-bootstrap.source-branch',
+      'worktree-bootstrap.source-select',
+      'worktree-bootstrap.source-primary-option',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en['worktree-bootstrap.source-branch']).toContain('{branch}')
+    expect(zh['worktree-bootstrap.source-primary']).toContain('主工作树')
   })
 
   test('distinguishes internal and external terminal actions in every dictionary', () => {
@@ -91,6 +412,15 @@ describe('i18n dictionaries', () => {
     expect(ko['terminal.external']).toBe('외부 터미널')
   })
 
+  test('includes terminal focus copy in every dictionary', () => {
+    const keys = ['terminal.focus', 'terminal.exit-focus'] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['terminal.focus']).toBe('最大化终端')
+    expect(zh['terminal.exit-focus']).toBe('退出终端最大化')
+  })
+
   test('includes discard selected changes copy', () => {
     expect(en['changes.selection-toggle']).toBe('Select')
     expect(en['changes.selection-toggle-title']).toBe('Show selection checkboxes')
@@ -101,6 +431,22 @@ describe('i18n dictionaries', () => {
     expect(en['changes.discard-confirm-multiple-title']).toBe('Discard changes to {count} selected items?')
     expect(en['changes.discard-confirm-body']).toContain('staged, unstaged, and untracked')
     expect(en['changes.discard-confirm-confirm']).toBe('Discard')
+  })
+
+  test('includes one-time worktree bootstrap candidate copy in every dictionary', () => {
+    const keys = [
+      'action.create-worktree-bootstrap-candidates-label',
+      'action.create-worktree-bootstrap-candidates-description',
+      'action.create-worktree-bootstrap-candidate-skip',
+      'action.create-worktree-bootstrap-candidate-copy',
+      'action.create-worktree-bootstrap-candidate-symlink',
+      'action.create-worktree-bootstrap-preflight-error',
+      'error.worktree-bootstrap-selection-stale',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
   })
 
   test('includes file tree text content shortcut copy in every dictionary', () => {

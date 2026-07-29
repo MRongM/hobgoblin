@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { useEffect, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { useMainWindowShellState } from '#/web/hooks/useMainWindowShellState.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
@@ -145,17 +145,13 @@ describe('useMainWindowShellState', () => {
     expect(text('#close-confirm-open')).toBe('no')
   })
 
-  test('derives focus workspace mode from the effective layout and focus preference', async () => {
-    useReposStore.getState().setWorkspaceLayout('/tmp/repo', 'top-bottom')
-    useReposStore.setState({
-      detailCollapsed: false,
-      detailFocusMode: true,
-    })
+  test('keeps the restored main workspace in fixed left-right mode', async () => {
+    useReposStore.getState().setWorkspaceLayout('/tmp/repo', 'left-right')
 
     await render(<Harness />)
 
-    expect(text('#workspace-layout')).toBe('top-bottom')
-    expect(text('#workspace-mode')).toBe('focus')
+    expect(text('#workspace-layout')).toBe('left-right')
+    expect(text('#workspace-mode')).toBe('split')
   })
 })
 

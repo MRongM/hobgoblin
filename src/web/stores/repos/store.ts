@@ -100,7 +100,6 @@ export const useReposStore = create<ReposStore>()(
       // Runtime-coherent renderer projection.
       repos: {},
       workspaceProjects: {},
-      workspaceActiveRepoByRoot: {},
 
       // Restorable warm-start cache.
       restorableRepoCache: {},
@@ -108,9 +107,12 @@ export const useReposStore = create<ReposStore>()(
       // Restorable workspace state.
       order: [],
       activeId: null,
+      activeProjectId: null,
+      workspaceActiveContextByRoot: {},
+      workspaceRepositoryListExpandedByRoot: {},
+      workspaceRepositoryListHeightByRoot: {},
       projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
-      detailFocusMode: false,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
       detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
       fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,
@@ -132,7 +134,9 @@ export const useReposStore = create<ReposStore>()(
       partialize: (state): PersistedReposStore => ({ restorableRepoCache: state.restorableRepoCache }),
       merge: (persisted, current) => ({
         ...current,
-        restorableRepoCache: normalizeRestorableRepoCache((persisted as RawPersistedReposStore | null)?.restorableRepoCache),
+        restorableRepoCache: normalizeRestorableRepoCache(
+          (persisted as RawPersistedReposStore | null)?.restorableRepoCache,
+        ),
       }),
     },
   ),

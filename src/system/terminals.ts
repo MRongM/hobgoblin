@@ -13,7 +13,14 @@ import type { ResolvedTerminalApp, TerminalAppAvailability, TerminalPref } from 
 import { isGhosttyInstalled, openInGhostty, openRemoteInGhostty } from '#/system/ghostty.ts'
 import { isAppleTerminalInstalled, openInAppleTerminal, openRemoteInAppleTerminal } from '#/system/apple-terminal.ts'
 import type { ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
+import type { TmuxSessionDescriptor } from '#/system/tmux-session.ts'
 import { isWindowsTerminalAvailable, openInWindowsTerminal } from '#/system/windows-terminal.ts'
+
+export type ExternalLocalTerminalTarget = TmuxSessionDescriptor
+
+export interface TerminalOpenOptions {
+  useTmux?: boolean
+}
 
 export interface TerminalBackend {
   /** Whether this terminal is available on the current system.
@@ -21,10 +28,10 @@ export interface TerminalBackend {
    *  If a future backend needs async detection (e.g. mdfind), resolve
    *  it at registration time and cache the result. */
   isInstalled: () => boolean
-  /** Open a directory in this terminal. */
-  open: (path: string) => Promise<ExecResult>
+  /** Open a local workspace in this terminal. */
+  open: (target: ExternalLocalTerminalTarget, options?: TerminalOpenOptions) => Promise<ExecResult>
   /** Open a remote SSH workspace in this terminal. */
-  openRemote?: (target: ExternalRemoteTerminalTarget) => Promise<ExecResult>
+  openRemote?: (target: ExternalRemoteTerminalTarget, options?: TerminalOpenOptions) => Promise<ExecResult>
 }
 
 /** Concrete terminal pref values (excludes 'auto'). */
@@ -44,14 +51,17 @@ function isWin32(): boolean {
   return process.platform === 'win32'
 }
 
-function openInNativeTerminal(path: string): Promise<ExecResult> {
-  if (isDarwin()) return openInAppleTerminal(path)
-  if (isWin32()) return openInWindowsTerminal(path)
+function openInNativeTerminal(target: ExternalLocalTerminalTarget, options?: TerminalOpenOptions): Promise<ExecResult> {
+  if (isDarwin()) return openInAppleTerminal(target, options)
+  if (isWin32()) return openInWindowsTerminal(target.workingDirectory)
   return Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
 }
 
-function openRemoteInNativeTerminal(target: ExternalRemoteTerminalTarget): Promise<ExecResult> {
-  if (isDarwin()) return openRemoteInAppleTerminal(target)
+function openRemoteInNativeTerminal(
+  target: ExternalRemoteTerminalTarget,
+  options?: TerminalOpenOptions,
+): Promise<ExecResult> {
+  if (isDarwin()) return openRemoteInAppleTerminal(target, options)
   return Promise.resolve({ ok: false, message: 'error.remote-terminal-not-supported' })
 }
 
@@ -87,36 +97,34 @@ export async function getTerminalAppAvailability(signal?: AbortSignal): Promise<
   }
 }
 
-/** Open `path` in the terminal selected by `pref`. */
+/** Open a local workspace in the terminal selected by `pref`. */
 export async function openInPreferredTerminal(
-  path: string,
+  target: ExternalLocalTerminalTarget,
   pref: TerminalPref,
+  options: TerminalOpenOptions = {},
 ): Promise<{ ok: boolean; message: string }> {
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
   return resolved
-    ? backends[resolved].open(path)
+    ? backends[resolved].open(target, options)
     : Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
 }
 
 export function openRemoteInTerminalBackend(
   backend: TerminalBackend | null,
   target: ExternalRemoteTerminalTarget,
+  options: TerminalOpenOptions = {},
 ): Promise<ExecResult> {
   if (!backend) return Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
   return backend.openRemote
-    ? backend.openRemote(target)
+    ? backend.openRemote(target, options)
     : Promise.resolve({ ok: false, message: 'error.remote-terminal-not-supported' })
 }
 
 export async function openRemoteInPreferredTerminal(
-  alias: string,
-  remotePath: string,
+  target: ExternalRemoteTerminalTarget,
   pref: TerminalPref,
+  options: TerminalOpenOptions = {},
 ): Promise<ExecResult> {
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
-  return await openRemoteInTerminalBackend(resolved ? backends[resolved] : null, { alias, worktreePath: remotePath })
-}
-
-export async function getResolvedTerminalApp(pref: TerminalPref): Promise<ResolvedTerminalApp | null> {
-  return resolveTerminalApp(pref, await getTerminalAppAvailability())
+  return await openRemoteInTerminalBackend(resolved ? backends[resolved] : null, target, options)
 }

@@ -11,6 +11,8 @@ import type {
   TerminalPref,
   WebAccessSettingsSnapshot,
   WebAccessSettingsUpdateInput,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
 } from '#/shared/rpc.ts'
 import {
   addRecentRepo,
@@ -20,7 +22,6 @@ import {
   setFileTreeClipboardMaxBytesMb,
   setFontFamily,
   setFileTreeFontSize,
-  setFileTreeTopbarFontSize,
   setGlobalShortcut,
   setGlobalShortcutDisabled,
   setGitNetworkProxyEnabled,
@@ -31,8 +32,8 @@ import {
   setPreferredEditorApp,
   setPreferredTerminalApp,
   setProjectColorTheme,
-  setRemoteTerminalTmuxEnabled,
   setSettingsFetchInterval,
+  setStatusRefreshInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
   setTemporaryFilesDirectory,
@@ -44,8 +45,8 @@ import {
   setTerminalThemeSyncEnabled,
   setToolbarHeightPx,
   setTopbarHeightPx,
-  setToggleDetailOnActionBarBlankClick,
   setWebAccessSettings,
+  saveTelegramNotificationSettings,
 } from '#/web/settings-client.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import {
@@ -79,12 +80,26 @@ export async function setFetchIntervalPreference(sec: number): Promise<number> {
   return fetchIntervalSec
 }
 
+export async function setStatusRefreshIntervalPreference(sec: number): Promise<number> {
+  const statusRefreshIntervalSec = await setStatusRefreshInterval(sec)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, statusRefreshIntervalSec }))
+  return statusRefreshIntervalSec
+}
+
 export async function setWebAccessSettingsPreference(
   input: WebAccessSettingsUpdateInput,
 ): Promise<WebAccessSettingsSnapshot> {
   const webAccess = await setWebAccessSettings(input)
   updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, webAccess }))
   return webAccess
+}
+
+export async function saveTelegramNotificationSettingsPreference(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const telegramNotifications = await saveTelegramNotificationSettings(input)
+  updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, telegramNotifications }))
+  return telegramNotifications
 }
 
 export async function setTerminalNotificationsEnabledPreference(enabled: boolean): Promise<void> {
@@ -111,14 +126,6 @@ export async function setGlobalShortcutDisabledPreference(disabled: boolean): Pr
 export async function setSwapCloseShortcutsPreference(swapped: boolean): Promise<void> {
   await setSwapCloseShortcuts(swapped)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, swapCloseShortcuts: swapped }))
-}
-
-export async function setToggleDetailOnActionBarBlankClickPreference(enabled: boolean): Promise<void> {
-  await setToggleDetailOnActionBarBlankClick(enabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    toggleDetailOnActionBarBlankClick: enabled,
-  }))
 }
 
 export async function setTerminalThemeSyncEnabledPreference(enabled: boolean): Promise<void> {
@@ -179,12 +186,6 @@ export async function setToolbarHeightPxPreference(heightPx: number): Promise<nu
   return toolbarHeightPx
 }
 
-export async function setFileTreeTopbarFontSizePreference(fontSize: number): Promise<number> {
-  const fileTreeTopbarFontSize = await setFileTreeTopbarFontSize(fontSize)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeTopbarFontSize }))
-  return fileTreeTopbarFontSize
-}
-
 export async function setFileTreeClipboardMaxBytesMbPreference(value: number): Promise<number> {
   const fileTreeClipboardMaxBytesMb = await setFileTreeClipboardMaxBytesMb(value)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fileTreeClipboardMaxBytesMb }))
@@ -211,14 +212,6 @@ export async function setProjectColorThemePreference(
   updateSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     repoSettings,
-  }))
-}
-
-export async function setRemoteTerminalTmuxEnabledPreference(enabled: boolean): Promise<void> {
-  await setRemoteTerminalTmuxEnabled(enabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    remoteTerminalTmuxEnabled: enabled,
   }))
 }
 

@@ -32,6 +32,26 @@ beforeEach(() => {
 })
 
 describe('normalizeRestorableRepoCache', () => {
+  test('preserves merge-out history under the initiating source worktree', () => {
+    const raw = cachedRepo(Date.now())
+    raw.ui.worktreeActionHistories = {
+      '/repo-feature': [
+        {
+          kind: 'mergeOut',
+          branch: 'feature/source',
+          destinationBranch: 'main',
+          worktreePath: '/repo-feature',
+        },
+      ],
+    }
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+
+    expect(normalized.repo?.ui.worktreeActionHistories?.['/repo-feature']).toEqual(
+      raw.ui.worktreeActionHistories['/repo-feature'],
+    )
+  })
+
   test('keeps only the newest 50 valid cache entries', () => {
     const now = Date.now()
     const raw = Object.fromEntries(
@@ -88,6 +108,24 @@ describe('normalizeRestorableRepoCache', () => {
     expect(normalized.repo?.data.branches[0]?.worktree).toEqual({ path: '/tmp/worktree-a' })
   })
 
+  test('preserves branch creation sources and discards legacy merge status', () => {
+    const now = Date.now()
+    const raw = cachedRepo(now)
+    raw.data.branches = [
+      {
+        ...createRepoBranch('feature/a'),
+        createdFrom: 'main',
+        mergedToDefault: true,
+      } as any,
+    ]
+
+    const normalized = normalizeRestorableRepoCache({ repo: raw })
+    const branch = normalized.repo?.data.branches[0]
+
+    expect(branch).toMatchObject({ name: 'feature/a', createdFrom: 'main' })
+    expect(branch).not.toHaveProperty('mergedToDefault')
+  })
+
   test('normalizes missing and invalid worktree path order to an empty array', () => {
     const now = Date.now()
     const missing = cachedRepo(now) as any
@@ -109,7 +147,6 @@ describe('normalizeRestorableRepoCache', () => {
     const normalized = normalizeRestorableRepoCache({ repo: raw })
 
     expect(normalized.repo?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 44.4,
       'left-right': DEFAULT_FILE_TREE_PANE_SIZES['left-right'],
     })
   })
@@ -274,13 +311,12 @@ describe('persistRestorableRepoSnapshot', () => {
       branches: [createRepoBranch('main')],
       currentBranch: 'main',
       selectedBranch: 'main',
-      fileTreePaneSizes: { 'top-bottom': 42.2, 'left-right': 73.4 },
+      fileTreePaneSizes: { 'left-right': 73.4 },
     })
 
     persistRestorableRepoSnapshot(useReposStore.setState, repo, 1)
 
     expect(useReposStore.getState().restorableRepoCache['/repo']?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 42.2,
       'left-right': 73.4,
     })
   })
@@ -396,11 +432,11 @@ describe('restoreRepoProjectionFromSnapshot', () => {
   test('restores project file tree pane sizes from cache', () => {
     const now = Date.now()
     const cached = cachedRepo(now)
-    cached.ui.fileTreePaneSizes = { 'top-bottom': 41.5, 'left-right': 70.5 }
+    cached.ui.fileTreePaneSizes = { 'left-right': 70.5 }
 
     const repo = restoreRepoProjectionFromSnapshot(emptyRepo('/repo', 'repo'), cached)
 
-    expect(repo.ui.fileTreePaneSizes).toEqual({ 'top-bottom': 41.5, 'left-right': 70.5 })
+    expect(repo.ui.fileTreePaneSizes).toEqual({ 'left-right': 70.5 })
   })
 
   test('restores per-branch explorer tabs and defaults old snapshots to empty', () => {

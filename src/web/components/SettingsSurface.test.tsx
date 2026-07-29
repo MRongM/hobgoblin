@@ -12,6 +12,8 @@ import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn(),
   error: vi.fn(),
 }))
 
@@ -25,6 +27,7 @@ function defaultRpcResult(path: string, input?: unknown) {
   if (path === 'settings.get') {
     return {
       fetchIntervalSec: 60,
+      statusRefreshIntervalSec: 60,
       fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
@@ -33,7 +36,6 @@ function defaultRpcResult(path: string, input?: unknown) {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
@@ -43,9 +45,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -60,6 +60,17 @@ function defaultRpcResult(path: string, input?: unknown) {
       },
       recentRepos: [],
       webAccess: { enabled: false, username: '', passwordConfigured: false },
+      telegramNotifications: {
+        enabled: false,
+        botTokenConfigured: false,
+        chatId: '',
+        proxyEnabled: true,
+        bellEnabled: true,
+        outputCompletionEnabled: false,
+        outputCompletionMinimumActivitySeconds: 10,
+        includeTerminalOutput: false,
+        outputTailLength: 400,
+      },
     }
   }
   if (path === 'externalApps.get' || path === 'externalApps.refresh') {
@@ -87,6 +98,8 @@ function defaultRpcResult(path: string, input?: unknown) {
 vi.mock('sonner', () => ({
   toast: {
     success: toastMocks.success,
+    info: toastMocks.info,
+    warning: toastMocks.warning,
     error: toastMocks.error,
   },
 }))
@@ -156,6 +169,34 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         passwordConfigured: true,
       },
     }
+  } else if (url.pathname === '/api/settings/telegram') {
+    const body = JSON.parse(String(init?.body ?? '{}')) as {
+      enabled?: boolean
+      botToken?: string
+      chatId?: string
+      proxyEnabled?: boolean
+      bellEnabled?: boolean
+      outputCompletionEnabled?: boolean
+      includeTerminalOutput?: boolean
+      outputCompletionMinimumActivitySeconds?: number
+      outputTailLength?: number
+    }
+    result = {
+      ok: true,
+      telegramNotifications: {
+        enabled: body.enabled === true,
+        botTokenConfigured: Boolean(body.botToken),
+        chatId: body.chatId?.trim() ?? '',
+        proxyEnabled: body.proxyEnabled === true,
+        bellEnabled: body.bellEnabled === true,
+        outputCompletionEnabled: body.outputCompletionEnabled === true,
+        outputCompletionMinimumActivitySeconds: body.outputCompletionMinimumActivitySeconds ?? 10,
+        includeTerminalOutput: body.includeTerminalOutput === true,
+        outputTailLength: body.outputTailLength ?? 400,
+      },
+    }
+  } else if (url.pathname === '/api/telegram-notifications/test') {
+    result = { ok: true }
   }
   return {
     ok: true,
@@ -170,6 +211,8 @@ beforeEach(() => {
   dndState.lastDragEnd = null
   sendTestNotification.mockClear()
   toastMocks.success.mockClear()
+  toastMocks.info.mockClear()
+  toastMocks.warning.mockClear()
   toastMocks.error.mockClear()
   invokeRpc.mockClear()
   invokeRpc.mockImplementation(async ({ path, input }: { path: string; input?: unknown }) =>
@@ -182,6 +225,7 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      statusRefreshIntervalSec: 60,
       fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
@@ -190,7 +234,6 @@ beforeEach(() => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
@@ -199,9 +242,7 @@ beforeEach(() => {
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -214,6 +255,7 @@ beforeEach(() => {
     initialI18n: null,
     initialSettings: {
       fetchIntervalSec: 60,
+      statusRefreshIntervalSec: 60,
       fontFamily: 'mono',
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
@@ -222,7 +264,6 @@ beforeEach(() => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: true,
@@ -231,9 +272,7 @@ beforeEach(() => {
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -277,6 +316,73 @@ afterEach(() => {
 })
 
 describe('SettingsSurface', () => {
+  test('renders and writes scheduled status refresh with the auto-sync interval choices', async () => {
+    await render(<SettingsSurface page="sync" onPageChange={() => {}} />)
+
+    expect(document.body.textContent).toContain('settings.group.status-refresh')
+    expect(document.body.textContent).toContain('settings.status-refresh')
+    expect(document.body.textContent).toContain('settings.status-refresh-hint')
+    const trigger = document.getElementById('settings-status-refresh')
+    if (!(trigger instanceof HTMLButtonElement)) throw new Error('Missing scheduled status refresh select')
+    if (!Element.prototype.scrollIntoView) {
+      Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+    }
+
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const options = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
+    expect(options.map((option) => option.textContent?.trim())).toEqual([
+      'settings.fetch.off',
+      'settings.fetch.30s',
+      'settings.fetch.1m',
+      'settings.fetch.2m',
+      'settings.fetch.3m',
+      'settings.fetch.5m',
+      'settings.fetch.15m',
+    ])
+    const fiveMinutes = options.find((option) => option.textContent?.trim() === 'settings.fetch.5m')
+    if (!fiveMinutes) throw new Error('Missing five minute status refresh option')
+
+    await act(async () => {
+      fiveMinutes.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, request] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(request?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.statusRefreshIntervalSec === 300
+      }),
+    ).toBe(true)
+  })
+
+  test('can preview every in-app notification style from settings', async () => {
+    await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
+
+    const cases = [
+      ['success', toastMocks.success],
+      ['info', toastMocks.info],
+      ['warning', toastMocks.warning],
+      ['error', toastMocks.error],
+    ] as const
+
+    for (const [style, showToast] of cases) {
+      await act(async () => {
+        buttonByText(`settings.in-app-notifications-test-button.${style}`).click()
+        await Promise.resolve()
+      })
+
+      expect(showToast).toHaveBeenCalledWith(`settings.in-app-notifications-test-title.${style}`, {
+        description: 'settings.in-app-notifications-test-body',
+      })
+    }
+  })
+
   test('can trigger a test terminal notification from settings', async () => {
     await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
 
@@ -325,6 +431,115 @@ describe('SettingsSurface', () => {
     await waitForSwitchState('settings-terminal-notifications', 'true')
   })
 
+  test('uses Telegram completion activity shortcuts and manual seconds as one saved value', async () => {
+    await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-telegram-output-completion-min-activity')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing Telegram completion activity duration input')
+    expect(input.value).toBe('10')
+    expect(input.min).toBe('1')
+    expect(input.max).toBe('3600')
+
+    await act(async () => {
+      buttonByText('settings.telegram.output-completion-min-activity-low').click()
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('1')
+
+    await act(async () => {
+      buttonByText('settings.telegram.output-completion-min-activity-medium').click()
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('10')
+
+    await act(async () => {
+      buttonByText('settings.telegram.output-completion-min-activity-high').click()
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('30')
+
+    await act(async () => {
+      setInputValue(input, '125')
+      await Promise.resolve()
+    })
+    expect(input.value).toBe('125')
+
+    await act(async () => {
+      buttonByText('settings.telegram.save').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const write = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname === '/api/settings/telegram'
+    })
+    expect(write).toBeDefined()
+    const [, options] = write as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(options.body))).toMatchObject({
+      outputCompletionMinimumActivitySeconds: 125,
+    })
+  })
+
+  test('configures and tests Telegram notifications without echoing the Bot Token', async () => {
+    await render(<SettingsSurface page="notifications" onPageChange={() => {}} />)
+
+    const tokenInput = document.getElementById('settings-telegram-bot-token')
+    const chatIdInput = document.getElementById('settings-telegram-chat-id')
+    if (!(tokenInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Bot Token input')
+    if (!(chatIdInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Chat ID input')
+    expect(tokenInput.type).toBe('password')
+    expect(tokenInput.value).toBe('')
+    expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
+    expect(switchById('settings-telegram-proxy-enabled').getAttribute('data-state')).toBe('checked')
+    expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
+    expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
+    expect(switchById('settings-telegram-include-terminal-screen-image').getAttribute('data-state')).toBe('unchecked')
+    expect(document.getElementById('settings-telegram-output-tail-length')).toBeNull()
+    expect(document.body.textContent).not.toContain('settings.telegram.output-tail-length')
+
+    await act(async () => {
+      switchById('settings-telegram-enabled').click()
+      switchById('settings-telegram-proxy-enabled').click()
+      switchById('settings-telegram-output-completion-enabled').click()
+      switchById('settings-telegram-include-terminal-screen-image').click()
+      setInputValue(tokenInput, '123456:test-token')
+      setInputValue(chatIdInput, '-100123')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.telegram.save').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const write = fetchMock.mock.calls.find((call) => {
+      const [url] = call as unknown as [unknown, RequestInit | undefined]
+      return new URL(String(url)).pathname === '/api/settings/telegram'
+    })
+    expect(write).toBeDefined()
+    const [, options] = write as unknown as [unknown, RequestInit]
+    expect(JSON.parse(String(options.body))).toEqual({
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      proxyEnabled: false,
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: true,
+      outputTailLength: 400,
+    })
+    expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
+
+    await act(async () => {
+      buttonByText('settings.telegram.test-button').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(toastMocks.success).toHaveBeenCalledWith('settings.telegram.test-sent')
+  })
+
   test('renders the SSH remotes settings page', async () => {
     await render(<SettingsSurface page="ssh" onPageChange={() => {}} />)
 
@@ -336,10 +551,15 @@ describe('SettingsSurface', () => {
   test('renders the proxy settings page', async () => {
     await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
 
+    const proxyUrlInput = document.getElementById('settings-proxy-url')
+    const gitProxySwitch = switchById('settings-git-network-proxy-enabled')
+    if (!(proxyUrlInput instanceof HTMLInputElement)) throw new Error('Missing shared proxy URL input')
     expect(document.body.textContent).toContain('settings.nav.proxy')
+    expect(document.body.textContent).toContain('settings.proxy.url')
     expect(document.body.textContent).toContain('settings.proxy.git-proxy')
     expect(document.body.textContent).toContain('settings.proxy.git-timeout')
     expect(document.body.textContent).toContain('settings.proxy.ssh-note')
+    expect(proxyUrlInput.compareDocumentPosition(gitProxySwitch) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
   })
 
   test('configures protected Web access without echoing password fields', async () => {
@@ -386,14 +606,16 @@ describe('SettingsSurface', () => {
     await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
 
     const enabledSwitch = switchById('settings-git-network-proxy-enabled')
-    const urlInput = document.getElementById('settings-git-network-proxy-url')
+    const urlInput = document.getElementById('settings-proxy-url')
     const timeoutInput = document.getElementById('settings-git-network-timeout-sec')
-    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing git network proxy url input')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing shared proxy URL input')
     if (!(timeoutInput instanceof HTMLInputElement)) throw new Error('Missing git network timeout input')
 
     await act(async () => {
       enabledSwitch.click()
+      urlInput.focus()
       setInputValue(urlInput, 'socks5://127.0.0.1:7890')
+      urlInput.blur()
       setInputValue(timeoutInput, '180')
       await Promise.resolve()
     })
@@ -424,11 +646,49 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('edits file tree font size from settings', async () => {
-    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+  test('keeps an incomplete proxy URL editable and persists it after editing finishes', async () => {
+    await render(<SettingsSurface page="proxy" onPageChange={() => {}} />)
 
-    const input = document.getElementById('settings-file-tree-font-size')
-    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree font size input')
+    const urlInput = document.getElementById('settings-proxy-url')
+    if (!(urlInput instanceof HTMLInputElement)) throw new Error('Missing shared proxy URL input')
+
+    await act(async () => {
+      urlInput.focus()
+      setInputValue(urlInput, 'http')
+      await Promise.resolve()
+    })
+
+    expect(urlInput.value).toBe('http')
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl !== undefined
+      }),
+    ).toBe(false)
+
+    await act(async () => {
+      setInputValue(urlInput, 'http://127.0.0.1:7890')
+      urlInput.blur()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [url, options] = call as unknown as [unknown, RequestInit | undefined]
+        if (new URL(String(url)).pathname !== '/api/settings/prefs') return false
+        const body = JSON.parse(String(options?.body ?? '{}')) as { settings?: Record<string, unknown> }
+        return body.settings?.gitNetworkProxyUrl === 'http://127.0.0.1:7890'
+      }),
+    ).toBe(true)
+  })
+
+  test('edits global UI font size from general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    const input = document.getElementById('settings-app-font-size')
+    if (!(input instanceof HTMLInputElement)) throw new Error('Missing application UI font size input')
 
     await act(async () => {
       setInputValue(input, '13')
@@ -443,35 +703,26 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('edits file area topbar font size from settings', async () => {
+  test('keeps application and terminal font-size controls out of Files settings', async () => {
     await render(<SettingsSurface page="files" onPageChange={() => {}} />)
 
-    const input = document.getElementById('settings-file-tree-topbar-font-size')
-    if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree topbar font size input')
-
-    await act(async () => {
-      setInputValue(input, '12')
-      await Promise.resolve()
-    })
-
-    expect(
-      fetchMock.mock.calls.some((call) => {
-        const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes('"fileTreeTopbarFontSize":12')
-      }),
-    ).toBe(true)
+    expect(document.getElementById('settings-app-font-size')).toBeNull()
+    expect(document.getElementById('settings-file-tree-font-size')).toBeNull()
+    expect(document.getElementById('settings-file-tree-topbar-font-size')).toBeNull()
+    expect(document.getElementById('settings-terminal-font-size')).toBeNull()
+    expect(document.body.textContent).not.toContain('settings.files.font.title')
   })
 
   test('edits the new project default file area height ratio from settings without changing project overrides', async () => {
     const repo = replaceRepo(emptyRepo('/repo-a', 'repo-a'), (draft) => {
-      draft.ui.fileTreePaneSizes = { 'top-bottom': 31.1, 'left-right': 32.2 }
+      draft.ui.fileTreePaneSizes = { 'left-right': 32.2 }
     })
     useReposStore.setState({
       repos: { '/repo-a': repo },
       order: ['/repo-a'],
       activeId: '/repo-a',
       workspaceLayout: 'left-right',
-      fileTreePaneSizes: { 'top-bottom': 66.7, 'left-right': 66.7 },
+      fileTreePaneSizes: { 'left-right': 66.7 },
     })
     await render(<SettingsSurface page="files" onPageChange={() => {}} />)
 
@@ -485,7 +736,6 @@ describe('SettingsSurface', () => {
 
     expect(useReposStore.getState().fileTreePaneSizes['left-right']).toBe(72.5)
     expect(useReposStore.getState().repos['/repo-a']?.ui.fileTreePaneSizes).toEqual({
-      'top-bottom': 31.1,
       'left-right': 32.2,
     })
   })
@@ -530,6 +780,12 @@ describe('SettingsSurface', () => {
         return body.settings?.terminalThemeSyncEnabled === false
       }),
     ).toBe(true)
+  })
+
+  test('does not expose the removed action bar blank toggle in general settings', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
+
+    expect(document.getElementById('settings-action-bar-blank-toggle')).toBeNull()
   })
 
   test('lists and writes every shared color theme from general settings', async () => {
@@ -656,7 +912,7 @@ describe('SettingsSurface', () => {
   test('edits terminal custom buttons from settings', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
-    expect(document.body.textContent).toContain('settings.terminal-remote.title')
+    expect(document.body.textContent).not.toContain('settings.terminal-tmux.title')
     expect(document.body.textContent).not.toContain(['settings', ['terminal', 'external', 'input'].join('-')].join('.'))
     expect(document.body.textContent).toContain('settings.terminal-custom-buttons.visible')
 
@@ -765,32 +1021,16 @@ describe('SettingsSurface', () => {
     expect(trigger?.textContent).toContain('settings.terminal-custom-buttons.size-medium')
   })
 
-  test('toggles remote tmux and custom button visibility from settings', async () => {
+  test('toggles custom button visibility', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
 
-    const removedSwitchId = ['settings', 'terminal', 'external', 'input'].join('-')
-    expect(document.getElementById(removedSwitchId)).toBeNull()
-    const remoteTmuxSwitch = switchById('settings-terminal-remote-tmux')
     const buttonsVisibleSwitch = switchById('settings-terminal-custom-buttons-visible')
 
     await act(async () => {
-      remoteTmuxSwitch.click()
       buttonsVisibleSwitch.click()
       await Promise.resolve()
     })
 
-    expect(
-      fetchMock.mock.calls.some((call) => {
-        const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes(['terminal', 'ExternalInputEnabled'].join(''))
-      }),
-    ).toBe(false)
-    expect(
-      fetchMock.mock.calls.some((call) => {
-        const [, options] = call as unknown as [unknown, RequestInit | undefined]
-        return String(options?.body ?? '').includes('remoteTerminalTmuxEnabled')
-      }),
-    ).toBe(true)
     expect(
       fetchMock.mock.calls.some((call) => {
         const [, options] = call as unknown as [unknown, RequestInit | undefined]

@@ -240,7 +240,9 @@ describe('ProjectChangesPanel', () => {
       pathButton?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
     })
 
-    expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, { path: 'src/app.ts' })
+    expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, {
+      path: 'src/app.ts',
+    })
   })
 
   test('refresh icon refreshes only selected repository status', async () => {
@@ -445,6 +447,8 @@ describe('ProjectChangesPanel', () => {
     const actionBar = container?.querySelector<HTMLElement>('[data-testid="project-changes-action-bar"]')
     expect(actionBar?.style.height).toBe('41px')
     expect(actionBar?.className).not.toContain('min-h-8')
+    expect(actionBar?.classList.contains('border-b')).toBe(false)
+    expect(actionBar?.classList.contains('border-toolbar-border')).toBe(false)
   })
 
   test('hides selection controls by default and shows them from the pre-commit toggle', async () => {
@@ -475,7 +479,6 @@ describe('ProjectChangesPanel', () => {
     })
 
     const actionBar = container?.querySelector('[data-testid="project-changes-action-bar"]')
-    const toggle = changeSelectionToggle()
     expect(actionBar?.querySelector<HTMLButtonElement>('button[aria-label="action.commit-title"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="changes.select-file:src/app.ts"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="changes.select-folder:src"]')).toBeNull()

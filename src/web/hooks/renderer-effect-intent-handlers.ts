@@ -13,7 +13,6 @@ import {
   runSelectTerminalCommand,
   runShowDetailTabCommand,
   runTerminalPrimaryActionCommand,
-  runToggleDetailCommand,
 } from '#/web/commands/workspace-commands.ts'
 import {
   createAppLevelIntentPlan,
@@ -22,7 +21,6 @@ import {
   createWorkspaceIntentPlan,
 } from '#/web/hooks/renderer-effect-intent-plans.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
-import type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import type { OpenRepoResult } from '#/web/stores/repos/types.ts'
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
@@ -46,9 +44,6 @@ interface SharedRendererIntentDeps {
   ensureWorkspaceOpen: (input: string | RepoSessionEntry) => Promise<OpenRepoResult>
   setDetailCollapsed: (collapsed: boolean) => void
   setSelectedTerminal: (worktreeKey: string, key: string) => void
-  setWorkspaceLayout: (id: string, layout: WorkspaceLayout) => void
-  toggleDetailCollapsed: () => void
-  resetLayout: () => void
   t: (key: string) => string
 }
 
@@ -90,9 +85,6 @@ export async function handleAppLevelRendererIntent(
   switch (plan.kind) {
     case 'noop':
       return true
-    case 'set-workspace-layout':
-      if (deps.currentRepoId) deps.setWorkspaceLayout(deps.currentRepoId, plan.layout)
-      return true
     case 'open-settings':
       deps.navigation.openSettings(plan.page)
       return true
@@ -110,9 +102,6 @@ export async function handleAppLevelRendererIntent(
       if (result.ok) deps.navigation.activateRepo(result.id)
       return true
     }
-    case 'reset-workspace-layout':
-      deps.resetLayout()
-      return true
   }
 }
 
@@ -122,12 +111,13 @@ export async function handleWorkspaceRendererIntent(
 ): Promise<boolean> {
   // Workspace intents are route-aware and may be gated by overlays, shortcut
   // suppression, or terminal focus before they execute.
-  const currentRepo = deps.currentRepoId ? useReposStore.getState().repos[deps.currentRepoId] ?? null : null
+  const currentRepo = deps.currentRepoId ? (useReposStore.getState().repos[deps.currentRepoId] ?? null) : null
   const plan = createWorkspaceIntentPlan(event, {
     overlayBlocked: deps.isOverlayOpen() || isShortcutBlockingLayerOpen(),
     workspaceShortcutSuppressed: deps.isWorkspaceShortcutSuppressed(),
     terminalFocused: isTerminalFocused(),
     currentRepoId: deps.currentRepoId,
+    currentProjectId: useReposStore.getState().activeProjectId ?? deps.currentRepoId,
     currentRepo,
   })
   if (!plan) return false
@@ -189,9 +179,6 @@ export async function handleWorkspaceRendererIntent(
         navigation: deps.navigation,
         setDetailCollapsed: deps.setDetailCollapsed,
       })
-      return true
-    case 'toggle-detail':
-      runToggleDetailCommand({ repoId: plan.repoId, toggleDetailCollapsed: deps.toggleDetailCollapsed })
       return true
   }
 }

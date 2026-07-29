@@ -25,7 +25,6 @@ import {
   rendererEffectIntentStoreActionsFromStore,
   repoTabStoreActionsEqual,
   repoTabStoreActionsFromStore,
-  restorableWorkspaceDetailFocusStoreActionsFromStore,
   restorableWorkspaceDetailVisibilityStoreActionsFromStore,
   restorableWorkspaceLayoutPreferenceStoreActionsFromStore,
   restorableWorkspaceLayoutStoreActionsFromStore,
@@ -37,8 +36,13 @@ import {
   runtimeCoherentRepoOpenStoreActionsFromStore,
   runtimeCoherentRepoProjectionStoreActionsFromStore,
 } from '#/web/stores/repos/selector-actions.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 describe('repo selectors', () => {
+  test('keeps terminal Focus out of the restorable workspace projection', () => {
+    expect(restorableWorkspaceStateFromStore(useReposStore.getState())).not.toHaveProperty('detailFocusMode')
+  })
+
   test('builds explicit runtime-coherent and local state slices from store fields', () => {
     expect(
       runtimeCoherentRepoProjectionStateFromStore({
@@ -83,21 +87,17 @@ describe('repo selectors', () => {
       restorableWorkspaceStateFromStore({
         order: ['/tmp/repo'],
         activeId: '/tmp/repo',
-        workspaceActiveRepoByRoot: {
-          '/tmp/repo': '/tmp/repo/api',
+        activeProjectId: '/tmp/repo',
+        workspaceActiveContextByRoot: {
+          '/tmp/repo': { kind: 'repository', repositoryId: '/tmp/repo/api' },
         },
+        workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
+        workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
         projectListExpanded: true,
         detailCollapsed: false,
-        detailFocusMode: true,
-        workspaceLayout: 'top-bottom',
-        detailPaneSizes: {
-          'top-bottom': 40,
-          'left-right': 50,
-        },
-        fileTreePaneSizes: {
-          'top-bottom': 44,
-          'left-right': 36,
-        },
+        workspaceLayout: 'left-right',
+        detailPaneSizes: { 'left-right': 50 },
+        fileTreePaneSizes: { 'left-right': 36 },
         selectedTerminalByWorktree: {
           '/tmp/repo\0/tmp/repo': 'terminal-1',
         },
@@ -105,21 +105,17 @@ describe('repo selectors', () => {
     ).toEqual({
       order: ['/tmp/repo'],
       activeId: '/tmp/repo',
-      workspaceActiveRepoByRoot: {
-        '/tmp/repo': '/tmp/repo/api',
+      activeProjectId: '/tmp/repo',
+      workspaceActiveContextByRoot: {
+        '/tmp/repo': { kind: 'repository', repositoryId: '/tmp/repo/api' },
       },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
       projectListExpanded: true,
       detailCollapsed: false,
-      detailFocusMode: true,
-      workspaceLayout: 'top-bottom',
-      detailPaneSizes: {
-        'top-bottom': 40,
-        'left-right': 50,
-      },
-      fileTreePaneSizes: {
-        'top-bottom': 44,
-        'left-right': 36,
-      },
+      workspaceLayout: 'left-right',
+      detailPaneSizes: { 'left-right': 50 },
+      fileTreePaneSizes: { 'left-right': 36 },
       selectedTerminalByWorktree: {
         '/tmp/repo\0/tmp/repo': 'terminal-1',
       },
@@ -130,10 +126,12 @@ describe('repo selectors', () => {
     expect(
       restorableWorkspaceNavigationStateFromStore({
         activeId: '/tmp/repo',
+        activeProjectId: '/tmp/repo',
         order: ['/tmp/repo'],
       }),
     ).toEqual({
       activeId: '/tmp/repo',
+      activeProjectId: '/tmp/repo',
       order: ['/tmp/repo'],
     })
   })
@@ -143,18 +141,18 @@ describe('repo selectors', () => {
       mainWindowWorkspaceStateEqual(
         mainWindowWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
           detailCollapsed: false,
-          detailFocusMode: true,
-          workspaceLayout: 'top-bottom',
+          workspaceLayout: 'left-right',
           sessionReady: true,
         }),
         mainWindowWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
           detailCollapsed: false,
-          detailFocusMode: true,
-          workspaceLayout: 'top-bottom',
+          workspaceLayout: 'left-right',
           sessionReady: true,
         }),
       ),
@@ -166,10 +164,12 @@ describe('repo selectors', () => {
       navigationWorkspaceStateEqual(
         navigationWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
         }),
         navigationWorkspaceStateFromStore({
           activeId: '/tmp/repo-a',
+          activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
         }),
       ),
@@ -209,7 +209,6 @@ describe('repo selectors', () => {
         cycleActive: fnA as never,
         setDetailCollapsed: fnA as never,
         toggleDetailCollapsed: fnA as never,
-        toggleDetailFocusMode: fnA as never,
         setWorkspaceLayout: fnA as never,
         resetLayout: fnA as never,
         setSelectedTerminal: fnA as never,
@@ -220,7 +219,6 @@ describe('repo selectors', () => {
       cycleActive: fnA,
       setDetailCollapsed: fnA,
       toggleDetailCollapsed: fnA,
-      toggleDetailFocusMode: fnA,
       setWorkspaceLayout: fnA,
       resetLayout: fnA,
       setSelectedTerminal: fnA,
@@ -256,7 +254,6 @@ describe('repo selectors', () => {
       restorableWorkspaceLayoutStoreActionsFromStore({
         setDetailCollapsed: fnA as never,
         toggleDetailCollapsed: fnA as never,
-        toggleDetailFocusMode: fnA as never,
         setWorkspaceLayout: fnA as never,
         resetLayout: fnA as never,
         setSelectedTerminal: fnA as never,
@@ -264,7 +261,6 @@ describe('repo selectors', () => {
     ).toEqual({
       setDetailCollapsed: fnA,
       toggleDetailCollapsed: fnA,
-      toggleDetailFocusMode: fnA,
       setWorkspaceLayout: fnA,
       resetLayout: fnA,
       setSelectedTerminal: fnA,
@@ -277,13 +273,6 @@ describe('repo selectors', () => {
     ).toEqual({
       setDetailCollapsed: fnA,
       toggleDetailCollapsed: fnA,
-    })
-    expect(
-      restorableWorkspaceDetailFocusStoreActionsFromStore({
-        toggleDetailFocusMode: fnA as never,
-      }),
-    ).toEqual({
-      toggleDetailFocusMode: fnA,
     })
     expect(
       restorableWorkspaceLayoutPreferenceStoreActionsFromStore({
@@ -365,17 +354,11 @@ describe('repo selectors', () => {
           ensureWorkspaceOpen: fnA as never,
           setDetailCollapsed: fnA as never,
           setSelectedTerminal: fnA as never,
-          setWorkspaceLayout: fnA as never,
-          toggleDetailCollapsed: fnA as never,
-          resetLayout: fnA as never,
         }),
         rendererEffectIntentStoreActionsFromStore({
           ensureWorkspaceOpen: fnA as never,
           setDetailCollapsed: fnA as never,
-          setSelectedTerminal: fnA as never,
-          setWorkspaceLayout: fnA as never,
-          toggleDetailCollapsed: fnA as never,
-          resetLayout: fnB as never,
+          setSelectedTerminal: fnB as never,
         }),
       ),
     ).toBe(false)
@@ -383,13 +366,9 @@ describe('repo selectors', () => {
       branchDetailToolbarStoreActionsEqual(
         branchDetailToolbarStoreActionsFromStore({
           setDetailCollapsed: fnA as never,
-          toggleDetailCollapsed: fnA as never,
-          toggleDetailFocusMode: fnA as never,
         }),
         branchDetailToolbarStoreActionsFromStore({
-          setDetailCollapsed: fnA as never,
-          toggleDetailCollapsed: fnB as never,
-          toggleDetailFocusMode: fnA as never,
+          setDetailCollapsed: fnB as never,
         }),
       ),
     ).toBe(false)

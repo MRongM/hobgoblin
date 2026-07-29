@@ -316,7 +316,7 @@ describe('RepoTabStrip', () => {
     expect(document.activeElement).toBe(repoA)
   })
 
-  test('keeps project tabs content-sized within the 144px to 256px bounds', () => {
+  test('keeps project tabs content-sized within the 144px to 224px bounds', () => {
     vi.stubGlobal('matchMedia', createMatchMedia(false))
 
     render(
@@ -337,8 +337,8 @@ describe('RepoTabStrip', () => {
     const classes = projectTab.className.split(/\s+/)
 
     expect(classes).toContain('min-w-36')
-    expect(classes).toContain('max-w-64')
-    expect(classes).not.toContain('max-w-56')
+    expect(classes).toContain('max-w-56')
+    expect(classes).not.toContain('max-w-64')
     expect(classes.some((className) => /^w-\d+$/.test(className))).toBe(false)
   })
 

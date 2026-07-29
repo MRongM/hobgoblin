@@ -37,21 +37,31 @@ describe('useAppBootstrap', () => {
     vi.spyOn(useSessionRestoreStore.getState(), 'hydrate').mockResolvedValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      workspaceActiveContextByRoot: {
+        '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
-      detailPaneSizes: { 'top-bottom': 55, 'left-right': 45 },
+      detailPaneSizes: { 'left-right': 45 },
       selectedTerminalByWorktree: { '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' },
     })
     vi.spyOn(useSessionRestoreStore.getState(), 'consumeBootSessionSnapshot').mockReturnValue({
       openRepos: [{ kind: 'local', id: '/tmp/repo' }],
       activeRepo: '/tmp/repo',
+      workspaceActiveContextByRoot: {
+        '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+      workspaceRepositoryListExpandedByRoot: { '/tmp/repo': false },
+      workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
       projectListExpanded: true,
       detailCollapsed: true,
       detailFocusMode: true,
       workspaceLayout: 'left-right',
-      detailPaneSizes: { 'top-bottom': 55, 'left-right': 45 },
+      detailPaneSizes: { 'left-right': 45 },
       selectedTerminalByWorktree: { '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' },
     })
     const hydrateSession = vi.spyOn(useReposStore.getState(), 'hydrateSession').mockResolvedValue(undefined)
@@ -61,11 +71,20 @@ describe('useAppBootstrap', () => {
     const state = useReposStore.getState()
     expect(state.projectListExpanded).toBe(true)
     expect(state.workspaceLayout).toBe('left-right')
-    expect(state.detailCollapsed).toBe(true)
-    expect(state.detailFocusMode).toBe(true)
-    expect(state.detailPaneSizes).toEqual({ 'top-bottom': 55, 'left-right': 45 })
-    expect(state.selectedTerminalByWorktree).toEqual({ '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' })
-    expect(hydrateSession).toHaveBeenCalledWith([{ kind: 'local', id: '/tmp/repo' }], '/tmp/repo', {})
+    expect(state.detailCollapsed).toBe(false)
+    expect(state).not.toHaveProperty('detailFocusMode')
+    expect(state.detailPaneSizes).toEqual({ 'left-right': 45 })
+    expect(state.selectedTerminalByWorktree).toEqual({
+      '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
+    })
+    expect(hydrateSession).toHaveBeenCalledWith(
+      [{ kind: 'local', id: '/tmp/repo' }],
+      '/tmp/repo',
+      { '/tmp/repo': { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
+      { '/tmp/repo': false },
+      '/tmp/repo',
+      { '/tmp/repo': 224 },
+    )
   })
 })
 

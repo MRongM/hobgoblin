@@ -8,14 +8,26 @@ import { CreateWorktreeDialog } from '#/web/components/CreateWorktreeDialog.tsx'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
+import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 const testWindow = window as unknown as { goblinNative?: unknown }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
   testWindow.goblinNative = {
     homeDir: '/Users/tester',
     initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
@@ -36,7 +48,12 @@ afterEach(() => {
   document.body.innerHTML = ''
   delete testWindow.goblinNative
   vi.unstubAllGlobals()
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+  vi.useRealTimers()
 })
 
 describe('CreateWorktreeDialog', () => {
@@ -44,6 +61,15 @@ describe('CreateWorktreeDialog', () => {
     render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
 
     expect(document.activeElement).toBe(input('#cwt-branch'))
+  })
+
+  test('prefills a dated feature branch from the current branch', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 29, 12))
+
+    render(<CreateWorktreeDialog open repo={createRepo()} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
+
+    expect(input('#cwt-branch').value).toBe('feat/20260729-main')
   })
 
   test('closes immediately after submitting create', () => {
@@ -61,6 +87,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-feature-new',
         mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
     deferred.resolve()
@@ -88,6 +115,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-feature-new',
         mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -130,6 +158,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '~/trees/repo-feature-new',
         mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -148,6 +177,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-main',
         mode: { kind: 'existingBranch', branch: 'main' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -164,10 +194,7 @@ describe('CreateWorktreeDialog', () => {
       ok: true,
       json: jsonMock,
     }))
-    vi.stubGlobal(
-      'fetch',
-      fetchMock,
-    )
+    vi.stubGlobal('fetch', fetchMock)
 
     render(<CreateWorktreeDialog open repo={createRepo()} onClose={onClose} onCreate={onCreate} />)
 
@@ -189,6 +216,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-feature-remote',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/remote', localBranch: 'feature/remote' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -230,6 +258,7 @@ describe('CreateWorktreeDialog', () => {
         worktreePath: '/tmp/goblin-repo-bugfix-login-flow',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/bugfix/login-flow', localBranch: 'bugfix/login-flow' },
       },
+      selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -244,11 +273,7 @@ describe('CreateWorktreeDialog', () => {
       'fetch',
       vi.fn(async () => ({
         ok: true,
-        json: async () => [
-          'origin/feature/api-client',
-          'origin/bugfix/login-flow',
-          'origin/release/searchable-branch',
-        ],
+        json: async () => ['origin/feature/api-client', 'origin/bugfix/login-flow', 'origin/release/searchable-branch'],
       })),
     )
 
@@ -310,10 +335,8 @@ describe('CreateWorktreeDialog', () => {
         repo={createRepo()}
         worktreeBootstrap={{
           loading: true,
-          preview: null,
+          preflight: null,
           error: false,
-          configTrusted: false,
-          onConfigTrustedChange: vi.fn(),
         }}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
@@ -324,35 +347,221 @@ describe('CreateWorktreeDialog', () => {
     expect(button('button[type="submit"]').disabled).toBe(true)
   })
 
-  test('renders trust checkbox for runnable bootstrap config', () => {
-    const onConfigTrustedChange = vi.fn()
+  test('defaults candidates to skip and submits only independent copy or symlink choices', () => {
+    const onCreate = vi.fn(async () => {})
     render(
       <CreateWorktreeDialog
         open
         repo={createRepo()}
         worktreeBootstrap={{
           loading: false,
-          preview: {
-            hasConfig: true,
-            hasOperations: true,
-            configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-            copyCount: 1,
-            symlinkCount: 0,
-            hardlinkCount: 0,
-            excludeCount: 0,
+          preflight: {
+            kind: 'candidates',
+            candidates: [
+              { path: 'node_modules', kind: 'directory' },
+              { path: '.env', kind: 'file' },
+            ],
           },
           error: false,
-          configTrusted: true,
-          onConfigTrustedChange,
+        }}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    expect(document.querySelectorAll('[data-materialization-item]').length).toBe(2)
+    expect(document.querySelectorAll('[data-materialization-choice="skip"][data-state="on"]').length).toBe(2)
+    click('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+      },
+      selections: [
+        { path: 'node_modules', mode: 'symlink' },
+        { path: '.env', mode: 'copy' },
+      ],
+    })
+  })
+
+  test('applies one materialization mode to every batch-selected candidate', () => {
+    const onCreate = vi.fn(async () => {})
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: {
+            kind: 'candidates',
+            candidates: [
+              { path: 'node_modules', kind: 'directory' },
+              { path: '.env', kind: 'file' },
+            ],
+          },
+          error: false,
+        }}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    click('[data-materialization-select-all]')
+    click('[data-materialization-bulk-choice="symlink"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+      },
+      selections: [
+        { path: 'node_modules', mode: 'symlink' },
+        { path: '.env', mode: 'symlink' },
+      ],
+    })
+  })
+
+  test('resets candidate choices when the dialog is reopened', () => {
+    const worktreeBootstrap = {
+      loading: false,
+      preflight: {
+        kind: 'candidates' as const,
+        candidates: [{ path: '.env', kind: 'file' as const }],
+      },
+      error: false,
+    }
+    const dialog = (open: boolean) => (
+      <CreateWorktreeDialog
+        open={open}
+        repo={createRepo()}
+        worktreeBootstrap={worktreeBootstrap}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />
+    )
+    render(dialog(true))
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    expect(document.querySelector('[data-materialization-choice="copy"][data-state="on"]')).not.toBeNull()
+
+    act(() => root!.render(dialog(false)))
+    act(() => root!.render(dialog(true)))
+
+    expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
+  })
+
+  test('reports the active local branch context for dependency source resolution', () => {
+    const onBootstrapContextBranchChange = vi.fn()
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        onBootstrapContextBranchChange={onBootstrapContextBranchChange}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
+    openSelect('#cwt-base')
+    clickOptionByText('feature/base')
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('feature/base')
+
+    clickButtonByText('action.create-worktree-mode-existing')
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
+
+    clickButtonByText('action.create-worktree-mode-detached')
+    expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
+  })
+
+  test('resets candidate choices when the dependency source changes', () => {
+    const base = branchSource('feature/base', '/tmp/repo-base')
+    const alternative = branchSource('feature/other', '/tmp/repo-other')
+    const dialog = (source: RepositoryDependencySource) => (
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+          error: false,
+          source,
+          sourceOptions: [alternative],
+        }}
+        onBootstrapSourceChange={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />
+    )
+    render(dialog(base))
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    expect(document.querySelector('[data-materialization-choice="copy"][data-state="on"]')).not.toBeNull()
+
+    act(() => root!.render(dialog(alternative)))
+
+    expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
+  })
+
+  test('submits the exact branch worktree source used for dependency candidates', () => {
+    const onCreate = vi.fn(async () => {})
+    const source = branchSource('feature/base', '/tmp/repo-base')
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+          error: false,
+          source,
+          sourceOptions: [{ id: 'primary', kind: 'primary' }],
+        }}
+        onBootstrapSourceChange={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
+    )
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+      },
+      selections: [{ path: '.env', mode: 'copy' }],
+      sourceWorktreePath: '/tmp/repo-base',
+    })
+  })
+
+  test('hides empty candidates and keeps preflight errors nonblocking', () => {
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [] },
+          error: true,
         }}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
       />,
     )
 
-    const checkbox = document.querySelector('button[role="checkbox"], input[type="checkbox"]')
-    expect(document.body.textContent).toContain('action.create-worktree-bootstrap-config-trusted')
-    expect(checkbox).toBeTruthy()
+    expect(document.body.textContent).not.toContain('action.create-worktree-bootstrap-candidates-label')
+    expect(document.body.textContent).toContain('action.create-worktree-bootstrap-preflight-error')
+    setInputValue('#cwt-branch', 'feature/new')
+    expect(button('button[type="submit"]').disabled).toBe(false)
   })
 })
 
@@ -397,6 +606,10 @@ function createRemoteRepo(): RepoState {
   repo.id = target.id
   repo.remote.target = target
   return repo
+}
+
+function branchSource(branch: string, worktreePath: string): RepositoryDependencySource {
+  return { id: `branch:${branch}`, kind: 'branch', branch, worktreePath }
 }
 
 function render(element: ReactNode) {
@@ -460,6 +673,14 @@ function clickButtonByText(text: string) {
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+}
+
+function clickOptionByText(text: string) {
+  const element = [...document.body.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (candidate) => candidate.textContent?.trim() === text,
+  )
+  if (!element) throw new Error(`Missing option text: ${text}`)
+  act(() => element.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 }
 
 async function flush() {

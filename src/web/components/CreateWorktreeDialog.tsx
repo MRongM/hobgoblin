@@ -20,6 +20,11 @@ import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.t
 import { useRemotePathSuggestions } from '#/web/hooks/useRemotePathSuggestions.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
+import {
+  WorktreeBootstrapCandidateList,
+  type WorktreeBootstrapCandidateChoice,
+} from '#/web/components/WorktreeBootstrapCandidateList.tsx'
+import { WorktreeBootstrapSourcePicker } from '#/web/components/WorktreeBootstrapSourcePicker.tsx'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { getRepositoryRemoteBranches } from '#/web/repo-client.ts'
@@ -29,7 +34,8 @@ import { validateBranchName } from '#/shared/refnames.ts'
 import { isResolvableRemotePathInput } from '#/shared/remote-repo.ts'
 import { deriveLocalBranchFromRemoteRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
-import type { WorktreeBootstrapPreview } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapPreflight, WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
+import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
 type CreateWorktreeDialogMode = CreateWorktreeInput['mode']['kind']
 
@@ -42,6 +48,8 @@ const MODE_OPTIONS = [
 
 export interface CreateWorktreeRequest {
   input: CreateWorktreeInput
+  selections: WorktreeBootstrapSelection[]
+  sourceWorktreePath?: string
 }
 
 interface Props {
@@ -49,19 +57,30 @@ interface Props {
   repo: RepoState
   defaultBranch?: string
   worktreeBootstrap?: WorktreeBootstrapPromptState
+  onBootstrapContextBranchChange?: (branch: string) => void
+  onBootstrapSourceChange?: (source: RepositoryDependencySource) => void
   onClose: () => void
   onCreate: (request: CreateWorktreeRequest) => void | Promise<void>
 }
 
 interface WorktreeBootstrapPromptState {
   loading: boolean
-  preview: WorktreeBootstrapPreview | null
+  preflight: WorktreeBootstrapPreflight | null
   error: boolean
-  configTrusted: boolean
-  onConfigTrustedChange: (trust: boolean) => void
+  source?: RepositoryDependencySource
+  sourceOptions?: readonly RepositoryDependencySource[]
 }
 
-export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootstrap, onClose, onCreate }: Props) {
+export function CreateWorktreeDialog({
+  open,
+  repo,
+  defaultBranch,
+  worktreeBootstrap,
+  onBootstrapContextBranchChange,
+  onBootstrapSourceChange,
+  onClose,
+  onCreate,
+}: Props) {
   const t = useT()
   const compact = useIsCompactUi()
 
@@ -76,6 +95,8 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
   const [remoteBranches, setRemoteBranches] = useState<string[]>([])
   const [remoteBranchQuery, setRemoteBranchQuery] = useState('')
   const [remoteBranchesLoading, setRemoteBranchesLoading] = useState(false)
+  const [bootstrapChoices, setBootstrapChoices] = useState<Record<string, WorktreeBootstrapCandidateChoice>>({})
+  const [originatingBranch, setOriginatingBranch] = useState('')
   const localBranchNames = repo.data.branches.map((b) => b.name)
   const hasLocalBranch = (name: string) => localBranchNames.includes(name)
 
@@ -92,7 +113,7 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
     const initialBase = initialBaseRef.current
     setMode('newBranch')
     setBase(initialBase)
-    setBranch('')
+    setBranch(defaultNewBranchName(initialBase))
     setExistingBranch(initialBase)
     setRemoteRef('')
     setLocalBranch('')
@@ -101,7 +122,20 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
     setRemoteBranches([])
     setRemoteBranchQuery('')
     setRemoteBranchesLoading(false)
+    setBootstrapChoices({})
+    setOriginatingBranch(initialBase)
   }, [open])
+
+  const bootstrapContextBranch =
+    mode === 'newBranch' ? base : mode === 'existingBranch' ? existingBranch : originatingBranch
+  useEffect(() => {
+    if (open && bootstrapContextBranch) onBootstrapContextBranchChange?.(bootstrapContextBranch)
+  }, [bootstrapContextBranch, onBootstrapContextBranchChange, open])
+
+  const bootstrapSourceId = worktreeBootstrap?.source?.id
+  useEffect(() => {
+    if (open) setBootstrapChoices({})
+  }, [bootstrapSourceId, open])
 
   useEffect(() => {
     if (!open || mode !== 'trackRemoteBranch' || remoteBranches.length > 0) return
@@ -184,6 +218,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
   const validPath = remoteTarget ? isResolvableRemotePathInput(effectivePath) : effectivePath.length > 0
   const input = buildInput()
   const canSubmit = !!input && validPath && !branchActionBusy && !bootstrapBusy
+  const bootstrapCandidates =
+    worktreeBootstrap?.preflight?.kind === 'candidates' ? worktreeBootstrap.preflight.candidates : []
+  const bootstrapSelections = bootstrapCandidates.flatMap((candidate): WorktreeBootstrapSelection[] => {
+    const choice = bootstrapChoices[candidate.path] ?? 'skip'
+    return choice === 'skip' ? [] : [{ path: candidate.path, mode: choice }]
+  })
 
   useEffect(() => {
     if (!open || mode !== 'trackRemoteBranch') return
@@ -212,7 +252,10 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
           : null
       case 'trackRemoteBranch':
         return activeRemoteRef && trackLocalBranch && !localBranchError
-          ? { worktreePath: effectivePath, mode: { kind: 'trackRemoteBranch', remoteRef: activeRemoteRef, localBranch: trackLocalBranch } }
+          ? {
+              worktreePath: effectivePath,
+              mode: { kind: 'trackRemoteBranch', remoteRef: activeRemoteRef, localBranch: trackLocalBranch },
+            }
           : null
       case 'detached':
         return detachedRefTrimmed && !detachedRefError
@@ -226,7 +269,13 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
   function handleSubmit() {
     const nextInput = buildInput()
     if (!nextInput || branchActionBusy || bootstrapBusy) return
-    void onCreate({ input: nextInput })
+    void onCreate({
+      input: nextInput,
+      selections: bootstrapSelections,
+      ...(bootstrapSelections.length > 0 && worktreeBootstrap?.source?.kind === 'branch'
+        ? { sourceWorktreePath: worktreeBootstrap.source.worktreePath }
+        : {}),
+    })
     onClose()
   }
 
@@ -465,15 +514,40 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
               ))}
             </datalist>
           )}
-          <FieldDescription id="cwt-path-hint" reserveHeight className="truncate" title={displayEffectivePath || undefined}>
-            {!pathName
-              ? t('action.create-worktree-path-disabled-hint')
-              : effectivePath
-                ? displayEffectivePath
-                : ''}
+          <FieldDescription
+            id="cwt-path-hint"
+            reserveHeight
+            className="truncate"
+            title={displayEffectivePath || undefined}
+          >
+            {!pathName ? t('action.create-worktree-path-disabled-hint') : effectivePath ? displayEffectivePath : ''}
           </FieldDescription>
         </Field>
-        <WorktreeBootstrapTrustCheckbox state={worktreeBootstrap} />
+        {worktreeBootstrap?.source ? (
+          <WorktreeBootstrapSourcePicker
+            source={worktreeBootstrap.source}
+            options={worktreeBootstrap.sourceOptions ?? []}
+            pending={bootstrapBusy || branchActionBusy}
+            onSourceChange={(source) => {
+              setBootstrapChoices({})
+              onBootstrapSourceChange?.(source)
+            }}
+          />
+        ) : null}
+        {bootstrapCandidates.length > 0 && (
+          <WorktreeBootstrapCandidateList
+            candidates={bootstrapCandidates}
+            choices={bootstrapChoices}
+            onChoiceChange={(candidatePath, choice) => {
+              setBootstrapChoices((current) => ({ ...current, [candidatePath]: choice }))
+            }}
+          />
+        )}
+        {worktreeBootstrap?.error && (
+          <p role="status" aria-live="polite" className="text-xs leading-4 text-muted-foreground">
+            {t('action.create-worktree-bootstrap-preflight-error')}
+          </p>
+        )}
         <DialogFooter className="pt-4">
           <Button type="button" variant="outline" className={cn(compact && 'w-full')} onClick={onClose}>
             {t('dialog.cancel')}
@@ -487,22 +561,12 @@ export function CreateWorktreeDialog({ open, repo, defaultBranch, worktreeBootst
   )
 }
 
-function WorktreeBootstrapTrustCheckbox({ state }: { state: WorktreeBootstrapPromptState | undefined }) {
-  const t = useT()
-  const preview = state?.preview ?? null
-  const showPrompt = !state?.loading && !state?.error && preview?.hasOperations === true && !!preview.configHash
-  if (!state || !showPrompt) return null
-
-  return (
-    <label className="flex items-center gap-2 pt-0.5 text-sm text-foreground">
-      <input
-        type="checkbox"
-        checked={state.configTrusted}
-        onChange={(event) => state.onConfigTrustedChange(event.currentTarget.checked)}
-      />
-      <span>{t('action.create-worktree-bootstrap-config-trusted')}</span>
-    </label>
-  )
+function defaultNewBranchName(currentBranch: string, now = new Date()): string {
+  if (!currentBranch) return ''
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `feat/${year}${month}${day}-${currentBranch}`
 }
 
 function worktreePathName(input: {

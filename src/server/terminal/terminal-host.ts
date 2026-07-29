@@ -2,9 +2,15 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
+  TerminalCloseSessionsResult,
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
+  TerminalScreenSnapshot,
+  TerminalScreenSnapshotInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionInput,
@@ -59,12 +65,18 @@ export interface ServerTerminalHost {
   write(clientId: string, input: TerminalWriteInput): MaybePromise<TerminalMutationResult>
   resize(clientId: string, input: TerminalResizeInput): MaybePromise<TerminalMutationResult>
   takeover(clientId: string, input: TerminalTakeoverInput): MaybePromise<TerminalTakeoverResult>
-  close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalMutationResult>
+  close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalCloseResult>
+  closeSessions(sessionIds: string[]): MaybePromise<TerminalCloseSessionsResult>
   notifyBell(clientId: string, input: TerminalNotifyBellInput): MaybePromise<TerminalMutationResult>
   listSessions(clientId: string, repoRoot: string): MaybePromise<TerminalSessionSummary[]>
   create(clientId: string, input: TerminalCreateInput): MaybePromise<TerminalCatalogMutationResult>
   prune(clientId: string, repoRoot: string): MaybePromise<{ pruned: number; remaining: number }>
-  getSessionSnapshot(clientId: string, input: TerminalSessionSnapshotInput): MaybePromise<TerminalSessionSnapshot | null>
+  getSessionSnapshot(
+    clientId: string,
+    input: TerminalSessionSnapshotInput,
+  ): MaybePromise<TerminalSessionSnapshot | null>
+  getOutputExcerpt(input: TerminalOutputExcerptInput): MaybePromise<TerminalOutputExcerpt | null>
+  getScreenSnapshot(input: TerminalScreenSnapshotInput): MaybePromise<TerminalScreenSnapshot | null>
   /** Handle an incoming realtime message from a client socket. */
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void
   shutdown(): void

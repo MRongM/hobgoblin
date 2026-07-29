@@ -9,12 +9,25 @@ vi.mock('#/web/lib/server-fetch.ts', () => ({
 }))
 
 import {
-  abortWorkspaceWorktree,
+  abortBranchWorkspace,
+  cleanupBranchWorkspaceRegistry,
   configureWorkspace,
   discoverWorkspace,
-  executeWorkspaceWorktree,
-  planWorkspaceWorktree,
+  executeBranchWorkspace,
+  planBranchWorkspace,
+  readBranchWorkspaces,
+  reorderBranchWorkspaces,
   restoreWorkspace,
+  planWorkspacePull,
+  executeWorkspacePull,
+  abortWorkspacePull,
+  planBranchWorkspaceGitAction,
+  executeBranchWorkspaceGitAction,
+  abortBranchWorkspaceGitAction,
+  readBranchWorkspaceDependencies,
+  planBranchWorkspaceDependencies,
+  executeBranchWorkspaceDependencies,
+  abortBranchWorkspaceDependencies,
 } from '#/web/workspace-client.ts'
 
 describe('workspace client', () => {
@@ -63,45 +76,143 @@ describe('workspace client', () => {
     })
   })
 
-  test('posts typed worktree plan, execute, and abort requests', async () => {
-    mocks.postServerJson.mockResolvedValue({ ok: true })
+  test('posts the root id to the branch workspace read endpoint with cancellation', async () => {
+    const result = { ok: true, rootId: '/workspace', items: [], auxiliaryCandidates: [] }
+    const controller = new AbortController()
+    mocks.postServerJson.mockResolvedValue(result)
 
-    await planWorkspaceWorktree('/workspace', {
-      operation: 'remove',
-      branch: 'feature/a',
-      alsoDeleteBranch: true,
-      alsoDeleteUpstream: true,
-    })
-    await executeWorkspaceWorktree('/workspace', { planToken: 'sha256:plan', approveBootstrap: false })
-    await abortWorkspaceWorktree('/workspace')
+    await expect(readBranchWorkspaces('/workspace', controller.signal)).resolves.toEqual(result)
+    expect(mocks.postServerJson).toHaveBeenCalledWith(
+      '/api/workspace/branch-workspaces/read',
+      { rootId: '/workspace' },
+      { signal: controller.signal },
+    )
+  })
 
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/worktrees/plan', {
-      rootPath: '/workspace',
-      request: {
-        operation: 'remove',
-        branch: 'feature/a',
-        alsoDeleteBranch: true,
-        alsoDeleteUpstream: true,
-      },
-    })
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/worktrees/execute', {
-      rootPath: '/workspace',
-      planToken: 'sha256:plan',
-      approveBootstrap: false,
-    })
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/worktrees/abort', {
-      rootPath: '/workspace',
+  test('posts the root id to the branch workspace cleanup endpoint', async () => {
+    const result = { ok: true, outcome: 'repaired', removedRecords: 2 }
+    mocks.postServerJson.mockResolvedValue(result)
+
+    await expect(cleanupBranchWorkspaceRegistry('/workspace')).resolves.toEqual(result)
+    expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/branch-workspaces/cleanup', {
+      rootId: '/workspace',
     })
   })
 
-  test('posts a branchless pull plan request', async () => {
+  test('posts typed branch workspace plan, execute, abort, and reorder requests', async () => {
+    mocks.postServerJson.mockResolvedValue({ ok: true })
+    const request = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [{ name: 'README.md', mode: 'copy' as const }],
+    }
+
+    await planBranchWorkspace('/workspace', request)
+    await executeBranchWorkspace('/workspace', {
+      planToken: 'sha256:plan',
+      approvals: ['outside-root-source'],
+    })
+    await abortBranchWorkspace('/workspace')
+    await reorderBranchWorkspaces('/workspace', ['third', 'first'])
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/branch-workspaces/plan', {
+      rootId: '/workspace',
+      request,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/execute', {
+      rootId: '/workspace',
+      planToken: 'sha256:plan',
+      approvals: ['outside-root-source'],
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/abort', {
+      rootId: '/workspace',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(4, '/api/workspace/branch-workspaces/reorder', {
+      rootId: '/workspace',
+      orderedIds: ['third', 'first'],
+    })
+  })
+
+  test('posts pull-only plan, execute, and abort requests', async () => {
     mocks.postServerJson.mockResolvedValue({ ok: true })
 
-    await planWorkspaceWorktree('/workspace', { operation: 'pull' })
+    await planWorkspacePull('/workspace')
+    await executeWorkspacePull('/workspace', { planToken: 'sha256:pull' })
+    await abortWorkspacePull('/workspace')
 
-    expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/worktrees/plan', {
-      rootPath: '/workspace',
-      request: { operation: 'pull' },
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/pull/plan', {
+      rootId: '/workspace',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/pull/execute', {
+      rootId: '/workspace',
+      planToken: 'sha256:pull',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/pull/abort', {
+      rootId: '/workspace',
+    })
+  })
+
+  test('posts branch workspace Git-action plan, execute, and abort requests', async () => {
+    mocks.postServerJson.mockResolvedValue({ ok: true })
+    const input = {
+      kind: 'batch-commit' as const,
+      planToken: 'sha256:git-action',
+      messages: [{ repositoryName: 'api', message: 'feat: api' }],
+    }
+
+    await planBranchWorkspaceGitAction('/workspace', { kind: 'batch-commit', branchWorkspaceId: 'ws-1' })
+    await executeBranchWorkspaceGitAction('/workspace', input)
+    await abortBranchWorkspaceGitAction('/workspace')
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/branch-workspaces/git-actions/plan', {
+      rootId: '/workspace',
+      request: { kind: 'batch-commit', branchWorkspaceId: 'ws-1' },
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/git-actions/execute', {
+      rootId: '/workspace',
+      input,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/git-actions/abort', {
+      rootId: '/workspace',
+    })
+  })
+
+  test('posts branch workspace dependency read, plan, execute, and abort requests', async () => {
+    mocks.postServerJson.mockResolvedValue({ ok: true })
+    const controller = new AbortController()
+    const request = {
+      operation: 'remove' as const,
+      branchWorkspaceId: 'branch-1',
+      names: ['.env'],
+    }
+    const input = {
+      planToken: 'sha256:dependencies',
+      approvals: [],
+      sourceToken: 'renderer-1',
+    }
+
+    await readBranchWorkspaceDependencies('/workspace', 'branch-1', controller.signal)
+    await planBranchWorkspaceDependencies('/workspace', request)
+    await executeBranchWorkspaceDependencies('/workspace', input)
+    await abortBranchWorkspaceDependencies('/workspace')
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(
+      1,
+      '/api/workspace/branch-workspaces/dependencies/read',
+      { rootId: '/workspace', branchWorkspaceId: 'branch-1' },
+      { signal: controller.signal },
+    )
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/dependencies/plan', {
+      rootId: '/workspace',
+      request,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/dependencies/execute', {
+      rootId: '/workspace',
+      input,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(4, '/api/workspace/branch-workspaces/dependencies/abort', {
+      rootId: '/workspace',
     })
   })
 })

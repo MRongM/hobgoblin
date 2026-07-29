@@ -13,7 +13,7 @@ export function toolbarTabChromeClassName(options: {
     'group relative shrink-0 select-none items-center transition-colors duration-100',
     compositeFocusRing,
     variant === 'repo'
-      ? 'flex h-8 min-w-36 max-w-64 touch-none gap-1.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border px-2 text-xs'
+      ? 'flex h-8 min-w-36 max-w-56 touch-none gap-1.5 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border px-2 text-xs'
       : 'flex h-7 w-36 gap-1 rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border px-2.5 text-sm',
     variant === 'repo'
       ? active

@@ -18,12 +18,13 @@ import type {
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
-import { emptyRendererBridgeBootstrap, setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import { settingsSnapshotQueryKey } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { DEFAULT_WORKSPACE_LAYOUT } from '#/shared/workspace-layout.ts'
-import type { RendererBridge } from '#/web/renderer-bridge-types.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 
 let compactUi = false
@@ -34,19 +35,6 @@ vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
-}))
-
-// Focus-mode branch controls live in their own component with their own
-// providers (commit drafts etc.); this suite only exercises the toolbar,
-// so the mock is just a placement marker.
-vi.mock('#/web/components/topbar/TopbarRepoControls.tsx', () => ({
-  TopbarRepoControls: ({
-    focusPresentation,
-    tone = 'topbar',
-  }: {
-    focusPresentation?: boolean
-    tone?: 'topbar' | 'toolbar'
-  }) => (focusPresentation ? <div data-testid="topbar-repo-controls" data-tone={tone} /> : null),
 }))
 
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
@@ -122,6 +110,24 @@ describe('BranchDetailToolbar', () => {
     expect(spacer?.className).toContain('min-w-2')
     expect(spacer?.className).toContain('flex-1')
     expect(spacer?.className).not.toContain('shrink-0')
+  })
+
+  test('ignores clicks on the detail toolbar blank area even when a legacy setting enables them', () => {
+    const { container: c } = renderToolbar({
+      terminalCount: 2,
+      detailTab: 'terminal',
+      legacyActionBarBlankToggleEnabled: true,
+      navigation: navigationWith({}),
+    })
+    const blankArea = c.querySelector<HTMLElement>('.min-w-2.flex-1.self-stretch')
+    expect(blankArea).not.toBeNull()
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+
+    act(() => {
+      blankArea?.click()
+    })
+
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
   test('clicking the new-terminal button navigates and creates a terminal', async () => {
@@ -243,7 +249,7 @@ describe('BranchDetailToolbar', () => {
     expect(toolbar?.className).toContain('text-topbar-foreground')
   })
 
-  test('keeps the compact detail toolbar on the generic toolbar tone', () => {
+  test('uses the project topbar tone with compact toolbar geometry', () => {
     compactUi = true
     const { container: c } = renderToolbar({
       terminalCount: 1,
@@ -254,8 +260,9 @@ describe('BranchDetailToolbar', () => {
 
     const toolbar = c.firstElementChild as HTMLElement | null
     expect(toolbar?.style.height).toBe('41px')
-    expect(toolbar?.className).toContain('bg-toolbar')
-    expect(toolbar?.className).not.toContain('topbar-tone')
+    expect(toolbar?.className).toContain('topbar-tone')
+    expect(toolbar?.className).toContain('bg-topbar')
+    expect(toolbar?.className).not.toContain('bg-toolbar')
   })
 
   test('keeps the complete compact terminal topbar in the shared horizontal scroll flow', () => {
@@ -264,7 +271,7 @@ describe('BranchDetailToolbar', () => {
       terminalCount: 1,
       detailTab: 'terminal',
       compactFocusPresentation: true,
-      layout: 'top-bottom',
+      layout: 'left-right',
       navigation: navigationWith({}),
     })
 
@@ -332,22 +339,62 @@ describe('BranchDetailToolbar', () => {
     expect(c.querySelector('[data-testid="focus-project-switcher"]')).toBeNull()
   })
 
-  test('focus mode shows the project switcher with the active project name', () => {
-    const { container: c } = renderToolbar({
+  test('does not expose terminal focus from the detail toolbar', () => {
+    const onShowTerminal = vi.fn()
+    const showRepoDetailTab = vi.fn()
+    const { container: c, mocks } = renderToolbar({
       terminalCount: 0,
-      detailFocusMode: true,
+      detailTab: 'status',
+      onShowTerminal,
+      navigation: navigationWith({ showRepoDetailTab }),
+    })
+
+    expect(c.querySelector('button[aria-label="terminal.focus"]')).toBeNull()
+    expect(onShowTerminal).not.toHaveBeenCalled()
+    expect(showRepoDetailTab).not.toHaveBeenCalled()
+    expect(mocks.createTerminal).not.toHaveBeenCalled()
+  })
+
+  test('shows member terminal focus context and exits through its callback', () => {
+    const onExitTerminalFocus = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      terminalFocusMode: true,
+      onExitTerminalFocus,
       navigation: navigationWith({}),
     })
 
-    const trigger = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
-    expect(trigger).not.toBeNull()
-    expect(trigger?.textContent).toContain('repo')
+    expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+    expect(c.querySelector('[data-testid="workspace-repository-switcher"]')).not.toBeNull()
+    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).toBeNull()
+
+    act(() => c.querySelector<HTMLButtonElement>('button[aria-label="terminal.exit-focus"]')?.click())
+
+    expect(onExitTerminalFocus).toHaveBeenCalledTimes(1)
   })
 
-  test('focus mode places repository and branch controls after the project switcher', () => {
+  test('shows a restore control for sidebar-owned terminal focus', () => {
+    const onExitTerminalFocus = vi.fn()
+    const { container: c } = renderToolbar({
+      terminalCount: 1,
+      detailTab: 'terminal',
+      detailFocusMode: true,
+      onExitTerminalFocus,
+      navigation: navigationWith({}),
+    })
+
+    expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
+
+    act(() => c.querySelector<HTMLButtonElement>('button[aria-label="terminal.exit-focus"]')?.click())
+
+    expect(onExitTerminalFocus).toHaveBeenCalledTimes(1)
+  })
+
+  test('compact focus keeps project and repository context without branch actions', () => {
     const { container: c } = renderToolbar({
       terminalCount: 0,
-      detailFocusMode: true,
+      compactFocusPresentation: true,
       navigation: navigationWith({}),
     })
 
@@ -356,9 +403,8 @@ describe('BranchDetailToolbar', () => {
     const controls = c.querySelector('[data-testid="topbar-repo-controls"]')
     expect(switcher).not.toBeNull()
     expect(repositorySwitcher).not.toBeNull()
-    expect(controls).not.toBeNull()
+    expect(controls).toBeNull()
     expect(switcher?.nextElementSibling).toBe(repositorySwitcher)
-    expect(repositorySwitcher?.nextElementSibling).toBe(controls)
   })
 
   test('does not render the branch controls outside focus mode', () => {
@@ -374,7 +420,7 @@ describe('BranchDetailToolbar', () => {
       terminalCount: 0,
       detailFocusMode: false,
       compactFocusPresentation: true,
-      layout: 'top-bottom',
+      layout: 'left-right',
       onShowCompactExplorer,
       navigation: navigationWith({}),
     })
@@ -383,7 +429,7 @@ describe('BranchDetailToolbar', () => {
     expect(workspaceButton).not.toBeNull()
     expect(c.querySelector('[data-testid="focus-project-switcher"]')).not.toBeNull()
     expect(c.querySelector('[data-testid="workspace-repository-switcher"]')?.getAttribute('data-compact')).toBe('true')
-    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).not.toBeNull()
+    expect(c.querySelector('[data-testid="topbar-repo-controls"]')).toBeNull()
     expect(c.querySelector('button[aria-label="branch-detail.collapse"]')).toBeNull()
 
     act(() => {
@@ -392,11 +438,10 @@ describe('BranchDetailToolbar', () => {
     await flush()
 
     expect(onShowCompactExplorer).toHaveBeenCalledTimes(1)
-    expect(useReposStore.getState().detailFocusMode).toBe(false)
     expect(useReposStore.getState().detailCollapsed).toBe(false)
   })
 
-  test('compact context rail uses generic toolbar tone', () => {
+  test('compact project switcher uses generic toolbar tone', () => {
     compactUi = true
     const { container: c } = renderToolbar({
       terminalCount: 0,
@@ -406,17 +451,15 @@ describe('BranchDetailToolbar', () => {
 
     const projectSwitcher = c.querySelector<HTMLButtonElement>('[data-testid="focus-project-switcher"]')
     const projectChevron = projectSwitcher?.querySelectorAll('svg').item(1)
-    const repoControls = c.querySelector<HTMLElement>('[data-testid="topbar-repo-controls"]')
     expect(projectChevron?.classList.contains('text-muted-foreground')).toBe(true)
     expect(projectChevron?.classList.contains('text-topbar-muted-foreground')).toBe(false)
-    expect(repoControls?.dataset.tone).toBe('toolbar')
   })
 
-  test('focus switcher lists open projects and activates the selected one', async () => {
+  test('compact focus switcher lists open projects and activates the selected one', async () => {
     const activateRepo = vi.fn()
     const { container: c } = renderToolbar({
       terminalCount: 0,
-      detailFocusMode: true,
+      compactFocusPresentation: true,
       navigation: navigationWith({ activateRepo }),
     })
 
@@ -489,10 +532,14 @@ function renderToolbar(options: {
   navigation: MainWindowNavigationActions
   detailTab?: 'status' | 'changes' | 'terminal'
   detailFocusMode?: boolean
+  terminalFocusMode?: boolean
   compactFocusPresentation?: boolean
   onShowCompactExplorer?: () => void
+  onShowTerminal?: () => void
+  onExitTerminalFocus?: () => void
   collapsed?: boolean
   layout?: RepoWorkspaceLayout
+  legacyActionBarBlankToggleEnabled?: boolean
 }): {
   container: HTMLDivElement
   terminalTab: HTMLButtonElement
@@ -571,12 +618,13 @@ function renderToolbar(options: {
   const showRepoDetailTab = vi.fn(options.navigation.showRepoDetailTab)
   const commandContext: TerminalSessionContextValue = {
     createTerminal,
+    restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal,
     scrollToBottom,
     focusTerminal,
     scrollLines: vi.fn(),
     clearBell: vi.fn(() => false),
-    closeTerminalAndDismissDetailIfLast: vi.fn(() => []),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
     registerWorktreeHost: vi.fn(),
     attach: vi.fn(),
     detach: vi.fn(),
@@ -595,6 +643,12 @@ function renderToolbar(options: {
   document.body.appendChild(container)
   root = createRoot(container)
   queryClient = new QueryClient()
+  if (options.legacyActionBarBlankToggleEnabled) {
+    queryClient.setQueryData(settingsSnapshotQueryKey(), {
+      ...defaultSettingsSnapshot(),
+      toggleDetailOnActionBarBlankClick: true,
+    })
+  }
   act(() => {
     root!.render(
       <QueryClientProvider client={queryClient!}>
@@ -608,9 +662,12 @@ function renderToolbar(options: {
                 contentId="content"
                 collapsed={options.collapsed ?? false}
                 detailFocusMode={options.detailFocusMode ?? false}
+                terminalFocusMode={options.terminalFocusMode}
                 compactFocusPresentation={options.compactFocusPresentation}
                 layout={options.layout ?? DEFAULT_WORKSPACE_LAYOUT}
                 onShowCompactExplorer={options.onShowCompactExplorer}
+                onShowTerminal={options.onShowTerminal}
+                onExitTerminalFocus={options.onExitTerminalFocus}
               />
             </TerminalSessionReadContext.Provider>
           </TerminalSessionContext.Provider>
@@ -649,11 +706,4 @@ function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWi
 
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0))
-}
-
-async function flushUntil(condition: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    await flush()
-    if (condition()) return
-  }
 }

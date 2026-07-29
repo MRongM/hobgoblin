@@ -35,7 +35,6 @@ const appDataClientMocks = vi.hoisted(() => ({
   saveSession: vi.fn(async (session) => session),
   setFontFamily: vi.fn(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily),
   setFileTreeFontSize: vi.fn(async (fontSize: number) => fontSize),
-  setFileTreeTopbarFontSize: vi.fn(async (fontSize: number) => fontSize),
   setGlobalShortcut: vi.fn(async (accelerator) => ({ accelerator, registered: true })),
   setGlobalShortcutDisabled: vi.fn(async () => {}),
   setGitNetworkProxyEnabled: vi.fn(async () => {}),
@@ -58,20 +57,30 @@ const appDataClientMocks = vi.hoisted(() => ({
   })),
   setProjectColorTheme: vi.fn<() => Promise<RepoSettingsEntry[]>>(async () => []),
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
+  setStatusRefreshInterval: vi.fn(async (sec) => sec),
   setShortcutsDisabled: vi.fn(async () => {}),
   setSwapCloseShortcuts: vi.fn(async () => {}),
   setTemporaryFilesDirectory: vi.fn(async () => {}),
-  setRemoteTerminalTmuxEnabled: vi.fn(async () => {}),
   setTerminalCustomButtonSize: vi.fn(async () => {}),
   setTerminalCustomButtons: vi.fn(async (buttons: TerminalCustomButton[]) => buttons),
   setTerminalCustomButtonsVisible: vi.fn(async () => {}),
   setTerminalFontSize: vi.fn(async (fontSize: number) => fontSize),
   setTerminalNotificationsEnabled: vi.fn(async () => {}),
-  setToggleDetailOnActionBarBlankClick: vi.fn(async () => {}),
   setWebAccessSettings: vi.fn(async (input) => ({
     enabled: input.enabled === true,
     username: input.username,
     passwordConfigured: true,
+  })),
+  saveTelegramNotificationSettings: vi.fn(async (input) => ({
+    enabled: input.enabled === true,
+    botTokenConfigured: Boolean(input.botToken),
+    chatId: input.chatId,
+    proxyEnabled: input.proxyEnabled !== false,
+    bellEnabled: input.bellEnabled,
+    outputCompletionEnabled: input.outputCompletionEnabled,
+    outputCompletionMinimumActivitySeconds: input.outputCompletionMinimumActivitySeconds,
+    includeTerminalOutput: input.includeTerminalOutput,
+    outputTailLength: input.outputTailLength,
   })),
 }))
 
@@ -82,7 +91,6 @@ vi.mock('#/web/settings-client.ts', () => ({
   saveSession: appDataClientMocks.saveSession,
   setFontFamily: appDataClientMocks.setFontFamily,
   setFileTreeFontSize: appDataClientMocks.setFileTreeFontSize,
-  setFileTreeTopbarFontSize: appDataClientMocks.setFileTreeTopbarFontSize,
   setGlobalShortcut: appDataClientMocks.setGlobalShortcut,
   setGlobalShortcutDisabled: appDataClientMocks.setGlobalShortcutDisabled,
   setGitNetworkProxyEnabled: appDataClientMocks.setGitNetworkProxyEnabled,
@@ -93,17 +101,17 @@ vi.mock('#/web/settings-client.ts', () => ({
   setPreferredTerminalApp: appDataClientMocks.setPreferredTerminalApp,
   setProjectColorTheme: appDataClientMocks.setProjectColorTheme,
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
+  setStatusRefreshInterval: appDataClientMocks.setStatusRefreshInterval,
   setShortcutsDisabled: appDataClientMocks.setShortcutsDisabled,
   setSwapCloseShortcuts: appDataClientMocks.setSwapCloseShortcuts,
   setTemporaryFilesDirectory: appDataClientMocks.setTemporaryFilesDirectory,
-  setRemoteTerminalTmuxEnabled: appDataClientMocks.setRemoteTerminalTmuxEnabled,
   setTerminalCustomButtonSize: appDataClientMocks.setTerminalCustomButtonSize,
   setTerminalCustomButtons: appDataClientMocks.setTerminalCustomButtons,
   setTerminalCustomButtonsVisible: appDataClientMocks.setTerminalCustomButtonsVisible,
   setTerminalFontSize: appDataClientMocks.setTerminalFontSize,
   setTerminalNotificationsEnabled: appDataClientMocks.setTerminalNotificationsEnabled,
-  setToggleDetailOnActionBarBlankClick: appDataClientMocks.setToggleDetailOnActionBarBlankClick,
   setWebAccessSettings: appDataClientMocks.setWebAccessSettings,
+  saveTelegramNotificationSettings: appDataClientMocks.saveTelegramNotificationSettings,
 }))
 
 describe('settings write paths', () => {
@@ -136,8 +144,6 @@ describe('settings write paths', () => {
     appDataClientMocks.setFontFamily.mockImplementation(async (fontFamily: 'mono' | 'maple' | 'system') => fontFamily)
     appDataClientMocks.setFileTreeFontSize.mockReset()
     appDataClientMocks.setFileTreeFontSize.mockImplementation(async (fontSize: number) => fontSize)
-    appDataClientMocks.setFileTreeTopbarFontSize.mockReset()
-    appDataClientMocks.setFileTreeTopbarFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setGlobalShortcut.mockReset()
     appDataClientMocks.setGlobalShortcut.mockImplementation(async (accelerator) => ({ accelerator, registered: true }))
     appDataClientMocks.setGlobalShortcutDisabled.mockReset()
@@ -170,14 +176,14 @@ describe('settings write paths', () => {
     appDataClientMocks.setProjectColorTheme.mockResolvedValue([])
     appDataClientMocks.setSettingsFetchInterval.mockReset()
     appDataClientMocks.setSettingsFetchInterval.mockImplementation(async (sec) => sec)
+    appDataClientMocks.setStatusRefreshInterval.mockReset()
+    appDataClientMocks.setStatusRefreshInterval.mockImplementation(async (sec) => sec)
     appDataClientMocks.setShortcutsDisabled.mockReset()
     appDataClientMocks.setShortcutsDisabled.mockResolvedValue(undefined)
     appDataClientMocks.setSwapCloseShortcuts.mockReset()
     appDataClientMocks.setSwapCloseShortcuts.mockResolvedValue(undefined)
     appDataClientMocks.setTemporaryFilesDirectory.mockReset()
     appDataClientMocks.setTemporaryFilesDirectory.mockResolvedValue(undefined)
-    appDataClientMocks.setRemoteTerminalTmuxEnabled.mockReset()
-    appDataClientMocks.setRemoteTerminalTmuxEnabled.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtonSize.mockReset()
     appDataClientMocks.setTerminalCustomButtonSize.mockResolvedValue(undefined)
     appDataClientMocks.setTerminalCustomButtons.mockReset()
@@ -188,13 +194,23 @@ describe('settings write paths', () => {
     appDataClientMocks.setTerminalFontSize.mockImplementation(async (fontSize: number) => fontSize)
     appDataClientMocks.setTerminalNotificationsEnabled.mockReset()
     appDataClientMocks.setTerminalNotificationsEnabled.mockResolvedValue(undefined)
-    appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockReset()
-    appDataClientMocks.setToggleDetailOnActionBarBlankClick.mockResolvedValue(undefined)
     appDataClientMocks.setWebAccessSettings.mockReset()
     appDataClientMocks.setWebAccessSettings.mockImplementation(async (input) => ({
       enabled: input.enabled === true,
       username: input.username,
       passwordConfigured: true,
+    }))
+    appDataClientMocks.saveTelegramNotificationSettings.mockReset()
+    appDataClientMocks.saveTelegramNotificationSettings.mockImplementation(async (input) => ({
+      enabled: input.enabled === true,
+      botTokenConfigured: Boolean(input.botToken),
+      chatId: input.chatId,
+      proxyEnabled: input.proxyEnabled !== false,
+      bellEnabled: input.bellEnabled,
+      outputCompletionEnabled: input.outputCompletionEnabled,
+      outputCompletionMinimumActivitySeconds: input.outputCompletionMinimumActivitySeconds,
+      includeTerminalOutput: input.includeTerminalOutput,
+      outputTailLength: input.outputTailLength,
     }))
   })
 
@@ -224,6 +240,18 @@ describe('settings write paths', () => {
 
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       recentRepos: [],
+    })
+  })
+
+  test('persists the status refresh interval and updates the runtime settings cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const { setStatusRefreshIntervalPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setStatusRefreshIntervalPreference(300)
+
+    expect(appDataClientMocks.setStatusRefreshInterval).toHaveBeenCalledWith(300)
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      statusRefreshIntervalSec: 300,
     })
   })
 
@@ -335,6 +363,49 @@ describe('settings write paths', () => {
     })
   })
 
+  test('saveTelegramNotificationSettingsPreference updates only the masked Telegram cache', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    const input = {
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      proxyEnabled: false,
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
+      includeTerminalOutput: true,
+      outputTailLength: 400,
+    }
+    const { saveTelegramNotificationSettingsPreference } = await import('#/web/settings-write-paths.ts')
+
+    await expect(saveTelegramNotificationSettingsPreference(input)).resolves.toEqual({
+      enabled: true,
+      botTokenConfigured: true,
+      chatId: '-100123',
+      proxyEnabled: false,
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
+      includeTerminalOutput: true,
+      outputTailLength: 400,
+    })
+    const snapshot = mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())
+    expect(snapshot).toMatchObject({
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        proxyEnabled: false,
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
+        includeTerminalOutput: true,
+        outputTailLength: 400,
+      },
+    })
+    expect(JSON.stringify(snapshot)).not.toContain('test-token')
+  })
+
   test('setGitNetworkProxyUrlPreference updates runtime settings cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
     const { setGitNetworkProxyUrlPreference } = await import('#/web/settings-write-paths.ts')
@@ -411,18 +482,6 @@ describe('settings write paths', () => {
     })
   })
 
-  test('setFileTreeTopbarFontSizePreference updates runtime settings cache', async () => {
-    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
-    const { setFileTreeTopbarFontSizePreference } = await import('#/web/settings-write-paths.ts')
-
-    await setFileTreeTopbarFontSizePreference(12)
-
-    expect(appDataClientMocks.setFileTreeTopbarFontSize).toHaveBeenCalledWith(12)
-    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
-      fileTreeTopbarFontSize: 12,
-    })
-  })
-
   test('setTerminalFontSizePreference updates runtime settings cache', async () => {
     mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
     const { setTerminalFontSizePreference } = await import('#/web/settings-write-paths.ts')
@@ -444,18 +503,6 @@ describe('settings write paths', () => {
     expect(appDataClientMocks.setTerminalCustomButtonsVisible).toHaveBeenCalledWith(false)
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
       terminalCustomButtonsVisible: false,
-    })
-  })
-
-  test('setRemoteTerminalTmuxEnabledPreference updates runtime settings cache', async () => {
-    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
-    const { setRemoteTerminalTmuxEnabledPreference } = await import('#/web/settings-write-paths.ts')
-
-    await setRemoteTerminalTmuxEnabledPreference(true)
-
-    expect(appDataClientMocks.setRemoteTerminalTmuxEnabled).toHaveBeenCalledWith(true)
-    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
-      remoteTerminalTmuxEnabled: true,
     })
   })
 })

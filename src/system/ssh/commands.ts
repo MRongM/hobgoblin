@@ -6,29 +6,55 @@ import {
   FILE_TREE_MAX_ENTRIES,
   FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
+import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
+import { buildTmuxServerName, isHobgoblinTmuxSessionName, isHobgoblinTmuxServerName } from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
+import { BRANCH_CREATED_FROM_CONFIG_PATTERN, branchCreatedFromConfigKey } from '#/system/git/branches.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
+import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
-import type { WorktreeBootstrapConfig } from '#/system/git/worktree-bootstrap.ts'
+import type {
+  WorktreeBootstrapCandidateScope,
+  WorktreeBootstrapTargetEntry,
+} from '#/shared/worktree-bootstrap-summary.ts'
 
 const SSH_COMMAND_TIMEOUT_MS = 15_000
 const SSH_CONNECT_TIMEOUT_SEC = 10
 export const REMOTE_SNAPSHOT_CURRENT_MARKER = '__GOBLIN_REMOTE_CURRENT__'
 export const REMOTE_SNAPSHOT_DEFAULT_MARKER = '__GOBLIN_REMOTE_DEFAULT__'
 export const REMOTE_SNAPSHOT_BRANCHES_MARKER = '__GOBLIN_REMOTE_BRANCHES__'
+export const REMOTE_SNAPSHOT_CREATED_FROM_MARKER = '__HOBGOBLIN_REMOTE_BRANCH_CREATED_FROM__'
 export const REMOTE_PATH_EXISTS_MARKER = '__HOBGOBLIN_PATH_EXISTS__'
 export const REMOTE_PATH_MISSING_MARKER = '__HOBGOBLIN_PATH_MISSING__'
+export const REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER = '__HOBGOBLIN_WORKSPACE_LINKED_WORKTREE__'
 
 export type RemoteCommandKind =
   | { type: 'printHome' }
   | { type: 'checkShell' }
   | { type: 'checkGit' }
+  | { type: 'tmuxListSessions'; projectRoot: string }
+  | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
+  | { type: 'tmuxListHostSessions' }
+  | { type: 'tmuxKillHostSessionByName'; sessionName: string; serverName?: string }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
   | { type: 'testWorkspaceGitDirectory'; path: string }
   | { type: 'testPathExists'; path: string }
+  | { type: 'listBranchWorkspaceCandidates'; rootPath: string; excludedNames: string[] }
+  | { type: 'inspectBranchWorkspacePath'; rootPath: string; candidatePath: string }
+  | { type: 'createBranchWorkspaceDirectory'; rootPath: string; targetPath: string }
+  | {
+      type: 'materializeBranchWorkspaceSymlink'
+      rootPath: string
+      sourcePath: string
+      targetPath: string
+    }
+  | { type: 'copyBranchWorkspaceEntry'; rootPath: string; sourcePath: string; targetPath: string }
+  | { type: 'fingerprintBranchWorkspaceEntry'; rootPath: string; targetPath: string }
+  | { type: 'removeBranchWorkspaceEntry'; rootPath: string; targetPath: string }
+  | { type: 'listBranchWorkspaceChildren'; rootPath: string; targetPath: string }
   | { type: 'listDirectoryEntries'; worktreePath: string; dirPath: string }
   | { type: 'searchFileTree'; worktreePath: string; query: string; limit: number }
   | { type: 'createFileTreeDirectory'; worktreePath: string; parentDirPath: string; name: string }
@@ -50,6 +76,7 @@ export type RemoteCommandKind =
   | { type: 'gitSnapshot'; path: string }
   | { type: 'gitPatch'; path: string }
   | { type: 'gitWorktreeList'; path: string }
+  | { type: 'gitWorktreePrune'; path: string }
   | { type: 'gitStatus'; path: string }
   | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
   | { type: 'gitCommitMetadata'; path: string; commit: string }
@@ -78,17 +105,26 @@ export type RemoteCommandKind =
   | { type: 'gitRemoteTagDelete'; path: string; remote: string; tag: string }
   | { type: 'gitTagPush'; path: string; remote: string; tag: string }
   | { type: 'gitWorktreeAdd'; path: string; input: CreateWorktreeInput }
-  | { type: 'gitWorktreeRemove'; path: string; worktreePath: string }
+  | { type: 'gitWorktreeRemove'; path: string; worktreePath: string; force?: boolean }
   | { type: 'gitBranchDelete'; path: string; branch: string; force?: boolean }
   | { type: 'gitUpstream'; path: string; branch: string }
   | { type: 'gitIsAncestor'; path: string; ancestor: string; descendant: string }
   | { type: 'gitRemoteVerbose'; path: string }
   | { type: 'gitRemoteGetUrl'; path: string }
-  | ({
+  | { type: 'worktreeBootstrapCandidates'; sourceRoot: string; candidateScope?: WorktreeBootstrapCandidateScope }
+  | {
       type: 'bootstrapRemoteWorktree'
       sourceRoot: string
       targetRoot: string
-    } & WorktreeBootstrapConfig)
+      literalPaths?: boolean
+      inspectOnly?: boolean
+      replaceExisting?: WorktreeBootstrapTargetEntry[]
+      copy: string[]
+      symlink: string[]
+      hardlink: string[]
+      exclude: string[]
+      setup?: string
+    }
 
 export interface RemoteCommandResult {
   ok: boolean
@@ -102,6 +138,7 @@ export interface RemoteCommandInvocation {
   command: 'ssh'
   args: string[]
   script: string
+  tmuxSessionName?: string | null
 }
 
 export interface RemoteCommandOptions {
@@ -133,23 +170,27 @@ export function buildRemoteCommandInvocation(
 export function buildRemoteTerminalInvocation(
   target: RemoteRepoTarget,
   remotePath: string,
-  options: { cols: number; rows: number; terminalNumber: number; useTmux?: boolean },
+  options: {
+    cols: number
+    rows: number
+    terminalNumber: number
+    useTmux?: boolean
+    existingTmuxSessionName?: string
+    existingTmuxServerName?: string
+  },
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
     {
       alias: target.alias,
-      endpoint: {
-        user: target.user,
-        host: target.host,
-        port: target.port,
-      },
-      repoPath: target.remotePath,
-      worktreePath: remotePath,
+      projectRoot: target.remotePath,
+      workingDirectory: remotePath,
       terminalNumber: options.terminalNumber,
     },
     {
       sshOptions: ['-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`],
       useTmux: options.useTmux === true,
+      existingTmuxSessionName: options.existingTmuxSessionName,
+      existingTmuxServerName: options.existingTmuxServerName,
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')
@@ -157,6 +198,7 @@ export function buildRemoteTerminalInvocation(
     command: invocation.command,
     args: invocation.args,
     script: invocation.script,
+    tmuxSessionName: invocation.tmuxSessionName,
   }
 }
 
@@ -198,6 +240,40 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `printf '%s\\n' ok`
     case 'checkGit':
       return 'command -v git'
+    case 'tmuxListSessions':
+      return tmuxListSessionsScript(command.projectRoot)
+    case 'tmuxListHostSessions':
+      return tmuxListHostSessionsScript()
+    case 'tmuxKillSessionByName': {
+      const serverName = buildTmuxServerName(command.projectRoot)
+      if (
+        !serverName ||
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && command.serverName !== serverName)
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
+      ].join('\n')
+    }
+    case 'tmuxKillHostSessionByName': {
+      if (
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && !isHobgoblinTmuxServerName(command.serverName))
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
+      const serverName = command.serverName ?? 'default'
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        ...tmuxSocketDirectoryScript(),
+        `tmux_socket="$tmux_socket_dir/${serverName}"`,
+        "[ -S \"$tmux_socket\" ] || { printf '%s\\n' 'no server running on selected socket' >&2; exit 1; }",
+        `tmux -S "$tmux_socket" kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
+      ].join('\n')
+    }
     case 'testDirectory':
       return `test -d ${shellQuote(command.path)}`
     case 'listDirectories': {
@@ -212,7 +288,14 @@ function scriptForCommand(command: RemoteCommandKind): string {
         `find ${rootPath} -mindepth 1 -maxdepth 1 \\( -type d -o -type l \\) -exec sh -c '`,
         'for candidate do',
         '  if [ -d "$candidate" ] && { [ -d "$candidate/.git" ] || [ -f "$candidate/.git" ]; }; then',
-        '    printf "%s\\0" "$candidate"',
+        '    candidate_root=$(cd "$candidate" 2>/dev/null && pwd -P) || continue',
+        '    git_root=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null) || continue',
+        '    git_root=$(cd "$git_root" 2>/dev/null && pwd -P) || continue',
+        '    git_dir=$(git -C "$candidate" rev-parse --git-dir 2>/dev/null) || continue',
+        '    git_common_dir=$(git -C "$candidate" rev-parse --git-common-dir 2>/dev/null) || continue',
+        '    if [ "$candidate_root" = "$git_root" ] && [ "$git_dir" = "$git_common_dir" ]; then',
+        '      printf "%s\\0" "$candidate"',
+        '    fi',
         '  fi',
         'done',
         "' sh {} +",
@@ -225,7 +308,13 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'candidate_root=$(cd "$candidate_path" 2>/dev/null && pwd -P) || exit 1',
         'git_root=$(git -C "$candidate_path" rev-parse --show-toplevel 2>/dev/null) || exit 1',
         'git_root=$(cd "$git_root" 2>/dev/null && pwd -P) || exit 1',
-        '[ "$candidate_root" = "$git_root" ]',
+        'git_dir=$(git -C "$candidate_path" rev-parse --git-dir 2>/dev/null) || exit 1',
+        'git_common_dir=$(git -C "$candidate_path" rev-parse --git-common-dir 2>/dev/null) || exit 1',
+        '[ "$candidate_root" = "$git_root" ] || exit 1',
+        'if [ "$git_dir" != "$git_common_dir" ]; then',
+        `  printf '%s\\n' ${shellQuote(REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER)}`,
+        '  exit 1',
+        'fi',
       ].join('\n')
     }
     case 'testPathExists': {
@@ -238,6 +327,15 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'fi',
       ].join('\n')
     }
+    case 'listBranchWorkspaceCandidates':
+    case 'inspectBranchWorkspacePath':
+    case 'createBranchWorkspaceDirectory':
+    case 'materializeBranchWorkspaceSymlink':
+    case 'copyBranchWorkspaceEntry':
+    case 'fingerprintBranchWorkspaceEntry':
+    case 'removeBranchWorkspaceEntry':
+    case 'listBranchWorkspaceChildren':
+      return remoteBranchWorkspaceScript(command)
     case 'listDirectoryEntries':
       return [
         "python3 - <<'PY'",
@@ -339,6 +437,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
         `git -C ${repo} symbolic-ref --short HEAD 2>/dev/null || true`,
         `printf '%s\\n' ${shellQuote(REMOTE_SNAPSHOT_DEFAULT_MARKER)}`,
         `git -C ${repo} symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##'`,
+        `printf '%s\\n' ${shellQuote(REMOTE_SNAPSHOT_CREATED_FROM_MARKER)}`,
+        `git -C ${repo} config --local --get-regexp ${shellQuote(BRANCH_CREATED_FROM_CONFIG_PATTERN)} 2>/dev/null || true`,
         `printf '%s\\n' ${shellQuote(REMOTE_SNAPSHOT_BRANCHES_MARKER)}`,
         `git -C ${repo} for-each-ref --format=${shellQuote(branchFormat)} refs/heads/`,
       ].join('\n')
@@ -354,7 +454,9 @@ function scriptForCommand(command: RemoteCommandKind): string {
         '[ "$code" -eq 0 ] || [ "$code" -eq 1 ]',
       ].join('; ')
     case 'gitWorktreeList':
-      return `git -C ${shellQuote(command.path)} worktree list --porcelain`
+      return `git -C ${shellQuote(command.path)} worktree list --porcelain --expire now`
+    case 'gitWorktreePrune':
+      return `git -C ${shellQuote(command.path)} worktree prune --expire now`
     case 'gitStatus':
       return `git -C ${shellQuote(command.path)} status --porcelain -z`
     case 'gitHistory': {
@@ -398,9 +500,19 @@ function scriptForCommand(command: RemoteCommandKind): string {
     case 'gitDiscardChanges':
       return remoteDiscardChangesScript(command)
     case 'gitBranchCreate':
-      return `git -C ${shellQuote(command.path)} branch -- ${shellQuote(command.branch)} ${shellQuote(command.baseBranch)}`
+      return remoteBranchCreationScript(
+        `git -C ${shellQuote(command.path)} branch -- ${shellQuote(command.branch)} ${shellQuote(command.baseBranch)}`,
+        command.path,
+        command.branch,
+        command.baseBranch,
+      )
     case 'gitBranchTrackRemote':
-      return `git -C ${shellQuote(command.path)} branch --track -- ${shellQuote(command.localBranch)} ${shellQuote(command.remoteRef)}`
+      return remoteBranchCreationScript(
+        `git -C ${shellQuote(command.path)} branch --track -- ${shellQuote(command.localBranch)} ${shellQuote(command.remoteRef)}`,
+        command.path,
+        command.localBranch,
+        command.remoteRef,
+      )
     case 'gitFetchBranch':
       return `git -C ${shellQuote(command.path)} fetch -- ${shellQuote(command.remote)} ${shellQuote(
         `${command.remoteBranch}:${command.branch}`,
@@ -433,12 +545,32 @@ function scriptForCommand(command: RemoteCommandKind): string {
       )}`
     case 'gitTagPush':
       return `git -C ${shellQuote(command.path)} push -- ${shellQuote(command.remote)} ${shellQuote(`refs/tags/${command.tag}`)}`
-    case 'gitWorktreeAdd':
-      return `git -C ${shellQuote(command.path)} worktree add ${remoteWorktreeAddArgs(command.input)}`
+    case 'gitWorktreeAdd': {
+      const createScript = `git -C ${shellQuote(command.path)} worktree add ${remoteWorktreeAddArgs(command.input)}`
+      if (command.input.mode.kind === 'newBranch') {
+        return remoteBranchCreationScript(
+          createScript,
+          command.path,
+          command.input.mode.newBranch,
+          command.input.mode.baseRef,
+        )
+      }
+      if (command.input.mode.kind === 'trackRemoteBranch') {
+        return remoteBranchCreationScript(
+          createScript,
+          command.path,
+          command.input.mode.localBranch,
+          command.input.mode.remoteRef,
+        )
+      }
+      return createScript
+    }
+    case 'worktreeBootstrapCandidates':
+      return remoteWorktreeBootstrapCandidatesScript(command)
     case 'bootstrapRemoteWorktree':
       return remoteBootstrapScript(command)
     case 'gitWorktreeRemove':
-      return `git -C ${shellQuote(command.path)} worktree remove -- ${shellQuote(command.worktreePath)}`
+      return `git -C ${shellQuote(command.path)} worktree remove ${command.force ? '--force ' : ''}-- ${shellQuote(command.worktreePath)}`
     case 'gitBranchDelete':
       return `git -C ${shellQuote(command.path)} branch ${command.force ? '-D' : '-d'} -- ${shellQuote(command.branch)}`
     case 'gitUpstream':
@@ -454,6 +586,303 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function tmuxListSessionsScript(projectRoot: string): string {
+  const serverName = buildTmuxServerName(projectRoot)
+  if (!serverName) throw new TypeError('error.invalid-arguments')
+  return [
+    'command -v tmux >/dev/null 2>&1 || exit 127',
+    'run_tmux_list() {',
+    '  tmux_output=$("$@" 2>&1)',
+    '  tmux_status=$?',
+    '  if [ "$tmux_status" -eq 0 ]; then',
+    '    [ -z "$tmux_output" ] || printf \'%s\\n\' "$tmux_output"',
+    '    return 0',
+    '  fi',
+    '  case "$tmux_output" in',
+    '    *"no server running"*|*"failed to connect to server"*|*"no sessions"*) return 0 ;;',
+    '  esac',
+    '  printf \'%s\\n\' "$tmux_output" >&2',
+    '  return "$tmux_status"',
+    '}',
+    `run_tmux_list tmux -L ${shellQuote(serverName)} -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\t${serverName}`)} || exit $?`,
+    `run_tmux_list tmux -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
+  ].join('\n')
+}
+
+function tmuxListHostSessionsScript(): string {
+  const serverSuffixPattern = '[0-9a-f]'.repeat(24)
+  return [
+    'command -v tmux >/dev/null 2>&1 || exit 127',
+    'LC_ALL=C',
+    'export LC_ALL',
+    'run_tmux_list() {',
+    '  tmux_output=$("$@" 2>&1)',
+    '  tmux_status=$?',
+    '  if [ "$tmux_status" -eq 0 ]; then',
+    '    [ -z "$tmux_output" ] || printf \'%s\\n\' "$tmux_output"',
+    '    return 0',
+    '  fi',
+    '  case "$tmux_output" in',
+    '    *"no server running"*|*"failed to connect to server"*|*"no sessions"*) return 0 ;;',
+    '  esac',
+    '  printf \'%s\\n\' "$tmux_output" >&2',
+    '  return "$tmux_status"',
+    '}',
+    ...tmuxSocketDirectoryScript(),
+    'if [ -d "$tmux_socket_dir" ]; then',
+    '  for tmux_socket in "$tmux_socket_dir"/hobgoblin-project-v1-*; do',
+    '    [ -S "$tmux_socket" ] || continue',
+    '    tmux_server=${tmux_socket##*/}',
+    '    case "$tmux_server" in',
+    `      hobgoblin-project-v1-${serverSuffixPattern}) ;;`,
+    '      *) continue ;;',
+    '    esac',
+    `    run_tmux_list tmux -S "$tmux_socket" -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\t`)}"$tmux_server" || exit $?`,
+    '  done',
+    'fi',
+    'tmux_default_socket="$tmux_socket_dir/default"',
+    'if [ -S "$tmux_default_socket" ]; then',
+    `  run_tmux_list tmux -S "$tmux_default_socket" -u list-sessions -F ${shellQuote(`${TMUX_HOST_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
+    'fi',
+  ].join('\n')
+}
+
+function tmuxSocketDirectoryScript(): string[] {
+  return [
+    'tmux_uid=$(id -u) || exit $?',
+    'case "$tmux_uid" in ""|*[!0-9]*) exit 1 ;; esac',
+    'tmux_socket_base=${TMUX_TMPDIR:-/tmp}',
+    'case "$tmux_socket_base" in /*) ;; *) exit 1 ;; esac',
+    'tmux_socket_dir="${tmux_socket_base%/}/tmux-$tmux_uid"',
+  ]
+}
+
+type RemoteBranchWorkspaceCommand = Extract<
+  RemoteCommandKind,
+  {
+    type:
+      | 'listBranchWorkspaceCandidates'
+      | 'inspectBranchWorkspacePath'
+      | 'createBranchWorkspaceDirectory'
+      | 'materializeBranchWorkspaceSymlink'
+      | 'copyBranchWorkspaceEntry'
+      | 'fingerprintBranchWorkspaceEntry'
+      | 'removeBranchWorkspaceEntry'
+      | 'listBranchWorkspaceChildren'
+  }
+>
+
+function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): string {
+  switch (command.type) {
+    case 'listBranchWorkspaceCandidates':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `excluded_names = set(json.loads(${pythonString(JSON.stringify(command.excludedNames))}))`,
+        `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
+        'root_real = os.path.realpath(root_path)',
+        'excluded_worktrees = set()',
+        'for repository_name in excluded_names:',
+        '    repository_path = os.path.join(root_path, repository_name)',
+        '    if not os.path.isdir(repository_path):',
+        '        continue',
+        '    try:',
+        '        worktree_output = subprocess.check_output(["git", "-C", repository_path, "worktree", "list", "--porcelain"], stderr=subprocess.DEVNULL)',
+        '    except (OSError, subprocess.CalledProcessError):',
+        '        continue',
+        '    for line in worktree_output.decode("utf-8", "surrogateescape").splitlines():',
+        '        if line.startswith("worktree "):',
+        '            excluded_worktrees.add(os.path.realpath(line[len("worktree "):]))',
+        'candidates = []',
+        'for name in sorted(os.listdir(root_path)):',
+        '    if name in excluded_names or name.startswith(managed_prefixes) or name.startswith(".goblin-") or name.startswith(".hobgoblin-"):',
+        '        continue',
+        '    candidate_path = os.path.join(root_path, name)',
+        '    info = os.lstat(candidate_path)',
+        '    resolved_path = os.path.realpath(candidate_path) if os.path.exists(candidate_path) else None',
+        '    if resolved_path in excluded_worktrees:',
+        '        continue',
+        '    item = {',
+        '        "name": name,',
+        '        "path": candidate_path,',
+        '        "kind": path_kind(info),',
+        '        "outsideRoot": resolved_path is not None and not path_inside(root_real, resolved_path, True),',
+        '    }',
+        '    if resolved_path is not None:',
+        '        item["resolvedPath"] = resolved_path',
+        '    candidates.append(item)',
+        'print(json.dumps({"ok": True, "candidates": candidates}, ensure_ascii=False))',
+      ])
+    case 'inspectBranchWorkspacePath':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `candidate_path = checked_path(${pythonString(command.candidatePath)}, True)`,
+        'relative = os.path.relpath(candidate_path, root_path)',
+        'direct_child = relative != "." and "/" not in relative',
+        'if not os.path.lexists(candidate_path):',
+        '    print(json.dumps({"ok": True, "inspection": {"path": candidate_path, "exists": False, "kind": "missing", "directChild": direct_child, "outsideRoot": False}}, ensure_ascii=False))',
+        '    sys.exit(0)',
+        'info = os.lstat(candidate_path)',
+        'resolved_path = os.path.realpath(candidate_path) if os.path.exists(candidate_path) else None',
+        'inspection = {',
+        '    "path": candidate_path,',
+        '    "exists": True,',
+        '    "kind": path_kind(info),',
+        '    "directChild": direct_child,',
+        '    "outsideRoot": resolved_path is not None and not path_inside(os.path.realpath(root_path), resolved_path, True),',
+        '}',
+        'if stat.S_ISLNK(info.st_mode):',
+        '    inspection["linkTarget"] = os.readlink(candidate_path)',
+        'if resolved_path is not None:',
+        '    inspection["resolvedPath"] = resolved_path',
+        'print(json.dumps({"ok": True, "inspection": inspection}, ensure_ascii=False))',
+      ])
+    case 'createBranchWorkspaceDirectory':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
+        'if os.path.dirname(target_path) != root_path or not os.path.basename(target_path).startswith(managed_prefixes):',
+        '    fail("workspace.branch-workspace.invalid-path")',
+        'ensure_safe_parents(target_path)',
+        'os.mkdir(target_path)',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'materializeBranchWorkspaceSymlink':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `source_path = checked_path(${pythonString(command.sourcePath)}, False)`,
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'if os.path.dirname(source_path) != root_path:',
+        '    fail("workspace.branch-workspace.invalid-source")',
+        'ensure_safe_parents(target_path)',
+        'os.symlink(source_path, target_path)',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'copyBranchWorkspaceEntry':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `source_path = checked_path(${pythonString(command.sourcePath)}, False)`,
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'if os.path.dirname(source_path) != root_path:',
+        '    fail("workspace.branch-workspace.invalid-source")',
+        'if not os.path.lexists(source_path):',
+        '    fail("workspace.branch-workspace.source-missing")',
+        'ensure_safe_parents(target_path)',
+        'if os.path.lexists(target_path):',
+        '    fail("workspace.branch-workspace.target-exists")',
+        'copy_source = os.path.realpath(source_path) if os.path.islink(source_path) else source_path',
+        'source_info = os.lstat(copy_source)',
+        'if stat.S_ISDIR(source_info.st_mode):',
+        '    shutil.copytree(copy_source, target_path, symlinks=True, copy_function=shutil.copy2)',
+        'elif stat.S_ISREG(source_info.st_mode):',
+        '    shutil.copy2(copy_source, target_path, follow_symlinks=False)',
+        'else:',
+        '    fail("workspace.branch-workspace.unsupported-entry")',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'fingerprintBranchWorkspaceEntry':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'ensure_safe_parents(target_path)',
+        'digest = hashlib.sha256()',
+        'def hash_field(value):',
+        '    data = value.encode("utf-8", "surrogateescape")',
+        '    digest.update(str(len(data)).encode("ascii") + b":")',
+        '    digest.update(data)',
+        'def hash_entry(entry_path, relative_path):',
+        '    info = os.lstat(entry_path)',
+        '    kind = path_kind(info)',
+        '    hash_field(relative_path)',
+        '    hash_field(kind)',
+        '    hash_field(str(info.st_mode & 0o7777))',
+        '    if kind == "symlink":',
+        '        hash_field(os.readlink(entry_path))',
+        '        return',
+        '    if kind == "file":',
+        '        with open(entry_path, "rb") as handle:',
+        '            while True:',
+        '                chunk = handle.read(65536)',
+        '                if not chunk:',
+        '                    break',
+        '                digest.update(chunk)',
+        '        return',
+        '    if kind != "directory":',
+        '        return',
+        '    for name in sorted(os.listdir(entry_path)):',
+        '        child_relative = name if relative_path == "." else relative_path + "/" + name',
+        '        hash_entry(os.path.join(entry_path, name), child_relative)',
+        'hash_entry(target_path, ".")',
+        'print(digest.hexdigest())',
+      ])
+    case 'removeBranchWorkspaceEntry':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'ensure_safe_parents(target_path)',
+        'def remove_no_follow(entry_path):',
+        '    try:',
+        '        info = os.lstat(entry_path)',
+        '    except FileNotFoundError:',
+        '        return',
+        '    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',
+        '        os.unlink(entry_path)',
+        '        return',
+        '    for name in sorted(os.listdir(entry_path)):',
+        '        remove_no_follow(os.path.join(entry_path, name))',
+        '    os.rmdir(entry_path)',
+        'remove_no_follow(target_path)',
+        'print(json.dumps({"ok": True}))',
+      ])
+    case 'listBranchWorkspaceChildren':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        'ensure_safe_parents(target_path)',
+        'info = os.lstat(target_path)',
+        'if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',
+        '    fail("workspace.branch-workspace.not-directory")',
+        'print(json.dumps({"ok": True, "children": sorted(os.listdir(target_path))}, ensure_ascii=False))',
+      ])
+  }
+  const exhaustive: never = command
+  return exhaustive
+}
+
+function remoteBranchWorkspacePython(rootPath: string, body: string[]): string {
+  return [
+    "python3 - <<'PY'",
+    'import hashlib, json, os, shutil, stat, subprocess, sys',
+    `root_path = os.path.normpath(${pythonString(rootPath)})`,
+    'def fail(message):',
+    '    print(json.dumps({"ok": False, "message": message}))',
+    '    sys.exit(0)',
+    'if not root_path or not os.path.isabs(root_path):',
+    '    fail("workspace.branch-workspace.invalid-root")',
+    'def path_inside(root, candidate, allow_root):',
+    '    try:',
+    '        common = os.path.commonpath([root, candidate])',
+    '    except ValueError:',
+    '        return False',
+    '    return common == root and (allow_root or candidate != root)',
+    'def checked_path(value, allow_root):',
+    '    candidate = os.path.normpath(value)',
+    '    if not os.path.isabs(candidate) or not path_inside(root_path, candidate, allow_root):',
+    '        fail("workspace.branch-workspace.invalid-path")',
+    '    return candidate',
+    'def ensure_safe_parents(candidate):',
+    '    relative = os.path.relpath(candidate, root_path)',
+    '    current = root_path',
+    '    for part in relative.split("/")[:-1]:',
+    '        current = os.path.join(current, part)',
+    '        try:',
+    '            info = os.lstat(current)',
+    '        except FileNotFoundError:',
+    '            fail("workspace.branch-workspace.invalid-path")',
+    '        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',
+    '            fail("workspace.branch-workspace.invalid-path")',
+    'def path_kind(info):',
+    '    if stat.S_ISLNK(info.st_mode): return "symlink"',
+    '    if stat.S_ISDIR(info.st_mode): return "directory"',
+    '    if stat.S_ISREG(info.st_mode): return "file"',
+    '    return "other"',
+    ...body,
+    'PY',
+  ].join('\n')
 }
 
 function remoteFileTreeSearchScript(command: Extract<RemoteCommandKind, { type: 'searchFileTree' }>): string {
@@ -1051,6 +1480,24 @@ function remoteFileTransferInventoryScript(
   ].join('\n')
 }
 
+function remoteBranchCreationScript(
+  createScript: string,
+  repoPath: string,
+  branch: string,
+  createdFrom: string,
+): string {
+  const configScript = [
+    'git',
+    '-C',
+    shellQuote(repoPath),
+    'config',
+    '--local',
+    shellQuote(branchCreatedFromConfigKey(branch)),
+    shellQuote(createdFrom),
+  ].join(' ')
+  return `${createScript} && { ${configScript} || true; }`
+}
+
 function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
   switch (input.mode.kind) {
     case 'newBranch':
@@ -1077,6 +1524,57 @@ function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
   }
 }
 
+function remoteWorktreeBootstrapCandidatesScript(
+  command: Extract<RemoteCommandKind, { type: 'worktreeBootstrapCandidates' }>,
+): string {
+  return [
+    "python3 - <<'PY'",
+    'import json, os, stat, subprocess, sys',
+    `root = ${pythonString(command.sourceRoot)}`,
+    `candidate_scope = ${pythonString(command.candidateScope ?? 'all-untracked')}`,
+    'def finish(payload):',
+    '    print(json.dumps(payload, ensure_ascii=True))',
+    '    sys.exit(0)',
+    'try:',
+    '    raw = subprocess.check_output(["git", "-C", root, "ls-files", "-z"], stderr=subprocess.PIPE)',
+    'except subprocess.CalledProcessError as exc:',
+    '    message = exc.stderr.decode("utf-8", "replace") if exc.stderr else "error.failed-read-repo"',
+    '    finish({"ok": False, "message": message})',
+    'tracked = [item.decode("utf-8", "surrogateescape") for item in raw.split(b"\\0") if item]',
+    'tracked_roots = {item.split("/", 1)[0] for item in tracked}',
+    'ignored_roots = None',
+    'if candidate_scope == "ignored-only":',
+    '    try:',
+    '        ignored_raw = subprocess.check_output(["git", "-C", root, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], stderr=subprocess.PIPE)',
+    '    except subprocess.CalledProcessError as exc:',
+    '        message = exc.stderr.decode("utf-8", "replace") if exc.stderr else "error.failed-read-repo"',
+    '        finish({"ok": False, "message": message})',
+    '    ignored = [item.decode("utf-8", "surrogateescape") for item in ignored_raw.split(b"\\0") if item]',
+    '    ignored_roots = {item.split("/", 1)[0] for item in ignored}',
+    'candidates = []',
+    'try:',
+    '    names = os.listdir(root)',
+    'except (FileNotFoundError, PermissionError, OSError):',
+    '    finish({"ok": False, "message": "error.failed-read-repo"})',
+    'for name in names:',
+    '    if name == ".git" or name in tracked_roots:',
+    '        continue',
+    '    if ignored_roots is not None and name not in ignored_roots:',
+    '        continue',
+    '    try:',
+    '        info = os.lstat(os.path.join(root, name))',
+    '    except (FileNotFoundError, PermissionError, OSError):',
+    '        continue',
+    '    if stat.S_ISDIR(info.st_mode):',
+    '        candidates.append({"path": name, "kind": "directory"})',
+    '    elif stat.S_ISREG(info.st_mode):',
+    '        candidates.append({"path": name, "kind": "file"})',
+    'candidates.sort(key=lambda item: (0 if item["kind"] == "directory" else 1, item["path"]))',
+    'finish({"ok": True, "candidates": candidates})',
+    'PY',
+  ].join('\n')
+}
+
 function remoteBootstrapScript(command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>): string {
   const inner = remoteBootstrapInnerScript(command)
   const quoted = shellQuote(inner)
@@ -1093,6 +1591,11 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
   const hardlink = command.hardlink.map(quote).join(' ')
   const exclude = command.exclude.map(quote).join(' ')
   const setup = command.setup ? quote(command.setup) : "''"
+  const literalPaths = command.literalPaths ? '1' : '0'
+  const inspectOnly = command.inspectOnly ? '1' : '0'
+  const replaceExisting = (command.replaceExisting ?? [])
+    .map((entry) => quote(`${entry.mode}\t${entry.path}`))
+    .join(' ')
   const sourceRoot = quote(command.sourceRoot)
   const targetRoot = quote(command.targetRoot)
 
@@ -1108,11 +1611,17 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     'SYMLINK_PATTERNS=(' + symlink + ')',
     'HARDLINK_PATTERNS=(' + hardlink + ')',
     'EXCLUDE_PATTERNS=(' + exclude + ')',
+    'REPLACE_EXISTING=(' + replaceExisting + ')',
+    'LITERAL_PATHS=' + literalPaths,
+    'INSPECT_ONLY=' + inspectOnly,
     'SETUP=' + setup,
     'SETUP_LOG=',
+    'TEMP_PATHS=()',
     '',
     'cleanup() {',
     '  if [ -n "$SETUP_LOG" ]; then rm -f -- "$SETUP_LOG"; fi',
+    '  local temp_path',
+    '  for temp_path in "${TEMP_PATHS[@]}"; do rm -rf -- "$temp_path"; done',
     '}',
     'trap cleanup EXIT',
     '',
@@ -1228,6 +1737,28 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  return 1',
     '}',
     '',
+    'replacement_approved() {',
+    '  local expected="$1"$\'\\t\'"$2"',
+    '  contains_path "$expected" "${REPLACE_EXISTING[@]}"',
+    '}',
+    '',
+    'target_satisfied() {',
+    '  local mode="$1" rel="$2" src dst',
+    '  source_path_for_rel "$rel"; src="$SRC"',
+    '  target_path_for_rel "$rel"; dst="$DST"',
+    '  case "$mode" in',
+    '    symlink)',
+    '      [ -L "$dst" ] || return 1',
+    '      [ "$src" -ef "$dst" ]',
+    '      ;;',
+    '    hardlink)',
+    '      [ ! -L "$dst" ] && [ -f "$dst" ] && [ "$src" -ef "$dst" ]',
+    '      ;;',
+    '    copy) return 1 ;;',
+    '    *) die "unknown bootstrap mode: $mode" ;;',
+    '  esac',
+    '}',
+    '',
     'append_missing() {',
     '  contains_path "$1" "${MISSING_PATHS[@]}" || MISSING_PATHS+=("$1")',
     '}',
@@ -1312,9 +1843,28 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  done',
     '}',
     '',
-    'process_patterns copy "${COPY_PATTERNS[@]}"',
-    'process_patterns symlink "${SYMLINK_PATTERNS[@]}"',
-    'process_patterns hardlink "${HARDLINK_PATTERNS[@]}"',
+    'process_literal_paths() {',
+    '  local mode="$1"',
+    '  shift',
+    '  local rel',
+    '  for rel in "$@"; do',
+    '    normalize_rel "$rel"',
+    '    rel="$REL"',
+    '    source_path_for_rel "$rel"',
+    '    if ! path_exists "$SRC"; then append_missing "$rel"; continue; fi',
+    '    append_mode_path "$mode" "$rel"',
+    '  done',
+    '}',
+    '',
+    'if [ "$LITERAL_PATHS" -eq 1 ]; then',
+    '  process_literal_paths copy "${COPY_PATTERNS[@]}"',
+    '  process_literal_paths symlink "${SYMLINK_PATTERNS[@]}"',
+    '  process_literal_paths hardlink "${HARDLINK_PATTERNS[@]}"',
+    'else',
+    '  process_patterns copy "${COPY_PATTERNS[@]}"',
+    '  process_patterns symlink "${SYMLINK_PATTERNS[@]}"',
+    '  process_patterns hardlink "${HARDLINK_PATTERNS[@]}"',
+    'fi',
     '',
     'filter_excluded_paths() {',
     '  local mode="$1" rel',
@@ -1342,6 +1892,29 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  fi',
     'done',
     '',
+    'validate_replacements() {',
+    '  local item mode rel normalized',
+    '  local -a seen',
+    '  seen=()',
+    '  for item in "${REPLACE_EXISTING[@]}"; do',
+    '    case "$item" in *$\'\\t\'*) ;; *) die "invalid replacement target: $item" ;; esac',
+    '    mode="${item%%$\'\\t\'*}"',
+    '    rel="${item#*$\'\\t\'}"',
+    '    normalize_rel "$rel"; normalized="$REL"',
+    '    [ "$normalized" = "$rel" ] || die "invalid replacement target: $rel"',
+    '    case "$mode" in',
+    '      copy) contains_path "$rel" "${COPY_PATHS[@]}" || die "invalid replacement target: $rel" ;;',
+    '      symlink) contains_path "$rel" "${SYMLINK_PATHS[@]}" || die "invalid replacement target: $rel" ;;',
+    '      hardlink) contains_path "$rel" "${HARDLINK_PATHS[@]}" || die "invalid replacement target: $rel" ;;',
+    '      *) die "invalid replacement target: $rel" ;;',
+    '    esac',
+    '    contains_path "$item" "${seen[@]}" && die "duplicate replacement target: $rel"',
+    '    seen+=("$item")',
+    '  done',
+    '}',
+    '',
+    'validate_replacements',
+    '',
     'preflight_mode() {',
     '  local mode="$1" rel src dst',
     '  shift',
@@ -1354,8 +1927,10 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '    if [ "$mode" = "hardlink" ] && { [ -L "$src" ] || [ ! -f "$src" ]; }; then',
     '      die "hardlink source is not a file: $rel"',
     '    fi',
-    '    if path_exists "$dst"; then die "destination already exists: $rel"; fi',
     '    append_ready_path "$mode" "$rel"',
+    '    if ! path_exists "$dst" || target_satisfied "$mode" "$rel"; then continue; fi',
+    '    if [ "$INSPECT_ONLY" -eq 1 ] || replacement_approved "$mode" "$rel"; then continue; fi',
+    '    die "destination already exists: $rel"',
     '  done',
     '}',
     '',
@@ -1372,12 +1947,45 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  done',
     'done',
     '',
+    'emit_target_state() {',
+    '  local mode="$1" rel="$2" dst state',
+    '  target_path_for_rel "$rel"; dst="$DST"',
+    '  if ! path_exists "$dst"; then',
+    '    state=PENDING',
+    '  elif target_satisfied "$mode" "$rel"; then',
+    '    state=SATISFIED',
+    '  else',
+    '    state=CONFLICT',
+    '  fi',
+    '  printf \'GOBLIN_BOOTSTRAP_%s %s %s\\n\' "$state" "$mode" "$rel"',
+    '}',
+    '',
+    'if [ "$INSPECT_ONLY" -eq 1 ]; then',
+    '  for rel in "${READY_COPY_PATHS[@]}"; do emit_target_state copy "$rel"; done',
+    '  for rel in "${READY_SYMLINK_PATHS[@]}"; do emit_target_state symlink "$rel"; done',
+    '  for rel in "${READY_HARDLINK_PATHS[@]}"; do emit_target_state hardlink "$rel"; done',
+    '  exit 0',
+    'fi',
+    '',
+    'prepare_target_for_replacement() {',
+    '  local mode="$1" rel="$2" dst',
+    '  target_path_for_rel "$rel"; dst="$DST"',
+    '  if ! path_exists "$dst"; then return; fi',
+    '  if target_satisfied "$mode" "$rel"; then return; fi',
+    '  replacement_approved "$mode" "$rel" || die "destination already exists: $rel"',
+    '  rm -rf -- "$dst" || die "failed to replace $rel"',
+    '}',
+    '',
+    'copy_target_path_for_rel() {',
+    '  DST="$COPY_TARGET_ROOT/$1"',
+    '}',
+    '',
     'copy_tree() {',
     '  local rel="$1" src dst child child_name',
     '  if is_excluded "$rel"; then return; fi',
     '  if has_git_segment "$rel"; then return; fi',
     '  source_path_for_rel "$rel"; src="$SRC"',
-    '  target_path_for_rel "$rel"; dst="$DST"',
+    '  copy_target_path_for_rel "$rel"; dst="$DST"',
     '  if ! path_exists "$src"; then die "failed to copy $rel: source is missing"; fi',
     '  if source_parent_has_symlink "$rel"; then die "bootstrap path uses symlink parent: $SYMLINK_PARENT"; fi',
     '  if target_parent_has_symlink "$rel"; then die "bootstrap target path uses symlink parent: $SYMLINK_PARENT"; fi',
@@ -1397,8 +2005,17 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '}',
     '',
     'copy_item() {',
-    '  local rel="$1"',
+    '  local rel="$1" temp_root prepared dst',
+    '  temp_root="$(mktemp -d "$TARGET_ROOT/.goblin-bootstrap.XXXXXX")" || die "failed to stage copy $rel"',
+    '  TEMP_PATHS+=("$temp_root")',
+    '  COPY_TARGET_ROOT="$temp_root"',
     '  copy_tree "$rel"',
+    '  prepared="$temp_root/$rel"',
+    '  target_path_for_rel "$rel"; dst="$DST"',
+    '  prepare_target_for_replacement copy "$rel"',
+    '  mkdir -p -- "$(dirname "$dst")" || die "failed to copy $rel"',
+    '  mv -- "$prepared" "$dst" || die "failed to copy $rel"',
+    '  rm -rf -- "$temp_root"',
     '  printf \'GOBLIN_BOOTSTRAP_COPY %s\\n\' "$rel"',
     '}',
     '',
@@ -1409,7 +2026,8 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  if ! path_exists "$src"; then die "failed to symlink $rel: source is missing"; fi',
     '  if source_parent_has_symlink "$rel"; then die "bootstrap path uses symlink parent: $SYMLINK_PARENT"; fi',
     '  if target_parent_has_symlink "$rel"; then die "bootstrap target path uses symlink parent: $SYMLINK_PARENT"; fi',
-    '  if path_exists "$dst"; then die "destination already exists: $rel"; fi',
+    '  if target_satisfied symlink "$rel"; then printf \'GOBLIN_BOOTSTRAP_SYMLINK %s\\n\' "$rel"; return; fi',
+    '  prepare_target_for_replacement symlink "$rel"',
     '  mkdir -p -- "$(dirname "$dst")" || die "failed to symlink $rel"',
     '  if target_parent_has_symlink "$rel"; then die "bootstrap target path uses symlink parent: $SYMLINK_PARENT"; fi',
     '  ln -s -- "$src" "$dst" || die "failed to symlink $rel"',
@@ -1424,7 +2042,8 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     '  if source_parent_has_symlink "$rel"; then die "bootstrap path uses symlink parent: $SYMLINK_PARENT"; fi',
     '  if target_parent_has_symlink "$rel"; then die "bootstrap target path uses symlink parent: $SYMLINK_PARENT"; fi',
     '  if [ -L "$src" ] || [ ! -f "$src" ]; then die "hardlink source is not a file: $rel"; fi',
-    '  if path_exists "$dst"; then die "destination already exists: $rel"; fi',
+    '  if target_satisfied hardlink "$rel"; then printf \'GOBLIN_BOOTSTRAP_HARDLINK %s\\n\' "$rel"; return; fi',
+    '  prepare_target_for_replacement hardlink "$rel"',
     '  mkdir -p -- "$(dirname "$dst")" || die "failed to hardlink $rel"',
     '  if target_parent_has_symlink "$rel"; then die "bootstrap target path uses symlink parent: $SYMLINK_PARENT"; fi',
     '  ln -- "$src" "$dst" || die "failed to hardlink $rel"',

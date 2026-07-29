@@ -77,10 +77,34 @@ jobs:
           path: release/Hobgoblin-*-x64.exe
           if-no-files-found: error
 
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build Android release APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-android
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-macos, build-windows]
+    needs: [build-macos, build-windows, build-android]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,6 +137,19 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - name: Prepare Android release asset
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          SOURCE="release-assets/app-release-unsigned.apk"
+          TARGET="release-assets/Hobgoblin-${VERSION}-android.apk"
+          if [[ ! -f "$SOURCE" ]]; then
+            echo "Missing Android release artifact: $SOURCE" >&2
+            find release-assets -maxdepth 2 -type f -print >&2
+            exit 1
+          fi
+          mv "$SOURCE" "$TARGET"
+
       - name: Validate release assets
         shell: bash
         run: |
@@ -121,6 +158,7 @@ jobs:
             "Hobgoblin-${VERSION}-arm64.dmg"
             "Hobgoblin-${VERSION}-x64.dmg"
             "Hobgoblin-${VERSION}-x64.exe"
+            "Hobgoblin-${VERSION}-android.apk"
           )
 
           for asset in "${EXPECTED[@]}"; do
@@ -146,6 +184,8 @@ jobs:
           Or right-click the app, choose Open, then confirm Open.
 
           Windows: SmartScreen may warn on unsigned installers. Continue only if you trust this GitHub Release source.
+
+          Android: This APK is unsigned and must be signed before installation.
           NOTES
 
       - name: Create or update GitHub Release
@@ -171,4 +211,5 @@ jobs:
             "release-assets/Hobgoblin-${VERSION}-arm64.dmg" \
             "release-assets/Hobgoblin-${VERSION}-x64.dmg" \
             "release-assets/Hobgoblin-${VERSION}-x64.exe" \
+            "release-assets/Hobgoblin-${VERSION}-android.apk" \
             --clobber

@@ -29,7 +29,6 @@ describe('native shell projection helpers', () => {
     expect(
       pickNativeSettingsProjectionPatch({
         terminalNotificationsEnabled: true,
-        toggleDetailOnActionBarBlankClick: true,
       }),
     ).toBeNull()
   })
@@ -41,6 +40,7 @@ describe('native shell projection helpers', () => {
         theme: 'dark',
         colorTheme: 'github',
         fetchIntervalSec: 120,
+        statusRefreshIntervalSec: 120,
         gitNetworkProxyEnabled: false,
         gitNetworkProxyUrl: '',
         gitNetworkTimeoutSec: 120,
@@ -48,7 +48,6 @@ describe('native shell projection helpers', () => {
         shortcutsDisabled: true,
         globalShortcutDisabled: true,
         swapCloseShortcuts: true,
-        toggleDetailOnActionBarBlankClick: false,
         terminalThemeSyncEnabled: true,
         temporaryFilesDirectory: '',
         globalShortcut: 'Alt+K',
@@ -57,10 +56,8 @@ describe('native shell projection helpers', () => {
         topbarHeightPx: 39,
         toolbarHeightPx: 41,
         fileTreeFontSize: 12,
-        fileTreeTopbarFontSize: 13,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
-        remoteTerminalTmuxEnabled: false,
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [],

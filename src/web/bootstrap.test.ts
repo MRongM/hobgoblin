@@ -10,6 +10,7 @@ function webBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): Rende
     initialI18n: null,
     initialSettings: null,
     initialServer: null,
+    surface: { kind: 'main' },
     ...overrides,
   }
 }
@@ -25,6 +26,7 @@ function electronBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): 
     initialI18n: null,
     initialSettings: null,
     initialServer: null,
+    surface: { kind: 'main' },
     ...overrides,
   }
 }
@@ -40,6 +42,7 @@ describe('renderer bootstrap', () => {
   test('reads bootstrap snapshots from the goblin bridge', async () => {
     const initialSettings: InitialSettingsSnapshot = {
       fetchIntervalSec: 120,
+      statusRefreshIntervalSec: 120,
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
@@ -47,7 +50,6 @@ describe('renderer bootstrap', () => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
@@ -57,10 +59,8 @@ describe('renderer bootstrap', () => {
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
       fileTreeClipboardMaxBytesMb: 30,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -68,17 +68,21 @@ describe('renderer bootstrap', () => {
       lanEnabled: false,
       serverPort: 32200,
     }
-    const bootstrap: RendererBootstrapSnapshot = electronBootstrap({
-      initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },
-      initialSettings,
-      initialServer: null,
-    })
+    const bootstrap = {
+      ...electronBootstrap({
+        initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },
+        initialSettings,
+        initialServer: null,
+      }),
+      hostPlatform: 'win32' as const,
+    }
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
         goblinNative: {
           runtime: bootstrap.runtime,
           homeDir: bootstrap.homeDir,
+          hostPlatform: bootstrap.hostPlatform,
           initialI18n: bootstrap.initialI18n,
           initialSettings: bootstrap.initialSettings,
           initialServer: bootstrap.initialServer,
@@ -98,6 +102,7 @@ describe('renderer bootstrap', () => {
       initialI18n: null,
       initialSettings: null,
       initialServer: null,
+      surface: { kind: 'main' },
     })
   })
 
@@ -109,6 +114,7 @@ describe('renderer bootstrap', () => {
       initialI18n: null,
       initialSettings: null,
       initialServer: null,
+      surface: { kind: 'main' },
     })
 
     Object.defineProperty(globalThis, 'window', {
@@ -133,7 +139,7 @@ describe('renderer bootstrap', () => {
             restart: async () => ({ ok: false, message: 'unavailable' }),
             write: async () => false,
             resize: async () => false,
-            close: async () => false,
+            close: async () => ({ ok: true }),
             create: async () => ({ ok: false, message: 'unavailable' }),
             pruneTerminals: async () => ({ pruned: 0, remaining: 0 }),
             notifyBell: async () => false,
@@ -157,6 +163,7 @@ describe('renderer bootstrap', () => {
       initialI18n: null,
       initialSettings: null,
       initialServer: null,
+      surface: { kind: 'main' },
     })
   })
 
@@ -182,7 +189,7 @@ describe('renderer bootstrap', () => {
         write: async () => false,
         resize: async () => false,
         takeover: async () => ({ ok: false as const, message: 'error.invalid-arguments' }),
-        close: async () => false,
+        close: async () => ({ ok: true }),
         create: async (input?: { kind?: string }) =>
           input?.kind === 'primary'
             ? {
@@ -217,6 +224,7 @@ describe('renderer bootstrap', () => {
                 message: null,
                 sessions: [],
               },
+        openTmuxSessions: async () => ({ ok: false as const, message: 'unavailable' }),
         pruneTerminals: async () => ({ pruned: 0, remaining: 0 }),
         listSessions: async () => [],
         getSessionSnapshot: async () => null,
@@ -250,6 +258,29 @@ describe('renderer bootstrap', () => {
 
     const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
     expect(getInitialBootstrap()).toEqual(bootstrap)
+  })
+
+  test('normalizes a detached surface injected into a Web bootstrap back to the main surface', async () => {
+    const bootstrap = webBootstrap({
+      surface: {
+        kind: 'detached-file-area',
+        request: {
+          repo: { kind: 'local', id: '/repo' },
+          branch: 'main',
+          tab: 'files',
+        },
+      },
+    })
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        __GOBLIN_BOOTSTRAP__: bootstrap,
+        location: { href: 'http://127.0.0.1:32100/', origin: 'http://127.0.0.1:32100', search: '' },
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap().surface).toEqual({ kind: 'main' })
   })
 
   test('reads injected web bootstrap from the html json script when the Electron bridge is unavailable', async () => {
@@ -298,6 +329,7 @@ describe('renderer bootstrap', () => {
         secret: 'test-secret',
         clientId: expect.stringMatching(/^web_/),
       },
+      surface: { kind: 'main' },
     })
   })
 })

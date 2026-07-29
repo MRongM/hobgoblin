@@ -2,13 +2,17 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { spawn } from 'node-pty'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
+import { buildTmuxServerName, buildTmuxSessionName } from '#/system/tmux-session.ts'
 import {
   closeAllServerTerminalSessions,
+  closeServerTerminalSessions,
   closeServerTerminal,
   createServerTerminal,
+  getServerTerminalOutputExcerpt,
   getServerTerminalSessionSnapshot,
   handleRealtimeServerMessage,
   listServerTerminalSessions,
+  openServerTmuxSessions,
   pruneServerTerminals,
   reorderServerTerminals,
   attachServerTerminal,
@@ -20,12 +24,20 @@ import {
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
 
-const settingsSourceMocks = vi.hoisted(() => ({
-  getServerSettingsPrefs: vi.fn(async () => ({ remoteTerminalTmuxEnabled: false })),
+const branchWorkspaceSourceMocks = vi.hoisted(() => ({
+  readBranchWorkspaceManifests: vi.fn(),
+}))
+const tmuxCleanupMocks = vi.hoisted(() => ({
+  previewAssociatedTmuxSessions: vi.fn(),
 }))
 
-vi.mock('#/server/modules/settings-source.ts', () => ({
-  getServerSettingsPrefs: settingsSourceMocks.getServerSettingsPrefs,
+vi.mock('#/server/modules/branch-workspace-source.ts', () => ({
+  readBranchWorkspaceManifests: branchWorkspaceSourceMocks.readBranchWorkspaceManifests,
+}))
+
+vi.mock('#/server/modules/tmux-cleanup.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/server/modules/tmux-cleanup.ts')>()),
+  previewAssociatedTmuxSessions: tmuxCleanupMocks.previewAssociatedTmuxSessions,
 }))
 
 vi.mock('#/system/git/worktrees.ts', () => ({
@@ -109,7 +121,14 @@ beforeEach(() => {
   autoEmitOnDataSubscribe = null
   vi.clearAllMocks()
   vi.mocked(spawn).mockClear()
-  settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: false })
+  branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockReset()
+  branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({ kind: 'missing' })
+  tmuxCleanupMocks.previewAssociatedTmuxSessions.mockReset()
+  tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValue({
+    ok: true,
+    targetPath: '/repo-linked',
+    sessions: [],
+  })
 })
 
 async function createTerminalSession(
@@ -140,6 +159,255 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
+  test('opens only detached associated tmux sessions in original terminal-number order with one discovery', async () => {
+    const serverName = buildTmuxServerName('/repo')!
+    const terminalOne = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 1,
+    })!
+    const terminalTwo = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 2,
+    })!
+    const terminalThree = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 3,
+    })!
+    tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
+      ok: true,
+      targetPath: '/repo-linked',
+      sessions: [
+        { sessionName: terminalTwo, initialPath: '/repo-linked', terminalNumber: 2, attachedClients: 0, serverName },
+        { sessionName: terminalThree, initialPath: '/repo-linked', terminalNumber: 3, attachedClients: 1 },
+        { sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1, attachedClients: 0, serverName },
+      ],
+    })
+    const result = await openServerTmuxSessions('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      attachmentId: 'attachment_1',
+      cols: 100,
+      rows: 30,
+    })
+
+    expect(result).toMatchObject({ ok: true, restored: 2, key: '/repo\0/repo-linked\0terminal-1' })
+    if (!result.ok || !('key' in result)) throw new Error('expected detached tmux sessions to be restored')
+    expect(result.sessions).toEqual([
+      expect.objectContaining({
+        key: '/repo\0/repo-linked\0terminal-1',
+        tmuxSessionName: terminalOne,
+        tmuxCloseSupported: true,
+      }),
+      expect.objectContaining({
+        key: '/repo\0/repo-linked\0terminal-2',
+        tmuxSessionName: terminalTwo,
+        tmuxCloseSupported: true,
+      }),
+    ])
+    expect(tmuxCleanupMocks.previewAssociatedTmuxSessions).toHaveBeenCalledTimes(1)
+    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(spawn).mock.calls.map((call) => (call[1] as string[]).at(-1))).toEqual([
+      expect.stringContaining(`tmux -L '${serverName}' attach-session -t '=${terminalOne}'`),
+      expect.stringContaining(`tmux -L '${serverName}' attach-session -t '=${terminalTwo}'`),
+    ])
+  })
+
+  test('falls back to a free internal slot and blocks unsafe tmux closure when the hash no longer matches', async () => {
+    const occupied = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(occupied.ok).toBe(true)
+    const terminalOne = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 1,
+    })!
+    tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
+      ok: true,
+      targetPath: '/repo-linked',
+      sessions: [{ sessionName: terminalOne, initialPath: '/repo-linked', terminalNumber: 1, attachedClients: 0 }],
+    })
+    const result = await openServerTmuxSessions('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+    })
+
+    expect(result).toMatchObject({ ok: true, restored: 1, key: '/repo\0/repo-linked\0terminal-2' })
+    if (!result.ok || !('key' in result)) throw new Error('expected a detached tmux session to be restored')
+    expect(result.sessions.find((session) => session.key === result.key)).toMatchObject({
+      tmuxSessionName: terminalOne,
+      tmuxCloseSupported: false,
+    })
+    const closeTmuxSession = vi.fn()
+    await expect(
+      closeServerTerminal('client_1', { sessionId: result.sessionId, closeTmuxSession: true }, { closeTmuxSession }),
+    ).resolves.toEqual({ ok: false, message: 'terminal.close-tmux-session-exit-required' })
+    expect(closeTmuxSession).not.toHaveBeenCalled()
+  })
+
+  test('returns a successful no-op when the current directory has no detached associated sessions', async () => {
+    const result = await openServerTmuxSessions('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+    })
+
+    expect(result).toEqual({ ok: true, restored: 0, sessions: [] })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  test('creates one tmux terminal through the ordinary create request without scanning the directory', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      launchMode: 'tmux-if-available',
+    })
+
+    expect(result).toMatchObject({ ok: true, key: '/repo\0/repo-linked\0terminal-1' })
+    if (!result.ok) return
+    expect(result.sessions[0]).toMatchObject({ tmuxBacked: true, tmuxCloseSupported: true })
+    expect(tmuxCleanupMocks.previewAssociatedTmuxSessions).not.toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      ['-lc', expect.stringContaining('new-session -d')],
+      expect.any(Object),
+    )
+  })
+  test('creates an authorized local branch workspace terminal without resolving Git worktrees', async () => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [branchWorkspaceManifest('/workspace', '/workspace/goblin-feature')],
+    })
+    vi.mocked(getWorktrees).mockRejectedValueOnce(new Error('branch workspaces are folder targets'))
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/workspace',
+      branch: 'feature/auth',
+      worktreePath: '/workspace/goblin-feature',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+    })
+    expect(getWorktrees).not.toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ cwd: '/workspace/goblin-feature' }),
+    )
+  })
+
+  test('creates an authorized SSH branch workspace terminal with the persisted folder cwd', async () => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [branchWorkspaceManifest('ssh-config://prod/srv/repo', '/srv/repo/goblin-feature')],
+    })
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: 'ssh-config://prod/srv/repo',
+      branch: 'feature/auth',
+      worktreePath: '/srv/repo/goblin-feature',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      key: 'ssh-config://prod/srv/repo\0/srv/repo/goblin-feature\0terminal-1',
+    })
+    const sshArgs = vi.mocked(spawn).mock.calls[0]?.[1] as string[]
+    expect(sshArgs[7]).toContain('/srv/repo/goblin-feature')
+  })
+
+  test.each([
+    {
+      label: 'unknown manifest id',
+      branchWorkspaceId: 'branch-missing',
+      worktreePath: '/workspace/goblin-feature',
+      operation: undefined,
+    },
+    {
+      label: 'mismatched persisted path',
+      branchWorkspaceId: 'branch-1',
+      worktreePath: '/workspace/goblin-other',
+      operation: undefined,
+    },
+    {
+      label: 'delete-incomplete workspace',
+      branchWorkspaceId: 'branch-1',
+      worktreePath: '/workspace/goblin-feature',
+      operation: { kind: 'remove' as const, phase: 'failed' as const, startedAt: '2026-07-21T00:00:00.000Z' },
+    },
+  ])('rejects an unauthorized branch workspace terminal: $label', async (fixture) => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [
+        {
+          ...branchWorkspaceManifest('/workspace', '/workspace/goblin-feature'),
+          ...(fixture.operation ? { operation: fixture.operation } : {}),
+        },
+      ],
+    })
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/workspace',
+      branch: 'feature/auth',
+      worktreePath: fixture.worktreePath,
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: fixture.branchWorkspaceId,
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+
+    expect(result).toEqual({ ok: false, message: 'workspace.branch-workspace.terminal-unavailable' })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  test('administratively closes sessions across owners and broadcasts every affected scope', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('observer', 'attachment_a', socket)
+    const first = await createTerminalSession('client_a', {
+      repoRoot: '/workspace',
+      worktreePath: '/repo-linked',
+    })
+    const second = await createTerminalSession('client_b', {
+      repoRoot: '/workspace/api',
+      worktreePath: '/repo-linked',
+    })
+    socket.send.mockClear()
+
+    expect(closeServerTerminalSessions([first, second, 'term_missing_1234'])).toEqual({
+      closed: [first, second],
+      missing: ['term_missing_1234'],
+    })
+    const messages = socket.send.mock.calls.map(([payload]) => JSON.parse(payload))
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        { type: 'sessions-changed', repoRoot: '/workspace' },
+        { type: 'sessions-changed', repoRoot: '/workspace/api' },
+      ]),
+    )
+    await expect(listServerTerminalSessions('client_a', '/workspace')).resolves.toEqual([])
+    await expect(listServerTerminalSessions('client_b', '/workspace/api')).resolves.toEqual([])
+  })
+
   test('create claims controller ownership for the provided attachment', async () => {
     const socket = { send: vi.fn(), close: vi.fn() }
     registerTerminalSocket('client_1', 'attachment_a', socket)
@@ -223,6 +491,8 @@ describe('server terminal sessions', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.sessionId === result.sessionId)?.tmuxBacked).toBe(false)
     expect(spawn).toHaveBeenCalledWith(
       'ssh',
       [
@@ -297,9 +567,7 @@ describe('server terminal sessions', () => {
     )
   })
 
-  test('creates remote terminal sessions with a tmux-aware ssh command when enabled', async () => {
-    settingsSourceMocks.getServerSettingsPrefs.mockResolvedValue({ remoteTerminalTmuxEnabled: true })
-
+  test('creates remote terminal sessions with the native login shell by default', async () => {
     const result = await createServerTerminal('client_1', {
       repoRoot: 'ssh-config://prod/srv/repo',
       branch: 'feature',
@@ -310,6 +578,25 @@ describe('server terminal sessions', () => {
     })
 
     expect(result.ok).toBe(true)
+    const args = vi.mocked(spawn).mock.calls[0]![1] as string[]
+    expect(args[7]).toContain('exec "${SHELL:-/bin/sh}" -l')
+    expect(args[7]).not.toContain('tmux new-session -A')
+  })
+
+  test('creates remote terminal sessions with a tmux-aware ssh command when explicitly requested', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: 'ssh-config://prod/srv/repo',
+      branch: 'feature',
+      worktreePath: '/srv/repo-feature',
+      kind: 'additional',
+      launchMode: 'tmux-if-available',
+      cols: 100,
+      rows: 30,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.sessionId === result.sessionId)?.tmuxBacked).toBe(true)
     expect(spawn).toHaveBeenCalledWith(
       'ssh',
       [
@@ -320,7 +607,7 @@ describe('server terminal sessions', () => {
         'ConnectTimeout=10',
         '--',
         'prod',
-        expect.stringContaining('tmux new-session -A'),
+        expect.stringContaining('new-session -d'),
       ],
       expect.objectContaining({
         cwd: process.cwd(),
@@ -330,10 +617,173 @@ describe('server terminal sessions', () => {
     )
     const args = vi.mocked(spawn).mock.calls[0]![1] as string[]
     expect(args[7]).toContain('/srv/repo-feature')
-    expect(args[7]).toContain('tmux new-session -A')
-    expect(args[7]).toContain('goblin-')
+    expect(args[7]).toContain('new-session -d')
+    expect(args[7]).toContain('Use New terminal (Native).')
+    expect(args[7]).toContain('hobgoblin-v1-')
+    expect(args[7]).not.toContain("-s 'goblin-")
     expect(args[7]).not.toContain('alice@example.com')
     expect(args[7]).not.toContain('/srv/repo\u0000')
+  })
+
+  test('creates local terminal sessions with the native login shell by default', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      cols: 100,
+      rows: 30,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(spawn).toHaveBeenCalledWith(
+      '/bin/zsh',
+      ['-l'],
+      expect.objectContaining({ cwd: '/repo-linked', cols: 100, rows: 30 }),
+    )
+  })
+
+  test('creates local terminal sessions with the tmux identity protocol when explicitly requested', async () => {
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      launchMode: 'tmux-if-available',
+      cols: 100,
+      rows: 30,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.sessions.find((session) => session.sessionId === result.sessionId)?.tmuxBacked).toBe(true)
+    const expectedName = buildTmuxSessionName({
+      projectRoot: '/repo',
+      workingDirectory: '/repo-linked',
+      terminalNumber: 1,
+    })
+    expect(spawn).toHaveBeenCalledWith(
+      '/bin/zsh',
+      ['-lc', expect.stringContaining(`new-session -d -s '${expectedName}' -c '/repo-linked'`)],
+      expect.objectContaining({ cwd: '/repo-linked', cols: 100, rows: 30 }),
+    )
+  })
+
+  test('closes a checked terminal through its private exact tmux identity', async () => {
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      launchMode: 'tmux-if-available',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const closeTmuxSession = vi.fn(async () => ({ ok: true as const, status: 'closed' as const }))
+
+    await expect(
+      closeServerTerminal('client_1', { sessionId: created.sessionId, closeTmuxSession: true }, { closeTmuxSession }),
+    ).resolves.toEqual({ ok: true })
+    expect(closeTmuxSession).toHaveBeenCalledWith({
+      projectRoot: '/repo',
+      itemPath: '/repo-linked',
+      sessionName: buildTmuxSessionName({
+        projectRoot: '/repo',
+        workingDirectory: '/repo-linked',
+        terminalNumber: 1,
+      }),
+    })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toEqual([])
+  })
+
+  test('keeps the internal terminal when checked tmux close fails', async () => {
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      launchMode: 'tmux-if-available',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    await expect(
+      closeServerTerminal(
+        'client_1',
+        { sessionId: created.sessionId, closeTmuxSession: true },
+        { closeTmuxSession: vi.fn(async () => ({ ok: false as const, message: 'permission denied' })) },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'permission denied' })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toContainEqual(
+      expect.objectContaining({ sessionId: created.sessionId }),
+    )
+  })
+
+  test('does not probe tmux for unchecked close and rejects checked close without tmux identity', async () => {
+    const plain = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(plain.ok).toBe(true)
+    if (!plain.ok) return
+    const closeTmuxSession = vi.fn()
+
+    await expect(
+      closeServerTerminal('client_1', { sessionId: plain.sessionId }, { closeTmuxSession }),
+    ).resolves.toEqual({ ok: true })
+    expect(closeTmuxSession).not.toHaveBeenCalled()
+
+    const anotherPlain = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+    })
+    expect(anotherPlain.ok).toBe(true)
+    if (!anotherPlain.ok) return
+    await expect(
+      closeServerTerminal(
+        'client_1',
+        { sessionId: anotherPlain.sessionId, closeTmuxSession: true },
+        { closeTmuxSession },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.terminal-tmux-unavailable' })
+    await expect(listServerTerminalSessions('client_1', '/repo')).resolves.toContainEqual(
+      expect.objectContaining({ sessionId: anotherPlain.sessionId }),
+    )
+  })
+
+  test('uses the persisted remote branch workspace path for the session key and tmux identity', async () => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [branchWorkspaceManifest('ssh-config://prod/srv/repo', '/srv/repo/goblin-feature')],
+    })
+
+    const result = await createServerTerminal('client_1', {
+      repoRoot: 'ssh-config://prod/srv/repo',
+      branch: 'feature/auth',
+      worktreePath: '/srv/repo/./goblin-feature',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      kind: 'primary',
+      launchMode: 'tmux-if-available',
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      key: 'ssh-config://prod/srv/repo\0/srv/repo/goblin-feature\0terminal-1',
+    })
+    const expectedName = buildTmuxSessionName({
+      projectRoot: '/srv/repo',
+      workingDirectory: '/srv/repo/goblin-feature',
+      terminalNumber: 1,
+    })
+    const args = vi.mocked(spawn).mock.calls[0]?.[1] as string[]
+    expect(args[7]).toContain(expectedName)
+    expect(args[7]).toContain('/srv/repo/goblin-feature')
+    expect(args[7]).not.toContain('/srv/repo/./goblin-feature')
   })
 
   test('reuses the smallest missing terminal number for additional sessions', async () => {
@@ -360,7 +810,7 @@ describe('server terminal sessions', () => {
     if (!second.ok) return
     expect(second.key).toBe('/repo\u0000/repo-linked\u0000terminal-2')
 
-    expect(closeServerTerminal('client_1', { sessionId: firstSession.sessionId })).toBe(true)
+    await expect(closeServerTerminal('client_1', { sessionId: firstSession.sessionId })).resolves.toEqual({ ok: true })
 
     const reopened = await createServerTerminal('client_1', {
       repoRoot: '/repo',
@@ -1099,6 +1549,19 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_2', 'attachment_b', socketB)
   })
 
+  test('returns a bounded canonical output excerpt for a valid server session', async () => {
+    const sessionId = await createTerminalSession('client_1')
+    mockPtys[0]?.emitData('build passed')
+
+    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 400 })).resolves.toMatchObject({
+      sessionId,
+      output: 'build passed',
+      sequence: 1,
+    })
+    await expect(getServerTerminalOutputExcerpt({ sessionId: 'invalid', maxCharacters: 400 })).resolves.toBeNull()
+    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 4_097 })).resolves.toBeNull()
+  })
+
   test('cleans up disconnected sessions after the reconnect grace period elapses', async () => {
     vi.useFakeTimers()
     const socket = { send: vi.fn(), close: vi.fn() }
@@ -1221,9 +1684,9 @@ describe('server terminal sessions', () => {
         attachmentId: 'attachment_b',
       }),
     ).toBe(false)
-    expect(writeServerTerminal('client_1', { sessionId: created.sessionId, data: 'ls', attachmentId: 'attachment_b' })).toBe(
-      false,
-    )
+    expect(
+      writeServerTerminal('client_1', { sessionId: created.sessionId, data: 'ls', attachmentId: 'attachment_b' }),
+    ).toBe(false)
     expect(mockPtys[0]?.resize).not.toHaveBeenCalledWith(120, 40)
 
     unregisterTerminalSocket('client_1', 'attachment_a', socketA)
@@ -1399,3 +1862,15 @@ describe('server terminal sessions', () => {
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
 })
+
+function branchWorkspaceManifest(rootId: string, workspacePath: string) {
+  return {
+    id: 'branch-1',
+    rootId,
+    branch: 'feature/auth',
+    directoryName: 'goblin-feature',
+    path: workspacePath,
+    repositories: [],
+    auxiliaryEntries: [],
+  }
+}

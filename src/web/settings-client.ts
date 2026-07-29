@@ -23,6 +23,11 @@ import type {
   ThemeState,
   WebAccessSettingsSnapshot,
   WebAccessSettingsUpdateInput,
+  TelegramBellNotificationContext,
+  TelegramNotificationResult,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
+  TelegramOutputCompletionNotificationContext,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
@@ -45,6 +50,39 @@ export async function setWebAccessSettings(input: WebAccessSettingsUpdateInput):
     input,
   )
   return result.webAccess
+}
+
+export async function saveTelegramNotificationSettings(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const result = await postServerJson<
+    TelegramNotificationSettingsUpdateInput,
+    { ok: true; telegramNotifications: TelegramNotificationSettingsSnapshot } | { ok: false; error: { code: string } }
+  >('/api/settings/telegram', input)
+  if (!result.ok) throw new Error(result.error.code)
+  return result.telegramNotifications
+}
+
+export async function sendTelegramTestNotification(): Promise<TelegramNotificationResult> {
+  return await postServerJson<{}, TelegramNotificationResult>('/api/telegram-notifications/test', {})
+}
+
+export async function sendTelegramBellNotification(
+  context: TelegramBellNotificationContext,
+): Promise<TelegramNotificationResult> {
+  return await postServerJson<TelegramBellNotificationContext, TelegramNotificationResult>(
+    '/api/telegram-notifications/bell',
+    context,
+  )
+}
+
+export async function sendTelegramOutputCompletionNotification(
+  context: TelegramOutputCompletionNotificationContext,
+): Promise<TelegramNotificationResult> {
+  return await postServerJson<TelegramOutputCompletionNotificationContext, TelegramNotificationResult>(
+    '/api/telegram-notifications/output-completion',
+    context,
+  )
 }
 
 function resolveThemeStateFromPrefs(settings: Pick<SettingsPrefs, 'theme' | 'colorTheme'>): ThemeState {
@@ -181,6 +219,11 @@ export async function setSettingsFetchInterval(sec: number): Promise<number> {
   return result.fetchIntervalSec
 }
 
+export async function setStatusRefreshInterval(sec: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ statusRefreshIntervalSec: sec })
+  return result.settings.statusRefreshIntervalSec
+}
+
 export async function setTerminalNotificationsEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalNotificationsEnabled: enabled })
 }
@@ -195,10 +238,6 @@ export async function setGlobalShortcutDisabled(disabled: boolean): Promise<void
 
 export async function setSwapCloseShortcuts(swapped: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ swapCloseShortcuts: swapped })
-}
-
-export async function setToggleDetailOnActionBarBlankClick(enabled: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ toggleDetailOnActionBarBlankClick: enabled })
 }
 
 export async function setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
@@ -239,11 +278,6 @@ export async function setToolbarHeightPx(heightPx: number): Promise<number> {
   return result.settings.toolbarHeightPx
 }
 
-export async function setFileTreeTopbarFontSize(fontSize: number): Promise<number> {
-  const result = await updateSettingsPrefsPatch({ fileTreeTopbarFontSize: fontSize })
-  return result.settings.fileTreeTopbarFontSize
-}
-
 export async function setFileTreeClipboardMaxBytesMb(value: number): Promise<number> {
   const result = await updateSettingsPrefsPatch({ fileTreeClipboardMaxBytesMb: value })
   return result.settings.fileTreeClipboardMaxBytesMb
@@ -257,10 +291,6 @@ export async function setTerminalFontSize(fontSize: number): Promise<number> {
 export async function setFontFamily(fontFamily: FontFamilyPref): Promise<FontFamilyPref> {
   const result = await updateSettingsPrefsPatch({ fontFamily })
   return result.settings.fontFamily
-}
-
-export async function setRemoteTerminalTmuxEnabled(enabled: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ remoteTerminalTmuxEnabled: enabled })
 }
 
 export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {

@@ -23,20 +23,35 @@ const mocks = vi.hoisted(() => ({
     shortcutsDisabled: false,
     globalShortcutDisabled: false,
     swapCloseShortcuts: false,
-    toggleDetailOnActionBarBlankClick: false,
     temporaryFilesDirectory: '',
     globalShortcut: 'CommandOrControl+Shift+G',
     terminalApp: 'auto',
     editorApp: 'auto',
     fileTreeFontSize: 12,
     terminalFontSize: 14,
-    remoteTerminalTmuxEnabled: false,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],
     lanEnabled: false,
   })),
   getServerWebAccessCredentials: vi.fn(async () => ({ enabled: false, username: '', passwordHash: '' })),
+  getServerTelegramNotificationConfig: vi.fn(async () => ({
+    enabled: true,
+    botTokenConfigured: true,
+    botToken: '123456:test-token',
+    chatId: '-100123',
+    proxyEnabled: true,
+    bellEnabled: true,
+    outputCompletionEnabled: true,
+    outputCompletionMinimumActivitySeconds: 10,
+    includeTerminalOutput: true,
+    outputTailLength: 400,
+  })),
+  sendTelegramMessage: vi.fn(
+    async (_input: { botToken: string; chatId: string; text: string; proxyUrl?: string }) => ({ ok: true as const }),
+  ),
+  sendTelegramPhoto: vi.fn(async () => ({ ok: true as const })),
+  telegramProxyUrlFromPrefs: vi.fn(() => undefined),
 }))
 
 const terminalHostStub = {
@@ -66,11 +81,18 @@ const terminalHostStub = {
   resize: vi.fn(),
   takeover: vi.fn(),
   close: vi.fn(),
+  closeSessions: vi.fn(),
   notifyBell: vi.fn(),
   listSessions: vi.fn(),
   create: vi.fn(),
   prune: vi.fn(),
   getSessionSnapshot: vi.fn(),
+  getScreenSnapshot: vi.fn(async () => null),
+  getOutputExcerpt: vi.fn(async ({ sessionId }) => ({
+    sessionId,
+    output: 'server screen output',
+    sequence: 42,
+  })),
   handleRealtimeMessage: vi.fn(),
   shutdown: vi.fn(),
 } satisfies ServerTerminalHost
@@ -83,6 +105,13 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerSettingsPrefs: mocks.getServerSettingsPrefs,
   getServerWebAccessCredentials: mocks.getServerWebAccessCredentials,
+  getServerTelegramNotificationConfig: mocks.getServerTelegramNotificationConfig,
+}))
+
+vi.mock('#/server/modules/telegram-notification-source.ts', () => ({
+  sendTelegramMessage: mocks.sendTelegramMessage,
+  sendTelegramPhoto: mocks.sendTelegramPhoto,
+  telegramProxyUrlFromPrefs: mocks.telegramProxyUrlFromPrefs,
 }))
 
 describe('server app html bootstrap', () => {
@@ -116,6 +145,7 @@ describe('server app html bootstrap', () => {
     expect(webCapabilityFromHtml(html)).not.toBe('secret')
     expect(webCapabilityFromHtml(html)).toMatch(/^[0-9a-f]{64}$/u)
     expect(html).toContain('"lang":"zh"')
+    expect(html).toContain(`"hostPlatform":"${process.platform}"`)
     expect(html).toContain('打开本地仓库')
   }, 10_000)
 
@@ -277,6 +307,85 @@ describe('server app html bootstrap', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
+  test('protects Telegram notification endpoints with the server capability', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/api/telegram-notifications/test', {
+      method: 'POST',
+    })
+    expect(response.status).toBe(401)
+  })
+
+  test('reads Telegram terminal screens through the worker-backed host and falls back to metadata', async () => {
+    const currentPrefs = await mocks.getServerSettingsPrefs()
+    mocks.getServerSettingsPrefs.mockResolvedValueOnce({
+      ...currentPrefs,
+      lang: 'zh',
+      terminalNotificationsEnabled: true,
+    })
+    terminalHostStub.getOutputExcerpt.mockClear()
+    terminalHostStub.getScreenSnapshot.mockClear()
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/api/telegram-notifications/output-completion', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-goblin-internal-secret': 'secret',
+      },
+      body: JSON.stringify({
+        terminalKey: 'terminal-1',
+        project: 'api',
+        contextKind: 'directory',
+        context: 'api',
+        directory: '~/src/api',
+        terminalIndex: 1,
+        sessionId: 'session-1',
+        finalOutputSeq: 42,
+        activityDurationMs: 10_000,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(terminalHostStub.getScreenSnapshot).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      maxColumns: 140,
+      maxRows: 40,
+    })
+    expect(terminalHostStub.getOutputExcerpt).not.toHaveBeenCalled()
+    expect(mocks.sendTelegramMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining('项目：api') }),
+    )
+    expect(mocks.sendTelegramMessage.mock.calls.at(-1)?.[0].text).not.toContain('server screen output')
+  })
+
+  test('protects tmux cleanup endpoints with the server capability', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'secret',
+      terminalHost: terminalHostStub,
+    })
+
+    const response = await app.request('http://127.0.0.1:32100/api/tmux-cleanup/preview', {
+      method: 'POST',
+    })
+    expect(response.status).toBe(401)
   })
 })
 

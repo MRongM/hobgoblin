@@ -6,6 +6,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
 } from '#/shared/rpc.ts'
+import type { RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 
 export type RendererRuntimeKind = 'electron' | 'web'
 export type RendererNativeCapability =
@@ -21,6 +22,7 @@ export type RendererNativeCapability =
   | 'file-tree-clipboard'
   | 'terminal-notifications'
   | 'terminal-badge'
+  | 'open-detached-file-area-window'
 
 export const RENDERER_BRIDGE_VERSION = 1
 export const ELECTRON_RENDERER_CAPABILITIES = [
@@ -36,11 +38,13 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'file-tree-clipboard',
   'terminal-notifications',
   'terminal-badge',
+  'open-detached-file-area-window',
 ] as const satisfies readonly RendererNativeCapability[]
 export const WEB_RENDERER_CAPABILITIES = [] as const satisfies readonly RendererNativeCapability[]
 
 export interface InitialSettingsSnapshot {
   fetchIntervalSec: number
+  statusRefreshIntervalSec: number
   fontFamily: FontFamilyPref
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
@@ -49,7 +53,6 @@ export interface InitialSettingsSnapshot {
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
-  toggleDetailOnActionBarBlankClick: boolean
   terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string
@@ -59,10 +62,8 @@ export interface InitialSettingsSnapshot {
   topbarHeightPx: number
   toolbarHeightPx: number
   fileTreeFontSize: number
-  fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
-  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
@@ -85,15 +86,21 @@ export interface RendererRuntimeSnapshot {
 export interface RendererBootstrapPayload {
   runtime: RendererRuntimeSnapshot
   homeDir: string
+  hostPlatform?: NodeJS.Platform
   i18n: I18nSnapshot
   settings: InitialSettingsSnapshot
   server: InitialServerSnapshot | null
+  surface: RendererSurfaceBootstrap
 }
 
 export interface RendererBootstrapSnapshot {
   runtime: RendererRuntimeSnapshot
   homeDir: string
+  /** Host running repository and tmux commands; absent only in legacy or test bootstraps. */
+  hostPlatform?: NodeJS.Platform
   initialI18n: I18nSnapshot | null
   initialSettings: InitialSettingsSnapshot | null
   initialServer: InitialServerSnapshot | null
+  /** Absent only for legacy or test-injected bootstraps; renderers normalize it to the main surface. */
+  surface?: RendererSurfaceBootstrap
 }

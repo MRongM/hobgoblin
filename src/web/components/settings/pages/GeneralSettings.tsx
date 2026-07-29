@@ -19,7 +19,7 @@ import { useThemeStore } from '#/web/stores/theme.ts'
 import { useI18nStore } from '#/web/stores/i18n.ts'
 import { COLOR_THEMES } from '#/shared/color-theme.ts'
 import { MAX_CHROME_HEIGHT_PX, MIN_CHROME_HEIGHT_PX } from '#/shared/window-chrome.ts'
-import { MAX_SERVER_PORT, MIN_SERVER_PORT } from '#/shared/settings.ts'
+import { MAX_APP_FONT_SIZE, MAX_SERVER_PORT, MIN_APP_FONT_SIZE, MIN_SERVER_PORT } from '#/shared/settings.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type { FontFamilyPref, LangPref, ThemePref } from '#/shared/rpc.ts'
 
@@ -31,17 +31,11 @@ export function GeneralSettings() {
   const setColorTheme = useThemeStore((s) => s.setColorTheme)
   const langPref = useI18nStore((s) => s.pref)
   const setLangPref = useI18nStore((s) => s.setPref)
-  const { fontFamily } = useRuntimeFontSettings()
+  const { appFontSize, fontFamily } = useRuntimeFontSettings()
   const { topbarHeightPx, toolbarHeightPx } = useRuntimeChromeSettings()
-  const { toggleDetailOnActionBarBlankClick, terminalThemeSyncEnabled, temporaryFilesDirectory, serverPort } =
-    useRuntimeGeneralSettings()
-  const {
-    setToggleDetailOnActionBarBlankClick,
-    setTerminalThemeSyncEnabled,
-    setTemporaryFilesDirectory,
-    setServerPort,
-  } = useGeneralSettingsController()
-  const { setFontFamily } = useFontSettingsController()
+  const { terminalThemeSyncEnabled, temporaryFilesDirectory, serverPort } = useRuntimeGeneralSettings()
+  const { setTerminalThemeSyncEnabled, setTemporaryFilesDirectory, setServerPort } = useGeneralSettingsController()
+  const { setAppFontSize, setFontFamily } = useFontSettingsController()
   const { setTopbarHeightPx, setToolbarHeightPx } = useChromeSettingsController()
   const appearanceOptions: { value: ThemePref; labelKey: string; icon: ReactNode }[] = [
     { value: 'auto', labelKey: 'settings.appearance.auto', icon: <Laptop className="size-4" /> },
@@ -106,6 +100,20 @@ export function GeneralSettings() {
             }
           />
           <SettingsRow
+            controlId="settings-app-font-size"
+            label={t('settings.font-size')}
+            hint={t('settings.font-size-hint')}
+            control={
+              <SettingsNumberInput
+                id="settings-app-font-size"
+                min={MIN_APP_FONT_SIZE}
+                max={MAX_APP_FONT_SIZE}
+                value={appFontSize}
+                onChange={(fontSize) => void setAppFontSize(fontSize)}
+              />
+            }
+          />
+          <SettingsRow
             controlId="settings-language"
             label={t('settings.lang')}
             control={
@@ -127,19 +135,6 @@ export function GeneralSettings() {
                 checked={terminalThemeSyncEnabled}
                 onCheckedChange={(enabled) => void setTerminalThemeSyncEnabled(enabled)}
                 aria-label={t('settings.terminal-theme-sync')}
-              />
-            }
-          />
-          <SettingsRow
-            controlId="settings-action-bar-blank-toggle"
-            label={t('settings.action-bar-blank-toggle')}
-            hint={t('settings.action-bar-blank-toggle-hint')}
-            control={
-              <Switch
-                id="settings-action-bar-blank-toggle"
-                checked={toggleDetailOnActionBarBlankClick}
-                onCheckedChange={(enabled) => void setToggleDetailOnActionBarBlankClick(enabled)}
-                aria-label={t('settings.action-bar-blank-toggle')}
               />
             }
           />

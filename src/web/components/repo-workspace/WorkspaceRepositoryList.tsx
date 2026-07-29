@@ -16,6 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { FolderGit2, GitCompareArrows, Terminal } from 'lucide-react'
+import { useMemo } from 'react'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
@@ -26,6 +27,17 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
+import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
+import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
+import {
+  WorkspaceListItemActionDock,
+  WorkspaceListItemFrame,
+  WorkspaceListItemMenu,
+  type WorkspaceListItemAction,
+} from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 
 const restrictToVerticalRepositoryList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -66,13 +78,12 @@ export function WorkspaceRepositoryList({ repositories, currentRepoId, disabled,
     >
       <SortableContext items={repositories.map((repository) => repository.id)} strategy={verticalListSortingStrategy}>
         <ul>
-          {repositories.map((repository, index) => (
+          {repositories.map((repository) => (
             <SortableWorkspaceRepositoryRow
               key={repository.id}
               repository={repository}
               active={currentRepoId === repository.id}
               disabled={disabled}
-              terminal={index === repositories.length - 1}
               onActivate={onActivate}
             />
           ))}
@@ -86,13 +97,11 @@ function SortableWorkspaceRepositoryRow({
   repository,
   active,
   disabled,
-  terminal,
   onActivate,
 }: {
   repository: WorkspaceRepositoryListItem
   active: boolean
   disabled: boolean
-  terminal: boolean
   onActivate: (id: string) => void
 }) {
   const t = useT()
@@ -104,54 +113,113 @@ function SortableWorkspaceRepositoryRow({
     repository.changeCount > 0 ? t('branch-status.worktree-dirty', { n: repository.changeCount }) : null
   const terminalBellLabel = t('terminal.bell-unread')
   const terminalOutputActiveLabel = t('terminal.output-active')
+  const terminalWorktreeKeys = useMemo(
+    () => repository.terminalWorktreePaths.map((path) => worktreeTerminalKey(repository.id, path)),
+    [repository.id, repository.terminalWorktreePaths],
+  )
+  const externalActions = useProjectExternalOpenActions(repository.id)
+  const internalTerminalAction = useProjectInternalTerminalAction(repository.id)
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: repository.id,
     disabled,
   })
+  const editorAction: WorkspaceListItemAction | undefined = externalActions.visible
+    ? {
+        id: 'editor',
+        label: t('worktrees.open-in-editor-label'),
+        icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+        disabled: externalActions.editor.disabled,
+        busy: externalActions.editor.busy,
+        onSelect: externalActions.editor.onSelect,
+      }
+    : undefined
+  const internalAction: WorkspaceListItemAction = {
+    id: 'terminal',
+    label: t('terminal.internal'),
+    icon: <Terminal aria-hidden="true" />,
+    disabled: internalTerminalAction.disabled,
+    busy: internalTerminalAction.busy,
+    onSelect: internalTerminalAction.onSelect,
+  }
+  const externalTerminalAction: WorkspaceListItemAction = {
+    id: 'externalTerminal',
+    label: t('terminal.external'),
+    icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+    disabled: externalActions.externalTerminal.disabled,
+    busy: externalActions.externalTerminal.busy,
+    visible: externalActions.visible,
+    onSelect: externalActions.externalTerminal.onSelect,
+  }
+  const tmuxTerminalAction: WorkspaceListItemAction = {
+    id: 'terminalTmux',
+    label: t('terminal.new-with-tmux'),
+    icon: <Terminal aria-hidden="true" />,
+    disabled: internalTerminalAction.disabled,
+    busy: internalTerminalAction.busy,
+    onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
+  }
 
   return (
-    <li
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(
-        'group relative',
-        isDragging && 'z-10 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] bg-card shadow-sm',
-      )}
+    <WorkspaceItemContextMenu
+      editor={{ ...externalActions.editor, icon: <EditorAppIcon pref={externalActions.editor.iconPref} /> }}
+      externalTerminal={{
+        ...externalActions.externalTerminal,
+        icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+      }}
+      internalTerminal={{ ...internalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
+      tmuxTerminal={{
+        ...internalTerminalAction,
+        icon: <Terminal aria-hidden="true" />,
+        onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
+      }}
+      worktreeTerminalKeys={terminalWorktreeKeys}
     >
-      <button
-        ref={setActivatorNodeRef}
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-current={active ? 'page' : undefined}
-        aria-label={[
-          repository.name,
-          repository.branch,
-          terminalCountLabel,
-          changeCountLabel,
-          hasTerminalBell ? terminalBellLabel : null,
-          t('workspace.repository-reorder'),
-        ]
-          .filter(Boolean)
-          .join('. ')}
-        title={repository.unavailable ? t('workspace.repository-unavailable') : repository.name}
-        className={cn(
-          'relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-xs transition-colors duration-100',
-          disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
-          active ? 'bg-selected text-selected-foreground' : 'text-foreground hover:bg-list-row-hover',
-          repository.unavailable && 'opacity-60',
-          isDragging && 'cursor-grabbing bg-card shadow-sm',
-        )}
-        onClick={() => onActivate(repository.id)}
+      <WorkspaceListItemFrame
+        size="primary"
+        itemRef={setNodeRef}
+        itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
+        selected={active}
+        unavailable={repository.unavailable}
+        dragging={isDragging}
+        leadingIcon={
+          <span
+            className={cn(
+              'relative z-10 flex size-4 shrink-0 items-center justify-center',
+              active ? 'bg-list-row-selected' : 'bg-sidebar group-hover:bg-list-row-hover',
+            )}
+          >
+            <FolderGit2 className="size-3.5" aria-hidden="true" />
+          </span>
+        }
+        dragHandle={{
+          label: t('workspace.repository-reorder'),
+          setActivatorNodeRef,
+          props: { ...attributes, ...listeners, disabled },
+        }}
+        buttonProps={{
+          'aria-current': active ? 'page' : undefined,
+          'aria-label': [
+            repository.name,
+            repository.branch,
+            terminalCountLabel,
+            changeCountLabel,
+            hasTerminalBell ? terminalBellLabel : null,
+          ]
+            .filter(Boolean)
+            .join('. '),
+          title: repository.unavailable ? t('workspace.repository-unavailable') : repository.name,
+          onClick: () => onActivate(repository.id),
+        }}
+        actions={
+          <WorkspaceListItemActionDock
+            editor={editorAction}
+            internalTerminal={internalAction}
+            moreMenu={
+              <WorkspaceListItemMenu label={t('action.menu')} groups={[[tmuxTerminalAction, externalTerminalAction]]} />
+            }
+          />
+        }
       >
-        <span
-          className={cn(
-            'relative z-10 flex size-4 shrink-0 items-center justify-center',
-            active ? 'bg-selected' : 'bg-sidebar group-hover:bg-list-row-hover',
-          )}
-        >
-          <FolderGit2 className="size-3.5" aria-hidden="true" />
-        </span>
         <span data-testid="workspace-repository-primary-content" className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="min-w-0 truncate font-medium">{repository.name}</span>
           {repository.branch ? (
@@ -194,13 +262,7 @@ function SortableWorkspaceRepositoryRow({
         {repository.unavailable ? (
           <span className="shrink-0 text-[9px] text-danger">{t('workspace.repository-unavailable')}</span>
         ) : null}
-        {terminal ? (
-          <span
-            className="absolute bottom-0 left-[0.68rem] h-1.5 w-1.5 border-b border-l border-separator"
-            aria-hidden="true"
-          />
-        ) : null}
-      </button>
-    </li>
+      </WorkspaceListItemFrame>
+    </WorkspaceItemContextMenu>
   )
 }

@@ -13,7 +13,6 @@ export interface MainWindowNavigationActions {
 
 interface CreateMainWindowNavigationActionsOptions {
   activeId: string | null
-  order: string[]
   setActive: (repoId: string) => void
   activateProject?: (projectId: string) => void
   closeRepo: (repoId: string) => void
@@ -25,7 +24,6 @@ interface CreateMainWindowNavigationActionsOptions {
 
 export function createMainWindowNavigationActions({
   activeId,
-  order,
   setActive,
   activateProject,
   closeRepo,

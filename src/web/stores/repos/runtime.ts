@@ -5,12 +5,11 @@ import {
   settleOperation,
   startOperation,
   type RepoOperationKey,
-  type RepoOperationReason,
   type RepoOperationState,
   type RepoOperationTarget,
 } from '#/web/stores/repos/operations.ts'
 export type RepoTaskLane = 'network' | 'read' | 'write'
-export type { RepoOperationKey, RepoOperationTarget as RepoRuntimeOperationTarget }
+export type { RepoOperationTarget as RepoRuntimeOperationTarget }
 
 interface QueuedRepoTask<T> {
   task: (signal: AbortSignal) => Promise<T>
@@ -285,15 +284,6 @@ export function waitForRepoOperationsIdle(
     signal?.addEventListener('abort', abort, { once: true })
     check()
   })
-}
-
-export function pruneRepoBranchLogOperations(repoId: string, validBranches: Set<string>): void {
-  const operations = runtimes.get(repoId)?.operations
-  if (!operations) return
-  for (const key of Object.keys(operations) as RepoOperationKey[]) {
-    if (!key.startsWith('log:')) continue
-    if (!validBranches.has(key.slice('log:'.length))) delete operations[key]
-  }
 }
 
 export function scheduleRepoTask<T>(

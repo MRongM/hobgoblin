@@ -26,7 +26,6 @@ import {
 import { getRepositorySnapshot, getRepositoryStatus } from '#/web/repo-client.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
-import type { ExecResult } from '#/web/types.ts'
 
 export function createRefreshActions(set: ReposSet, get: ReposGet) {
   const { runManualSyncPipeline } = createRefreshSyncHelpers(set, get)

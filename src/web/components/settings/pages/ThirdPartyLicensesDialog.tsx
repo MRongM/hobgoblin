@@ -42,13 +42,16 @@ export function ThirdPartyLicensesDialog() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           showCloseButton={false}
-          className="max-h-[calc(100vh-2rem)] overflow-hidden sm:max-w-3xl"
+          className="max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-3xl"
         >
           <DialogHeader>
             <DialogTitle>{t('about.third-party-licenses.dialog-title')}</DialogTitle>
             <DialogDescription>{t('about.third-party-licenses.dialog-description')}</DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 space-y-5 overflow-y-auto pr-2">
+          <div
+            data-slot="third-party-license-scroll-region"
+            className="min-h-0 space-y-5 overflow-y-auto overscroll-contain pr-2"
+          >
             {licenseDocuments.map((document) => (
               <section key={document.title} className="space-y-2">
                 <h3 className="text-xs font-semibold text-foreground">{document.title}</h3>

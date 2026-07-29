@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { settingsInvalidationScopesForPrefsPatch } from '#/shared/server-invalidation.ts'
+import { isWorkspaceInvalidationEvent, settingsInvalidationScopesForPrefsPatch } from '#/shared/server-invalidation.ts'
 
 describe('settingsInvalidationScopesForPrefsPatch', () => {
   test('always includes the settings snapshot scope', () => {
@@ -14,5 +14,24 @@ describe('settingsInvalidationScopesForPrefsPatch', () => {
         terminalApp: 'ghostty',
       }),
     ).toEqual(['settings-snapshot', 'i18n', 'theme', 'external-apps'])
+  })
+})
+
+describe('isWorkspaceInvalidationEvent', () => {
+  test('accepts an optional string source token and rejects other token shapes', () => {
+    expect(
+      isWorkspaceInvalidationEvent({
+        type: 'workspace-invalidated',
+        rootId: '/workspace',
+        sourceToken: 'workspace_create_1',
+      }),
+    ).toBe(true)
+    expect(
+      isWorkspaceInvalidationEvent({
+        type: 'workspace-invalidated',
+        rootId: '/workspace',
+        sourceToken: 42,
+      }),
+    ).toBe(false)
   })
 })

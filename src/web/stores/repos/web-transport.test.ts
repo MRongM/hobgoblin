@@ -69,10 +69,14 @@ describe('repo web transport helpers', () => {
     const { createRepositoryWorktree } = await import('#/web/repo-client.ts')
 
     await expect(
-      createRepositoryWorktree('/tmp/repo', {
-        worktreePath: '/tmp/repo-feature',
-        mode: { kind: 'existingBranch', branch: 'feature/a' },
-      }, { kind: 'skip' }),
+      createRepositoryWorktree(
+        '/tmp/repo',
+        {
+          worktreePath: '/tmp/repo-feature',
+          mode: { kind: 'existingBranch', branch: 'feature/a' },
+        },
+        { kind: 'skip' },
+      ),
     ).resolves.toEqual({ ok: true, message: 'ok' })
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
@@ -102,6 +106,32 @@ describe('repo web transport helpers', () => {
         body: expect.stringContaining('"worktreeBootstrap":{"kind":"skip"}'),
       }),
     )
+  })
+
+  test('create worktree posts one-time materialization selections unchanged', async () => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'ok' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { createRepositoryWorktree } = await import('#/web/repo-client.ts')
+    const decision = {
+      kind: 'materialize' as const,
+      selections: [
+        { path: '.env', mode: 'copy' as const },
+        { path: 'node_modules', mode: 'symlink' as const },
+      ],
+    }
+
+    await createRepositoryWorktree(
+      '/tmp/repo',
+      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      decision,
+    )
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      worktreeBootstrap: decision,
+    })
   })
 
   test('open remote opens browser with server-provided URL in web host mode', async () => {

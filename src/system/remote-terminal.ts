@@ -1,100 +1,90 @@
-import { createHash } from 'node:crypto'
+import {
+  buildTmuxAttachShellCommand,
+  buildRequiredTmuxShellScript,
+  buildTmuxServerName,
+  isHobgoblinTmuxSessionName,
+  normalizeTmuxSessionDescriptor,
+  type TmuxSessionDescriptor,
+} from '#/system/tmux-session.ts'
 
-export interface RemoteTerminalEndpoint {
-  user: string
-  host: string
-  port: number
-}
-
-export interface ManagedRemoteTerminalTarget {
+export interface ManagedRemoteTerminalTarget extends TmuxSessionDescriptor {
   alias: string
-  endpoint: RemoteTerminalEndpoint
-  repoPath: string
-  worktreePath: string
-  terminalNumber: number
 }
 
-export interface ExternalRemoteTerminalTarget {
-  alias: string
-  worktreePath: string
-}
+export type ExternalRemoteTerminalTarget = ManagedRemoteTerminalTarget
 
 export interface RemoteTerminalInvocation {
   command: 'ssh'
   args: string[]
   script: string
   shellCommand: string
+  tmuxSessionName: string | null
 }
 
 export interface RemoteTerminalInvocationOptions {
   sshOptions?: readonly string[]
   useTmux?: boolean
-}
-
-export function buildManagedRemoteTerminalSessionName(target: ManagedRemoteTerminalTarget): string {
-  const endpoint = remoteEndpointIdentity(target.endpoint)
-  const digest = createHash('sha256')
-    .update(endpoint)
-    .update('\0')
-    .update(target.repoPath)
-    .update('\0')
-    .update(target.worktreePath)
-    .update('\0')
-    .update(String(target.terminalNumber))
-    .digest('hex')
-    .slice(0, 24)
-  return `goblin-${digest}`
+  existingTmuxSessionName?: string
+  existingTmuxServerName?: string
 }
 
 export function buildManagedRemoteTerminalInvocation(
   target: ManagedRemoteTerminalTarget,
   options: RemoteTerminalInvocationOptions = {},
 ): RemoteTerminalInvocation | null {
+  const descriptor = normalizeTmuxSessionDescriptor(target)
+  if (!isSafeRemoteAlias(target.alias) || !descriptor) return null
+
+  const existingSessionName = options.existingTmuxSessionName
+  const existingServerName = options.existingTmuxServerName
+  if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
   if (
-    !isSafeRemoteAlias(target.alias) ||
-    !isSafeRemoteEndpoint(target.endpoint) ||
-    !isSafeRemoteAbsolutePath(target.repoPath) ||
-    !isSafeRemoteAbsolutePath(target.worktreePath) ||
-    !isSafeTerminalNumber(target.terminalNumber)
+    existingServerName !== undefined &&
+    (!existingSessionName || existingServerName !== buildTmuxServerName(descriptor.projectRoot))
   ) {
     return null
   }
-
-  const script =
+  const tmuxInvocation =
     options.useTmux === true
-      ? buildTmuxRemoteLoginShellScript(target)
-      : buildPlainRemoteLoginShellScript(target.worktreePath)
-  return buildSshInvocation(target.alias, script, options)
+      ? existingSessionName
+        ? {
+            sessionName: existingSessionName,
+            command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
+          }
+        : buildTmuxAttachShellCommand(descriptor)
+      : null
+  if (options.useTmux === true && !tmuxInvocation) return null
+  const script = tmuxInvocation
+    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxInvocation.command)
+    : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
+  return buildSshInvocation(target.alias, script, tmuxInvocation?.sessionName ?? null, options)
 }
 
 export function buildExternalRemoteTerminalInvocation(
   target: ExternalRemoteTerminalTarget,
   options: RemoteTerminalInvocationOptions = {},
 ): RemoteTerminalInvocation | null {
-  if (!isSafeRemoteAlias(target.alias) || !isSafeRemoteAbsolutePath(target.worktreePath)) return null
-
-  const script = buildPlainRemoteLoginShellScript(target.worktreePath)
-  return buildSshInvocation(target.alias, script, options)
+  return buildManagedRemoteTerminalInvocation(target, options)
 }
 
 function buildPlainRemoteLoginShellScript(worktreePath: string): string {
   return [`cd ${shellQuote(worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
 }
 
-function buildTmuxRemoteLoginShellScript(target: ManagedRemoteTerminalTarget): string {
-  const sessionName = buildManagedRemoteTerminalSessionName(target)
-  return [
-    `cd ${shellQuote(target.worktreePath)} || exit`,
-    'if command -v tmux >/dev/null 2>&1; then',
-    `  exec tmux new-session -A -s ${shellQuote(sessionName)} -c ${shellQuote(target.worktreePath)}`,
-    'fi',
-    'exec "${SHELL:-/bin/sh}" -l',
-  ].join('\n')
+function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, tmuxCommand: string): string {
+  return requireTmuxShellScript(target.workingDirectory, tmuxCommand)
+}
+
+function requireTmuxShellScript(workingDirectory: string, tmuxCommand: string): string {
+  const script = buildRequiredTmuxShellScript(workingDirectory, tmuxCommand)
+  if (!script) throw new Error('Invalid tmux terminal invocation')
+  return script
 }
 
 function buildSshInvocation(
   alias: string,
   script: string,
+  tmuxSessionName: string | null,
   options: RemoteTerminalInvocationOptions,
 ): RemoteTerminalInvocation {
   const remoteCommand = `sh -lc ${shellQuote(script)}`
@@ -104,42 +94,12 @@ function buildSshInvocation(
     args,
     script,
     shellCommand: ['ssh', ...args].map(shellQuote).join(' '),
+    tmuxSessionName,
   }
-}
-
-function remoteEndpointIdentity(endpoint: RemoteTerminalEndpoint): string {
-  return `${endpoint.user}@${endpoint.host}:${endpoint.port}`
-}
-
-function isSafeRemoteEndpoint(endpoint: RemoteTerminalEndpoint): boolean {
-  return (
-    isSafeEndpointPart(endpoint.user) &&
-    isSafeEndpointPart(endpoint.host) &&
-    Number.isInteger(endpoint.port) &&
-    endpoint.port >= 1 &&
-    endpoint.port <= 65535
-  )
-}
-
-function isSafeEndpointPart(value: string): boolean {
-  return value.length > 0 && value.length <= 255 && !/[\0-\x1f\x7f]/.test(value)
-}
-
-function isSafeTerminalNumber(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 1
 }
 
 function isSafeRemoteAlias(alias: string): boolean {
   return alias.length > 0 && alias.length <= 255 && !/[\s\0/?#\\]/.test(alias)
-}
-
-function isSafeRemoteAbsolutePath(remotePath: string): boolean {
-  return (
-    remotePath.length > 0 &&
-    remotePath.length <= 4096 &&
-    remotePath.startsWith('/') &&
-    !/[\0-\x1f\x7f]/.test(remotePath)
-  )
 }
 
 function shellQuote(value: string): string {

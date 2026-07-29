@@ -301,6 +301,55 @@ describe('terminal web host bridge', () => {
     dispose()
   })
 
+  test('opens all associated tmux sessions through websocket request-response', async () => {
+    const { terminalBridge } = await import('#/web/terminal.ts')
+    const dispose = terminalBridge.onOutput(() => {})
+    const socket = MockWebSocket.instances[0]
+
+    const openPromise = terminalBridge.openTmuxSessions({
+      repoRoot: '/tmp/repo',
+      branch: 'feature',
+      worktreePath: '/tmp/repo',
+      attachmentId: 'attachment_local',
+      cols: 100,
+      rows: 30,
+    })
+    socket?.emitOpen()
+    await Promise.resolve()
+    const request = socket?.sent
+      .map((payload) => JSON.parse(payload))
+      .find((message) => message.action === 'open-tmux-sessions')
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'open-tmux-sessions',
+      input: {
+        repoRoot: '/tmp/repo',
+        branch: 'feature',
+        worktreePath: '/tmp/repo',
+        attachmentId: 'attachment_local',
+        cols: 100,
+        rows: 30,
+      },
+    })
+    socket?.emitMessage(
+      JSON.stringify({
+        type: 'response',
+        requestId: request?.requestId,
+        ok: true,
+        action: 'open-tmux-sessions',
+        payload: {
+          ok: true,
+          action: 'restored',
+          key: '/tmp/repo\u0000/tmp/repo\u0000terminal-1',
+          sessions: [],
+        },
+      }),
+    )
+
+    await expect(openPromise).resolves.toMatchObject({ ok: true, action: 'restored' })
+    dispose()
+  })
+
   test('loads terminal session lists through websocket request-response and validates payloads', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

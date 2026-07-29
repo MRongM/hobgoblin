@@ -1,0 +1,155 @@
+:root {
+  color-scheme: dark;
+  --canvas: #020617;
+  --surface: #111827;
+  --surface-soft: #172033;
+  --text: #f8fafc;
+  --muted: #cbd5e1;
+  --cyan: #38bdf8;
+  --green: #22c55e;
+  --rule: #334155;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.65;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: var(--cyan);
+}
+
+a:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 4px;
+}
+
+.skip-link {
+  left: 1rem;
+  position: absolute;
+  top: -5rem;
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+.shell {
+  margin: 0 auto;
+  max-width: 54rem;
+  padding: 2rem 1.25rem 5rem;
+}
+
+header {
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 2.5rem;
+  padding-bottom: 2rem;
+}
+
+.mark {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  gap: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.prompt {
+  color: var(--cyan);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+h1 {
+  font-size: clamp(2.25rem, 7vw, 4.25rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+  margin: 1.25rem 0 1rem;
+}
+
+.summary {
+  color: var(--muted);
+  font-size: 1.08rem;
+  margin: 0;
+  max-width: 44rem;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin-top: 1.5rem;
+}
+
+nav a[aria-current="page"] {
+  color: var(--green);
+  font-weight: 700;
+  text-decoration-thickness: 2px;
+}
+
+.meta {
+  background: var(--surface);
+  border-left: 4px solid var(--green);
+  margin: 0 0 2.5rem;
+  padding: 1rem 1.2rem;
+}
+
+section {
+  border-top: 1px solid var(--rule);
+  padding: 1.7rem 0 0.7rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.65rem;
+}
+
+p,
+li {
+  color: var(--muted);
+}
+
+strong {
+  color: var(--text);
+}
+
+code {
+  background: var(--surface-soft);
+  border-radius: 0.25rem;
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  padding: 0.08rem 0.3rem;
+}
+
+footer {
+  border-top: 1px solid var(--rule);
+  color: var(--muted);
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+}
+
+@media (max-width: 36rem) {
+  .shell {
+    padding-top: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a {
+    transition: color 140ms ease;
+  }
+}

@@ -1,15 +1,16 @@
 import { openExternalUrl } from '#/web/app-shell-client.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
-import type { CommitMessageGenerationResult, CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type {
-  RepoFileSearchResult,
+  CommitMessageGenerationResult,
+  CommitMessageProvider,
+  CommitMessageProviderAvailability,
+} from '#/shared/commit-message-ai.ts'
+import type {
   RepoFileTransferRequest,
   RepoFileTransferResult,
   RepoFileTreeBinaryFileReadResult,
   RepoFileTreeBinaryFileReplaceResult,
   RepoFileTreeResult,
-  RepoFileTreeTextFileReadResult,
-  RepoFileTreeTextFileReplaceResult,
 } from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
@@ -17,7 +18,17 @@ import type { CloneRepoResult, RepoSnapshot } from '#/shared/rpc.ts'
 import type { CommitDetail, CommitHistoryEntry, ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreviewResult } from '#/shared/worktree-bootstrap-summary.ts'
+import type {
+  RepositoryBranchMergeOutExecuteInput,
+  RepositoryBranchMergeOutPlanRequest,
+  RepositoryBranchMergeOutPlanResult,
+  RepositoryBranchMergeOutResult,
+} from '#/shared/repository-branch-merge.ts'
+import type {
+  WorktreeBootstrapCandidateScope,
+  WorktreeBootstrapDecision,
+  WorktreeBootstrapPreflightResult,
+} from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await postServerJson('/api/repo/probe', { cwd })
@@ -120,21 +131,17 @@ export async function createRepositoryWorktree(
   )
 }
 
-export async function getRepositoryWorktreeBootstrapPreview(
+export async function getRepositoryWorktreeBootstrapPreflight(
   cwd: string,
-  worktreePathOrSignal?: string | AbortSignal,
   signal?: AbortSignal,
-): Promise<WorktreeBootstrapPreviewResult> {
-  const worktreePath = typeof worktreePathOrSignal === 'string' ? worktreePathOrSignal : undefined
-  const requestSignal = typeof worktreePathOrSignal === 'string' ? signal : worktreePathOrSignal
-  return await postServerJson('/api/repo/worktree-bootstrap-preview', { cwd, worktreePath }, { signal: requestSignal })
-}
-
-export async function initializeRepositoryWorktreeBootstrapConfig(
-  repoId: string,
-  worktreePath: string,
-): Promise<ExecResult> {
-  return await postServerJson('/api/repo/worktree-bootstrap-config/init', { repoId, worktreePath })
+  candidateScope?: WorktreeBootstrapCandidateScope,
+  sourceWorktreePath?: string,
+): Promise<WorktreeBootstrapPreflightResult> {
+  return await postServerJson(
+    '/api/repo/worktree-bootstrap-preflight',
+    { cwd, candidateScope, sourceWorktreePath },
+    { signal },
+  )
 }
 
 export async function createRepositoryBranch(
@@ -229,6 +236,7 @@ export async function removeRepositoryWorktree(
     branch: string
     worktreePath: string
     alsoDeleteBranch: boolean
+    forceRemoveWorktree?: boolean
     forceDeleteBranch?: boolean
     alsoDeleteUpstream?: boolean
   },
@@ -236,6 +244,15 @@ export async function removeRepositoryWorktree(
   sourceToken?: string,
 ): Promise<ExecResult> {
   return await postServerJson('/api/repo/remove-worktree', { cwd, ...options, sourceToken }, { signal })
+}
+
+export async function cleanupRepositoryWorktree(
+  cwd: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/cleanup-worktree', { cwd, worktreePath, sourceToken }, { signal })
 }
 
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
@@ -264,16 +281,6 @@ export async function getRepositoryFileTree(
   return await postServerJson('/api/repo/file-tree', { repoId, worktreePath, dirPath }, { signal })
 }
 
-export async function searchRepositoryFileTree(
-  repoId: string,
-  worktreePath: string,
-  query: string,
-  limit?: number,
-  signal?: AbortSignal,
-): Promise<RepoFileSearchResult> {
-  return await postServerJson('/api/repo/file-search', { repoId, worktreePath, query, limit }, { signal })
-}
-
 export async function renameRepositoryFileTreeEntry(
   repoId: string,
   worktreePath: string,
@@ -299,23 +306,6 @@ export async function createRepositoryFileTreeFile(
   name: string,
 ): Promise<ExecResult> {
   return await postServerJson('/api/repo/file-tree/create-file', { repoId, worktreePath, parentDirPath, name })
-}
-
-export async function readRepositoryFileTreeTextFile(
-  repoId: string,
-  worktreePath: string,
-  filePath: string,
-): Promise<RepoFileTreeTextFileReadResult> {
-  return await postServerJson('/api/repo/file-tree/read-text-file', { repoId, worktreePath, filePath })
-}
-
-export async function replaceRepositoryFileTreeTextFile(
-  repoId: string,
-  worktreePath: string,
-  filePath: string,
-  content: string,
-): Promise<RepoFileTreeTextFileReplaceResult> {
-  return await postServerJson('/api/repo/file-tree/replace-text-file', { repoId, worktreePath, filePath, content })
 }
 
 export async function readRepositoryFileTreeBinaryFile(
@@ -380,8 +370,11 @@ export async function openRepositoryRemote(cwd: string, branch?: string): Promis
   return opened.ok ? { ok: true, message: '' } : opened
 }
 
-export async function openRepositoryTerminal(path: string): Promise<ExecResult> {
-  return await postServerJson('/api/repo/open-terminal', { path })
+export async function openRepositoryTerminal(input: {
+  projectRoot: string
+  workingDirectory: string
+}): Promise<ExecResult> {
+  return await postServerJson('/api/repo/open-terminal', input)
 }
 
 export async function openRepositoryEditor(target: EditorOpenTarget): Promise<ExecResult> {
@@ -416,18 +409,26 @@ export async function commitRepositoryChanges(
   return postServerJson('/api/repo/commit', { repoId, worktreePath, message })
 }
 
-export async function mergeRepositoryBranch(
-  repoId: string,
-  worktreePath: string,
-  branch: string,
-): Promise<ExecResult> {
+export async function mergeRepositoryBranch(repoId: string, worktreePath: string, branch: string): Promise<ExecResult> {
   return postServerJson('/api/repo/merge', { repoId, worktreePath, branch })
 }
 
-export async function resetRepositoryHard(
-  repoId: string,
-  worktreePath: string,
-): Promise<ExecResult> {
+export async function getRepositoryBranchMergeOutPlan(
+  request: RepositoryBranchMergeOutPlanRequest,
+  signal?: AbortSignal,
+): Promise<RepositoryBranchMergeOutPlanResult> {
+  return await postServerJson('/api/repo/merge-out-plan', request, { signal })
+}
+
+export async function mergeRepositoryBranchOut(
+  input: RepositoryBranchMergeOutExecuteInput,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<RepositoryBranchMergeOutResult> {
+  return await postServerJson('/api/repo/merge-out', { ...input, sourceToken }, { signal })
+}
+
+export async function resetRepositoryHard(repoId: string, worktreePath: string): Promise<ExecResult> {
   return postServerJson('/api/repo/reset-hard', { repoId, worktreePath })
 }
 

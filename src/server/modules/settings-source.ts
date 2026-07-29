@@ -7,6 +7,7 @@ import {
   toSafeSessionRepoEntry,
 } from '#/shared/input-validation.ts'
 import { safeRelativePath } from '#/shared/path-semantics.ts'
+import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import { hashWebAccessPassword, isWebAccessPasswordHash } from '#/server/modules/web-access-auth.ts'
 import type {
@@ -20,6 +21,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
+  WorkspaceActiveContext,
   WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
 import {
@@ -27,16 +29,15 @@ import {
   effectiveDetailCollapsed,
   normalizeDetailPaneSizes,
   normalizeFileTreePaneSizes,
+  normalizeWorkspaceRepositoryListHeight,
   normalizeWorkspaceLayout,
 } from '#/shared/workspace-layout.ts'
-import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
+import { isRemoteRepoId, parseRemoteRepoId, repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 import {
   clearRepoSettingsEntryColorTheme,
-  isWorktreeBootstrapConfigHash,
   repoSettingsEntryHasPersistedFields,
   setRepoSettingsEntryColorTheme,
   type RepoSettingsEntry,
-  type WorktreeBootstrapTrust,
 } from '#/shared/repo-settings.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
 import { isColorTheme, normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
@@ -44,8 +45,8 @@ import {
   DEFAULT_EDITOR_APP,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FILE_TREE_FONT_SIZE,
-  DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
   DEFAULT_FETCH_INTERVAL_SEC,
+  DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
   DEFAULT_LANG_PREF,
@@ -54,17 +55,16 @@ import {
   DEFAULT_TERMINAL_APP,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
   DEFAULT_TERMINAL_FONT_SIZE,
+  DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
   DEFAULT_THEME_PREF,
   MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MAX_FILE_TREE_FONT_SIZE,
-  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
   MAX_GIT_NETWORK_TIMEOUT_SEC,
   MAX_RECENT_REPOS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   MIN_FILE_TREE_FONT_SIZE,
-  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
   MIN_GIT_NETWORK_TIMEOUT_SEC,
   MIN_SERVER_PORT,
   MIN_TERMINAL_FONT_SIZE,
@@ -74,6 +74,19 @@ import {
   defaultSettingsPrefs,
 } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TOPBAR_HEIGHT_PX, DEFAULT_TOOLBAR_HEIGHT_PX, normalizeChromeHeightPx } from '#/shared/window-chrome.ts'
+import {
+  TELEGRAM_BOT_TOKEN_MAX_LENGTH,
+  TELEGRAM_CHAT_ID_MAX_LENGTH,
+  TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_MAX_LENGTH,
+  TELEGRAM_OUTPUT_TAIL_MIN_LENGTH,
+  type TelegramNotificationErrorCode,
+  type TelegramNotificationSettingsSnapshot,
+  type TelegramNotificationSettingsUpdateInput,
+} from '#/shared/telegram-notifications.ts'
 
 type FetchIntervalListener = (sec: number) => void
 interface ServerSettingsData {
@@ -82,6 +95,7 @@ interface ServerSettingsData {
   colorTheme: ColorTheme
   fontFamily: FontFamilyPref
   fetchIntervalSec: number
+  statusRefreshIntervalSec: number
   gitNetworkProxyEnabled: boolean
   gitNetworkProxyUrl: string
   gitNetworkTimeoutSec: number
@@ -89,7 +103,6 @@ interface ServerSettingsData {
   shortcutsDisabled: boolean
   globalShortcutDisabled: boolean
   swapCloseShortcuts: boolean
-  toggleDetailOnActionBarBlankClick: boolean
   terminalThemeSyncEnabled: boolean
   temporaryFilesDirectory: string
   globalShortcut: string
@@ -98,10 +111,8 @@ interface ServerSettingsData {
   topbarHeightPx: number
   toolbarHeightPx: number
   fileTreeFontSize: number
-  fileTreeTopbarFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
-  remoteTerminalTmuxEnabled: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
@@ -110,6 +121,15 @@ interface ServerSettingsData {
   webAccessEnabled: boolean
   webAccessUsername: string
   webAccessPasswordHash: string
+  telegramNotificationsEnabled: boolean
+  telegramProxyEnabled: boolean
+  telegramBellNotificationsEnabled: boolean
+  telegramOutputCompletionNotificationsEnabled: boolean
+  telegramOutputCompletionMinimumActivitySeconds: number
+  telegramIncludeTerminalOutput: boolean
+  telegramOutputTailLength: number
+  telegramBotToken: string
+  telegramChatId: string
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -142,10 +162,20 @@ export class WebAccessSettingsError extends Error {
   }
 }
 
-function normalizeFetchInterval(value: unknown): number {
+export class TelegramNotificationSettingsError extends Error {
+  readonly code: TelegramNotificationErrorCode
+
+  constructor(code: TelegramNotificationErrorCode) {
+    super(code)
+    this.name = 'TelegramNotificationSettingsError'
+    this.code = code
+  }
+}
+
+function normalizeRefreshInterval(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(3600, Math.round(value)))
-    : DEFAULT_FETCH_INTERVAL_SEC
+    : fallback
 }
 
 function normalizeThemePref(value: unknown): ThemePref {
@@ -185,14 +215,6 @@ function normalizeFileTreeFontSize(value: unknown): number {
   })
 }
 
-function normalizeFileTreeTopbarFontSize(value: unknown): number {
-  return normalizeFontSize(value, {
-    min: MIN_FILE_TREE_TOPBAR_FONT_SIZE,
-    max: MAX_FILE_TREE_TOPBAR_FONT_SIZE,
-    fallback: DEFAULT_FILE_TREE_TOPBAR_FONT_SIZE,
-  })
-}
-
 function normalizeFileTreeClipboardMaxBytesMb(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB
   return Math.max(
@@ -218,7 +240,7 @@ function normalizeToolbarHeightPx(value: unknown): number {
 }
 
 function normalizeTerminalNotificationsEnabled(value: unknown): boolean {
-  return value === true
+  return typeof value === 'boolean' ? value : DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED
 }
 
 function normalizeTemporaryFilesDirectory(value: unknown): string {
@@ -231,10 +253,6 @@ function normalizeTemporaryFilesDirectory(value: unknown): string {
 
 function normalizeTerminalThemeSyncEnabled(value: unknown): boolean {
   return typeof value === 'boolean' ? value : DEFAULT_TERMINAL_THEME_SYNC_ENABLED
-}
-
-function normalizeRemoteTerminalTmuxEnabled(value: unknown): boolean {
-  return value === true
 }
 
 function normalizeTerminalCustomButtonsVisible(value: unknown): boolean {
@@ -292,6 +310,51 @@ function webAccessSettingsFromData(data: ServerSettingsData): WebAccessSettingsS
   }
 }
 
+function normalizeTelegramBotToken(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const token = value.trim()
+  return token && token.length <= TELEGRAM_BOT_TOKEN_MAX_LENGTH && !/[\u0000-\u0020\u007f]/u.test(token) ? token : ''
+}
+
+function normalizeTelegramChatId(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const chatId = value.trim()
+  if (!chatId || chatId.length > TELEGRAM_CHAT_ID_MAX_LENGTH) return ''
+  return /^-?\d+$/u.test(chatId) || /^@[A-Za-z][A-Za-z0-9_]{4,31}$/u.test(chatId) ? chatId : ''
+}
+
+function normalizeTelegramOutputTailLength(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH
+  return Math.max(TELEGRAM_OUTPUT_TAIL_MIN_LENGTH, Math.min(TELEGRAM_OUTPUT_TAIL_MAX_LENGTH, Math.round(value)))
+}
+
+function normalizeTelegramOutputCompletionMinimumActivitySeconds(value: unknown): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS ||
+    value > TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS
+  ) {
+    return TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS
+  }
+  return value
+}
+
+function telegramNotificationSettingsFromData(data: ServerSettingsData): TelegramNotificationSettingsSnapshot {
+  const botTokenConfigured = Boolean(data.telegramBotToken)
+  return {
+    enabled: data.telegramNotificationsEnabled && botTokenConfigured && Boolean(data.telegramChatId),
+    botTokenConfigured,
+    chatId: data.telegramChatId,
+    proxyEnabled: data.telegramProxyEnabled,
+    bellEnabled: data.telegramBellNotificationsEnabled,
+    outputCompletionEnabled: data.telegramOutputCompletionNotificationsEnabled,
+    outputCompletionMinimumActivitySeconds: data.telegramOutputCompletionMinimumActivitySeconds,
+    includeTerminalOutput: data.telegramIncludeTerminalOutput,
+    outputTailLength: data.telegramOutputTailLength,
+  }
+}
+
 function normalizeGitNetworkProxyEnabled(value: unknown): boolean {
   return value === true
 }
@@ -320,6 +383,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     colorTheme: data.colorTheme,
     fontFamily: data.fontFamily,
     fetchIntervalSec: data.fetchIntervalSec,
+    statusRefreshIntervalSec: data.statusRefreshIntervalSec,
     gitNetworkProxyEnabled: data.gitNetworkProxyEnabled,
     gitNetworkProxyUrl: data.gitNetworkProxyUrl,
     gitNetworkTimeoutSec: data.gitNetworkTimeoutSec,
@@ -327,7 +391,6 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     shortcutsDisabled: data.shortcutsDisabled,
     globalShortcutDisabled: data.globalShortcutDisabled,
     swapCloseShortcuts: data.swapCloseShortcuts,
-    toggleDetailOnActionBarBlankClick: data.toggleDetailOnActionBarBlankClick,
     terminalThemeSyncEnabled: data.terminalThemeSyncEnabled,
     temporaryFilesDirectory: data.temporaryFilesDirectory,
     globalShortcut: data.globalShortcut,
@@ -336,10 +399,8 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     topbarHeightPx: data.topbarHeightPx,
     toolbarHeightPx: data.toolbarHeightPx,
     fileTreeFontSize: data.fileTreeFontSize,
-    fileTreeTopbarFontSize: data.fileTreeTopbarFontSize,
     fileTreeClipboardMaxBytesMb: data.fileTreeClipboardMaxBytesMb,
     terminalFontSize: data.terminalFontSize,
-    remoteTerminalTmuxEnabled: data.remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
     terminalCustomButtonSize: data.terminalCustomButtonSize,
     terminalCustomButtons: data.terminalCustomButtons,
@@ -382,22 +443,108 @@ function normalizeWorkspaceActiveRepoByRoot(
   openRepos: RepoSessionEntry[],
 ): Record<string, string | null> {
   if (!value || typeof value !== 'object') return {}
-  const openLocalRoots = new Set(
-    openRepos.filter((entry) => entry.kind === 'local').map((entry) => path.resolve(entry.id)),
-  )
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
   const normalized: Record<string, string | null> = {}
   for (const [rawRoot, rawSelection] of Object.entries(value)) {
     const root = toSafeRepoLocator(rawRoot)
-    if (!root || !openLocalRoots.has(path.resolve(root))) continue
+    if (!root || !openRootIds.has(root)) continue
     if (rawSelection === null) {
       normalized[root] = null
       continue
     }
     const selection = toSafeRepoLocator(rawSelection)
-    if (!selection || path.dirname(path.resolve(selection)) !== path.resolve(root)) continue
+    if (!selection || !isImmediateWorkspaceRepository(root, selection)) continue
     normalized[root] = selection
   }
   return normalized
+}
+
+function normalizeWorkspaceActiveContextByRoot(
+  taggedValue: unknown,
+  legacyValue: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, WorkspaceActiveContext> {
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
+  const normalized: Record<string, WorkspaceActiveContext> = {}
+  const legacy = normalizeWorkspaceActiveRepoByRoot(legacyValue, openRepos)
+  for (const [rootId, repositoryId] of Object.entries(legacy)) {
+    normalized[rootId] =
+      repositoryId === null || repositoryId === rootId ? { kind: 'overview' } : { kind: 'repository', repositoryId }
+  }
+  if (!taggedValue || typeof taggedValue !== 'object') return normalized
+  for (const [rawRootId, rawContext] of Object.entries(taggedValue)) {
+    const rootId = toSafeRepoLocator(rawRootId)
+    if (!rootId || !openRootIds.has(rootId) || !rawContext || typeof rawContext !== 'object') continue
+    const context = rawContext as Partial<WorkspaceActiveContext>
+    if (context.kind === 'overview') {
+      normalized[rootId] = { kind: 'overview' }
+      continue
+    }
+    if (context.kind === 'repository') {
+      const repositoryId = toSafeRepoLocator(context.repositoryId)
+      if (repositoryId && isImmediateWorkspaceRepository(rootId, repositoryId)) {
+        normalized[rootId] = { kind: 'repository', repositoryId }
+      }
+      continue
+    }
+    if (context.kind === 'branch-workspace' && isValidBranchWorkspaceContextId(context.branchWorkspaceId)) {
+      normalized[rootId] = {
+        kind: 'branch-workspace',
+        branchWorkspaceId: context.branchWorkspaceId,
+        ...(isWorkspaceRepositoryName(context.memberRepositoryName)
+          ? { memberRepositoryName: context.memberRepositoryName }
+          : {}),
+      }
+    }
+  }
+  return normalized
+}
+
+function normalizeWorkspaceRepositoryListExpandedByRoot(
+  value: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, boolean> {
+  if (!value || typeof value !== 'object') return {}
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
+  const normalized: Record<string, boolean> = {}
+  for (const [rawRootId, expanded] of Object.entries(value)) {
+    const rootId = toSafeRepoLocator(rawRootId)
+    if (rootId && openRootIds.has(rootId) && typeof expanded === 'boolean') normalized[rootId] = expanded
+  }
+  return normalized
+}
+
+function normalizeWorkspaceRepositoryListHeightByRoot(
+  value: unknown,
+  openRepos: RepoSessionEntry[],
+): Record<string, number> {
+  if (!value || typeof value !== 'object') return {}
+  const openRootIds = new Set(openRepos.map(repoSessionEntryId))
+  const normalized: Record<string, number> = {}
+  for (const [rawRootId, height] of Object.entries(value)) {
+    const rootId = toSafeRepoLocator(rawRootId)
+    const normalizedHeight = normalizeWorkspaceRepositoryListHeight(height)
+    if (rootId && openRootIds.has(rootId) && normalizedHeight !== null) normalized[rootId] = normalizedHeight
+  }
+  return normalized
+}
+
+function isImmediateWorkspaceRepository(rootId: string, repositoryId: string): boolean {
+  if (isRemoteRepoId(rootId) || isRemoteRepoId(repositoryId)) {
+    const root = parseRemoteRepoId(rootId)
+    const repository = parseRemoteRepoId(repositoryId)
+    return (
+      !!root &&
+      !!repository &&
+      root.alias === repository.alias &&
+      path.posix.dirname(repository.remotePath) === root.remotePath
+    )
+  }
+  return path.dirname(path.resolve(repositoryId)) === path.resolve(rootId)
+}
+
+function isValidBranchWorkspaceContextId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\x00-\x1f\x7f]/.test(value)
 }
 
 function normalizeSession(value: unknown): SessionState {
@@ -409,25 +556,44 @@ function normalizeSession(value: unknown): SessionState {
       )
     : []
   const activeRepo = toSafeRepoLocator(partial.activeRepo)
-  const workspaceActiveRepoByRoot = normalizeWorkspaceActiveRepoByRoot(partial.workspaceActiveRepoByRoot, openRepos)
+  const workspaceActiveContextByRoot = normalizeWorkspaceActiveContextByRoot(
+    partial.workspaceActiveContextByRoot,
+    partial.workspaceActiveRepoByRoot,
+    openRepos,
+  )
   const workspaceLayout = normalizeWorkspaceLayout(partial.workspaceLayout)
   const detailCollapsed =
     typeof partial.detailCollapsed === 'boolean' ? partial.detailCollapsed : DEFAULT_DETAIL_COLLAPSED
-  const detailFocusMode =
-    workspaceLayout === 'top-bottom' && partial.detailFocusMode === true ? true : DEFAULT_SESSION_DETAIL_FOCUS_MODE
+  const activeProject = normalizeActiveProject(
+    partial.activeProject,
+    activeRepo,
+    openRepos,
+    workspaceActiveContextByRoot,
+  )
   return {
     openRepos,
     activeRepo:
       activeRepo &&
       (openRepos.some((entry) => repoSessionEntryId(entry) === activeRepo) ||
-        Object.values(workspaceActiveRepoByRoot).includes(activeRepo))
+        Object.values(workspaceActiveContextByRoot).some(
+          (context) => context.kind === 'repository' && context.repositoryId === activeRepo,
+        ))
         ? activeRepo
         : null,
-    workspaceActiveRepoByRoot,
+    activeProject,
+    workspaceActiveContextByRoot,
+    workspaceRepositoryListExpandedByRoot: normalizeWorkspaceRepositoryListExpandedByRoot(
+      partial.workspaceRepositoryListExpandedByRoot,
+      openRepos,
+    ),
+    workspaceRepositoryListHeightByRoot: normalizeWorkspaceRepositoryListHeightByRoot(
+      partial.workspaceRepositoryListHeightByRoot,
+      openRepos,
+    ),
     projectListExpanded:
       typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),
-    detailFocusMode,
+    detailFocusMode: DEFAULT_SESSION_DETAIL_FOCUS_MODE,
     workspaceLayout,
     detailPaneSizes: normalizeDetailPaneSizes(partial.detailPaneSizes),
     fileTreePaneSizes: normalizeFileTreePaneSizes(partial.fileTreePaneSizes),
@@ -435,6 +601,25 @@ function normalizeSession(value: unknown): SessionState {
       partial.selectedTerminalByWorktree ?? partial.activeTerminalByGroup,
     ),
   }
+}
+
+function normalizeActiveProject(
+  value: unknown,
+  activeRepo: string | null,
+  openRepos: RepoSessionEntry[],
+  workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext>,
+): string | null {
+  const openProjectIds = new Set(openRepos.map(repoSessionEntryId))
+  const requested = toSafeRepoLocator(value)
+  if (requested && openProjectIds.has(requested)) return requested
+  if (activeRepo && openProjectIds.has(activeRepo)) return activeRepo
+  if (!activeRepo) return null
+  return (
+    Object.entries(workspaceActiveContextByRoot).find(
+      ([rootId, context]) =>
+        openProjectIds.has(rootId) && context.kind === 'repository' && context.repositoryId === activeRepo,
+    )?.[0] ?? null
+  )
 }
 
 function normalizeRecentRepos(value: unknown): RepoSessionEntry[] {
@@ -453,31 +638,27 @@ function normalizeRepoSettings(value: unknown): RepoSettingsEntry[] {
     if (typeof raw.repoId !== 'string' || raw.repoId.length === 0) continue
     const next: RepoSettingsEntry = { repoId: raw.repoId }
     if (isColorTheme(raw.colorTheme)) next.colorTheme = raw.colorTheme
-    const trust = normalizeWorktreeBootstrapTrust(raw.worktreeBootstrapTrust)
-    if (trust) next.worktreeBootstrapTrust = trust
     if (repoSettingsEntryHasPersistedFields(next)) entries.set(next.repoId, next)
   }
   return Array.from(entries.values())
-}
-
-function normalizeWorktreeBootstrapTrust(value: unknown): WorktreeBootstrapTrust | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const raw = value as Partial<WorktreeBootstrapTrust>
-  if (!isWorktreeBootstrapConfigHash(raw.configHash)) return undefined
-  if (typeof raw.trustedAt !== 'string' || raw.trustedAt.length === 0) return undefined
-  return { configHash: raw.configHash, trustedAt: raw.trustedAt }
 }
 
 async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
   try {
     const raw = await readFile(serverDataFile('server-settings.json'), 'utf-8')
     const parsed = JSON.parse(raw) as Partial<ServerSettingsData>
+    const telegramBotToken = normalizeTelegramBotToken(parsed.telegramBotToken)
+    const telegramChatId = normalizeTelegramChatId(parsed.telegramChatId)
     return {
       lang: normalizeLangPref(parsed.lang),
       theme: normalizeThemePref(parsed.theme),
       colorTheme: normalizeColorTheme(parsed.colorTheme),
       fontFamily: normalizeFontFamilyPref(parsed.fontFamily),
-      fetchIntervalSec: normalizeFetchInterval(parsed.fetchIntervalSec),
+      fetchIntervalSec: normalizeRefreshInterval(parsed.fetchIntervalSec, DEFAULT_FETCH_INTERVAL_SEC),
+      statusRefreshIntervalSec: normalizeRefreshInterval(
+        parsed.statusRefreshIntervalSec,
+        DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
+      ),
       gitNetworkProxyEnabled: normalizeGitNetworkProxyEnabled(parsed.gitNetworkProxyEnabled),
       gitNetworkProxyUrl: normalizeGitNetworkProxyUrl(parsed.gitNetworkProxyUrl),
       gitNetworkTimeoutSec: normalizeGitNetworkTimeoutSec(parsed.gitNetworkTimeoutSec),
@@ -485,7 +666,6 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       shortcutsDisabled: parsed.shortcutsDisabled === true,
       globalShortcutDisabled: parsed.globalShortcutDisabled === true,
       swapCloseShortcuts: parsed.swapCloseShortcuts === true,
-      toggleDetailOnActionBarBlankClick: parsed.toggleDetailOnActionBarBlankClick === true,
       terminalThemeSyncEnabled: normalizeTerminalThemeSyncEnabled(parsed.terminalThemeSyncEnabled),
       temporaryFilesDirectory: normalizeTemporaryFilesDirectory(parsed.temporaryFilesDirectory),
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
@@ -494,10 +674,8 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       topbarHeightPx: normalizeTopbarHeightPx(parsed.topbarHeightPx),
       toolbarHeightPx: normalizeToolbarHeightPx(parsed.toolbarHeightPx),
       fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
-      fileTreeTopbarFontSize: normalizeFileTreeTopbarFontSize(parsed.fileTreeTopbarFontSize),
       fileTreeClipboardMaxBytesMb: normalizeFileTreeClipboardMaxBytesMb(parsed.fileTreeClipboardMaxBytesMb),
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
-      remoteTerminalTmuxEnabled: normalizeRemoteTerminalTmuxEnabled(parsed.remoteTerminalTmuxEnabled),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
       terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
       terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
@@ -514,6 +692,18 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
         normalizeWebAccessUsername(parsed.webAccessUsername) && isWebAccessPasswordHash(parsed.webAccessPasswordHash)
           ? parsed.webAccessPasswordHash
           : '',
+      telegramNotificationsEnabled:
+        parsed.telegramNotificationsEnabled === true && Boolean(telegramBotToken && telegramChatId),
+      telegramProxyEnabled: parsed.telegramProxyEnabled !== false,
+      telegramBellNotificationsEnabled: parsed.telegramBellNotificationsEnabled !== false,
+      telegramOutputCompletionNotificationsEnabled: parsed.telegramOutputCompletionNotificationsEnabled === true,
+      telegramOutputCompletionMinimumActivitySeconds: normalizeTelegramOutputCompletionMinimumActivitySeconds(
+        parsed.telegramOutputCompletionMinimumActivitySeconds,
+      ),
+      telegramIncludeTerminalOutput: parsed.telegramIncludeTerminalOutput === true,
+      telegramOutputTailLength: normalizeTelegramOutputTailLength(parsed.telegramOutputTailLength),
+      telegramBotToken,
+      telegramChatId,
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -537,6 +727,15 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       webAccessEnabled: false,
       webAccessUsername: '',
       webAccessPasswordHash: '',
+      telegramNotificationsEnabled: false,
+      telegramProxyEnabled: true,
+      telegramBellNotificationsEnabled: true,
+      telegramOutputCompletionNotificationsEnabled: false,
+      telegramOutputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
+      telegramIncludeTerminalOutput: false,
+      telegramOutputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+      telegramBotToken: '',
+      telegramChatId: '',
       session: defaultSession(),
       recentRepos: [],
       repoSettings: [],
@@ -559,6 +758,63 @@ export async function getServerSettingsPrefs(): Promise<SettingsPrefs> {
 
 export async function getServerWebAccessSettings(): Promise<WebAccessSettingsSnapshot> {
   return webAccessSettingsFromData(await loadServerSettings())
+}
+
+export async function getServerTelegramNotificationSettings(): Promise<TelegramNotificationSettingsSnapshot> {
+  return telegramNotificationSettingsFromData(await loadServerSettings())
+}
+
+export interface ServerTelegramNotificationConfig extends TelegramNotificationSettingsSnapshot {
+  botToken: string
+}
+
+export async function getServerTelegramNotificationConfig(): Promise<ServerTelegramNotificationConfig> {
+  const data = await loadServerSettings()
+  const snapshot = telegramNotificationSettingsFromData(data)
+  return {
+    ...snapshot,
+    botToken: snapshot.botTokenConfigured ? data.telegramBotToken : '',
+  }
+}
+
+export async function updateServerTelegramNotificationSettings(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const data = await loadServerSettings()
+  const rawToken = typeof input.botToken === 'string' ? input.botToken.trim() : ''
+  const normalizedToken = normalizeTelegramBotToken(rawToken)
+  if (rawToken && !normalizedToken) throw new TelegramNotificationSettingsError('invalid-input')
+
+  const rawChatId = typeof input.chatId === 'string' ? input.chatId.trim() : ''
+  const chatId = normalizeTelegramChatId(rawChatId)
+  if (rawChatId && !chatId) throw new TelegramNotificationSettingsError('invalid-input')
+
+  const botToken = normalizedToken || data.telegramBotToken
+  if (input.enabled && (!botToken || !chatId)) {
+    throw new TelegramNotificationSettingsError('configuration-incomplete')
+  }
+  if (
+    !Number.isInteger(input.outputCompletionMinimumActivitySeconds) ||
+    input.outputCompletionMinimumActivitySeconds < TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS ||
+    input.outputCompletionMinimumActivitySeconds > TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS ||
+    !Number.isInteger(input.outputTailLength) ||
+    input.outputTailLength < TELEGRAM_OUTPUT_TAIL_MIN_LENGTH ||
+    input.outputTailLength > TELEGRAM_OUTPUT_TAIL_MAX_LENGTH
+  ) {
+    throw new TelegramNotificationSettingsError('invalid-input')
+  }
+
+  data.telegramNotificationsEnabled = input.enabled === true
+  data.telegramProxyEnabled = input.proxyEnabled !== false
+  data.telegramBellNotificationsEnabled = input.bellEnabled === true
+  data.telegramOutputCompletionNotificationsEnabled = input.outputCompletionEnabled === true
+  data.telegramOutputCompletionMinimumActivitySeconds = input.outputCompletionMinimumActivitySeconds
+  data.telegramIncludeTerminalOutput = input.includeTerminalOutput === true
+  data.telegramOutputTailLength = input.outputTailLength
+  data.telegramBotToken = botToken
+  data.telegramChatId = chatId
+  await writeServerSettingsFile(data)
+  return telegramNotificationSettingsFromData(data)
 }
 
 export async function getServerWebAccessCredentials(): Promise<{
@@ -619,7 +875,7 @@ export function subscribeServerFetchInterval(listener: FetchIntervalListener): (
 
 export async function setServerFetchIntervalSec(sec: number): Promise<number> {
   const data = await loadServerSettings()
-  const next = normalizeFetchInterval(sec)
+  const next = normalizeRefreshInterval(sec, DEFAULT_FETCH_INTERVAL_SEC)
   if (data.fetchIntervalSec !== next) {
     data.fetchIntervalSec = next
     await writeServerSettingsFile(data)
@@ -638,7 +894,13 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextColorTheme = patch.colorTheme === undefined ? data.colorTheme : normalizeColorTheme(patch.colorTheme)
   const nextFontFamily = patch.fontFamily === undefined ? data.fontFamily : normalizeFontFamilyPref(patch.fontFamily)
   const nextFetchIntervalSec =
-    patch.fetchIntervalSec === undefined ? data.fetchIntervalSec : normalizeFetchInterval(patch.fetchIntervalSec)
+    patch.fetchIntervalSec === undefined
+      ? data.fetchIntervalSec
+      : normalizeRefreshInterval(patch.fetchIntervalSec, DEFAULT_FETCH_INTERVAL_SEC)
+  const nextStatusRefreshIntervalSec =
+    patch.statusRefreshIntervalSec === undefined
+      ? data.statusRefreshIntervalSec
+      : normalizeRefreshInterval(patch.statusRefreshIntervalSec, DEFAULT_STATUS_REFRESH_INTERVAL_SEC)
   const nextGitNetworkProxyEnabled =
     patch.gitNetworkProxyEnabled === undefined
       ? data.gitNetworkProxyEnabled
@@ -661,10 +923,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.globalShortcutDisabled === undefined ? data.globalShortcutDisabled : patch.globalShortcutDisabled === true
   const nextSwapCloseShortcuts =
     patch.swapCloseShortcuts === undefined ? data.swapCloseShortcuts : patch.swapCloseShortcuts === true
-  const nextToggleDetailOnActionBarBlankClick =
-    patch.toggleDetailOnActionBarBlankClick === undefined
-      ? data.toggleDetailOnActionBarBlankClick
-      : patch.toggleDetailOnActionBarBlankClick === true
   const nextTerminalThemeSyncEnabled =
     patch.terminalThemeSyncEnabled === undefined
       ? data.terminalThemeSyncEnabled
@@ -683,20 +941,12 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     patch.toolbarHeightPx === undefined ? data.toolbarHeightPx : normalizeToolbarHeightPx(patch.toolbarHeightPx)
   const nextFileTreeFontSize =
     patch.fileTreeFontSize === undefined ? data.fileTreeFontSize : normalizeFileTreeFontSize(patch.fileTreeFontSize)
-  const nextFileTreeTopbarFontSize =
-    patch.fileTreeTopbarFontSize === undefined
-      ? data.fileTreeTopbarFontSize
-      : normalizeFileTreeTopbarFontSize(patch.fileTreeTopbarFontSize)
   const nextFileTreeClipboardMaxBytesMb =
     patch.fileTreeClipboardMaxBytesMb === undefined
       ? data.fileTreeClipboardMaxBytesMb
       : normalizeFileTreeClipboardMaxBytesMb(patch.fileTreeClipboardMaxBytesMb)
   const nextTerminalFontSize =
     patch.terminalFontSize === undefined ? data.terminalFontSize : normalizeTerminalFontSize(patch.terminalFontSize)
-  const nextRemoteTerminalTmuxEnabled =
-    patch.remoteTerminalTmuxEnabled === undefined
-      ? data.remoteTerminalTmuxEnabled
-      : normalizeRemoteTerminalTmuxEnabled(patch.remoteTerminalTmuxEnabled)
   const nextTerminalCustomButtonsVisible =
     patch.terminalCustomButtonsVisible === undefined
       ? data.terminalCustomButtonsVisible
@@ -717,6 +967,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.colorTheme !== nextColorTheme ||
     data.fontFamily !== nextFontFamily ||
     data.fetchIntervalSec !== nextFetchIntervalSec ||
+    data.statusRefreshIntervalSec !== nextStatusRefreshIntervalSec ||
     data.gitNetworkProxyEnabled !== nextGitNetworkProxyEnabled ||
     data.gitNetworkProxyUrl !== nextGitNetworkProxyUrl ||
     data.gitNetworkTimeoutSec !== nextGitNetworkTimeoutSec ||
@@ -724,7 +975,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.shortcutsDisabled !== nextShortcutsDisabled ||
     data.globalShortcutDisabled !== nextGlobalShortcutDisabled ||
     data.swapCloseShortcuts !== nextSwapCloseShortcuts ||
-    data.toggleDetailOnActionBarBlankClick !== nextToggleDetailOnActionBarBlankClick ||
     data.terminalThemeSyncEnabled !== nextTerminalThemeSyncEnabled ||
     data.temporaryFilesDirectory !== nextTemporaryFilesDirectory ||
     data.globalShortcut !== nextGlobalShortcut ||
@@ -733,10 +983,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.topbarHeightPx !== nextTopbarHeightPx ||
     data.toolbarHeightPx !== nextToolbarHeightPx ||
     data.fileTreeFontSize !== nextFileTreeFontSize ||
-    data.fileTreeTopbarFontSize !== nextFileTreeTopbarFontSize ||
     data.fileTreeClipboardMaxBytesMb !== nextFileTreeClipboardMaxBytesMb ||
     data.terminalFontSize !== nextTerminalFontSize ||
-    data.remoteTerminalTmuxEnabled !== nextRemoteTerminalTmuxEnabled ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     data.terminalCustomButtonSize !== nextTerminalCustomButtonSize ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
@@ -747,6 +995,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.colorTheme = nextColorTheme
   data.fontFamily = nextFontFamily
   data.fetchIntervalSec = nextFetchIntervalSec
+  data.statusRefreshIntervalSec = nextStatusRefreshIntervalSec
   data.gitNetworkProxyEnabled = nextGitNetworkProxyEnabled
   data.gitNetworkProxyUrl = nextGitNetworkProxyUrl
   data.gitNetworkTimeoutSec = nextGitNetworkTimeoutSec
@@ -754,7 +1003,6 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.shortcutsDisabled = nextShortcutsDisabled
   data.globalShortcutDisabled = nextGlobalShortcutDisabled
   data.swapCloseShortcuts = nextSwapCloseShortcuts
-  data.toggleDetailOnActionBarBlankClick = nextToggleDetailOnActionBarBlankClick
   data.terminalThemeSyncEnabled = nextTerminalThemeSyncEnabled
   data.temporaryFilesDirectory = nextTemporaryFilesDirectory
   data.globalShortcut = nextGlobalShortcut
@@ -763,10 +1011,8 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.topbarHeightPx = nextTopbarHeightPx
   data.toolbarHeightPx = nextToolbarHeightPx
   data.fileTreeFontSize = nextFileTreeFontSize
-  data.fileTreeTopbarFontSize = nextFileTreeTopbarFontSize
   data.fileTreeClipboardMaxBytesMb = nextFileTreeClipboardMaxBytesMb
   data.terminalFontSize = nextTerminalFontSize
-  data.remoteTerminalTmuxEnabled = nextRemoteTerminalTmuxEnabled
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible
   data.terminalCustomButtonSize = nextTerminalCustomButtonSize
   data.terminalCustomButtons = nextTerminalCustomButtons
@@ -817,62 +1063,11 @@ export async function setServerRepoColorTheme(input: {
   return cloneRepoSettings(data.repoSettings)
 }
 
-export async function trustServerRepoWorktreeBootstrapConfig(input: {
-  repoId: string
-  configHash: string
-}): Promise<RepoSettingsEntry[]> {
-  const data = await loadServerSettings()
-  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return cloneRepoSettings(data.repoSettings)
-  const worktreeBootstrapTrust: WorktreeBootstrapTrust = {
-    configHash: input.configHash,
-    trustedAt: new Date().toISOString(),
-  }
-  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
-  data.repoSettings = upsertRepoSettingsEntry(data.repoSettings, {
-    repoId: input.repoId,
-    ...(existing?.colorTheme ? { colorTheme: existing.colorTheme } : {}),
-    worktreeBootstrapTrust,
-  })
-  await writeServerSettingsFile(data)
-  return cloneRepoSettings(data.repoSettings)
-}
-
-export async function untrustServerRepoWorktreeBootstrapConfig(input: {
-  repoId: string
-  configHash: string
-}): Promise<boolean> {
-  const data = await loadServerSettings()
-  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return false
-  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
-  if (existing?.worktreeBootstrapTrust?.configHash !== input.configHash) return false
-  const next: RepoSettingsEntry = {
-    repoId: input.repoId,
-    ...(existing.colorTheme ? { colorTheme: existing.colorTheme } : {}),
-  }
-  data.repoSettings = repoSettingsEntryHasPersistedFields(next)
-    ? [next, ...data.repoSettings.filter((entry) => entry.repoId !== input.repoId)]
-    : data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
-  await writeServerSettingsFile(data)
-  return true
-}
-
 function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSettingsEntry[] {
   return repoSettings.map((entry) => ({
     repoId: entry.repoId,
     ...(entry.colorTheme ? { colorTheme: entry.colorTheme } : {}),
-    ...(entry.worktreeBootstrapTrust
-      ? {
-          worktreeBootstrapTrust: {
-            configHash: entry.worktreeBootstrapTrust.configHash,
-            trustedAt: entry.worktreeBootstrapTrust.trustedAt,
-          },
-        }
-      : {}),
   }))
-}
-
-function upsertRepoSettingsEntry(entries: readonly RepoSettingsEntry[], next: RepoSettingsEntry): RepoSettingsEntry[] {
-  return [next, ...entries.filter((entry) => entry.repoId !== next.repoId)]
 }
 
 export async function addServerRecentRepo(repo: RepoSessionEntry): Promise<RepoSessionEntry[]> {

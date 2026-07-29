@@ -57,11 +57,13 @@ import { useRepoDrop } from '#/web/hooks/useRepoDrop.ts'
 import { useAppBootstrap } from '#/web/hooks/useAppBootstrap.ts'
 import { useBackgroundFetch } from '#/web/hooks/useBackgroundFetch.ts'
 import { useHeuristicRepoStatusRefresh } from '#/web/hooks/useHeuristicRepoStatusRefresh.ts'
+import { useScheduledRepoStatusRefresh } from '#/web/hooks/useScheduledRepoStatusRefresh.ts'
 import { useRendererEffectIntentRouter } from '#/web/hooks/useRendererEffectIntentRouter.ts'
 import { useSessionPersistence } from '#/web/hooks/useSessionPersistence.ts'
 import { useSettingsWriteErrorToast } from '#/web/hooks/useSettingsWriteErrorToast.ts'
 import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalidationRefresh.ts'
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
+import { useBranchWorkspaceInvalidationSync } from '#/web/branch-workspace-queries.ts'
 import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
@@ -100,8 +102,10 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
   useSettingsWriteErrorToast()
   useBackgroundFetch()
   useHeuristicRepoStatusRefresh()
+  useScheduledRepoStatusRefresh()
   useRepoStoreInvalidationRefresh()
   useSettingsQueryInvalidationSync()
+  useBranchWorkspaceInvalidationSync()
   useRendererEffectIntentRouter({
     navigation,
     currentRepoId: visibleRepoId,
@@ -149,7 +153,6 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
                 visibleRepoId={visibleRepoId}
                 sessionReady={sessionReady}
                 workspaceLayout={workspaceLayout}
-                detailCollapsed={workspaceBehavior.detailCollapsed}
                 detailFocusMode={workspaceBehavior.detailFocusMode}
                 overlays={overlays}
                 closeRepoConfirmation={closeRepoConfirmation}
@@ -170,8 +173,7 @@ interface MainWindowViewportProps {
   settingsOpen: boolean
   visibleRepoId: string | null
   sessionReady: boolean
-  workspaceLayout: 'top-bottom' | 'left-right'
-  detailCollapsed: boolean
+  workspaceLayout: ReturnType<typeof useMainWindowShellState>['workspaceLayout']
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
   closeRepoConfirmation: ReturnType<typeof useMainWindowShellState>['closeRepoConfirmation']
@@ -183,8 +185,7 @@ interface MainWindowViewportContentProps {
   settingsOpen: boolean
   visibleRepoId: string | null
   sessionReady: boolean
-  workspaceLayout: 'top-bottom' | 'left-right'
-  detailCollapsed: boolean
+  workspaceLayout: ReturnType<typeof useMainWindowShellState>['workspaceLayout']
   detailFocusMode: boolean
   overlays: ReturnType<typeof useMainWindowShellState>['overlays']
 }
@@ -203,7 +204,6 @@ function MainWindowViewport({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
-  detailCollapsed,
   detailFocusMode,
   overlays,
   closeRepoConfirmation,
@@ -228,7 +228,6 @@ function MainWindowViewport({
         visibleRepoId={visibleRepoId}
         sessionReady={sessionReady}
         workspaceLayout={workspaceLayout}
-        detailCollapsed={detailCollapsed}
         detailFocusMode={detailFocusMode}
         overlays={overlays}
       />
@@ -249,7 +248,6 @@ function MainWindowViewportContent({
   visibleRepoId,
   sessionReady,
   workspaceLayout,
-  detailCollapsed,
   detailFocusMode,
   overlays,
 }: MainWindowViewportContentProps) {
@@ -301,12 +299,7 @@ function MainWindowViewportContent({
           {visibleRepoId ? (
             <RepoView repoId={visibleRepoId} />
           ) : !sessionReady ? (
-            <RepoWorkspaceSkeleton
-              layout={workspaceLayout}
-              detailCollapsed={detailCollapsed}
-              detailFocusMode={detailFocusMode}
-              compact={compact}
-            />
+            <RepoWorkspaceSkeleton layout={workspaceLayout} detailFocusMode={detailFocusMode} compact={compact} />
           ) : (
             <EmptyState />
           )}

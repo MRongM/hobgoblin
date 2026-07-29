@@ -1,6 +1,7 @@
 import { git, gitResultWithOptions } from '#/system/git/helper.ts'
 import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { mapWithConcurrency } from '#/system/git/concurrency.ts'
+import { recordBranchCreatedFrom } from '#/system/git/branches.ts'
 import type { ExecResult, WorktreeInfo } from '#/shared/git-types.ts'
 import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 
@@ -14,7 +15,7 @@ interface GetWorktreesOptions {
 
 export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): Promise<WorktreeInfo[]> {
   try {
-    const output = await git(cwd, ['worktree', 'list', '--porcelain'], { signal: options?.signal })
+    const output = await git(cwd, ['worktree', 'list', '--porcelain', '--expire', 'now'], { signal: options?.signal })
     const worktrees = parseWorktrees(output)
     if (options?.includeStatus === false) return worktrees
 
@@ -54,19 +55,36 @@ export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): 
  *  external disk or a busy filesystem still stays inside the budget. */
 const WORKTREE_OP_TIMEOUT_MS = 180_000
 
-/** Plain `git worktree remove` — no `--force`. Git refuses on dirty,
- *  locked, or otherwise non-removable worktrees, which is exactly the
- *  safety net we want; the IPC handler has already pre-checked the
- *  expected cases and surfaced friendlier errors, so anything that
- *  reaches here is a corner case worth showing git's own message for. */
-export async function removeWorktree(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
+/** A single `--force` may discard uncommitted changes but cannot override
+ *  a worktree lock. Callers pre-check the expected safety boundaries so
+ *  remaining failures retain Git's own diagnostic. */
+export async function removeWorktree(
+  cwd: string,
+  worktreePath: string,
+  options: { force?: boolean; signal?: AbortSignal } = {},
+): Promise<ExecResult> {
   return gitResultWithOptions(
     cwd,
-    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal: options.signal },
     'worktree',
     'remove',
+    ...(options.force ? ['--force'] : []),
     '--',
     worktreePath,
+  )
+}
+
+export async function pruneWorktrees(
+  cwd: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<ExecResult> {
+  return gitResultWithOptions(
+    cwd,
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal: options.signal },
+    'worktree',
+    'prune',
+    '--expire',
+    'now',
   )
 }
 
@@ -75,7 +93,20 @@ export async function createWorktree(
   input: CreateWorktreeInput,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  return gitResultWithOptions(cwd, { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal }, 'worktree', 'add', ...createWorktreeArgs(input))
+  const created = await gitResultWithOptions(
+    cwd,
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
+    'worktree',
+    'add',
+    ...createWorktreeArgs(input),
+  )
+  if (created.ok && input.mode.kind === 'newBranch') {
+    await recordBranchCreatedFrom(cwd, input.mode.newBranch, input.mode.baseRef, signal)
+  }
+  if (created.ok && input.mode.kind === 'trackRemoteBranch') {
+    await recordBranchCreatedFrom(cwd, input.mode.localBranch, input.mode.remoteRef, signal)
+  }
+  return created
 }
 
 function createWorktreeArgs(input: CreateWorktreeInput): string[] {

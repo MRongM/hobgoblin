@@ -162,6 +162,62 @@ describe('repo lifecycle', () => {
     expect(calls.snapshot).toEqual([api, web])
   })
 
+  test('keeps an already-open repository as a standalone project when its parent workspace opens', async () => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: api, name: 'api' }],
+        candidates: [{ id: api, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(api)
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+
+    expect(useReposStore.getState().order).toEqual([api, root])
+    expect(useReposStore.getState().repos[api]?.workspaceRootId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([api])
+  })
+
+  test('adds a workspace member as a standalone project when the same repository is opened directly', async () => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: api, name: 'api' }],
+        candidates: [{ id: api, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    await useReposStore.getState().ensureWorkspaceOpen(api)
+
+    expect(useReposStore.getState().order).toEqual([root, api])
+    expect(useReposStore.getState().repos[api]?.workspaceRootId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([api])
+  })
+
   test('does not discover children when the selected root is itself a git repository', async () => {
     const calls = installGoblin()
 
@@ -295,7 +351,11 @@ describe('repo lifecycle', () => {
       configured: true,
       configurationError: null,
     })
-    useReposStore.setState({ activeId: api, workspaceActiveRepoByRoot: { [root]: api } })
+    useReposStore.setState({
+      activeId: api,
+      activeProjectId: root,
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: api } },
+    })
 
     await expect(useReposStore.getState().configureWorkspace(root, { repo: ['web'] })).resolves.toEqual({
       ok: true,
@@ -306,6 +366,7 @@ describe('repo lifecycle', () => {
       configured: true,
     })
     expect(useReposStore.getState().repos[api]).toBeDefined()
+    expect(useReposStore.getState().repos[api]?.workspaceRootId).toBeUndefined()
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).not.toContain(api)
     expect(useReposStore.getState().activeId).toBe(web)
   })
@@ -675,7 +736,9 @@ describe('repo lifecycle', () => {
           error: null,
         },
       },
-      workspaceActiveRepoByRoot: { [root]: child },
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+      workspaceRepositoryListExpandedByRoot: { [root]: false },
+      workspaceRepositoryListHeightByRoot: { [root]: 224 },
     })
 
     useReposStore.getState().closeRepo(root)
@@ -684,8 +747,86 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().order).toEqual([])
     expect(useReposStore.getState().activeId).toBeNull()
     expect(useReposStore.getState().workspaceProjects).toEqual({})
-    expect(useReposStore.getState().workspaceActiveRepoByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceRepositoryListExpandedByRoot).toEqual({})
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({})
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(root)
     expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(child)
+  })
+
+  test('closing a standalone project keeps the shared repository projection for its workspace', () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    useReposStore.setState({
+      repos: {
+        [root]: emptyRepo(root, 'workspace'),
+        [child]: replaceRepo(emptyRepo(child, 'api'), (repo) => {
+          repo.workspaceRootId = root
+        }),
+      },
+      order: [child, root],
+      activeId: child,
+      activeProjectId: child,
+      workspaceProjects: {
+        [root]: {
+          rootId: root,
+          repositoryIds: [child],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+    })
+
+    useReposStore.getState().closeRepo(child)
+
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(useReposStore.getState().repos[child]?.workspaceRootId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
+    expect(mocks.stopPortForwardSessionsForRepo).not.toHaveBeenCalledWith(child)
+  })
+
+  test('closing a workspace keeps member repositories that remain open as standalone projects', () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    useReposStore.setState({
+      repos: {
+        [root]: emptyRepo(root, 'workspace'),
+        [child]: replaceRepo(emptyRepo(child, 'api'), (repo) => {
+          repo.workspaceRootId = root
+        }),
+      },
+      order: [root, child],
+      activeId: child,
+      activeProjectId: root,
+      workspaceProjects: {
+        [root]: {
+          rootId: root,
+          repositoryIds: [child],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+    })
+
+    useReposStore.getState().closeRepo(root)
+
+    expect(useReposStore.getState().order).toEqual([child])
+    expect(useReposStore.getState().repos[root]).toBeUndefined()
+    expect(useReposStore.getState().repos[child]).toBeDefined()
+    expect(useReposStore.getState().repos[child]?.workspaceRootId).toBeUndefined()
+    expect(useReposStore.getState().activeProjectId).toBe(child)
+    expect(useReposStore.getState().activeId).toBe(child)
+    expect(mocks.stopPortForwardSessionsForRepo).toHaveBeenCalledWith(root)
+    expect(mocks.stopPortForwardSessionsForRepo).not.toHaveBeenCalledWith(child)
   })
 })

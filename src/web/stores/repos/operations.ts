@@ -1,11 +1,6 @@
 import type { RepoBranchActionKind } from '#/web/stores/repos/branch-action-types.ts'
 export type RepoOperationPhase = 'idle' | 'queued' | 'running'
-export type RepoOperationKey =
-  | 'fetch'
-  | 'manualRefresh'
-  | 'snapshot'
-  | 'status'
-  | 'branchAction'
+export type RepoOperationKey = 'fetch' | 'manualRefresh' | 'snapshot' | 'status' | 'branchAction'
 export type RepoBranchActionReason =
   | 'branch:checkout'
   | 'branch:pull'
@@ -14,6 +9,7 @@ export type RepoBranchActionReason =
   | 'branch:createBranch'
   | 'branch:trackRemoteBranch'
   | 'branch:deleteBranch'
+  | 'branch:cleanupWorktree'
   | 'branch:removeWorktree'
 export type RepoOperationReason =
   | 'fetch'
@@ -97,23 +93,6 @@ function operationForKey(operations: RepoOperationsState, key: RepoOperationKey)
   return exhaustive
 }
 
-function readOperationForKey(operations: RepoOperationsState, key: RepoOperationKey): RepoOperationState {
-  switch (key) {
-    case 'fetch':
-      return operations.fetch
-    case 'manualRefresh':
-      return operations.manualRefresh
-    case 'snapshot':
-      return operations.snapshot
-    case 'status':
-      return operations.status
-    case 'branchAction':
-      return operations.branchAction
-  }
-  const exhaustive: never = key
-  return exhaustive
-}
-
 export function markRepoOperationViews(
   operations: RepoOperationsState,
   operationId: number,
@@ -123,7 +102,7 @@ export function markRepoOperationViews(
 ): void {
   if (phase === 'running' && wasQueued) {
     const allTargetsQueuedForOperation = targets.every((target) => {
-      const operation = readOperationForKey(operations, target.key)
+      const operation = operationForKey(operations, target.key)
       return operation.operationId === operationId && operation.phase === 'queued'
     })
     if (!allTargetsQueuedForOperation) return
@@ -145,7 +124,7 @@ export function settleRepoOperationViews(
   error: string | null,
 ): void {
   for (const target of targets) {
-    settleOperation(readOperationForKey(operations, target.key), operationId, { error })
+    settleOperation(operationForKey(operations, target.key), operationId, { error })
   }
 }
 

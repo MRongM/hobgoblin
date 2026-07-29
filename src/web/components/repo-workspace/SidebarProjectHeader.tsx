@@ -14,6 +14,7 @@ import {
   Folder,
   FolderGit2,
   FolderOpen,
+  FolderTree,
   PanelLeftClose,
   PanelRightOpen,
   Plus,
@@ -38,19 +39,17 @@ import {
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { workspaceRootIdForRepo } from '#/web/stores/repos/workspace-projects.ts'
+import { activeProjectId as selectActiveProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
-import { AsyncButton } from '#/web/components/AsyncButton.tsx'
-import { Tip } from '#/web/components/Tip.tsx'
-import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
-import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 
 interface Props {
   repoId: string
   onShowCompactDetail?: () => void
+  onShowCompactFiles?: () => void
+  onMaximizeTerminal?: () => void
 }
 
-export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
+export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompactFiles, onMaximizeTerminal }: Props) {
   const t = useT()
   const listId = useId()
   const listExpanded = useReposStore((state) => state.projectListExpanded)
@@ -60,12 +59,10 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   const shellActions = useShellOverlayActions()
   const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
   const reorderRepos = useReposStore((s) => s.reorderRepos)
-  const toggleDetailFocusMode = useReposStore((s) => s.toggleDetailFocusMode)
   const { topbarHeightPx } = useRuntimeChromeSettings()
-  const activeProjectId = useReposStore((s) => workspaceRootIdForRepo(s, repoId) ?? repoId)
+  const activeProjectId = useReposStore(selectActiveProjectId) ?? repoId
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
-  const projectExternalActions = useProjectExternalOpenActions(activeProjectId)
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
   const activeProjectKind = activeProject?.isGitRepo === false ? 'plain' : 'git'
@@ -97,15 +94,8 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
   }
 
   return (
-    <div
-      data-testid="sidebar-project-header"
-      className="flex shrink-0 flex-col border-b border-topbar-border bg-topbar text-topbar-foreground"
-    >
-      {/* The bottom border lives on the outer wrapper (it must also wrap the
-          expanded project list), so subtract it here to keep the collapsed
-          header at exactly topbarHeightPx — the same border-box height every
-          other topbar row (Toolbar chrome="topbar", Topbar) renders with. */}
-      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx - 1 }}>
+    <div data-testid="sidebar-project-header" className="flex shrink-0 flex-col bg-topbar text-topbar-foreground">
+      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx }}>
         <Button
           type="button"
           variant="ghost"
@@ -120,7 +110,12 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
         >
           <ActiveProjectIcon className="size-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide">{activeName}</span>
-          {activeProject && <ProjectTerminalStatus terminalWorktreeKeys={activeProject.terminalWorktreeKeys} />}
+          {activeProject && !listExpanded && (
+            <ProjectTerminalStatus
+              terminalWorktreeKeys={activeProject.terminalWorktreeKeys}
+              branchWorkspaceRootId={activeProject.branchWorkspaceRootId}
+            />
+          )}
           <ChevronDown
             className={cn(
               'size-3.5 shrink-0 text-topbar-muted-foreground transition-transform',
@@ -131,42 +126,6 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
         </Button>
         {onShowCompactDetail && <WorkspaceRepositorySwitcher repoId={repoId} compact />}
         <div className="min-w-0 flex-1" aria-hidden="true" />
-        {!listExpanded && projectExternalActions.visible && (
-          <div data-testid="project-header-external-actions" className="flex shrink-0 items-center gap-0.5">
-            <Tip label={t('worktrees.open-in-editor-label')}>
-              <span className="inline-flex">
-                <AsyncButton
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  data-testid="project-editor-btn"
-                  loading={projectExternalActions.editor.busy}
-                  disabled={projectExternalActions.editor.disabled}
-                  aria-label={`${t('worktrees.open-in-editor-label')} ${activeName}`}
-                  onClick={() => projectExternalActions.editor.onSelect()}
-                >
-                  {() => <EditorAppIcon pref={projectExternalActions.editor.iconPref} />}
-                </AsyncButton>
-              </span>
-            </Tip>
-            <Tip label={t('terminal.external')}>
-              <span className="inline-flex">
-                <AsyncButton
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  data-testid="project-external-terminal-btn"
-                  loading={projectExternalActions.externalTerminal.busy}
-                  disabled={projectExternalActions.externalTerminal.disabled}
-                  aria-label={`${t('terminal.external')} ${activeName}`}
-                  onClick={() => projectExternalActions.externalTerminal.onSelect()}
-                >
-                  {() => <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />}
-                </AsyncButton>
-              </span>
-            </Tip>
-          </div>
-        )}
         {shellActions && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -201,20 +160,46 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail }: Props) {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onShowCompactDetail ?? toggleDetailFocusMode}
-          aria-label={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus')}
-          title={t(onShowCompactDetail ? 'mobile.show-terminal' : 'branch-detail.focus-title')}
-        >
-          {onShowCompactDetail ? <PanelRightOpen /> : <PanelLeftClose />}
-        </Button>
+        {onShowCompactFiles && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onShowCompactFiles}
+            aria-label={t('file-tree.title')}
+            title={t('file-tree.title')}
+          >
+            <FolderTree />
+          </Button>
+        )}
+        {onShowCompactDetail && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onShowCompactDetail}
+            aria-label={t('mobile.show-terminal')}
+            title={t('mobile.show-terminal')}
+          >
+            <PanelRightOpen />
+          </Button>
+        )}
+        {!onShowCompactDetail && onMaximizeTerminal && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onMaximizeTerminal}
+            aria-label={t('branch-detail.focus')}
+            title={t('branch-detail.focus-title')}
+          >
+            <PanelLeftClose />
+          </Button>
+        )}
       </div>
       {listExpanded && (
-        <div className="border-t border-separator/70">
-          <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-topbar-muted-foreground">
+        <div>
+          <div className="flex h-7 shrink-0 items-center px-4 pt-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-topbar-muted-foreground">
             {t('repo-tabs.repos')}
           </div>
           <SidebarProjectList

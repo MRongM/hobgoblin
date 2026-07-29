@@ -60,7 +60,8 @@ Notes:
 Representative examples:
 
 - saved session state
-- workspace layout and detail pane sizes
+- fixed desktop detail pane size
+- per-workspace desktop repository-list height
 - active repo and open repo set for next launch
 - `restorableRepoCache` for warm restore
 - boot-only `useSessionRestoreStore`
@@ -86,6 +87,9 @@ Notes:
 ## Rules of thumb
 
 - If the state only matters during one interaction, keep it local.
+- Compact workspace focus surfaces (`detail`, `scope`, and `files`) are local presentation state. Do not persist them or project them into desktop pane state.
+- Desktop terminal Focus is also local presentation state. Own it beside the destination that composes the terminal, and clear it on non-terminal selection, destination changes, responsive-mode changes, deletion fallback, and relaunch.
+- A legacy session `detailFocusMode` field is transport compatibility only. Normalize it to `false`; never project it into renderer Focus state or write an active Focus value back to the session.
 - If the state must converge across windows right now, make it runtime-coherent.
 - If the state only needs to come back on next launch, make it restorable.
 - Let the server own runtime-coherent truth for settings, repo data, and terminal state.

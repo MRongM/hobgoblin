@@ -14,7 +14,7 @@ import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeGeneralSettings } from '#/web/runtime-settings-general.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { useRuntimeLanSettings } from '#/web/runtime-settings-lan.ts'
-import { useRuntimeRecentRepos } from '#/web/settings-read-projection.ts'
+import { readRuntimeFetchSettings, useRuntimeRecentRepos } from '#/web/settings-read-projection.ts'
 import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { useI18nStore } from '#/web/stores/i18n.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
@@ -55,11 +55,17 @@ afterEach(() => {
 })
 
 describe('runtime settings hooks', () => {
+  test('defaults terminal notifications on when runtime settings are unavailable', () => {
+    expect(readRuntimeFetchSettings(undefined).terminalNotificationsEnabled).toBe(true)
+    expect(readRuntimeFetchSettings(undefined).statusRefreshIntervalSec).toBe(120)
+  })
+
   test('reads fetch, shortcut, and lan settings from the runtime settings snapshot', async () => {
     mainWindowQueryClient.setQueryData(
       settingsSnapshotQueryKey(),
       defaultSettingsSnapshot({
         fetchIntervalSec: 300,
+        statusRefreshIntervalSec: 60,
         terminalNotificationsEnabled: true,
         shortcutsDisabled: true,
         globalShortcutDisabled: true,
@@ -91,6 +97,7 @@ describe('runtime settings hooks', () => {
     expect(result).toMatchObject({
       fetch: {
         fetchIntervalSec: 300,
+        statusRefreshIntervalSec: 60,
         terminalNotificationsEnabled: true,
       },
       shortcuts: {
@@ -110,7 +117,6 @@ describe('runtime settings hooks', () => {
     mainWindowQueryClient.setQueryData(
       settingsSnapshotQueryKey(),
       defaultSettingsSnapshot({
-        toggleDetailOnActionBarBlankClick: true,
         terminalThemeSyncEnabled: false,
       }),
     )
@@ -124,7 +130,6 @@ describe('runtime settings hooks', () => {
     await renderWithMainWindowQueryClient(<HookHost />)
 
     expect(result).toMatchObject({
-      toggleDetailOnActionBarBlankClick: true,
       terminalThemeSyncEnabled: false,
     })
   })
@@ -158,7 +163,6 @@ describe('runtime settings hooks', () => {
       defaultSettingsSnapshot({
         fontFamily: 'system',
         fileTreeFontSize: 12,
-        fileTreeTopbarFontSize: 13,
         terminalFontSize: 16,
       }),
     )
@@ -173,8 +177,7 @@ describe('runtime settings hooks', () => {
 
     expect(result).toEqual({
       fontFamily: 'system',
-      fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
+      appFontSize: 12,
       terminalFontSize: 16,
     })
   })

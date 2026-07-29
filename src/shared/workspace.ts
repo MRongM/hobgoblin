@@ -34,7 +34,7 @@ export type WorkspaceDiscoveryResult =
       configuration: WorkspaceConfigSnapshot
       skipped: WorkspaceDiscoveryIssue[]
     }
-  | { ok: false; message: string }
+  | { ok: false; message: string; affectedBranchWorkspaces?: string[] }
 
 export function isWorkspaceRepositoryName(value: unknown): value is string {
   return (

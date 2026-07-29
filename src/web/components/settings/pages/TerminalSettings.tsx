@@ -62,7 +62,6 @@ export function TerminalSettings() {
   const t = useT()
   const {
     terminalCustomButtons: buttons,
-    remoteTerminalTmuxEnabled,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
     terminalFontSize,
@@ -72,7 +71,6 @@ export function TerminalSettings() {
   const [dirty, setDirty] = useState(false)
   const {
     setTerminalCustomButtons,
-    setRemoteTerminalTmuxEnabled,
     setTerminalCustomButtonsVisible,
     setTerminalCustomButtonSize,
   } = useTerminalCustomButtonsController()
@@ -127,23 +125,6 @@ export function TerminalSettings() {
                 max={MAX_TERMINAL_FONT_SIZE}
                 value={terminalFontSize}
                 onChange={(fontSize) => void setTerminalFontSize(fontSize)}
-              />
-            }
-          />
-        </SettingsList>
-      </SettingsGroup>
-      <SettingsGroup label={t('settings.terminal-remote.title')} hint={t('settings.terminal-remote.hint')}>
-        <SettingsList>
-          <SettingsRow
-            controlId="settings-terminal-remote-tmux"
-            label={t('settings.terminal-remote-tmux')}
-            hint={t('settings.terminal-remote-tmux-hint')}
-            control={
-              <Switch
-                id="settings-terminal-remote-tmux"
-                checked={remoteTerminalTmuxEnabled}
-                onCheckedChange={(enabled) => void setRemoteTerminalTmuxEnabled(enabled)}
-                aria-label={t('settings.terminal-remote-tmux')}
               />
             }
           />

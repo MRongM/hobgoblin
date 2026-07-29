@@ -8,14 +8,17 @@ import type {
   RendererRuntimeSnapshot,
 } from '#/shared/bootstrap.ts'
 import type { I18nSnapshot } from '#/shared/rpc.ts'
+import type { RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 import { RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
 
 interface RendererBootstrapSeed {
   runtime: RendererRuntimeSnapshot
   homeDir: string
+  hostPlatform?: NodeJS.Platform
   i18n: I18nSnapshot
   settings: InitialSettingsSnapshot
   server: InitialServerSnapshot | null
+  surface?: RendererSurfaceBootstrap
 }
 
 export function createRendererRuntimeSnapshot(
@@ -39,16 +42,20 @@ export function toInitialServerSnapshot(
     | null
     | undefined,
 ): InitialServerSnapshot | null {
-  return server ? { url: server.url, secret: server.secret, ...(server.clientId ? { clientId: server.clientId } : {}) } : null
+  return server
+    ? { url: server.url, secret: server.secret, ...(server.clientId ? { clientId: server.clientId } : {}) }
+    : null
 }
 
 export function createRendererBootstrapPayload(seed: RendererBootstrapSeed): RendererBootstrapPayload {
   return {
     runtime: seed.runtime,
     homeDir: seed.homeDir,
+    ...(seed.hostPlatform ? { hostPlatform: seed.hostPlatform } : {}),
     i18n: seed.i18n,
     settings: seed.settings,
     server: seed.server,
+    surface: seed.surface ?? { kind: 'main' },
   }
 }
 
@@ -56,8 +63,10 @@ export function createRendererBootstrapSnapshot(seed: RendererBootstrapSeed): Re
   return {
     runtime: seed.runtime,
     homeDir: seed.homeDir,
+    ...(seed.hostPlatform ? { hostPlatform: seed.hostPlatform } : {}),
     initialI18n: seed.i18n,
     initialSettings: seed.settings,
     initialServer: seed.server,
+    surface: seed.surface ?? { kind: 'main' },
   }
 }

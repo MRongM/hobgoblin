@@ -12,7 +12,6 @@ import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { getI18nSnapshot, setI18nPref } from '#/web/settings-client.ts'
 import { subscribeSettingsInvalidationRefetch } from '#/web/settings-invalidation-refetch.ts'
 
-export type { Lang, LangPref }
 export type Dict = Record<string, string>
 
 interface InitialI18n {
@@ -140,8 +139,4 @@ export function useT() {
   return (key: string, params?: Record<string, string | number>) => {
     return t(key, params) as string
   }
-}
-
-export function translate(key: string, params?: Record<string, string | number>): string {
-  return i18next.t(key, params) as string
 }

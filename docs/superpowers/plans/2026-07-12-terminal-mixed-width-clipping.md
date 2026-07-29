@@ -271,7 +271,7 @@ Expected: exit 0，`src/main`、`src/web`、`src/server` 和 `src/shared` 边界
 在应用终端中运行：
 
 ```sh
-printf '%s\n' '- **worktree bootstrap 配置生成：** 在文件树工具栏初始化缺失的 `goblin.toml`，再用仓库相对路径配置 `copy`、`symlink`、`hardlink`、`exclude` 和 `setup`，作为新 worktree 的自动准备规则。'
+printf '%s\n' '- **worktree 依赖选择：** 创建 worktree 前，选择源 worktree 根目录下未跟踪的文件或目录，并复制或符号链接到新 worktree。'
 ```
 
 在 `stty size` 返回 160 列时，确认：

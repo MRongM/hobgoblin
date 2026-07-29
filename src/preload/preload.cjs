@@ -23,6 +23,7 @@ const IPC = {
     saveClipboardBinaryFiles: 'goblin:shell-save-clipboard-binary-files',
     writeFileTreeClipboardFile: 'goblin:shell-write-file-tree-clipboard-file',
     readFileTreeClipboardFile: 'goblin:shell-read-file-tree-clipboard-file',
+    openDetachedFileAreaWindow: 'goblin:shell-open-detached-file-area-window',
   },
   terminal: {
     notifyBell: 'goblin:terminal-notify-bell',
@@ -104,6 +105,7 @@ const runtime =
     ? bootstrap.runtime
     : { kind: 'electron', bridgeVersion: 1, capabilities: [] }
 const homeDir = typeof bootstrap?.homeDir === 'string' ? bootstrap.homeDir : ''
+const hostPlatform = typeof bootstrap?.hostPlatform === 'string' ? bootstrap.hostPlatform : null
 const initialI18n = isObject(bootstrap?.i18n) ? bootstrap.i18n : null
 const initialSettings = isObject(bootstrap?.settings) ? bootstrap.settings : null
 const initialServer =
@@ -113,6 +115,7 @@ const initialServer =
   (typeof bootstrap.server.clientId === 'undefined' || typeof bootstrap.server.clientId === 'string')
     ? bootstrap.server
     : null
+const surface = isObject(bootstrap?.surface) ? bootstrap.surface : { kind: 'main' }
 const rpcEventSubscribers = new Set()
 let rpcEventListener = null
 const effectIntentSubscribers = new Set()
@@ -161,9 +164,11 @@ function maybeDisposeEffectIntentListener() {
 contextBridge.exposeInMainWorld('goblinNative', {
   runtime,
   homeDir,
+  ...(hostPlatform ? { hostPlatform } : {}),
   initialI18n,
   initialSettings,
   initialServer,
+  surface,
   invokeRpc: ({ path, input, requestId }) => rpcCall({ path, input, requestId }),
   abortRpc: (requestId) => safeInvoke(IPC.rpc.abort, { requestId }),
   pathForFile: (file) => webUtils.getPathForFile(file),
@@ -178,6 +183,7 @@ contextBridge.exposeInMainWorld('goblinNative', {
     saveClipboardBinaryFiles: (input) => safeInvoke(IPC.shell.saveClipboardBinaryFiles, input),
     writeFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.writeFileTreeClipboardFile, input),
     readFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.readFileTreeClipboardFile, input),
+    openDetachedFileAreaWindow: (input) => safeInvoke(IPC.shell.openDetachedFileAreaWindow, input),
   },
   terminal: {
     notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),

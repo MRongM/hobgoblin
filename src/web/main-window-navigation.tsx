@@ -9,7 +9,6 @@ import {
   mainWindowNavigationStoreActionsEqual,
   mainWindowNavigationStoreActionsFromStore,
 } from '#/web/stores/repos/selector-actions.ts'
-import { navigationWorkspaceStateEqual, navigationWorkspaceStateFromStore } from '#/web/stores/repos/selector-state.ts'
 export type { MainWindowNavigationActions } from '#/web/main-window-navigation-actions.ts'
 
 const MainWindowNavigationContext = createContext<MainWindowNavigationActions | null>(null)
@@ -18,11 +17,7 @@ export const MainWindowNavigationProvider = MainWindowNavigationContext.Provider
 
 export function useMainWindowNavigation(): MainWindowNavigationActions {
   const context = useContext(MainWindowNavigationContext)
-  const { activeId, order } = useStoreWithEqualityFn(
-    useReposStore,
-    navigationWorkspaceStateFromStore,
-    navigationWorkspaceStateEqual,
-  )
+  const activeId = useReposStore((state) => state.activeId)
   const { setActive, activateProject, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
     useReposStore,
     mainWindowNavigationStoreActionsFromStore,
@@ -32,7 +27,6 @@ export function useMainWindowNavigation(): MainWindowNavigationActions {
     () =>
       createMainWindowNavigationActions({
         activeId,
-        order,
         setActive,
         activateProject,
         closeRepo,
@@ -40,7 +34,7 @@ export function useMainWindowNavigation(): MainWindowNavigationActions {
         selectBranch,
         setDetailTab,
       }),
-    [activeId, activateProject, closeRepo, cycleActive, order, selectBranch, setActive, setDetailTab],
+    [activeId, activateProject, closeRepo, cycleActive, selectBranch, setActive, setDetailTab],
   )
 
   return context ?? fallbackNavigation

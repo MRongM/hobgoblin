@@ -1,6 +1,5 @@
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
-import type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { LangPref, ThemePref } from '#/shared/settings.ts'
 
 export type RendererEffectIntent =
@@ -15,9 +14,6 @@ export type RendererEffectIntent =
   | { type: 'show-detail-tab-requested'; tab: 'status' | 'changes' | 'terminal' }
   | { type: 'select-terminal-requested'; index: number }
   | { type: 'terminal-primary-action-requested' }
-  | { type: 'toggle-detail-requested' }
-  | { type: 'workspace-layout-set-requested'; layout: WorkspaceLayout }
-  | { type: 'workspace-layout-reset-requested' }
   | { type: 'open-settings-requested'; page: SettingsPage }
   | { type: 'theme-pref-set-requested'; pref: ThemePref }
   | { type: 'lang-pref-set-requested'; pref: LangPref }
@@ -43,9 +39,6 @@ export function isRendererEffectIntent(event: unknown): event is RendererEffectI
     type === 'show-detail-tab-requested' ||
     type === 'select-terminal-requested' ||
     type === 'terminal-primary-action-requested' ||
-    type === 'toggle-detail-requested' ||
-    type === 'workspace-layout-set-requested' ||
-    type === 'workspace-layout-reset-requested' ||
     type === 'open-settings-requested' ||
     type === 'theme-pref-set-requested' ||
     type === 'lang-pref-set-requested' ||

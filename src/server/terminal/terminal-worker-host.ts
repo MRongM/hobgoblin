@@ -4,9 +4,15 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
+  TerminalCloseSessionsResult,
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
+  TerminalScreenSnapshot,
+  TerminalScreenSnapshotInput,
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalSessionInput,
@@ -152,8 +158,12 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     return this.request('takeover', clientId, input)
   }
 
-  close(clientId: string, input: TerminalSessionInput): Promise<TerminalMutationResult> {
+  close(clientId: string, input: TerminalSessionInput): Promise<TerminalCloseResult> {
     return this.request('close', clientId, input)
+  }
+
+  closeSessions(sessionIds: string[]): Promise<TerminalCloseSessionsResult> {
+    return this.request('close-sessions', 'server', { sessionIds })
   }
 
   notifyBell(clientId: string, input: TerminalNotifyBellInput): Promise<TerminalMutationResult> {
@@ -174,6 +184,14 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
 
   getSessionSnapshot(clientId: string, input: TerminalSessionSnapshotInput): Promise<TerminalSessionSnapshot | null> {
     return this.request('session-snapshot', clientId, input)
+  }
+
+  getOutputExcerpt(input: TerminalOutputExcerptInput): Promise<TerminalOutputExcerpt | null> {
+    return this.request('output-excerpt', 'server', input)
+  }
+
+  getScreenSnapshot(input: TerminalScreenSnapshotInput): Promise<TerminalScreenSnapshot | null> {
+    return this.request('screen-snapshot', 'server', input)
   }
 
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void {
@@ -293,7 +311,8 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
         'terminal worker process error',
       )
       if (this.worker === worker) this.worker = null
-      for (const pending of this.pending.values()) pending.reject(error instanceof Error ? error : new Error(String(error)))
+      for (const pending of this.pending.values())
+        pending.reject(error instanceof Error ? error : new Error(String(error)))
       this.pending.clear()
       if (!this.shuttingDown && this.socketMeta.size > 0) this.scheduleRestart()
     })
@@ -313,8 +332,7 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
         this.restartAttempts = 0
         this.lastSuccessfulResponseAt = this.now()
         pending.resolve(message.payload)
-      }
-      else pending.reject(new Error(message.error))
+      } else pending.reject(new Error(message.error))
       return
     }
     if (message.type === 'socket-send') {
@@ -344,7 +362,10 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
       try {
         this.ensureWorker()
       } catch (error) {
-        terminalWorkerLogger.error({ err: error, lastWorkerFailure: this.lastWorkerFailure }, 'failed to restart terminal worker')
+        terminalWorkerLogger.error(
+          { err: error, lastWorkerFailure: this.lastWorkerFailure },
+          'failed to restart terminal worker',
+        )
         if (this.socketMeta.size > 0) this.scheduleRestart()
       }
     }, delayMs)

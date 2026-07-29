@@ -37,8 +37,8 @@ afterEach(() => {
 })
 
 describe('RepoWorkspaceSkeleton', () => {
-  test('shows compact branch rows with list actions in top-bottom split mode', () => {
-    render(<RepoWorkspaceSkeleton layout="top-bottom" detailCollapsed={false} detailFocusMode={false} />)
+  test('shows branch rows with list actions in the fixed split mode', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(14)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
@@ -50,7 +50,7 @@ describe('RepoWorkspaceSkeleton', () => {
   })
 
   test('renders split workspace with list actions in left-right mode', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode={false} />)
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(14)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
@@ -61,40 +61,26 @@ describe('RepoWorkspaceSkeleton', () => {
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
   })
 
-  test('hides the branch pane entirely in top-bottom focus mode', () => {
-    render(<RepoWorkspaceSkeleton layout="top-bottom" detailCollapsed={false} detailFocusMode />)
+  test('renders only the terminal detail placeholder while desktop focus is restored', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(8)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
     expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
   })
 
-  test('hides the branch pane entirely in left-right focus mode', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed={false} detailFocusMode />)
+  test('keeps only the detail pane when focus preference is true', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(8)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
     expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
   })
 
-  test('keeps branch rows visible in left-right collapsed mode', () => {
-    render(<RepoWorkspaceSkeleton layout="left-right" detailCollapsed detailFocusMode />)
-
-    expect(container?.querySelectorAll('li')).toHaveLength(6)
-    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
-    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
-  })
-
   test('renders only the detail pane on small screens when persisted focus is disabled', () => {
-    render(
-      <RepoWorkspaceSkeleton
-        layout="top-bottom"
-        detailCollapsed={false}
-        detailFocusMode={false}
-        compact
-      />,
-    )
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} compact />)
 
     expect(container?.querySelectorAll('li')).toHaveLength(8)
     expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)

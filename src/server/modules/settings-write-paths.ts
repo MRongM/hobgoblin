@@ -7,12 +7,18 @@ import {
   setServerFetchIntervalSec,
   setServerSessionState,
   updateServerWebAccessSettings,
+  updateServerTelegramNotificationSettings,
   updateServerSettingsPrefs,
 } from '#/server/modules/settings-source.ts'
 import type { ServerSettingsState } from '#/server/modules/settings-state.ts'
 import { resolveI18nSnapshot } from '#/shared/i18n/snapshot.ts'
 import { toSafeSessionRepoEntry } from '#/shared/input-validation.ts'
-import type { SessionState, SettingsPrefsUpdateResponse, WebAccessSettingsSnapshot } from '#/shared/rpc.ts'
+import type {
+  SessionState,
+  SettingsPrefsUpdateResponse,
+  TelegramNotificationSettingsSnapshot,
+  WebAccessSettingsSnapshot,
+} from '#/shared/rpc.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import { repoSessionEntryId } from '#/shared/remote-repo.ts'
 import { settingsInvalidationScopesForPrefsPatch } from '#/shared/server-invalidation.ts'
@@ -54,6 +60,38 @@ export async function applyServerWebAccessSettingsWrite(
   publishSettingsInvalidation(['settings-snapshot'])
   options.revokeAllWebSessions()
   return { ok: true, webAccess }
+}
+
+export async function applyServerTelegramNotificationSettingsWrite(
+  body: unknown,
+): Promise<{ ok: true; telegramNotifications: TelegramNotificationSettingsSnapshot }> {
+  const input = body as {
+    enabled?: unknown
+    botToken?: unknown
+    chatId?: unknown
+    proxyEnabled?: unknown
+    bellEnabled?: unknown
+    outputCompletionEnabled?: unknown
+    outputCompletionMinimumActivitySeconds?: unknown
+    includeTerminalOutput?: unknown
+    outputTailLength?: unknown
+  } | null
+  const telegramNotifications = await updateServerTelegramNotificationSettings({
+    enabled: input?.enabled === true,
+    ...(typeof input?.botToken === 'string' ? { botToken: input.botToken } : {}),
+    chatId: typeof input?.chatId === 'string' ? input.chatId : '',
+    proxyEnabled: input?.proxyEnabled !== false,
+    bellEnabled: input?.bellEnabled === true,
+    outputCompletionEnabled: input?.outputCompletionEnabled === true,
+    outputCompletionMinimumActivitySeconds:
+      typeof input?.outputCompletionMinimumActivitySeconds === 'number'
+        ? input.outputCompletionMinimumActivitySeconds
+        : Number.NaN,
+    includeTerminalOutput: input?.includeTerminalOutput === true,
+    outputTailLength: typeof input?.outputTailLength === 'number' ? input.outputTailLength : Number.NaN,
+  })
+  publishSettingsInvalidation(['settings-snapshot'])
+  return { ok: true, telegramNotifications }
 }
 
 export function applyServerGlobalShortcutRegistrationWrite(

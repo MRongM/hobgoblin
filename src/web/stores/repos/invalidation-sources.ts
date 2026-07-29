@@ -3,7 +3,7 @@ const RECENT_SOURCE_TOKEN_TTL_MS = 10_000
 const activeSourceTokens = new Set<string>()
 const recentSourceTokens = new Map<string, number>()
 
-export function createRepoInvalidationSourceToken(prefix: 'manual' | 'branch'): string {
+export function createRepoInvalidationSourceToken(prefix: 'manual' | 'branch' | 'workspace'): string {
   const random =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID().replace(/-/g, '')
@@ -36,7 +36,7 @@ export function shouldSuppressRepoInvalidationSource(token: string | undefined, 
 }
 
 export async function runWithRepoInvalidationSource<T>(
-  prefix: 'manual' | 'branch',
+  prefix: 'manual' | 'branch' | 'workspace',
   task: (sourceToken: string) => Promise<T>,
 ): Promise<T> {
   const sourceToken = createRepoInvalidationSourceToken(prefix)

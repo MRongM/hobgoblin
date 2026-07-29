@@ -3,6 +3,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
+  branchDetailRepoEqual,
   getSelectedBranchDetailPresentation,
   type BranchDetailRepo,
   type SelectedBranchDetailPresentation,
@@ -17,37 +18,12 @@ interface Props {
   layout?: RepoWorkspaceLayout
   collapsed?: boolean
   detailFocusMode?: boolean
+  terminalFocusMode?: boolean
   compactFocusPresentation?: boolean
   onRevealPath?: (relativePath: string) => void
   onShowCompactExplorer?: () => void
-}
-
-// Keep this equality in sync with fields read by BranchDetail children.
-function branchDetailRepoEqual(a: BranchDetailRepo | undefined, b: BranchDetailRepo | undefined): boolean {
-  return (
-    a === b ||
-    (!!a &&
-      !!b &&
-      a.id === b.id &&
-      a.instanceToken === b.instanceToken &&
-      a.data.branches === b.data.branches &&
-      a.data.currentBranch === b.data.currentBranch &&
-      a.data.status === b.data.status &&
-      a.data.statusLoaded === b.data.statusLoaded &&
-      a.data.worktreesByPath === b.data.worktreesByPath &&
-      a.ui.selectedBranch === b.ui.selectedBranch &&
-      a.ui.detailTab === b.ui.detailTab &&
-      a.resources.status === b.resources.status &&
-      a.operations.branchAction === b.operations.branchAction &&
-      a.operations.fetch === b.operations.fetch &&
-      a.operations.manualRefresh === b.operations.manualRefresh &&
-      a.remote.target === b.remote.target &&
-      a.remote.hasRemotes === b.remote.hasRemotes &&
-      a.remote.hasBrowserRemote === b.remote.hasBrowserRemote &&
-      a.remote.hasGitHubRemote === b.remote.hasGitHubRemote &&
-      a.remote.browserRemoteProvider === b.remote.browserRemoteProvider &&
-      a.remote.remoteProviders === b.remote.remoteProviders)
-  )
+  onShowTerminal?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 export function BranchDetail({
@@ -55,9 +31,12 @@ export function BranchDetail({
   layout = DEFAULT_WORKSPACE_LAYOUT,
   collapsed = false,
   detailFocusMode = false,
+  terminalFocusMode = false,
   compactFocusPresentation = false,
   onRevealPath,
   onShowCompactExplorer,
+  onShowTerminal,
+  onExitTerminalFocus,
 }: Props) {
   const detailId = useId()
   const repo = useStoreWithEqualityFn(
@@ -105,7 +84,7 @@ export function BranchDetail({
   const detail = getSelectedBranchDetailPresentation(repo)
   const contentId = `${detailId}-content`
 
-  const focusMode = detailFocusMode
+  const focusMode = detailFocusMode || terminalFocusMode
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-detail">
@@ -119,10 +98,13 @@ export function BranchDetail({
           contentId={contentId}
           collapsed={collapsed}
           detailFocusMode={detailFocusMode}
+          terminalFocusMode={terminalFocusMode}
           compactFocusPresentation={compactFocusPresentation}
           layout={layout}
           onRevealPath={onRevealPath}
           onShowCompactExplorer={onShowCompactExplorer}
+          onShowTerminal={onShowTerminal}
+          onExitTerminalFocus={onExitTerminalFocus}
         />
       ) : (
         <>
@@ -133,9 +115,12 @@ export function BranchDetail({
             contentId={contentId}
             collapsed={collapsed}
             detailFocusMode={detailFocusMode}
+            terminalFocusMode={terminalFocusMode}
             compactFocusPresentation={compactFocusPresentation}
             layout={layout}
             onShowCompactExplorer={onShowCompactExplorer}
+            onShowTerminal={onShowTerminal}
+            onExitTerminalFocus={onExitTerminalFocus}
           />
           {!collapsed && (
             <BranchDetailContent
@@ -161,10 +146,13 @@ interface BranchShortcutHandlerProps {
   contentId: string
   collapsed: boolean
   detailFocusMode: boolean
+  terminalFocusMode: boolean
   compactFocusPresentation: boolean
   layout: RepoWorkspaceLayout
   onRevealPath?: (relativePath: string) => void
   onShowCompactExplorer?: () => void
+  onShowTerminal?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 function BranchShortcutHandler({
@@ -175,10 +163,13 @@ function BranchShortcutHandler({
   contentId,
   collapsed,
   detailFocusMode,
+  terminalFocusMode,
   compactFocusPresentation,
   layout,
   onRevealPath,
   onShowCompactExplorer,
+  onShowTerminal,
+  onExitTerminalFocus,
 }: BranchShortcutHandlerProps) {
   const actions = useBranchActionItems(repo, branch)
   useBranchActionShortcutRegistry(actions)
@@ -192,9 +183,12 @@ function BranchShortcutHandler({
         contentId={contentId}
         collapsed={collapsed}
         detailFocusMode={detailFocusMode}
+        terminalFocusMode={terminalFocusMode}
         compactFocusPresentation={compactFocusPresentation}
         layout={layout}
         onShowCompactExplorer={onShowCompactExplorer}
+        onShowTerminal={onShowTerminal}
+        onExitTerminalFocus={onExitTerminalFocus}
       />
       {actions.dialogs}
       {!collapsed && (

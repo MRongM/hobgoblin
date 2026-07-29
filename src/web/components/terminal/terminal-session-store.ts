@@ -86,6 +86,16 @@ export function useWorktreeTerminalSnapshot(worktreeTerminalKey: string | null):
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
+export function useRepoTerminalSyncReady(repoRoot: string | null): boolean {
+  const { repoSyncReady, subscribeRepoSync } = useTerminalSessionReadContext()
+  const subscribe = useCallback(
+    (listener: () => void) => (repoRoot ? subscribeRepoSync(repoRoot, listener) : () => {}),
+    [repoRoot, subscribeRepoSync],
+  )
+  const getSnapshot = useCallback(() => (repoRoot ? repoSyncReady(repoRoot) : false), [repoRoot, repoSyncReady])
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
 export function useWorktreeTerminalCount(worktreeTerminalKey: string | null): number {
   const { worktreeSnapshot, subscribeWorktree } = useTerminalSessionReadContext()
   const subscribe = useCallback(

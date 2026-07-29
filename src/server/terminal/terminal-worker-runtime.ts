@@ -52,7 +52,12 @@ export class TerminalWorkerRuntime {
   private async handleRequest(message: TerminalWorkerActionRequest): Promise<void> {
     try {
       const payload = await this.dispatchRequest(message)
-      this.options.emit({ type: 'response', requestId: message.requestId, ok: true, payload } satisfies TerminalWorkerSuccessMessage)
+      this.options.emit({
+        type: 'response',
+        requestId: message.requestId,
+        ok: true,
+        payload,
+      } satisfies TerminalWorkerSuccessMessage)
     } catch (error) {
       terminalWorkerRuntimeLogger.warn(
         {
@@ -86,6 +91,8 @@ export class TerminalWorkerRuntime {
         return await this.options.service.takeover(message.clientId, message.input)
       case 'close':
         return await this.options.service.close(message.clientId, message.input)
+      case 'close-sessions':
+        return await this.options.service.closeSessions(message.input)
       case 'notify-bell':
         return await this.options.service.notifyBell(message.clientId, message.input)
       case 'list-sessions':
@@ -96,6 +103,10 @@ export class TerminalWorkerRuntime {
         return await this.options.service.prune(message.clientId, message.input)
       case 'session-snapshot':
         return await this.options.service.getSessionSnapshot(message.clientId, message.input)
+      case 'output-excerpt':
+        return await this.options.service.getOutputExcerpt(message.input)
+      case 'screen-snapshot':
+        return await this.options.service.getScreenSnapshot(message.input)
       case 'reorder':
         return await this.options.service.reorder(message.clientId, message.input)
     }

@@ -1,39 +1,5 @@
-import type { ComponentPropsWithoutRef, ElementType } from 'react'
+import type { ComponentPropsWithoutRef } from 'react'
 import { cn } from '#/web/lib/cn.ts'
-
-type PanelProps<T extends ElementType = 'div'> = {
-  as?: T
-  className?: string
-} & Omit<ComponentPropsWithoutRef<T>, 'as' | 'className'>
-
-function Panel<T extends ElementType = 'div'>({ as, className, ...props }: PanelProps<T>) {
-  const Comp = (as ?? 'div') as ElementType
-  return (
-    <Comp
-      className={cn(
-        'overflow-hidden rounded-[var(--goblin-brand-radius-lg,var(--radius-lg))] border border-border/60 bg-[var(--goblin-card-bg,var(--color-background))] shadow-[var(--shadow-inset-highlight)]',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function PanelHeader({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-between border-b border-border/60 bg-[var(--goblin-pane-header-bg,var(--color-card))] px-3 py-2',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-function PanelBody({ className, ...props }: ComponentPropsWithoutRef<'div'>) {
-  return <div className={cn('px-3 py-3', className)} {...props} />
-}
 
 function PanelInset({
   className,
@@ -62,4 +28,4 @@ function PanelInset({
   )
 }
 
-export { Panel, PanelBody, PanelHeader, PanelInset }
+export { PanelInset }

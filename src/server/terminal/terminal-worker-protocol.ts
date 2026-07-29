@@ -2,9 +2,16 @@ import type {
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseSessionsInput,
+  TerminalCloseSessionsResult,
+  TerminalCloseResult,
   TerminalCreateInput,
   TerminalMutationResult,
   TerminalNotifyBellInput,
+  TerminalOutputExcerpt,
+  TerminalOutputExcerptInput,
+  TerminalScreenSnapshot,
+  TerminalScreenSnapshotInput,
   TerminalReorderInput,
   TerminalResizeInput,
   TerminalRestartInput,
@@ -24,11 +31,14 @@ export interface TerminalWorkerRequestInputs {
   resize: TerminalResizeInput
   takeover: TerminalTakeoverInput
   close: TerminalSessionInput
+  'close-sessions': TerminalCloseSessionsInput
   'notify-bell': TerminalNotifyBellInput
   'list-sessions': { repoRoot: string }
   create: TerminalCreateInput
   prune: { repoRoot: string }
   'session-snapshot': TerminalSessionSnapshotInput
+  'output-excerpt': TerminalOutputExcerptInput
+  'screen-snapshot': TerminalScreenSnapshotInput
   reorder: TerminalReorderInput
 }
 
@@ -38,12 +48,15 @@ export interface TerminalWorkerResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
-  close: TerminalMutationResult
+  close: TerminalCloseResult
+  'close-sessions': TerminalCloseSessionsResult
   'notify-bell': TerminalMutationResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
+  'output-excerpt': TerminalOutputExcerpt | null
+  'screen-snapshot': TerminalScreenSnapshot | null
   reorder: TerminalMutationResult
 }
 

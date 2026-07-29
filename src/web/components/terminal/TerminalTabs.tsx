@@ -1,4 +1,5 @@
 import { Plus, X, ChevronDown, Terminal } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   useCallback,
   useLayoutEffect,
@@ -13,6 +14,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { ConfirmCheckbox } from '#/web/components/ConfirmCheckbox.tsx'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,13 +36,15 @@ import { DelegatedTooltipLayer, DELEGATED_TOOLTIP_DEFAULTS } from '#/web/compone
 import { createRestrictToTabStripBounds } from '#/web/components/tab-strip/drag-bounds.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
-import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
+import type { TerminalCloseOptions, TerminalSessionSummary } from '#/web/components/terminal/types.ts'
+import type { TerminalCloseResult } from '#/shared/terminal.ts'
 import { ToolbarTabList, ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
 import { ToolbarClosableTab } from '#/web/components/tab-strip/ToolbarClosableTab.tsx'
 import { toolbarTabButtonClassName, toolbarTabChromeClassName } from '#/web/components/tab-strip/tab-variants.ts'
 import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '#/web/components/ui/context-menu.tsx'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 
 interface TerminalTabsProps {
   worktreeTerminalKey: string
@@ -51,11 +55,11 @@ interface TerminalTabsProps {
   focusMode?: boolean
   focusRegistry?: FocusRegistry<string, HTMLButtonElement>
   emptyFocusKey?: string
-  onNew: () => void
+  onNew: (launchMode: TerminalLaunchMode) => void
   onSelect: (worktreeTerminalKey: string, key: string) => void
   onScrollToBottom: (key: string) => void
   onFocusTerminal?: (key: string) => void
-  onClose: (key: string) => void
+  onClose: (key: string, options?: TerminalCloseOptions) => void | Promise<TerminalCloseResult>
   onReorder: (worktreeTerminalKey: string, orderedKeys: string[]) => void
   onNavigateOut?: (direction: 'prev' | 'next' | 'first' | 'last') => void
 }
@@ -93,6 +97,7 @@ export function TerminalTabs({
   const prevSessionCountRef = useRef(sessions.length)
   const newButtonRef = useRef<HTMLButtonElement>(null)
   const [pendingCloseKey, setPendingCloseKey] = useState<string | null>(null)
+  const [closeTmuxSession, setCloseTmuxSession] = useState(false)
   const [pendingBulkClose, setPendingBulkClose] = useState<PendingBulkClose | null>(null)
   const pendingCloseSession = sessions.find((session) => session.key === pendingCloseKey) ?? null
   const pendingBulkCloseKeys =
@@ -151,23 +156,40 @@ export function TerminalTabs({
   const handleClose = useCallback((event: React.MouseEvent, key: string) => {
     event.preventDefault()
     event.stopPropagation()
+    setCloseTmuxSession(false)
     setPendingCloseKey(key)
   }, [])
 
   const confirmClose = useCallback(() => {
     const key = pendingCloseKey
     if (!key) return
-    setPendingCloseKey(null)
     const isActive = sessions.find((s) => s.key === key)?.selected ?? false
     const idx = sessions.findIndex((s) => s.key === key)
     const nextKey = sessions[idx + 1]?.key ?? sessions[idx - 1]?.key ?? null
 
-    onClose(key)
-
-    if (isActive && nextKey) {
-      focusRegistry.focus(nextKey)
+    const finish = () => {
+      setPendingCloseKey(null)
+      setCloseTmuxSession(false)
+      if (isActive && nextKey) focusRegistry.focus(nextKey)
     }
-  }, [focusRegistry, onClose, pendingCloseKey, sessions])
+    const result = closeTmuxSession ? onClose(key, { closeTmuxSession: true }) : onClose(key)
+    if (!result) {
+      finish()
+      return
+    }
+    return result.then(
+      (closeResult) => {
+        if (!closeResult.ok) {
+          toast.error(t('terminal.close-tmux-session-failed'), { description: t(closeResult.message) })
+          return
+        }
+        finish()
+      },
+      () => {
+        toast.error(t('terminal.close-tmux-session-failed'), { description: t('error.tmux-command-failed') })
+      },
+    )
+  }, [closeTmuxSession, focusRegistry, onClose, pendingCloseKey, sessions, t])
 
   const confirmBulkClose = useCallback(() => {
     setPendingBulkClose(null)
@@ -178,6 +200,7 @@ export function TerminalTabs({
 
   const requestContextClose = useCallback((scope: TerminalCloseScope, targetKey: string) => {
     if (scope === 'current') {
+      setCloseTmuxSession(false)
       setPendingCloseKey(targetKey)
       return
     }
@@ -252,7 +275,7 @@ export function TerminalTabs({
         size="icon-sm"
         className="h-7 border border-separator"
         id={`${detailId}-terminal-tab`}
-        onClick={onNew}
+        onClick={() => onNew('native')}
         aria-label={t('terminal.new')}
         title={t('terminal.new')}
       >
@@ -279,6 +302,7 @@ export function TerminalTabs({
               buttonWrapper={(button) => <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>}
               onSelect={handleSelect}
               onClose={handleClose}
+              onNew={onNew}
               onRequestClose={requestContextClose}
               onKeyDown={handleTabKeyDown}
               t={t}
@@ -316,9 +340,13 @@ export function TerminalTabs({
               ))}
             </ScrollArea>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2" onSelect={onNew}>
+            <DropdownMenuItem className="gap-2" onSelect={() => onNew('native')}>
               <Plus size={14} />
               {t('terminal.new')}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="gap-2" onSelect={() => onNew('tmux-if-available')}>
+              <Terminal size={14} />
+              {t('terminal.new-with-tmux')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -364,6 +392,7 @@ export function TerminalTabs({
                   focusRegistry={focusRegistry}
                   onSelect={handleSelect}
                   onClose={handleClose}
+                  onNew={onNew}
                   onRequestClose={requestContextClose}
                   onKeyDown={handleTabKeyDown}
                   t={t}
@@ -377,7 +406,7 @@ export function TerminalTabs({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            onClick={onNew}
+            onClick={() => onNew('native')}
             aria-label={t('terminal.new')}
             title={t('terminal.new')}
           >
@@ -399,10 +428,30 @@ export function TerminalTabs({
       <ConfirmDialog
         open={!!pendingCloseSession}
         title={t('terminal.close-confirm-title')}
-        message={t('terminal.close-confirm-body', { name: pendingCloseSession?.title ?? '' })}
+        message={
+          <div className="flex flex-col gap-3">
+            <p>{t('terminal.close-confirm-body', { name: pendingCloseSession?.title ?? '' })}</p>
+            {pendingCloseSession?.tmuxBacked === true && pendingCloseSession.tmuxCloseSupported === false && (
+              <p className="text-xs text-muted-foreground">
+                {t('terminal.close-tmux-session-exit-required')}
+              </p>
+            )}
+            {pendingCloseSession?.tmuxBacked === true && pendingCloseSession.tmuxCloseSupported !== false && (
+              <ConfirmCheckbox checked={closeTmuxSession} onCheckedChange={setCloseTmuxSession} destructive>
+                <span className="flex flex-col gap-1">
+                  <span>{t('terminal.close-tmux-session')}</span>
+                  <span className="text-xs text-muted-foreground">{t('terminal.close-tmux-session-hint')}</span>
+                </span>
+              </ConfirmCheckbox>
+            )}
+          </div>
+        }
         confirmLabel={t('terminal.close-confirm-confirm')}
         destructive
-        onCancel={() => setPendingCloseKey(null)}
+        onCancel={() => {
+          setPendingCloseKey(null)
+          setCloseTmuxSession(false)
+        }}
         onConfirm={confirmClose}
       />
       <ConfirmDialog
@@ -438,6 +487,7 @@ interface TerminalTabProps {
   focusRegistry: FocusRegistry<string, HTMLButtonElement>
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
+  onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
@@ -459,6 +509,7 @@ interface TerminalTabChromeProps {
   buttonWrapper?: (button: ReactElement) => ReactNode
   onSelect: (key: string) => void
   onClose: (event: React.MouseEvent, key: string) => void
+  onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
@@ -480,6 +531,7 @@ function TerminalTabChrome({
   buttonWrapper,
   onSelect,
   onClose,
+  onNew,
   onRequestClose,
   onKeyDown,
   t,
@@ -512,6 +564,7 @@ function TerminalTabChrome({
         <TerminalTabContextMenu
           sessionKey={session.key}
           sessionCount={contextSessionCount ?? total ?? 1}
+          onNew={onNew}
           onRequestClose={onRequestClose}
           t={t}
         />
@@ -550,40 +603,6 @@ function TerminalTabChrome({
   )
 }
 
-function TerminalTab({
-  session,
-  isActive,
-  isSelected,
-  index,
-  total,
-  contextSessionCount,
-  tabId,
-  focusRegistry,
-  onSelect,
-  onClose,
-  onRequestClose,
-  onKeyDown,
-  t,
-}: TerminalTabProps) {
-  return (
-    <TerminalTabChrome
-      session={session}
-      isActive={isActive}
-      isSelected={isSelected}
-      index={index}
-      total={total}
-      contextSessionCount={contextSessionCount}
-      tabId={tabId}
-      buttonRef={focusRegistry.setRef(session.key)}
-      onSelect={onSelect}
-      onClose={onClose}
-      onRequestClose={onRequestClose}
-      onKeyDown={onKeyDown}
-      t={t}
-    />
-  )
-}
-
 function SortableTerminalTab({
   session,
   isActive,
@@ -595,6 +614,7 @@ function SortableTerminalTab({
   focusRegistry,
   onSelect,
   onClose,
+  onNew,
   onRequestClose,
   onKeyDown,
   t,
@@ -621,6 +641,7 @@ function SortableTerminalTab({
         buttonProps={{ ...sortable.attributes, ...sortable.sortableListeners }}
         onSelect={onSelect}
         onClose={onClose}
+        onNew={onNew}
         onRequestClose={onRequestClose}
         onKeyDown={(e) => {
           sortable.sortableOnKeyDown?.(e)
@@ -636,16 +657,27 @@ function SortableTerminalTab({
 function TerminalTabContextMenu({
   sessionKey,
   sessionCount,
+  onNew,
   onRequestClose,
   t,
 }: {
   sessionKey: string
   sessionCount: number
+  onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }) {
   return (
     <ContextMenuContent>
+      <ContextMenuItem onSelect={() => onNew('native')}>
+        <Plus />
+        {t('terminal.new')}
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => onNew('tmux-if-available')}>
+        <Terminal />
+        {t('terminal.new-with-tmux')}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={() => onRequestClose('current', sessionKey)}>
         <X />
         {t('terminal.close-current')}

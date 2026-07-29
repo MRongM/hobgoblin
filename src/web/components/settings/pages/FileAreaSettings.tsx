@@ -1,15 +1,5 @@
-import {
-  MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  MAX_FILE_TREE_FONT_SIZE,
-  MAX_FILE_TREE_TOPBAR_FONT_SIZE,
-  MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
-  MIN_FILE_TREE_FONT_SIZE,
-  MIN_FILE_TREE_TOPBAR_FONT_SIZE,
-} from '#/shared/settings.ts'
-import {
-  MAX_WORKSPACE_PANE_SIZE,
-  MIN_WORKSPACE_PANE_SIZE,
-} from '#/shared/workspace-layout.ts'
+import { MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB, MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB } from '#/shared/settings.ts'
+import { MAX_WORKSPACE_PANE_SIZE, MIN_WORKSPACE_PANE_SIZE } from '#/shared/workspace-layout.ts'
 import {
   SettingsGroup,
   SettingsList,
@@ -23,9 +13,8 @@ import { useT } from '#/web/stores/i18n.ts'
 
 export function FileAreaSettings() {
   const t = useT()
-  const { fileTreeFontSize, fileTreeTopbarFontSize, fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
-  const { setFileTreeFontSize, setFileTreeTopbarFontSize, setFileTreeClipboardMaxBytesMb } =
-    useFileAreaSettingsController()
+  const { fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
+  const { setFileTreeClipboardMaxBytesMb } = useFileAreaSettingsController()
   // The workspace always renders with the responsive effective layout (see
   // useEffectiveWorkspaceLayout), so the setting must edit the same key —
   // the session's stored workspaceLayout may differ and would silently edit
@@ -64,38 +53,6 @@ export function FileAreaSettings() {
                 max={MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB}
                 value={fileTreeClipboardMaxBytesMb}
                 onChange={(value) => void setFileTreeClipboardMaxBytesMb(value)}
-              />
-            }
-          />
-        </SettingsList>
-      </SettingsGroup>
-      <SettingsGroup label={t('settings.files.font.title')}>
-        <SettingsList>
-          <SettingsRow
-            controlId="settings-file-tree-font-size"
-            label={t('settings.files.font-size')}
-            hint={t('settings.files.font-size-hint')}
-            control={
-              <SettingsNumberInput
-                id="settings-file-tree-font-size"
-                min={MIN_FILE_TREE_FONT_SIZE}
-                max={MAX_FILE_TREE_FONT_SIZE}
-                value={fileTreeFontSize}
-                onChange={(fontSize) => void setFileTreeFontSize(fontSize)}
-              />
-            }
-          />
-          <SettingsRow
-            controlId="settings-file-tree-topbar-font-size"
-            label={t('settings.files.topbar-font-size')}
-            hint={t('settings.files.topbar-font-size-hint')}
-            control={
-              <SettingsNumberInput
-                id="settings-file-tree-topbar-font-size"
-                min={MIN_FILE_TREE_TOPBAR_FONT_SIZE}
-                max={MAX_FILE_TREE_TOPBAR_FONT_SIZE}
-                value={fileTreeTopbarFontSize}
-                onChange={(fontSize) => void setFileTreeTopbarFontSize(fontSize)}
               />
             }
           />

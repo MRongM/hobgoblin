@@ -29,6 +29,13 @@ function assertRepoBranchStateTypeGuards() {
       isLocked: true,
     },
   })
+  createRepoBranch('feature/a', {
+    worktree: {
+      path: '/tmp/worktree-a',
+      // @ts-expect-error renderer branch state must not include snapshot worktree metadata
+      isPrunable: true,
+    },
+  })
 }
 
 void assertRepoBranchStateTypeGuards
@@ -122,6 +129,7 @@ describe('worktree state selectors', () => {
         path: '/tmp/worktree-a',
         isPrimary: true,
         isLocked: true,
+        isPrunable: true,
         summary: {
           dirty: true,
           changeCount: 2,
@@ -136,9 +144,11 @@ describe('worktree state selectors', () => {
     expect(branch?.worktree).not.toHaveProperty('summary')
     expect(branch?.worktree).not.toHaveProperty('isPrimary')
     expect(branch?.worktree).not.toHaveProperty('isLocked')
+    expect(branch?.worktree).not.toHaveProperty('isPrunable')
     expect(worktreesByPath['/tmp/worktree-a']).toMatchObject({
       isMain: true,
       isLocked: true,
+      isPrunable: true,
       isDirty: true,
       changeCount: 2,
     })
@@ -152,7 +162,22 @@ describe('worktree state selectors', () => {
       dirty: false,
       changeCount: 0,
       changeCountKnown: false,
+      isPrunable: false,
     })
+  })
+
+  test('projects prunable state from the canonical worktree map', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const snapshot = createBranchSnapshot('feature/stale', {
+      worktree: {
+        path: '/tmp/worktree-stale',
+        isPrunable: true,
+      },
+    })
+    repo.data.worktreesByPath = worktreeStatesFromBranches([snapshot])
+    const branch = createRepoBranch('feature/stale', { worktree: { path: '/tmp/worktree-stale' } })
+
+    expect(getBranchWorktreeState(repo, branch)?.isPrunable).toBe(true)
   })
 
   test('marks status-derived worktree change counts as known', () => {

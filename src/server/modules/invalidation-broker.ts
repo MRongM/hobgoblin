@@ -1,5 +1,9 @@
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
-import type { SettingsInvalidationEvent, SettingsInvalidationScope } from '#/shared/server-invalidation.ts'
+import type {
+  SettingsInvalidationEvent,
+  SettingsInvalidationScope,
+  WorkspaceInvalidationEvent,
+} from '#/shared/server-invalidation.ts'
 
 interface InvalidationSocket {
   send(data: string): unknown
@@ -37,10 +41,26 @@ export function disconnectAllInvalidationSockets(): void {
 }
 
 export function publishRepoQueryInvalidation(event: Omit<RepoQueryInvalidationEvent, 'type'>): void {
-  publishInvalidationPayload(JSON.stringify({ type: 'repo-query-invalidated', ...event } satisfies RepoQueryInvalidationEvent))
+  publishInvalidationPayload(
+    JSON.stringify({ type: 'repo-query-invalidated', ...event } satisfies RepoQueryInvalidationEvent),
+  )
 }
 
 export function publishSettingsInvalidation(scopes: SettingsInvalidationScope[]): void {
   if (scopes.length === 0) return
-  publishInvalidationPayload(JSON.stringify({ type: 'settings-invalidated', scopes } satisfies SettingsInvalidationEvent))
+  publishInvalidationPayload(
+    JSON.stringify({ type: 'settings-invalidated', scopes } satisfies SettingsInvalidationEvent),
+  )
+}
+
+export function publishWorkspaceInvalidation(rootId: string, sourceToken?: string): void {
+  const normalizedSourceToken =
+    typeof sourceToken === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(sourceToken) ? sourceToken : undefined
+  publishInvalidationPayload(
+    JSON.stringify({
+      type: 'workspace-invalidated',
+      rootId,
+      ...(normalizedSourceToken ? { sourceToken: normalizedSourceToken } : {}),
+    } satisfies WorkspaceInvalidationEvent),
+  )
 }

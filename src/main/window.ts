@@ -11,7 +11,12 @@ import { BrowserWindow, app, screen } from 'electron'
 import path from 'node:path'
 import { loadWindowState, setWindowBounds, type WindowBounds } from '#/main/window-state.ts'
 import { attachRendererSurfaceWindow, detachRendererSurfaceWindow } from '#/main/renderer-surface.ts'
-import { defaultTitleBarStyle, macTrafficLightPosition, supportsTitleBarOverlay, titleBarOverlayForTheme } from '#/main/window-chrome.ts'
+import {
+  defaultTitleBarStyle,
+  macTrafficLightPosition,
+  supportsTitleBarOverlay,
+  titleBarOverlayForTheme,
+} from '#/main/window-chrome.ts'
 import { buildStartupErrorPageHtml } from '#/main/startup-error-page.ts'
 import { createStartupDiagnostics, type StartupDiagnostics } from '#/main/startup-diagnostics.ts'
 import { getMainWindow as getRegisteredMainWindow } from '#/main/window-registry.ts'
@@ -26,6 +31,7 @@ import {
 import { getTheme } from '#/main/theme.ts'
 import { getSettingsPrefs } from '#/main/settings-server-client.ts'
 import { DEFAULT_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
+import { closeDetachedFileAreaWindows } from '#/main/detached-file-area-window.ts'
 
 const DEFAULT_BOUNDS: WindowBounds = { width: 900, height: 600 }
 const MAIN_WINDOW_SURFACE = {
@@ -171,7 +177,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   const diagnostics = startupDiagnostics()
   const startupErrorPageState: StartupErrorPageState = { shown: false }
   attachStartupDiagnostics(win, diagnostics, startupErrorPageState)
-  attachRendererSurfaceWindow(win, { logLabel: 'window', surface: MAIN_WINDOW_SURFACE })
+  attachRendererSurfaceWindow(win, { logLabel: 'window', surface: MAIN_WINDOW_SURFACE, main: true })
   const { url } = createRendererEntryUrl({ routePath: '/' })
   const disposeNavigationCapability = configureEmbeddedServerNavigationCapability(win)
   allowRendererWindowEntryUrl(win, url.toString())
@@ -189,6 +195,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   win.on('move', persistBounds)
 
   win.on('closed', () => {
+    closeDetachedFileAreaWindows()
     disposeNavigationCapability()
     disposeRendererBootstrapForWebPreferences(webPreferences)
     detachRendererSurfaceWindow(win, MAIN_WINDOW_SURFACE)

@@ -57,15 +57,16 @@ export function SplitPane({
     [afterCollapsed, beforeCollapsed, onAfterSizeChange],
   )
 
-  // Collapse is CSS-driven (display:none on the trailing panel) rather than
-  // panel.collapse()/dynamic minSize: imperative collapse validates against
-  // the registered min-size constraints and never reaches zero, and
-  // panel.resize(number) treats the value as pixels, so both directions end
-  // up clamped at the minimum size. Hiding the panel lets the leading pane
-  // absorb the full flex share while the group keeps its layout state.
-  // The rule lives on the group because Panel does not forward className
-  // to its DOM element. Re-applying the controlled layout on expand clears
-  // any re-measuring the library did while the panel was display:none.
+  // Collapse is CSS-driven rather than panel.collapse()/dynamic minSize:
+  // imperative collapse validates against the registered min-size constraints
+  // and never reaches zero, and panel.resize(number) treats the value as
+  // pixels. Keep the panel root in flex layout with zero growth instead of
+  // display:none; react-resizable-panels registers panels by their measured
+  // DOM order, so an initially hidden trailing panel would otherwise sort
+  // before the visible panel and invert the drag direction after expansion.
+  // Panel applies className to its nested content, which stays hidden while
+  // the sibling panel absorbs the full flex share. Re-applying the controlled
+  // layout on expand clears any re-measuring performed while collapsed.
   useEffect(() => {
     if (beforeCollapsed || afterCollapsed) return
     groupRef.current?.setLayout(layout)
@@ -83,15 +84,17 @@ export function SplitPane({
       onLayoutChanged={handleLayoutChanged}
       className={cn(
         'min-h-0 min-w-0',
-        beforeCollapsed && '[&>[data-panel]:first-child]:!hidden',
-        afterCollapsed && '[&>[data-panel]:last-child]:!hidden',
+        beforeCollapsed &&
+          '[&>[data-panel]:first-child]:!grow-0 [&>[data-panel]:first-child]:!overflow-hidden',
+        afterCollapsed &&
+          '[&>[data-panel]:last-child]:!grow-0 [&>[data-panel]:last-child]:!overflow-hidden',
         className,
       )}
     >
       <ResizablePanel
         id={BEFORE_PANEL_ID}
         minSize={beforeMinSize}
-        className={cn('flex min-h-0 min-w-0 overflow-hidden', beforeClassName)}
+        className={cn('flex min-h-0 min-w-0 overflow-hidden', beforeCollapsed && 'hidden', beforeClassName)}
       >
         {before}
       </ResizablePanel>
@@ -104,7 +107,7 @@ export function SplitPane({
         id={AFTER_PANEL_ID}
         minSize={afterMinSize}
         maxSize={afterMaxSize}
-        className={cn('flex min-h-0 min-w-0 overflow-hidden', afterClassName)}
+        className={cn('flex min-h-0 min-w-0 overflow-hidden', afterCollapsed && 'hidden', afterClassName)}
       >
         {after}
       </ResizablePanel>

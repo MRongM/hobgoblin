@@ -57,20 +57,20 @@ describe('EffectiveProjectThemeBridge', () => {
     )
     seedRepoState({ id: '/repo-a', branches: [], currentBranch: '', selectedBranch: null })
     seedRepoState({ id: '/repo-b', branches: [], currentBranch: '', selectedBranch: null })
-    useReposStore.setState({ activeId: '/repo-a' })
+    useReposStore.setState({ activeId: '/repo-a', activeProjectId: '/repo-a' })
 
     await renderBridge()
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('cursor')
 
     await act(async () => {
-      useReposStore.setState({ activeId: '/repo-b' })
+      useReposStore.setState({ activeId: '/repo-b', activeProjectId: '/repo-b' })
       await Promise.resolve()
     })
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('github')
 
     await act(async () => {
-      useReposStore.setState({ activeId: null })
+      useReposStore.setState({ activeId: null, activeProjectId: null })
       await Promise.resolve()
     })
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('macos')
@@ -95,6 +95,25 @@ describe('EffectiveProjectThemeBridge', () => {
       await Promise.resolve()
     })
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+    expect(document.documentElement.getAttribute('data-color-theme')).toBe('cursor')
+  })
+
+  test('uses the workspace project theme while a shared member repository is visible', async () => {
+    mainWindowQueryClient.setQueryData(
+      settingsSnapshotQueryKey(),
+      defaultSettingsSnapshot({
+        colorTheme: 'macos',
+        repoSettings: [
+          { repoId: '/workspace', colorTheme: 'cursor' },
+          { repoId: '/workspace/api', colorTheme: 'github' },
+        ],
+      }),
+    )
+    seedRepoState({ id: '/workspace/api', branches: [], currentBranch: '', selectedBranch: null })
+    useReposStore.setState({ activeId: '/workspace/api', activeProjectId: '/workspace' })
+
+    await renderBridge()
+
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('cursor')
   })
 })

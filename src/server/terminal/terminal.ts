@@ -1,5 +1,10 @@
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
-import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
+import {
+  closeAssociatedTmuxSessionByName,
+  previewAssociatedTmuxSessions,
+  type AssociatedTmuxSessionNameInput,
+  type TerminalTmuxCloseResult,
+} from '#/server/modules/tmux-cleanup.ts'
 import {
   TerminalSessionManager,
   isValidTerminalSessionId,
@@ -9,8 +14,16 @@ import { createTerminalCatalog } from '#/server/terminal/terminal-catalog.ts'
 import { TerminalConnectionState } from '#/server/terminal/terminal-connection-state.ts'
 import { TerminalRealtimeBroker, type TerminalRealtimeSocket } from '#/server/terminal/terminal-realtime-broker.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
-import { type TerminalCatalogMutationResult, type TerminalCreateInput } from '#/shared/terminal.ts'
 import {
+  type TerminalCatalogMutationResult,
+  type TerminalCloseResult,
+  type TerminalCloseSessionsResult,
+  type TerminalCreateInput,
+  type TerminalOpenTmuxSessionsInput,
+  type TerminalOpenTmuxSessionsResult,
+} from '#/shared/terminal.ts'
+import {
+  TERMINAL_SIZE_LIMITS,
   isValidTerminalAttachmentId,
   isValidTerminalNotifyBellInput,
   isValidTerminalSize,
@@ -20,6 +33,10 @@ import {
   type TerminalClientMessage,
   type TerminalMutationResult,
   type TerminalNotifyBellInput,
+  type TerminalOutputExcerpt,
+  type TerminalOutputExcerptInput,
+  type TerminalScreenSnapshot,
+  type TerminalScreenSnapshotInput,
   type TerminalReorderInput,
   type TerminalResizeInput,
   type TerminalRestartInput,
@@ -79,7 +96,11 @@ const broker = new TerminalRealtimeBroker({
   },
   onAttachmentDisconnected(clientId, attachmentId) {
     manager.setAttachmentConnected(clientId, attachmentId, false)
-    connectionState.scheduleOwnershipRelease(clientId, attachmentId, () => broker.attachmentIsConnected(clientId, attachmentId) === true)
+    connectionState.scheduleOwnershipRelease(
+      clientId,
+      attachmentId,
+      () => broker.attachmentIsConnected(clientId, attachmentId) === true,
+    )
   },
   onClientDisconnected(clientId) {
     connectionState.scheduleClientDisconnect(clientId, () => broker.hasClientSockets(clientId))
@@ -89,9 +110,6 @@ const catalog = createTerminalCatalog({
   isValidClientId: isValidTerminalClientId,
   isValidTerminalId,
   manager,
-  async remoteTerminalTmuxEnabled() {
-    return (await getServerSettingsPrefs()).remoteTerminalTmuxEnabled
-  },
   attachmentIsConnected(clientId, attachmentId) {
     return broker.attachmentIsConnected(clientId, attachmentId)
   },
@@ -99,6 +117,7 @@ const catalog = createTerminalCatalog({
     broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   },
   withSessionSnapshot,
+  previewAssociatedTmuxSessions,
 })
 const brokerSocketByRawSocket = new WeakMap<TerminalRealtimeSocket, BufferedTerminalSocket>()
 type MaybePromise<T> = T | Promise<T>
@@ -139,6 +158,9 @@ const realtimeRequestHandlers = {
   create(clientId, attachmentId, input) {
     return createServerTerminal(clientId, { ...input, attachmentId })
   },
+  'open-tmux-sessions'(clientId, attachmentId, input) {
+    return openServerTmuxSessions(clientId, { ...input, attachmentId })
+  },
   prune(clientId, _attachmentId, input) {
     return pruneServerTerminals(clientId, input.repoRoot)
   },
@@ -171,7 +193,10 @@ export function isValidTerminalClientId(value: unknown): value is string {
   return typeof value === 'string' && TERMINAL_CLIENT_ID_RE.test(value)
 }
 
-export async function attachServerTerminal(clientId: string, input: TerminalAttachInput): Promise<TerminalAttachResult> {
+export async function attachServerTerminal(
+  clientId: string,
+  input: TerminalAttachInput,
+): Promise<TerminalAttachResult> {
   if (
     !isValidTerminalClientId(clientId) ||
     !isValidTerminalSessionId(input?.sessionId) ||
@@ -191,7 +216,10 @@ export async function attachServerTerminal(clientId: string, input: TerminalAtta
   return result.ok ? await withSessionSnapshot(result) : result
 }
 
-export async function restartServerTerminal(clientId: string, input: TerminalRestartInput): Promise<TerminalAttachResult> {
+export async function restartServerTerminal(
+  clientId: string,
+  input: TerminalRestartInput,
+): Promise<TerminalAttachResult> {
   if (
     !isValidTerminalClientId(clientId) ||
     !isValidTerminalSessionId(input?.sessionId) ||
@@ -216,6 +244,13 @@ export async function createServerTerminal(
   input: TerminalCreateInput,
 ): Promise<TerminalCatalogMutationResult> {
   return await catalog.create(clientId, input)
+}
+
+export async function openServerTmuxSessions(
+  clientId: string,
+  input: TerminalOpenTmuxSessionsInput,
+): Promise<TerminalOpenTmuxSessionsResult> {
+  return await catalog.openTmuxSessions(clientId, input)
 }
 
 export async function pruneServerTerminals(
@@ -256,12 +291,50 @@ export function resizeServerTerminal(clientId: string, input: TerminalResizeInpu
   )
 }
 
-export function closeServerTerminal(clientId: string, input: TerminalSessionInput): TerminalMutationResult {
-  if (!isValidTerminalClientId(clientId)) return false
-  const repoRoot = isValidTerminalSessionId(input?.sessionId) ? manager.getSession(clientId, input.sessionId)?.scope : undefined
-  const closed = isValidTerminalSessionId(input?.sessionId) ? manager.closeOwnedSession(clientId, input.sessionId) : false
-  if (closed && repoRoot) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
-  return closed
+export interface TerminalCloseDependencies {
+  closeTmuxSession?: (input: AssociatedTmuxSessionNameInput) => Promise<TerminalTmuxCloseResult>
+}
+
+export async function closeServerTerminal(
+  clientId: string,
+  input: TerminalSessionInput,
+  dependencies: TerminalCloseDependencies = {},
+): Promise<TerminalCloseResult> {
+  if (
+    !isValidTerminalClientId(clientId) ||
+    !isValidTerminalSessionId(input?.sessionId) ||
+    (input.closeTmuxSession !== undefined && typeof input.closeTmuxSession !== 'boolean')
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const session = manager.getSession(clientId, input.sessionId)
+  if (!session) return { ok: true }
+  if (input.closeTmuxSession === true) {
+    if (!session.tmuxSessionName || !session.tmuxWorkingDirectory) {
+      return { ok: false, message: 'error.terminal-tmux-unavailable' }
+    }
+    if (!session.tmuxCloseSupported) {
+      return { ok: false, message: 'terminal.close-tmux-session-exit-required' }
+    }
+    const result = await (dependencies.closeTmuxSession ?? closeAssociatedTmuxSessionByName)({
+      projectRoot: session.scope,
+      itemPath: session.tmuxWorkingDirectory,
+      sessionName: session.tmuxSessionName,
+    })
+    if (!result.ok) return result
+  }
+  const repoRoot = session.scope
+  const closed = manager.closeOwnedSession(clientId, input.sessionId)
+  if (closed) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
+  return { ok: true }
+}
+
+export function closeServerTerminalSessions(sessionIds: string[]): TerminalCloseSessionsResult {
+  const result = manager.closeSessions(sessionIds)
+  for (const repoRoot of result.scopes) {
+    broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
+  }
+  return { closed: result.closed, missing: result.missing }
 }
 
 export function takeoverServerTerminal(clientId: string, input: TerminalTakeoverInput): TerminalTakeoverResult {
@@ -287,7 +360,10 @@ export function notifyServerTerminalBell(_clientId: string, input: TerminalNotif
   return isValidTerminalNotifyBellInput(input)
 }
 
-export async function listServerTerminalSessions(clientId: string, repoRoot: string): Promise<TerminalSessionSummary[]> {
+export async function listServerTerminalSessions(
+  clientId: string,
+  repoRoot: string,
+): Promise<TerminalSessionSummary[]> {
   if (!isValidTerminalClientId(clientId)) return []
   if (!isValidRepoLocator(repoRoot)) return []
   return await manager.listSessions(terminalSessionScope(repoRoot))
@@ -300,6 +376,31 @@ export async function getServerTerminalSessionSnapshot(
   if (!isValidTerminalClientId(clientId)) return null
   if (!isValidTerminalSessionId(input?.sessionId)) return null
   return await manager.snapshotSession(input.sessionId)
+}
+
+export async function getServerTerminalOutputExcerpt(
+  input: TerminalOutputExcerptInput,
+): Promise<TerminalOutputExcerpt | null> {
+  if (!isValidTerminalSessionId(input?.sessionId)) return null
+  if (!Number.isInteger(input?.maxCharacters) || input.maxCharacters < 1 || input.maxCharacters > 4_096) return null
+  return await manager.outputExcerpt(input.sessionId, input.maxCharacters)
+}
+
+export async function getServerTerminalScreenSnapshot(
+  input: TerminalScreenSnapshotInput,
+): Promise<TerminalScreenSnapshot | null> {
+  if (!isValidTerminalSessionId(input?.sessionId)) return null
+  if (
+    !Number.isInteger(input?.maxColumns) ||
+    input.maxColumns < TERMINAL_SIZE_LIMITS.minCols ||
+    input.maxColumns > TERMINAL_SIZE_LIMITS.maxCols ||
+    !Number.isInteger(input?.maxRows) ||
+    input.maxRows < TERMINAL_SIZE_LIMITS.minRows ||
+    input.maxRows > TERMINAL_SIZE_LIMITS.maxRows
+  ) {
+    return null
+  }
+  return await manager.screenSnapshot(input.sessionId, input)
 }
 
 export function reorderServerTerminals(clientId: string, input: TerminalReorderInput): TerminalMutationResult {
@@ -432,13 +533,15 @@ async function dispatchRealtimeRequestForAction<TAction extends TerminalSocketRe
 }
 
 function shouldPauseRealtimeRequest(action: TerminalSocketRequestAction): boolean {
-  return action === 'attach' || action === 'restart' || action === 'create'
+  return action === 'attach' || action === 'restart' || action === 'create' || action === 'open-tmux-sessions'
 }
 
 class BufferedTerminalSocket implements TerminalRealtimeSocket {
   private paused = 0
   private active = true
-  private readonly buffer: Array<{ type: 'send'; payload: string } | { type: 'close'; code?: number; reason?: string }> = []
+  private readonly buffer: Array<
+    { type: 'send'; payload: string } | { type: 'close'; code?: number; reason?: string }
+  > = []
 
   private readonly socket: TerminalRealtimeSocket
   constructor(socket: TerminalRealtimeSocket) {

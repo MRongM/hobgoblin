@@ -71,10 +71,6 @@ export function openRemoteInPreferredEditor(
     : Promise.resolve({ ok: false, message: 'error.remote-editor-not-supported' })
 }
 
-export function getResolvedEditorApp(pref: EditorPref): ResolvedEditorApp | null {
-  return resolveEditorApp(pref, getEditorAppAvailability())
-}
-
 export function getEditorAppAvailability(): EditorAppAvailability {
   return {
     vscode: backends.vscode.isInstalled(),

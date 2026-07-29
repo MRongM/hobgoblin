@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createBranchSnapshot, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { isRendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import {
   createAppLevelIntentPlan,
   createExternalOpenDrainKickPlan,
@@ -8,6 +9,12 @@ import {
 } from '#/web/hooks/renderer-effect-intent-plans.ts'
 
 describe('renderer effect intent plans', () => {
+  test('rejects obsolete workspace layout and desktop detail toggle intents', () => {
+    expect(isRendererEffectIntent({ type: 'workspace-layout-set-requested', layout: 'left-right' })).toBe(false)
+    expect(isRendererEffectIntent({ type: 'workspace-layout-reset-requested' })).toBe(false)
+    expect(isRendererEffectIntent({ type: 'toggle-detail-requested' })).toBe(false)
+  })
+
   test('creates a worktree terminal bell plan when the bell key matches a known worktree', () => {
     resetReposStore()
     const repo = seedRepoState({
@@ -52,11 +59,28 @@ describe('renderer effect intent plans', () => {
         workspaceShortcutSuppressed: true,
         terminalFocused: false,
         currentRepoId: '/tmp/repo',
+        currentProjectId: '/tmp/repo',
         currentRepo: { id: '/tmp/repo', instanceToken: 7 },
       },
     )
 
     expect(plan).toEqual({ kind: 'noop' })
+  })
+
+  test('closes the active workspace project instead of its visible member repository', () => {
+    const plan = createWorkspaceIntentPlan(
+      { type: 'close-repo-requested' },
+      {
+        overlayBlocked: false,
+        workspaceShortcutSuppressed: false,
+        terminalFocused: false,
+        currentRepoId: '/workspace/api',
+        currentProjectId: '/workspace',
+        currentRepo: { id: '/workspace/api', instanceToken: 7 },
+      },
+    )
+
+    expect(plan).toEqual({ kind: 'close-repo', repoId: '/workspace' })
   })
 
   test('creates a refresh plan from the current visible repo token', () => {
@@ -67,6 +91,7 @@ describe('renderer effect intent plans', () => {
         workspaceShortcutSuppressed: false,
         terminalFocused: false,
         currentRepoId: '/tmp/repo',
+        currentProjectId: '/tmp/repo',
         currentRepo: { id: '/tmp/repo', instanceToken: 7 },
       },
     )

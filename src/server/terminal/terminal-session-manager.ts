@@ -8,6 +8,9 @@ import {
   type TerminalController,
   type TerminalExitEvent,
   type TerminalOwnershipEvent,
+  type TerminalOutputExcerpt,
+  type TerminalScreenSnapshot,
+  type TerminalScreenSnapshotInput,
   type TerminalOutputEvent,
   type TerminalSessionPhase,
   type TerminalSessionSnapshot,
@@ -35,6 +38,8 @@ import {
   queueTerminalRenderResize,
   queueTerminalRenderWrite,
   resetTerminalRenderState,
+  readTerminalRenderOutputExcerpt,
+  readTerminalRenderScreenSnapshot,
   snapshotTerminalRenderState,
   type TerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
@@ -55,6 +60,9 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   forceNew?: boolean
   command?: string
   args?: string[]
+  tmuxSessionName?: string
+  tmuxWorkingDirectory?: string
+  tmuxCloseSupported?: boolean
 }
 
 interface TerminalSession<TOwner extends string | number> {
@@ -65,6 +73,9 @@ interface TerminalSession<TOwner extends string | number> {
   cwd: string
   command?: string
   args?: string[]
+  tmuxSessionName: string | null
+  tmuxWorkingDirectory: string | null
+  tmuxCloseSupported: boolean
   cols: number
   rows: number
   pty: TerminalPtyRuntime | null
@@ -128,6 +139,9 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cwd,
       command: input.command,
       args: input.args,
+      tmuxSessionName: input.tmuxSessionName ?? null,
+      tmuxWorkingDirectory: input.tmuxSessionName ? (input.tmuxWorkingDirectory ?? null) : null,
+      tmuxCloseSupported: input.tmuxSessionName ? input.tmuxCloseSupported !== false : false,
       cols: size.cols,
       rows: size.rows,
       pty: null,
@@ -164,7 +178,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
 
   writeSession(ownerId: TOwner, sessionId: string, data: string, attachmentId?: string): boolean {
     if (!isValidTerminalSessionId(sessionId) || !isValidTerminalWriteData(data)) return false
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session?.pty) return false
     if (!attachmentId) return false
     if (!authorizeTerminalAttachment(session, attachmentId, 'write').ok) return false
@@ -184,7 +198,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -204,7 +218,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return false
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return false
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return false
     if (!attachmentId) return false
     registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -223,7 +237,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -246,7 +260,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
-    const session = this.ownedSession(ownerId, sessionId)
+    const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
@@ -265,7 +279,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
   }
 
   closeOwnedSession(ownerId: TOwner, sessionId: string): boolean {
-    if (!this.ownedSession(ownerId, sessionId)) return false
+    if (!this.getSession(ownerId, sessionId)) return false
     this.closeSession(sessionId)
     return true
   }
@@ -279,6 +293,23 @@ export class TerminalSessionManager<TOwner extends string | number> {
     const ownerKey = this.sessionOwnerKey(session.ownerId, session.key)
     if (this.sessionIdByOwnerKey.get(ownerKey) === sessionId) this.sessionIdByOwnerKey.delete(ownerKey)
     this.disposeSessionResources(session)
+  }
+
+  closeSessions(sessionIds: string[]): { closed: string[]; missing: string[]; scopes: string[] } {
+    const closed: string[] = []
+    const missing: string[] = []
+    const scopes = new Set<string>()
+    for (const sessionId of new Set(sessionIds)) {
+      const session = this.sessionsById.get(sessionId)
+      if (!session) {
+        missing.push(sessionId)
+        continue
+      }
+      closed.push(sessionId)
+      scopes.add(session.scope)
+      this.closeSession(sessionId)
+    }
+    return { closed, missing, scopes: [...scopes] }
   }
 
   closeKey(key: string): void {
@@ -325,6 +356,18 @@ export class TerminalSessionManager<TOwner extends string | number> {
     return await snapshotTerminalRenderState(sessionId, session.render)
   }
 
+  async outputExcerpt(sessionId: string, maxCharacters: number): Promise<TerminalOutputExcerpt | null> {
+    const session = this.sessionsById.get(sessionId)
+    if (!session) return null
+    return await readTerminalRenderOutputExcerpt(sessionId, session.render, maxCharacters)
+  }
+
+  async screenSnapshot(sessionId: string, input: TerminalScreenSnapshotInput): Promise<TerminalScreenSnapshot | null> {
+    const session = this.sessionsById.get(sessionId)
+    if (!session) return null
+    return await readTerminalRenderScreenSnapshot(sessionId, session.render, input)
+  }
+
   async listSessions(scope: string): Promise<TerminalSessionSummary[]> {
     const sessions: TerminalSessionSummary[] = []
     for (const session of Array.from(this.sessionsById.values())) {
@@ -342,6 +385,13 @@ export class TerminalSessionManager<TOwner extends string | number> {
           phase: session.phase,
           message: session.message,
           windowsPty: session.windowsPty,
+          tmuxBacked: session.tmuxSessionName !== null,
+          ...(session.tmuxSessionName
+            ? {
+                tmuxSessionName: session.tmuxSessionName,
+                tmuxCloseSupported: session.tmuxCloseSupported,
+              }
+            : {}),
         })
       }
     }
@@ -377,12 +427,6 @@ export class TerminalSessionManager<TOwner extends string | number> {
       }
     }
     return max + 1
-  }
-
-  private ownedSession(ownerId: TOwner, sessionId: string): TerminalSession<TOwner> | undefined {
-    if (!this.isValidOwnerId(ownerId) || !isValidTerminalSessionId(sessionId)) return undefined
-    const session = this.sessionsById.get(sessionId)
-    return session?.ownerId === ownerId ? session : undefined
   }
 
   getSession(ownerId: TOwner, sessionId: string): TerminalSession<TOwner> | undefined {

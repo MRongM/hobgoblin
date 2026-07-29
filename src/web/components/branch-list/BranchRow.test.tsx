@@ -4,10 +4,24 @@ import { act, createRef } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchRow } from '#/web/components/branch-list/BranchRow.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
-import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
+
+type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
+
+const branchActionState = vi.hoisted(() => ({
+  editorOnSelect: vi.fn(),
+  externalTerminalOnSelect: vi.fn(),
+  internalTerminalOnSelect: vi.fn(),
+  tmuxTerminalOnSelect: vi.fn(),
+  restoreTmuxTerminalsOnSelect: vi.fn(),
+  pullDisabled: false,
+}))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
   useI18nStore: (selector: (state: { lang: string }) => string) => selector({ lang: 'zh' }),
@@ -25,6 +39,8 @@ vi.mock('#/web/stores/i18n.ts', () => ({
         return '已失联'
       case 'branch-status.current':
         return '当前'
+      case 'workspace.branch-workspace.member-badge':
+        return '子工作区'
       case 'branch-status.worktree-dirty':
         return `${params?.n ?? 0} 个改动`
       case 'branch-status.sync.ahead':
@@ -45,8 +61,58 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: () => ({
-    patchItems: [],
-    mainItems: [],
+    patchItems: [
+      {
+        id: 'createTag',
+        label: 'action.create-tag',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+    ],
+    mainItems: [
+      {
+        id: 'checkout',
+        label: 'action.checkout',
+        icon: <span />,
+        disabled: false,
+        visible: false,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'pull',
+        label: 'action.pull',
+        icon: <span />,
+        disabled: branchActionState.pullDisabled,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'push',
+        label: 'action.push',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'createWorktree',
+        label: 'action.create-worktree',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'sync',
+        label: 'action.refresh',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        onSelect: vi.fn(),
+      },
+    ],
     externalItems: [
       {
         id: 'editor',
@@ -57,7 +123,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         disabled: false,
         busy: false,
         visible: true,
-        onSelect: vi.fn(),
+        onSelect: branchActionState.editorOnSelect,
       },
       {
         id: 'terminal',
@@ -68,10 +134,64 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         disabled: false,
         busy: false,
         visible: true,
+        onSelect: branchActionState.internalTerminalOnSelect,
+      },
+      {
+        id: 'terminalTmux',
+        label: 'terminal.new-with-tmux',
+        title: 'terminal.new-with-tmux',
+        ariaLabel: 'terminal.new-with-tmux',
+        icon: <span data-testid="tmux-terminal-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        menuOnly: true,
+        onSelect: branchActionState.tmuxTerminalOnSelect,
+      },
+      {
+        id: 'restoreTmuxTerminals',
+        label: 'terminal.restore-directory-tmux',
+        title: 'terminal.restore-directory-tmux',
+        ariaLabel: 'terminal.restore-directory-tmux',
+        icon: <span data-testid="restore-tmux-terminals-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        menuOnly: true,
+        onSelect: branchActionState.restoreTmuxTerminalsOnSelect,
+      },
+      {
+        id: 'externalTerminal',
+        label: 'open-external-terminal',
+        title: 'open-external-terminal',
+        ariaLabel: 'open-external-terminal',
+        icon: <span data-testid="external-terminal-icon" />,
+        disabled: false,
+        busy: false,
+        visible: true,
+        onSelect: branchActionState.externalTerminalOnSelect,
+      },
+    ],
+    destructiveItems: [
+      {
+        id: 'removeWorktree',
+        label: 'action.remove-worktree',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        destructive: true,
+        onSelect: vi.fn(),
+      },
+      {
+        id: 'deleteBranch',
+        label: 'action.delete-branch',
+        icon: <span />,
+        disabled: false,
+        visible: true,
+        destructive: true,
         onSelect: vi.fn(),
       },
     ],
-    destructiveItems: [],
     dialogs: null,
     inlinePanel: <div data-testid="inline-commit-form">inline commit</div>,
   }),
@@ -97,6 +217,12 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
+  branchActionState.editorOnSelect.mockReset()
+  branchActionState.externalTerminalOnSelect.mockReset()
+  branchActionState.internalTerminalOnSelect.mockReset()
+  branchActionState.tmuxTerminalOnSelect.mockReset()
+  branchActionState.restoreTmuxTerminalsOnSelect.mockReset()
+  branchActionState.pullDisabled = false
 })
 
 afterEach(() => {
@@ -169,7 +295,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -198,7 +323,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -232,7 +356,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -257,7 +380,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -282,14 +404,13 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
       </ul>,
     )
 
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     // worktree 路径不再作为独立 aria-label 元素显示
     expect(document.body.querySelector('[aria-label="hobgoblin-feat-optimize"]')).toBeNull()
     // 但仍出现在整行的 title 悬停中
@@ -308,14 +429,13 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
       </ul>,
     )
 
-    const branchName = document.body.querySelector('.text-\\[13px\\].font-medium')
+    const branchName = document.body.querySelector('.text-sm.font-medium')
     const hashTag = document.body.querySelector<HTMLElement>('[data-testid="branch-hash-tag"]')
 
     expect(branchName?.textContent).toBe('feature/a')
@@ -338,18 +458,18 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
       </ul>,
     )
 
-    const summary = document.querySelector<HTMLElement>('li > .pointer-events-none > [title*="feature/a"]')
+    const summary = document.querySelector<HTMLElement>('[data-workspace-list-item-main] [title*="feature/a"]')
     const [iconColumn, textColumn] = Array.from(summary?.children ?? []) as HTMLElement[]
 
     expect(summary?.className).toContain('grid-cols-[1rem_minmax(0,1fr)]')
     expect(summary?.className).toContain('items-center')
+    expect(iconColumn?.className).toContain('workspace-list-item-leading-icon')
     expect(iconColumn?.querySelector('svg')?.classList.contains('lucide-folder-tree')).toBe(true)
     expect(textColumn?.textContent).toContain('feature/a')
     // 单行显示：worktree 路径不再作为文本内容出现在 textColumn
@@ -367,17 +487,45 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
       </ul>,
     )
 
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     // worktree 路径不再作为独立 aria-label / 文本内容显示（已移入整行的 title 悬停）
     expect(document.body.querySelector('[aria-label="worktree-a"]')).toBeNull()
     expect(document.body.textContent).not.toContain('工作树')
+  })
+
+  test('shows an icon-only branch workspace badge for a flagged member worktree', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/member', {
+      worktree: { path: '/tmp/member-worktree' },
+    })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          branchWorkspaceMember
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    const badge = document.querySelector('[data-testid="branch-workspace-member-badge"]')
+    expect(badge?.textContent).toBe('')
+    expect(badge?.getAttribute('data-variant')).toBe('outline')
+    expect(badge?.getAttribute('aria-label')).toBe('子工作区')
+    expect(badge?.getAttribute('title')).toBe('子工作区')
+    expect(badge?.querySelector('.lucide-folder-kanban')).not.toBeNull()
+    expect(document.querySelector('[title*="子工作区"]')).not.toBeNull()
   })
 
   test('uses the worktree icon for the current branch when it has a worktree', () => {
@@ -392,7 +540,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -418,7 +565,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -426,7 +572,7 @@ describe('BranchRow', () => {
     )
 
     const text = document.body.textContent ?? ''
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     expect(text).not.toContain('Add workspace branch summary')
     expect(text).not.toContain('../worktree-a')
     // worktree 路径不再作为独立 aria-label 显示，但仍存在于行 title 悬停中
@@ -445,7 +591,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -470,7 +615,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -497,7 +641,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -524,7 +667,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -549,7 +691,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -560,6 +701,103 @@ describe('BranchRow', () => {
     )
 
     expect(document.body.querySelector('[data-testid="terminal-count-badge"]')).toBeNull()
+  })
+
+  test('closes only the linked worktree terminals from the row context menu when inline actions are hidden', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const terminalWorktreeKey = '/tmp/repo\0/tmp/worktree-a'
+    const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+      {
+        countsByWorktreeKey: new Map([[terminalWorktreeKey, 1]]),
+        closeTerminal,
+      },
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+
+    await requestCloseAllFromContextMenu(row)
+
+    expect(closeTerminal).not.toHaveBeenCalled()
+    await confirmCloseAll()
+    expect(closeTerminal).toHaveBeenCalledWith(`${terminalWorktreeKey}\0terminal-1`, {
+      repoRoot: '/tmp/repo',
+      worktreePath: '/tmp/worktree-a',
+    })
+  })
+
+  test('offers scoped worktree and tmux cleanup actions from the row context menu', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal',
+      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
+      'terminal.close-all',
+      'tmux.cleanup.action',
+    ])
+
+    await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
+    await clickContextMenuItem(row, 'terminal.external')
+    await clickContextMenuItem(row, 'terminal.internal')
+    await clickContextMenuItem(row, 'terminal.new-with-tmux')
+    await clickContextMenuItem(row, 'terminal.restore-directory-tmux')
+
+    expect(branchActionState.editorOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.externalTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.internalTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.tmuxTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.restoreTmuxTerminalsOnSelect).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not attach the item context menu to a branch without a worktree', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a')
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing branch row')
+
+    expect(await openContextMenu(row)).toEqual([])
   })
 
   test('shows only the directory name for remote worktree paths', () => {
@@ -582,14 +820,13 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
       </ul>,
     )
 
-    expect(document.body.querySelector('.text-\\[13px\\].font-medium')?.textContent).toBe('feature/a')
+    expect(document.body.querySelector('.text-sm.font-medium')?.textContent).toBe('feature/a')
     // 目录名不再作为独立 aria-label 元素显示，但仍出现在整行 title 悬停中
     expect(document.body.querySelector('[aria-label="repo-feature"]')).toBeNull()
     expect(document.body.querySelector('[title*="repo-feature"]')).not.toBeNull()
@@ -607,7 +844,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -630,7 +866,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -653,20 +888,18 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
       </ul>,
     )
 
-    const row = document.querySelector('li')
-    const content = row?.querySelector('.pointer-events-none')
+    const row = document.querySelector('[data-workspace-list-item]')
+    const content = row?.querySelector('[data-workspace-list-item-main]')
 
-    expect(row?.className).toContain('min-h-8')
-    expect(row?.className).not.toContain('min-h-9')
-    expect(content?.className).toContain('py-1')
-    expect(content?.className).not.toContain('py-1.5')
+    expect(row?.getAttribute('data-size')).toBe('primary')
+    expect(content?.className).toContain('h-8')
+    expect(content?.className).not.toContain('h-9')
   })
 
   test('does not render commit author or commit time in visible branch row text', () => {
@@ -684,7 +917,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
         />
@@ -698,7 +930,7 @@ describe('BranchRow', () => {
     expect(text).not.toContain('MRongM')
   })
 
-  test('applies sortable props to the row without rendering a drag handle', () => {
+  test('applies sortable props only to a dedicated drag handle', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -709,24 +941,26 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
           sortable={{
             setNodeRef: vi.fn(),
-            props: { role: 'button' },
+            dragHandle: {
+              setActivatorNodeRef: vi.fn(),
+              props: { 'data-sortable-id': '/tmp/worktree-a' },
+            },
           }}
         />
       </ul>,
     )
 
     const handle = document.querySelector('[aria-label="重新排序工作树"]')
-    const row = document.querySelector('li[role="button"]')
-    expect(handle).toBeNull()
-    expect(document.querySelector('.lucide-grip-vertical')).toBeNull()
-    expect(row).not.toBeNull()
-    expect(row?.className).toContain('grid-cols-1')
-    expect(row?.className).not.toContain('1.75rem')
+    const row = document.querySelector('[data-workspace-list-item]')
+    const main = document.querySelector('[data-workspace-list-item-main]')
+    expect(handle?.getAttribute('data-sortable-id')).toBe('/tmp/worktree-a')
+    expect(handle?.querySelector('.lucide-grip-vertical')).not.toBeNull()
+    expect(row?.hasAttribute('data-sortable-id')).toBe(false)
+    expect(main?.hasAttribute('data-sortable-id')).toBe(false)
   })
 
   test('keeps standard content padding when sortable props are provided', () => {
@@ -740,24 +974,24 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions={false}
           sortable={{
             setNodeRef: vi.fn(),
-            props: { role: 'button' },
+            dragHandle: {
+              setActivatorNodeRef: vi.fn(),
+              props: { 'data-sortable-id': '/tmp/worktree-a' },
+            },
           }}
         />
       </ul>,
     )
 
-    const content = Array.from(document.querySelectorAll<HTMLElement>('li > .pointer-events-none')).find((node) =>
-      node.textContent?.includes('feature/a'),
-    )
+    const content = document.querySelector<HTMLElement>('[data-workspace-list-item-main]')
 
-    expect(content?.className).toContain('pl-2.5')
-    expect(content?.className).toContain('py-1')
-    expect(content?.className).not.toContain('pr-2.5')
+    expect(content?.className).toContain('pl-2')
+    expect(content?.className).toContain('pr-2')
+    expect(content?.className).toContain('h-8')
   })
 
   test('renders inline action panel below the branch row content', () => {
@@ -771,7 +1005,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
         />
       </ul>,
@@ -779,7 +1012,7 @@ describe('BranchRow', () => {
 
     const panel = document.body.querySelector('[data-testid="inline-commit-form"]')
     expect(panel).not.toBeNull()
-    expect(panel?.parentElement?.className).toContain('col-span-full')
+    expect(panel?.closest('[data-workspace-list-item]')).not.toBeNull()
   })
 
   test('renders inline editor and terminal buttons before the actions dropdown when worktree exists', () => {
@@ -793,15 +1026,14 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
       </ul>,
     )
 
-    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-editor-btn"]')
-    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-terminal-btn"]')
+    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
+    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
     const dropdown = document.body.querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
 
     expect(editorBtn).not.toBeNull()
@@ -812,7 +1044,49 @@ describe('BranchRow', () => {
     expect(terminalBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  test('clicking the inline editor button also selects its branch', () => {
+  test('keeps the worktree menu stable while excluding create, refresh, and delete branch', async () => {
+    branchActionState.pullDisabled = true
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const items = await openRowMenu()
+    const labels = items.map((item) => item.textContent?.trim())
+    expect(labels).toEqual([
+      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
+      'open-external-terminal',
+      'action.pull',
+      'action.push',
+      'action.create-tag',
+      'action.remove-worktree',
+      'tmux.cleanup.action',
+    ])
+    expect(labels).not.toContain('action.create-worktree')
+    expect(labels).not.toContain('action.refresh')
+    expect(labels).not.toContain('action.delete-branch')
+    expect(items.find((item) => item.textContent?.includes('action.pull'))?.hasAttribute('data-disabled')).toBe(true)
+    expect(
+      items.find((item) => item.textContent?.includes('action.remove-worktree'))?.getAttribute('data-variant'),
+    ).toBe('destructive')
+    expect(items.find((item) => item.textContent?.includes('tmux.cleanup.action'))?.getAttribute('data-variant')).toBe(
+      'destructive',
+    )
+  })
+
+  test('clicking the branch row selects its branch', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     const onSelectBranch = vi.fn()
@@ -824,22 +1098,46 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    act(() => {
+      document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')!.click()
+    })
+
+    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+  })
+
+  test('clicking the inline editor button does not select its branch', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const onSelectBranch = vi.fn()
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={onSelectBranch}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
       </ul>,
     )
 
-    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-editor-btn"]')
+    const editorBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
     act(() => {
       editorBtn!.click()
     })
 
-    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onSelectBranch).not.toHaveBeenCalled()
   })
 
-  test('clicking the inline terminal button also selects its branch', () => {
+  test('leaves branch selection to the inline terminal action callback', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     const onSelectBranch = vi.fn()
@@ -851,22 +1149,21 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
       </ul>,
     )
 
-    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-testid="branch-row-terminal-btn"]')
+    const terminalBtn = document.body.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
     act(() => {
       terminalBtn!.click()
     })
 
-    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onSelectBranch).not.toHaveBeenCalled()
   })
 
-  test('clicking the actions dropdown also selects its branch', () => {
+  test('clicking the actions dropdown does not select its branch', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
     const onSelectBranch = vi.fn()
@@ -878,7 +1175,6 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={onSelectBranch}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
@@ -890,7 +1186,7 @@ describe('BranchRow', () => {
       dropdown!.click()
     })
 
-    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onSelectBranch).not.toHaveBeenCalled()
   })
 
   test('does not render inline editor/terminal buttons for branches without a worktree', () => {
@@ -904,15 +1200,14 @@ describe('BranchRow', () => {
           branch={branch}
           selected={null}
           onSelectBranch={vi.fn()}
-          onOpenBranchStatus={vi.fn()}
           selectedRef={createRef<HTMLLIElement>()}
           showActions
         />
       </ul>,
     )
 
-    expect(document.body.querySelector('[data-testid="branch-row-editor-btn"]')).toBeNull()
-    expect(document.body.querySelector('[data-testid="branch-row-terminal-btn"]')).toBeNull()
+    expect(document.body.querySelector('[data-workspace-list-item-action="editor"]')).toBeNull()
+    expect(document.body.querySelector('[data-workspace-list-item-action="terminal"]')).toBeNull()
     // dropdown 仍然存在
     expect(document.body.querySelector('[aria-label="action.menu"]')).not.toBeNull()
   })
@@ -924,6 +1219,7 @@ function render(
     bellWorktreeKeys?: string[]
     countsByWorktreeKey?: Map<string, number>
     outputActiveWorktreeKeys?: string[]
+    closeTerminal?: CloseTerminalMock
   } = {},
 ) {
   const readContext = terminalReadContextWithState(
@@ -931,9 +1227,85 @@ function render(
     fixture.countsByWorktreeKey ?? new Map(),
     new Set(fixture.outputActiveWorktreeKeys ?? []),
   )
+  const closeTerminal =
+    fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>{element}</TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+        <TerminalSessionReadContext.Provider value={readContext}>{element}</TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
+  })
+}
+
+function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: closeTerminal,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
+}
+
+async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes('terminal.close-all'))
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function openRowMenu(): Promise<HTMLElement[]> {
+  await act(async () => {
+    document.body
+      .querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+      ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function confirmCloseAll(): Promise<void> {
+  const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all-confirm-confirm'),
+  )
+  if (!confirm) throw new Error('missing close all terminals confirmation')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
   })
 }

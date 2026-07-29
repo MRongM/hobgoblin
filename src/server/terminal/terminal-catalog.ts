@@ -1,9 +1,14 @@
+import path from 'node:path'
 import { getWorktrees } from '#/system/git/worktrees.ts'
+import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { resolveKnownWorktree } from '#/shared/worktree-guards.ts'
 import { isValidBranch, isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { resolveRemoteTarget } from '#/system/ssh/config.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
+import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import type { TmuxCleanupPreviewResult, TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
   formatTerminalId,
@@ -16,18 +21,26 @@ import {
   type TerminalCatalogMutationResult,
   type TerminalControllerStatus,
   type TerminalCreateInput,
+  type TerminalOpenTmuxSessionsInput,
+  type TerminalOpenTmuxSessionsResult,
   type TerminalSessionSummary,
   type TerminalWindowsPty,
+  normalizeTerminalLaunchMode,
 } from '#/shared/terminal.ts'
 
 interface EnsureTerminalCatalogInput {
   repoRoot: string
   branch: string
   worktreePath: string
+  targetKind?: 'branch-workspace'
+  branchWorkspaceId?: string
   terminalId?: string
+  launchMode?: TerminalCreateInput['launchMode']
   cols?: number
   rows?: number
   attachmentId?: string
+  existingTmuxSession?: TmuxSessionRecord
+  tmuxCloseSupported?: boolean
 }
 
 type EnsureTerminalCatalogResult =
@@ -64,6 +77,9 @@ interface TerminalCatalogEnsureSessionInput {
   forceNew?: boolean
   command?: string
   args?: string[]
+  tmuxSessionName?: string
+  tmuxWorkingDirectory?: string
+  tmuxCloseSupported?: boolean
 }
 
 interface TerminalCatalogManager {
@@ -72,18 +88,16 @@ interface TerminalCatalogManager {
   closeSession(sessionId: string): void
 }
 
-type MaybePromise<T> = T | Promise<T>
-
 interface TerminalCatalogOptions {
   isValidClientId(value: unknown): value is string
   isValidTerminalId(value: unknown): value is string
   manager: TerminalCatalogManager
-  remoteTerminalTmuxEnabled(): MaybePromise<boolean>
   attachmentIsConnected(clientId: string, attachmentId?: string): boolean | undefined
   broadcastSessionsChanged(repoRoot: string): void
   withSessionSnapshot(
     result: Extract<TerminalAttachResult, { ok: true }>,
   ): Promise<Extract<TerminalAttachResult, { ok: true }>>
+  previewAssociatedTmuxSessions(input: { projectRoot: string; itemPath: string }): Promise<TmuxCleanupPreviewResult>
 }
 
 class TerminalCatalog {
@@ -98,6 +112,11 @@ class TerminalCatalog {
     if (!isValidRepoLocator(input.repoRoot)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidBranch(input.branch)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidCwd(input.worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+    const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
+    if (!targetAuthorization.ok) return targetAuthorization
+    const repoRoot = normalizeTerminalRepoRoot(input.repoRoot)
+    const worktreePath = normalizeTerminalWorkingPath(input.repoRoot, targetAuthorization.worktreePath)
+    const canonicalInput = { ...input, repoRoot, worktreePath }
 
     const terminalId = input.terminalId ?? formatTerminalId(1)
     const cols = input.cols ?? 80
@@ -105,9 +124,9 @@ class TerminalCatalog {
     if (!this.options.isValidTerminalId(terminalId)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidTerminalSize(cols, rows)) return { ok: false, message: 'error.invalid-arguments' }
 
-    const scope = terminalSessionScope(input.repoRoot)
+    const scope = terminalSessionScope(repoRoot)
     const existingSessions = await this.options.manager.listSessions(scope)
-    const targetSessionKey = sessionKey(input.repoRoot, input.worktreePath, terminalId)
+    const targetSessionKey = sessionKey(repoRoot, worktreePath, terminalId)
     const existingSession = existingSessions.find((session) => session.key === targetSessionKey)
     const action: TerminalCatalogAction = existingSession
       ? existingSession.controller
@@ -115,10 +134,10 @@ class TerminalCatalog {
         : 'reused'
       : 'created'
 
-    if (isRemoteRepoId(input.repoRoot)) {
-      return await this.ensureRemote(clientId, input, { terminalId, cols, rows, targetSessionKey, action })
+    if (isRemoteRepoId(repoRoot)) {
+      return await this.ensureRemote(clientId, canonicalInput, { terminalId, cols, rows, targetSessionKey, action })
     }
-    return await this.ensureLocal(clientId, input, { cols, rows, targetSessionKey, action })
+    return await this.ensureLocal(clientId, canonicalInput, { terminalId, cols, rows, targetSessionKey, action })
   }
 
   async create(clientId: string, input: TerminalCreateInput): Promise<TerminalCatalogMutationResult> {
@@ -136,22 +155,65 @@ class TerminalCatalog {
     if (!sessions.some((session) => session.sessionId === createResult.sessionId)) {
       return { ok: false, message: 'error.terminal-create-failed' }
     }
+    return toCatalogMutationResult(createResult, sessions)
+  }
+
+  async openTmuxSessions(
+    clientId: string,
+    input: TerminalOpenTmuxSessionsInput,
+  ): Promise<TerminalOpenTmuxSessionsResult> {
+    if (!this.options.isValidClientId(clientId)) return { ok: false, message: 'error.invalid-arguments' }
+    if (!isValidRepoLocator(input.repoRoot) || !isValidBranch(input.branch) || !isValidCwd(input.worktreePath)) {
+      return { ok: false, message: 'error.invalid-arguments' }
+    }
+    if (!isValidTerminalAttachmentId(input.attachmentId)) return { ok: false, message: 'error.invalid-arguments' }
+    const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
+    if (!targetAuthorization.ok) return targetAuthorization
+    const canonicalInput = {
+      ...input,
+      repoRoot: normalizeTerminalRepoRoot(input.repoRoot),
+      worktreePath: normalizeTerminalWorkingPath(input.repoRoot, targetAuthorization.worktreePath),
+    }
+    const preview = await this.options.previewAssociatedTmuxSessions({
+      projectRoot: canonicalInput.repoRoot,
+      itemPath: canonicalInput.worktreePath,
+    })
+    if (!preview.ok) return preview
+
+    const scope = terminalSessionScope(canonicalInput.repoRoot)
+    const existingSessions = await this.options.manager.listSessions(scope)
+    const usedKeys = new Set(existingSessions.map((session) => session.key))
+    const sessions = preview.sessions
+      .filter((session) => session.attachedClients === 0)
+      .sort(compareRecoveredTmuxSessions)
+    if (sessions.length === 0) return { ok: true, restored: 0, sessions: existingSessions }
+    let selectedResult: Extract<EnsureTerminalCatalogResult, { ok: true }> | null = null
+    for (const tmuxSession of sessions) {
+      const existing = existingSessions.find((session) => session.tmuxSessionName === tmuxSession.sessionName)
+      const existingTerminalId = existing ? parseSessionKey(existing.key)?.terminalId : undefined
+      const preferredTerminalId = formatTerminalId(tmuxSession.terminalNumber)
+      const preferredKey = sessionKey(canonicalInput.repoRoot, canonicalInput.worktreePath, preferredTerminalId)
+      const terminalId =
+        existingTerminalId ??
+        (!usedKeys.has(preferredKey)
+          ? preferredTerminalId
+          : nextAvailableTerminalId(canonicalInput.repoRoot, canonicalInput.worktreePath, usedKeys))
+      const key = sessionKey(canonicalInput.repoRoot, canonicalInput.worktreePath, terminalId)
+      usedKeys.add(key)
+      const result = await this.ensureOrRestore(clientId, {
+        ...canonicalInput,
+        terminalId,
+        launchMode: 'tmux-if-available',
+        existingTmuxSession: tmuxSession,
+        tmuxCloseSupported: tmuxSession.terminalNumber === parseTerminalIdIndex(terminalId),
+      })
+      if (!result.ok) return result
+      selectedResult ??= result
+    }
+    if (!selectedResult) return { ok: false, message: 'error.terminal-create-failed' }
     return {
-      ok: true,
-      action: createResult.action,
-      key: createResult.key,
-      sessionId: createResult.sessionId,
-      processName: createResult.processName,
-      canonicalTitle: createResult.canonicalTitle,
-      snapshot: createResult.snapshot ?? '',
-      snapshotSeq: createResult.snapshotSeq ?? createResult.replaySeq,
-      controller: createResult.controller,
-      canonicalCols: createResult.canonicalCols,
-      canonicalRows: createResult.canonicalRows,
-      phase: createResult.phase,
-      message: createResult.message,
-      windowsPty: createResult.windowsPty,
-      sessions,
+      ...toCatalogMutationResult(selectedResult, await this.options.manager.listSessions(scope)),
+      restored: sessions.length,
     }
   }
 
@@ -167,6 +229,12 @@ class TerminalCatalog {
     if (worktrees.length === 0) return { pruned: 0, remaining: allSessions.length }
 
     const liveWorktreePaths = new Set(worktrees.map((worktree) => terminalSessionScope(worktree.path)))
+    const branchWorkspaceSnapshot = await readBranchWorkspaceManifests(repoRoot).catch(() => null)
+    if (branchWorkspaceSnapshot?.kind === 'ready') {
+      for (const manifest of branchWorkspaceSnapshot.manifests) {
+        liveWorktreePaths.add(terminalSessionScope(manifest.path))
+      }
+    }
 
     let pruned = 0
     for (const session of allSessions) {
@@ -183,11 +251,19 @@ class TerminalCatalog {
   }
 
   async nextTerminalId(repoRoot: string, worktreePath: string): Promise<string> {
-    const sessions = await this.options.manager.listSessions(terminalSessionScope(repoRoot))
+    const normalizedRepoRoot = normalizeTerminalRepoRoot(repoRoot)
+    const normalizedWorktreePath = normalizeTerminalWorkingPath(repoRoot, worktreePath)
+    const sessions = await this.options.manager.listSessions(terminalSessionScope(normalizedRepoRoot))
     const usedIndexes = new Set<number>()
     for (const session of sessions) {
       const parsed = parseSessionKey(session.key)
-      if (!parsed || parsed.repoRoot !== repoRoot || parsed.worktreePath !== worktreePath) continue
+      if (
+        !parsed ||
+        normalizeTerminalRepoRoot(parsed.repoRoot) !== normalizedRepoRoot ||
+        normalizeTerminalWorkingPath(repoRoot, parsed.worktreePath) !== normalizedWorktreePath
+      ) {
+        continue
+      }
       const index = parseTerminalIdIndex(parsed.terminalId)
       if (index !== null) usedIndexes.add(index)
     }
@@ -217,13 +293,15 @@ class TerminalCatalog {
     }
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
-    const useTmux = (await this.options.remoteTerminalTmuxEnabled()) === true
+    const useTmux = normalizeTerminalLaunchMode(input.launchMode) === 'tmux-if-available'
 
     const invocation = buildRemoteTerminalInvocation(resolved.target, input.worktreePath, {
       cols: context.cols,
       rows: context.rows,
       terminalNumber,
       useTmux,
+      existingTmuxSessionName: input.existingTmuxSession?.sessionName,
+      existingTmuxServerName: input.existingTmuxSession?.serverName,
     })
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
@@ -237,6 +315,13 @@ class TerminalCatalog {
       forceNew: context.action === 'created',
       command: invocation.command,
       args: invocation.args,
+      ...(invocation.tmuxSessionName
+        ? {
+            tmuxSessionName: invocation.tmuxSessionName,
+            tmuxWorkingDirectory: input.worktreePath,
+            tmuxCloseSupported: input.tmuxCloseSupported,
+          }
+        : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)
@@ -247,12 +332,20 @@ class TerminalCatalog {
     clientId: string,
     input: EnsureTerminalCatalogInput,
     context: {
+      terminalId: string
       cols: number
       rows: number
       targetSessionKey: string
       action: TerminalCatalogAction
     },
   ): Promise<EnsureTerminalCatalogResult> {
+    if (input.targetKind === 'branch-workspace') {
+      return await this.ensureLocalSession(clientId, input, {
+        ...context,
+        repoRoot: terminalSessionScope(input.repoRoot),
+        worktreePath: terminalSessionScope(input.worktreePath),
+      })
+    }
     if (isNonGitLocalWorkspaceTerminal(input)) {
       const repoRoot = terminalSessionScope(input.repoRoot)
       return await this.ensureLocalSession(clientId, input, {
@@ -279,6 +372,7 @@ class TerminalCatalog {
     clientId: string,
     input: EnsureTerminalCatalogInput,
     context: {
+      terminalId: string
       cols: number
       rows: number
       targetSessionKey: string
@@ -287,6 +381,22 @@ class TerminalCatalog {
       worktreePath: string
     },
   ): Promise<EnsureTerminalCatalogResult> {
+    const terminalNumber = parseTerminalIdIndex(context.terminalId)
+    if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
+    const useTmux = normalizeTerminalLaunchMode(input.launchMode) === 'tmux-if-available'
+    const invocation = buildManagedLocalTerminalInvocation(
+      {
+        projectRoot: context.repoRoot,
+        workingDirectory: context.worktreePath,
+        terminalNumber,
+      },
+      {
+        useTmux,
+        fallbackShell: process.env.SHELL,
+        existingTmuxSessionName: input.existingTmuxSession?.sessionName,
+        existingTmuxServerName: input.existingTmuxSession?.serverName,
+      },
+    )
     const result = this.options.manager.ensureSession({
       ownerId: clientId,
       scope: context.repoRoot,
@@ -297,11 +407,67 @@ class TerminalCatalog {
       attachmentId: input.attachmentId,
       attachmentConnected: this.options.attachmentIsConnected(clientId, input.attachmentId),
       forceNew: context.action === 'created',
+      command: invocation?.command,
+      args: invocation?.args,
+      ...(invocation
+        ? {
+            tmuxSessionName: invocation.tmuxSessionName,
+            tmuxWorkingDirectory: context.worktreePath,
+            tmuxCloseSupported: input.tmuxCloseSupported,
+          }
+        : {}),
     })
     if (!result.ok) return { ok: false, message: result.message }
     this.options.broadcastSessionsChanged(input.repoRoot)
     return toEnsureResult(context.targetSessionKey, context.action, await this.options.withSessionSnapshot(result))
   }
+}
+
+async function authorizeBranchWorkspaceTerminalTarget(
+  input: Pick<EnsureTerminalCatalogInput, 'repoRoot' | 'branch' | 'worktreePath' | 'targetKind' | 'branchWorkspaceId'>,
+): Promise<{ ok: true; worktreePath: string } | { ok: false; message: string }> {
+  if (input.targetKind === undefined) {
+    return input.branchWorkspaceId === undefined
+      ? { ok: true, worktreePath: input.worktreePath }
+      : { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (
+    input.targetKind !== 'branch-workspace' ||
+    typeof input.branchWorkspaceId !== 'string' ||
+    !input.branchWorkspaceId.trim()
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+
+  const snapshot = await readBranchWorkspaceManifests(input.repoRoot).catch(() => null)
+  const manifest =
+    snapshot?.kind === 'ready'
+      ? snapshot.manifests.find((candidate) => candidate.id === input.branchWorkspaceId)
+      : undefined
+  if (
+    !manifest ||
+    workspaceRootId(manifest.rootId) !== workspaceRootId(input.repoRoot) ||
+    manifest.branch !== input.branch ||
+    !sameBranchWorkspaceTerminalPath(input.repoRoot, manifest.path, input.worktreePath) ||
+    manifest.operation?.kind === 'remove'
+  ) {
+    return { ok: false, message: 'workspace.branch-workspace.terminal-unavailable' }
+  }
+  return { ok: true, worktreePath: manifest.path }
+}
+
+function normalizeTerminalRepoRoot(repoRoot: string): string {
+  return isRemoteRepoId(repoRoot) ? repoRoot : terminalSessionScope(repoRoot)
+}
+
+function normalizeTerminalWorkingPath(repoRoot: string, value: string): string {
+  return isRemoteRepoId(repoRoot) ? path.posix.normalize(value) : terminalSessionScope(value)
+}
+
+function sameBranchWorkspaceTerminalPath(rootId: string, left: string, right: string): boolean {
+  return isRemoteRepoId(rootId)
+    ? path.posix.normalize(left) === path.posix.normalize(right)
+    : terminalSessionScope(left) === terminalSessionScope(right)
 }
 
 function isNonGitLocalWorkspaceTerminal(
@@ -338,6 +504,39 @@ function toEnsureResult(
     message: snapshotResult.message,
     windowsPty: snapshotResult.windowsPty,
   }
+}
+
+function toCatalogMutationResult(
+  result: Extract<EnsureTerminalCatalogResult, { ok: true }>,
+  sessions: TerminalSessionSummary[],
+): Extract<TerminalCatalogMutationResult, { ok: true }> {
+  return {
+    ok: true,
+    action: result.action,
+    key: result.key,
+    sessionId: result.sessionId,
+    processName: result.processName,
+    canonicalTitle: result.canonicalTitle,
+    snapshot: result.snapshot ?? '',
+    snapshotSeq: result.snapshotSeq ?? result.replaySeq,
+    controller: result.controller,
+    canonicalCols: result.canonicalCols,
+    canonicalRows: result.canonicalRows,
+    phase: result.phase,
+    message: result.message,
+    windowsPty: result.windowsPty,
+    sessions,
+  }
+}
+
+function compareRecoveredTmuxSessions(left: TmuxSessionRecord, right: TmuxSessionRecord): number {
+  return left.terminalNumber - right.terminalNumber || left.sessionName.localeCompare(right.sessionName)
+}
+
+function nextAvailableTerminalId(repoRoot: string, worktreePath: string, usedKeys: ReadonlySet<string>): string {
+  let terminalNumber = 1
+  while (usedKeys.has(sessionKey(repoRoot, worktreePath, formatTerminalId(terminalNumber)))) terminalNumber += 1
+  return formatTerminalId(terminalNumber)
 }
 
 function sessionKey(repoRoot: string, worktreePath: string, terminalId?: string): string {

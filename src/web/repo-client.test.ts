@@ -70,6 +70,101 @@ describe('repo-client', () => {
     setRendererBridgeForTests(null)
   })
 
+  test('serializes merge-out plan and execute requests with their abort signals', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, plan: { token: 'sha256:plan', destinations: [] } }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const signal = new AbortController().signal
+    const { getRepositoryBranchMergeOutPlan, mergeRepositoryBranchOut } = await import('#/web/repo-client.ts')
+    const request = {
+      repoId: '/repo',
+      sourceBranch: 'feature/source',
+      sourceWorktreePath: '/repo-feature',
+    }
+    const executeInput = {
+      ...request,
+      planToken: 'sha256:plan',
+      destinationBranch: 'main',
+      mode: 'merge' as const,
+    }
+
+    await getRepositoryBranchMergeOutPlan(request, signal)
+    await mergeRepositoryBranchOut(executeInput, signal, 'client_123')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/merge-out-plan',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(request), signal }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/merge-out',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ ...executeInput, sourceToken: 'client_123' }),
+        signal,
+      }),
+    )
+  })
+
+  test('requests bootstrap preflight from an explicit source worktree', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, preflight: { kind: 'candidates', candidates: [] } }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { getRepositoryWorktreeBootstrapPreflight } = await import('#/web/repo-client.ts')
+
+    await expect(
+      getRepositoryWorktreeBootstrapPreflight('/repo', undefined, 'all-untracked', '/repo-feature'),
+    ).resolves.toMatchObject({ ok: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/worktree-bootstrap-preflight',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          cwd: '/repo',
+          candidateScope: 'all-untracked',
+          sourceWorktreePath: '/repo-feature',
+        }),
+      }),
+    )
+  })
+
+  test('requests invalid worktree cleanup with the selected path and source token', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'pruned' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const repoClient = await import('#/web/repo-client.ts')
+    const cleanupRepositoryWorktree = (repoClient as Record<string, unknown>).cleanupRepositoryWorktree
+    expect(cleanupRepositoryWorktree).toBeTypeOf('function')
+
+    await expect(
+      (
+        cleanupRepositoryWorktree as (
+          cwd: string,
+          worktreePath: string,
+          signal?: AbortSignal,
+          sourceToken?: string,
+        ) => Promise<unknown>
+      )('/repo', '/repo-stale', undefined, 'client_123'),
+    ).resolves.toEqual({ ok: true, message: 'pruned' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/cleanup-worktree',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ cwd: '/repo', worktreePath: '/repo-stale', sourceToken: 'client_123' }),
+      }),
+    )
+  })
+
   test('opens repository remote through the native shell bridge when available', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     window.open = vi.fn(() => null)
@@ -187,7 +282,9 @@ describe('repo-client', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const { openRepositoryEditor, openRepositoryTerminal } = await import('#/web/repo-client.ts')
-    await expect(openRepositoryTerminal('/tmp/repo')).resolves.toEqual({ ok: true, message: 'server-terminal' })
+    await expect(
+      openRepositoryTerminal({ projectRoot: '/tmp/repo', workingDirectory: '/tmp/repo/worktree' }),
+    ).resolves.toEqual({ ok: true, message: 'server-terminal' })
     await expect(openRepositoryEditor('/tmp/repo')).resolves.toEqual({ ok: true, message: 'server-editor' })
     await expect(openRepositoryEditor({ path: '/tmp/repo/src/app.ts', line: 12 })).resolves.toEqual({
       ok: true,
@@ -201,7 +298,7 @@ describe('repo-client', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
-        body: JSON.stringify({ path: '/tmp/repo' }),
+        body: JSON.stringify({ projectRoot: '/tmp/repo', workingDirectory: '/tmp/repo/worktree' }),
       }),
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -556,20 +653,21 @@ describe('repo-client', () => {
       })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { readRepositoryFileTreeBinaryFile, replaceRepositoryFileTreeBinaryFile } = await import('#/web/repo-client.ts')
+    const { readRepositoryFileTreeBinaryFile, replaceRepositoryFileTreeBinaryFile } =
+      await import('#/web/repo-client.ts')
     await expect(readRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 30)).resolves.toEqual({
       ok: true,
       name: 'image.bin',
       byteLength: 3,
       bytesBase64: 'AQID',
     })
-    await expect(
-      replaceRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 'AQI=', 30),
-    ).resolves.toEqual({
-      ok: true,
-      previousBytesBase64: 'CQg=',
-      previousByteLength: 2,
-    })
+    await expect(replaceRepositoryFileTreeBinaryFile('/repo', '/repo', '/repo/image.bin', 'AQI=', 30)).resolves.toEqual(
+      {
+        ok: true,
+        previousBytesBase64: 'CQg=',
+        previousByteLength: 2,
+      },
+    )
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'http://127.0.0.1:32100/api/repo/file-tree/read-binary-file',

@@ -4,13 +4,13 @@ import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
 import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
-import { SplitPane } from '#/web/components/SplitPane.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
-import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
+import { FileAreaSplitPane } from '#/web/components/repo-workspace/FileAreaSplitPane.tsx'
+import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
-import { repoWorkspaceBehavior } from '#/web/lib/workspace-layout.ts'
+import type { CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
 
 interface PlainWorkspacePaneProps {
   repoId: string
@@ -19,7 +19,13 @@ interface PlainWorkspacePaneProps {
   terminalPanel?: ReactNode
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
+  onOpenFileArea?: () => void
+  compactSurface?: Exclude<CompactWorkspaceSurface, 'detail'>
   onShowCompactDetail?: () => void
+  onShowCompactFiles?: () => void
+  terminalFocusMode?: boolean
+  onMaximizeTerminal?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 export function PlainWorkspacePane({
@@ -29,10 +35,15 @@ export function PlainWorkspacePane({
   terminalPanel,
   fileAreaCollapsed = false,
   onToggleFileArea,
+  onOpenFileArea,
+  compactSurface,
   onShowCompactDetail,
+  onShowCompactFiles,
+  terminalFocusMode = false,
+  onMaximizeTerminal,
+  onExitTerminalFocus,
 }: PlainWorkspacePaneProps) {
   const compact = useIsCompactUi()
-  const detailFocusMode = useReposStore((state) => state.detailFocusMode)
   const repoUnavailable = useReposStore((state) => state.repos[repoId]?.availability.phase === 'unavailable')
   const multiRepositoryWorkspace = useReposStore((state) => !!state.workspaceProjects[repoId])
   const terminalPaneSize = useReposStore((s) => s.detailPaneSizes[layout])
@@ -43,66 +54,87 @@ export function PlainWorkspacePane({
   const setRepoFileTreePaneSize = useReposStore((state) => state.setRepoFileTreePaneSize)
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
   const desktopWorkspaceOverview = !compact && multiRepositoryWorkspace
-  const splitOrientation = layout === 'top-bottom' ? 'horizontal' : 'vertical'
-  const sideBySide = splitOrientation === 'horizontal'
-  const behavior = repoWorkspaceBehavior(layout, false, detailFocusMode)
-  const focusMode = !compact && !repoUnavailable && behavior.mode === 'focus'
+  const focusMode = !compact && !repoUnavailable && terminalFocusMode
+  const fileBrowser = <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
 
-  if (compact && multiRepositoryWorkspace && onShowCompactDetail) {
+  if (compact) {
+    const surface = compactSurface ?? (multiRepositoryWorkspace ? 'scope' : 'files')
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <SidebarProjectHeader repoId={repoId} onShowCompactDetail={onShowCompactDetail} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-          <WorkspaceRepositoryRail workspaceRootId={repoId} currentRepoId={repoId} fill />
+      <div data-compact-surface={surface} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <SidebarProjectHeader
+          repoId={repoId}
+          onShowCompactDetail={onShowCompactDetail}
+          onShowCompactFiles={onShowCompactFiles}
+        />
+        <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+          {surface === 'scope' && multiRepositoryWorkspace ? (
+            <WorkspaceRepositoryRail
+              workspaceRootId={repoId}
+              currentRepoId={repoId}
+              fill
+              onOpenFileArea={onOpenFileArea}
+            />
+          ) : (
+            fileBrowser
+          )}
         </div>
         <StatusBar repoId={repoId} />
       </div>
     )
   }
 
-  const fileBrowser = <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
   const detailPane = (
     <RepoWorkspacePane>
-      {terminalPanel ?? <PlainWorkspaceTerminalPanel repoId={repoId} layout={layout} focusMode={focusMode} />}
+      {terminalPanel ?? (
+        <PlainWorkspaceTerminalPanel
+          repoId={repoId}
+          layout={layout}
+          focusMode={focusMode}
+          onExitTerminalFocus={onExitTerminalFocus}
+        />
+      )}
     </RepoWorkspacePane>
   )
 
-  if (focusMode) {
-    return <div className="flex min-h-0 min-w-0 flex-1 flex-col">{detailPane}</div>
-  }
-
   const branchPane = (
     <RepoWorkspacePane>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {!compact && <SidebarProjectHeader repoId={repoId} />}
+      <div className="project-file-area-tone flex min-h-0 min-w-0 flex-1 flex-col bg-topbar">
+        <SidebarProjectHeader repoId={repoId} onMaximizeTerminal={onMaximizeTerminal} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {desktopWorkspaceOverview ? (
-            <SplitPane
-              orientation={splitOrientation}
-              before={
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
-                  <WorkspaceRepositoryRail workspaceRootId={repoId} currentRepoId={repoId} fill />
+            <FileAreaSplitPane
+              orientation="vertical"
+              navigationArea={
+                <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
+                  <WorkspaceRepositoryRail
+                    workspaceRootId={repoId}
+                    currentRepoId={repoId}
+                    fill
+                    onOpenFileArea={onOpenFileArea}
+                  />
                 </div>
               }
-              after={fileBrowser}
-              afterSize={fileAreaSize}
-              afterCollapsed={desktopFileAreaCollapsed}
-              onAfterSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
-              beforeMinSize={sideBySide ? '12rem' : '8rem'}
-              afterMinSize={sideBySide ? '12rem' : '8rem'}
-              afterMaxSize="80%"
+              fileArea={fileBrowser}
+              fileAreaSize={fileAreaSize}
+              fileAreaCollapsed={desktopFileAreaCollapsed}
+              onFileAreaSizeChange={(size) => setRepoFileTreePaneSize(repoId, layout, size)}
+              navigationMinSize="8rem"
+              fileAreaMinSize="8rem"
+              fileAreaMaxSize="80%"
               className="min-h-0 flex-1"
             />
           ) : !desktopFileAreaCollapsed ? (
             fileBrowser
           ) : null}
         </div>
-        {!compact && (
-          <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
-        )}
+        <StatusBar repoId={repoId} fileAreaCollapsed={desktopFileAreaCollapsed} onToggleFileArea={onToggleFileArea} />
       </div>
     </RepoWorkspacePane>
   )
+
+  if (focusMode) {
+    return <div className="flex min-h-0 min-w-0 flex-1 flex-col">{detailPane}</div>
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">

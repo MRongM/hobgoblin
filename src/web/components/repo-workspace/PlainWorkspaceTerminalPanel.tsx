@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { PanelLeftOpen } from 'lucide-react'
-import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
-import { EmptyState, Toolbar } from '#/web/components/Layout.tsx'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH, type TerminalLaunchMode } from '#/shared/terminal.ts'
+import { Toolbar } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
@@ -25,6 +25,7 @@ interface PlainWorkspaceTerminalPanelProps {
   focusMode?: boolean
   compactFocusPresentation?: boolean
   onShowCompactOverview?: () => void
+  onExitTerminalFocus?: () => void
 }
 
 const DETAIL_ID = 'plain-workspace-terminal'
@@ -35,11 +36,11 @@ export function PlainWorkspaceTerminalPanel({
   focusMode = false,
   compactFocusPresentation = false,
   onShowCompactOverview,
+  onExitTerminalFocus,
 }: PlainWorkspaceTerminalPanelProps) {
   const t = useT()
   const compact = useIsCompactUi()
   const repo = useReposStore((state) => state.repos[repoId])
-  const toggleDetailFocusMode = useReposStore((state) => state.toggleDetailFocusMode)
   const workspacePath = repoPlainWorkspacePath(repo) ?? repoId
   const terminalWorktreeKey = worktreeTerminalKey(repoId, workspacePath)
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
@@ -63,9 +64,12 @@ export function PlainWorkspaceTerminalPanel({
     [repoId, workspacePath],
   )
 
-  const handleNewTerminal = useCallback(() => {
-    void createTerminal(terminalBase)
-  }, [createTerminal, terminalBase])
+  const handleNewTerminal = useCallback(
+    (launchMode: TerminalLaunchMode = 'native') => {
+      void createTerminal(terminalBase, launchMode)
+    },
+    [createTerminal, terminalBase],
+  )
 
   const handleSelectTerminal = useCallback(
     (key: string) => {
@@ -75,8 +79,8 @@ export function PlainWorkspaceTerminalPanel({
   )
 
   const handleCloseTerminal = useCallback(
-    (key: string) => {
-      closeTerminalAndDismissDetailIfLast(key, terminalBase)
+    (key: string, options?: Parameters<typeof closeTerminalAndDismissDetailIfLast>[2]) => {
+      return closeTerminalAndDismissDetailIfLast(key, terminalBase, options)
     },
     [closeTerminalAndDismissDetailIfLast, terminalBase],
   )
@@ -94,6 +98,7 @@ export function PlainWorkspaceTerminalPanel({
         data-testid="plain-workspace-terminal-toolbar"
         variant="detail"
         chrome={compact ? 'toolbar' : 'topbar'}
+        tone="topbar"
         className={cn(
           'mobile-topbar-scroll',
           layout === 'left-right' && '[-webkit-app-region:drag]',
@@ -117,7 +122,7 @@ export function PlainWorkspaceTerminalPanel({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={toggleDetailFocusMode}
+                  onClick={onExitTerminalFocus}
                   aria-label={t('branch-detail.exit-focus')}
                   title={t('branch-detail.exit-focus-title')}
                 >
@@ -147,11 +152,9 @@ export function PlainWorkspaceTerminalPanel({
         </div>
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
-        {snapshot.selectedDescriptor ? (
-          <TerminalSlot repoRoot={repoId} branch={snapshot.selectedDescriptor.branch} worktreePath={workspacePath} />
-        ) : (
-          <EmptyState title={t('terminal.label')} body={t('terminal.new')} />
-        )}
+        {snapshot.selectedDescriptor || snapshot.creating === true ? (
+          <TerminalSlot repoRoot={repoId} worktreePath={workspacePath} />
+        ) : null}
       </div>
     </section>
   )

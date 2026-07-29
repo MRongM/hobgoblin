@@ -14,9 +14,12 @@ import type {
 } from '#/shared/file-tree-clipboard.ts'
 import type {
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalAttachInput,
   TerminalAttachResult,
   TerminalCreateInput,
+  TerminalOpenTmuxSessionsInput,
+  TerminalOpenTmuxSessionsResult,
   TerminalExitEvent,
   TerminalMutationResult,
   TerminalNotifyBellInput,
@@ -34,6 +37,7 @@ import type {
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
 import type { TerminalOwnershipViewModel } from '#/web/components/terminal/types.ts'
+import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
 
 export interface RendererTerminalBridge {
   attach: (input: TerminalAttachInput) => Promise<TerminalAttachResult>
@@ -41,8 +45,9 @@ export interface RendererTerminalBridge {
   write: (input: TerminalWriteInput) => Promise<TerminalMutationResult>
   resize: (input: TerminalResizeInput) => Promise<TerminalMutationResult>
   takeover: (input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>
-  close: (input: TerminalSessionInput) => Promise<TerminalMutationResult>
+  close: (input: TerminalSessionInput) => Promise<TerminalCloseResult>
   create: (input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>
+  openTmuxSessions: (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalOpenTmuxSessionsResult>
   pruneTerminals: (repoRoot: string) => Promise<{ pruned: number; remaining: number }>
   listSessions: (input: { repoRoot: string }) => Promise<TerminalSessionSummary[]>
   getSessionSnapshot: (input: TerminalSessionSnapshotInput) => Promise<TerminalSessionSnapshot | null>
@@ -68,6 +73,7 @@ export interface RendererShellBridge {
   saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>
   writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
   readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
+  openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
 }
 
 export interface RendererBridge {

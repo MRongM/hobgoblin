@@ -18,6 +18,7 @@ import type {
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
+import type { TelegramNotificationSettingsSnapshot } from '#/shared/telegram-notifications.ts'
 import { NativeShellProjectionSchema, type NativeShellProjection } from '#/shared/native-shell-projection.ts'
 
 export type { WorkspaceLayout } from '#/shared/workspace-layout.ts'
@@ -45,7 +46,15 @@ export type {
   NativeSettingsProjectionState,
   NativeShellProjection,
 } from '#/shared/native-shell-projection.ts'
-export type { RepoSettingsEntry, WorktreeBootstrapTrust } from '#/shared/repo-settings.ts'
+export type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
+export type {
+  TelegramBellNotificationContext,
+  TelegramNotificationErrorCode,
+  TelegramNotificationResult,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
+  TelegramOutputCompletionNotificationContext,
+} from '#/shared/telegram-notifications.ts'
 
 export interface LanInfo {
   host: string
@@ -61,13 +70,30 @@ export interface ThemeState {
   colorTheme: ColorTheme
 }
 
+export type WorkspaceActiveContext =
+  | { kind: 'overview' }
+  | { kind: 'repository'; repositoryId: string }
+  | {
+      kind: 'branch-workspace'
+      branchWorkspaceId: string
+      memberRepositoryName?: string
+    }
+
 export interface SessionState {
   /** Repo entries that were open, in tab order. */
   openRepos: RepoSessionEntry[]
-  /** The active tab id — null when no repos were open. */
+  /** The visible repository id — null when no project is open. */
   activeRepo: string | null
-  /** Last Overview/child selection for each open multi-repository workspace root. */
+  /** The active top-level project id. Missing values are migrated from activeRepo. */
+  activeProject?: string | null
+  /** Last tagged selection for each open multi-repository workspace root. */
+  workspaceActiveContextByRoot?: Record<string, WorkspaceActiveContext>
+  /** @deprecated Read-only migration input from sessions written before tagged workspace contexts. */
   workspaceActiveRepoByRoot?: Record<string, string | null>
+  /** Missing roots default to visible. The legacy field name is retained for session compatibility. */
+  workspaceRepositoryListExpandedByRoot?: Record<string, boolean>
+  /** Desktop repository-list heights by open multi-repository workspace root. */
+  workspaceRepositoryListHeightByRoot?: Record<string, number>
   projectListExpanded: boolean
   detailCollapsed: boolean
   detailFocusMode: boolean
@@ -101,6 +127,7 @@ export interface SettingsSnapshot extends RuntimeSettingsSnapshot, RuntimeRecent
   session: SessionState
   repoSettings: RepoSettingsEntry[]
   webAccess: WebAccessSettingsSnapshot
+  telegramNotifications: TelegramNotificationSettingsSnapshot
 }
 
 export interface GlobalShortcutState {
@@ -185,7 +212,6 @@ export type RpcEvent =
   | { type: 'shortcuts-disabled-changed'; disabled: boolean }
   | { type: 'global-shortcut-disabled-changed'; disabled: boolean }
   | { type: 'swap-close-shortcuts-changed'; swapped: boolean }
-  | { type: 'toggle-detail-on-action-bar-blank-click-changed'; enabled: boolean }
   | ({ type: 'terminal-app-changed' } & TerminalAppState)
   | ({ type: 'editor-app-changed' } & EditorAppState)
   | { type: 'settings-write-error'; message: string }

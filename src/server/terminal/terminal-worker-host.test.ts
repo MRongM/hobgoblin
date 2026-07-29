@@ -46,6 +46,52 @@ describe('worker-backed terminal host', () => {
     await expect(promise).resolves.toBe(true)
   })
 
+  test('routes administrative session closure without an owning client', async () => {
+    const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
+    const promise = host.closeSessions(['term_123456789012', 'term_abcdefghijkl'])
+
+    const request = worker.sent[0]
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'close-sessions',
+      input: { sessionIds: ['term_123456789012', 'term_abcdefghijkl'] },
+    })
+    if (!request || request.type !== 'request') return
+    worker.emit('message', {
+      type: 'response',
+      requestId: request.requestId,
+      ok: true,
+      payload: { closed: ['term_123456789012'], missing: ['term_abcdefghijkl'] },
+    } satisfies TerminalWorkerMessage)
+
+    await expect(promise).resolves.toEqual({
+      closed: ['term_123456789012'],
+      missing: ['term_abcdefghijkl'],
+    })
+  })
+
+  test('routes output excerpt requests through the worker', async () => {
+    const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
+    const input = { sessionId: 'term_123456789012', maxCharacters: 400 }
+    const promise = host.getOutputExcerpt(input)
+
+    const request = worker.sent[0]
+    expect(request).toMatchObject({ type: 'request', action: 'output-excerpt', clientId: 'server', input })
+    if (!request || request.type !== 'request') return
+    worker.emit('message', {
+      type: 'response',
+      requestId: request.requestId,
+      ok: true,
+      payload: { sessionId: input.sessionId, output: 'tests passed', sequence: 42 },
+    } satisfies TerminalWorkerMessage)
+
+    await expect(promise).resolves.toEqual({
+      sessionId: input.sessionId,
+      output: 'tests passed',
+      sequence: 42,
+    })
+  })
+
   test('forwards worker socket output to the registered websocket', () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
     const socket: ServerTerminalSocket = { send: vi.fn(), close: vi.fn() }

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   applyServerSessionWrite: vi.fn(),
   applyServerSettingsPrefsWrite: vi.fn(),
   applyServerWebAccessSettingsWrite: vi.fn(),
+  applyServerTelegramNotificationSettingsWrite: vi.fn(),
 }))
 
 vi.mock('#/server/modules/external-apps.ts', () => ({
@@ -36,6 +37,7 @@ vi.mock('#/server/modules/settings-write-paths.ts', () => ({
   applyServerSessionWrite: mocks.applyServerSessionWrite,
   applyServerSettingsPrefsWrite: mocks.applyServerSettingsPrefsWrite,
   applyServerWebAccessSettingsWrite: mocks.applyServerWebAccessSettingsWrite,
+  applyServerTelegramNotificationSettingsWrite: mocks.applyServerTelegramNotificationSettingsWrite,
 }))
 
 describe('settings routes', () => {
@@ -101,11 +103,10 @@ describe('settings routes', () => {
     const session = {
       openRepos: [],
       activeRepo: null,
-      detailCollapsed: true,
+      detailCollapsed: false,
       detailFocusMode: false,
-      workspaceLayout: 'top-bottom',
+      workspaceLayout: 'left-right',
       detailPaneSizes: {
-        'top-bottom': 40,
         'left-right': 50,
       },
       selectedTerminalByWorktree: {},
@@ -127,6 +128,64 @@ describe('settings routes', () => {
       session,
     })
     expect(mocks.applyServerSessionWrite).toHaveBeenCalledWith({ session })
+  })
+
+  test('delegates Telegram settings writes without exposing the Bot Token', async () => {
+    mocks.applyServerTelegramNotificationSettingsWrite.mockResolvedValue({
+      ok: true,
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        proxyEnabled: false,
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
+        includeTerminalOutput: true,
+      },
+    })
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState())
+    const response = await app.request('http://127.0.0.1:32100/telegram', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        enabled: true,
+        botToken: '123456:test-token',
+        chatId: '-100123',
+        proxyEnabled: false,
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
+        includeTerminalOutput: true,
+      }),
+    })
+
+    const result = await response.json()
+    expect(result).toEqual({
+      ok: true,
+      telegramNotifications: {
+        enabled: true,
+        botTokenConfigured: true,
+        chatId: '-100123',
+        proxyEnabled: false,
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
+        includeTerminalOutput: true,
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain('test-token')
+    expect(mocks.applyServerTelegramNotificationSettingsWrite).toHaveBeenCalledWith({
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      proxyEnabled: false,
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
+      includeTerminalOutput: true,
+    })
   })
 
   test('delegates recent-repo writes to the settings write-path application layer', async () => {

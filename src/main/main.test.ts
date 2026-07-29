@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => {
     broadcastRendererEffectIntent: vi.fn(),
     wireShellBridgeIpc: vi.fn(),
     wireTerminalIpc: vi.fn(),
+    wireDetachedFileAreaWindowIpc: vi.fn(),
+    closeDetachedFileAreaWindows: vi.fn(),
     resetReady() {
       whenReadyPromise = new Promise<void>((resolve) => {
         resolveReady = resolve
@@ -119,6 +121,11 @@ vi.mock('#/main/terminal.ts', () => ({
   wireTerminalIpc: mocks.wireTerminalIpc,
 }))
 
+vi.mock('#/main/detached-file-area-window.ts', () => ({
+  wireDetachedFileAreaWindowIpc: mocks.wireDetachedFileAreaWindowIpc,
+  closeDetachedFileAreaWindows: mocks.closeDetachedFileAreaWindows,
+}))
+
 vi.mock('#/main/settings-server-client.ts', () => ({
   getSettingsSnapshot: mocks.getSettingsSnapshot,
   setSettingsGlobalShortcutState: mocks.setSettingsGlobalShortcutState,
@@ -186,6 +193,7 @@ describe('main process startup lifecycle', () => {
 
     expect(event.preventDefault).toHaveBeenCalledTimes(1)
     expect(mocks.broadcastRendererEffectIntent).toHaveBeenCalledWith({ type: 'app-quitting' })
+    expect(mocks.closeDetachedFileAreaWindows).toHaveBeenCalledTimes(1)
     expect(mocks.flushWindowState).toHaveBeenCalledTimes(1)
     expect(mocks.unregisterAppShortcuts).toHaveBeenCalledTimes(1)
     expect(mocks.exit).toHaveBeenCalledWith(0)

@@ -6,7 +6,6 @@ describe('createMainWindowNavigationActions', () => {
     const activateProject = vi.fn()
     const actions = createMainWindowNavigationActions({
       activeId: '/workspace/api',
-      order: ['/workspace'],
       setActive: vi.fn(),
       activateProject,
       closeRepo: vi.fn(),
@@ -26,7 +25,6 @@ describe('createMainWindowNavigationActions', () => {
     const setDetailTab = vi.fn()
     const actions = createMainWindowNavigationActions({
       activeId: '/tmp/repo-a',
-      order: ['/tmp/repo-a', '/tmp/repo-b'],
       setActive,
       closeRepo: vi.fn(),
       cycleActive: vi.fn(),
@@ -46,7 +44,6 @@ describe('createMainWindowNavigationActions', () => {
     const cycleActive = vi.fn()
     const actions = createMainWindowNavigationActions({
       activeId: '/tmp/repo-a',
-      order: ['/tmp/repo-a', '/tmp/repo-b', '/tmp/repo-c'],
       setActive: vi.fn(),
       closeRepo: vi.fn(),
       cycleActive,
@@ -63,7 +60,6 @@ describe('createMainWindowNavigationActions', () => {
     const closeRepo = vi.fn()
     const actions = createMainWindowNavigationActions({
       activeId: '/tmp/repo-b',
-      order: ['/tmp/repo-a', '/tmp/repo-b', '/tmp/repo-c'],
       setActive: vi.fn(),
       closeRepo,
       cycleActive: vi.fn(),

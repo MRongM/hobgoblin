@@ -4,12 +4,14 @@ import {
   addResolvedRepo,
   addUnavailableRepo,
   createRuntimeRepoLifecycleActions,
+  ensureProjectInOrder,
   refreshInitialRepoState,
   reconcileWorkspaceProject,
   resolveRepoPath,
 } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import { activeRepoIdAfterWorkspaceHydration } from '#/web/open-workspace-state.ts'
 import { repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
+import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
 
 interface InitialRepoRefresh {
   id: string
@@ -25,7 +27,10 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
     async hydrateSession(
       openRepos: RepoSessionEntry[],
       activeRepo: string | null,
-      workspaceActiveRepoByRoot: Record<string, string | null> = {},
+      workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext> = {},
+      workspaceRepositoryListExpandedByRoot: Record<string, boolean> = {},
+      activeProject: string | null = null,
+      workspaceRepositoryListHeightByRoot: Record<string, number> = {},
     ) {
       // Boot/session restore of workspace membership and active tab. This
       // reopens what SessionState described, but does not subscribe the repos
@@ -35,7 +40,11 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
       // tabs so the user's workspace shape stays intact.
       const rankById = new Map<string, number>()
       let managedActiveId: string | null = null
-      set({ workspaceActiveRepoByRoot: { ...workspaceActiveRepoByRoot } })
+      set({
+        workspaceActiveContextByRoot: { ...workspaceActiveContextByRoot },
+        workspaceRepositoryListExpandedByRoot: { ...workspaceRepositoryListExpandedByRoot },
+        workspaceRepositoryListHeightByRoot: { ...workspaceRepositoryListHeightByRoot },
+      })
       const limitProbe = pLimit(SESSION_PROBE_CONCURRENCY)
       await Promise.all(
         openRepos.map((entry, index) =>
@@ -71,7 +80,9 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
             if (!rankById.has(resolvedRepo.id)) rankById.set(resolvedRepo.id, index)
             let initialRefresh: InitialRepoRefresh | null = null
             set((s) => {
-              const { repos, order } = addResolvedRepo(s, resolvedRepo, rankById)
+              const opened = addResolvedRepo(s, resolvedRepo, rankById)
+              const repos = opened.repos
+              const order = ensureProjectInOrder(opened.order, resolvedRepo.id, rankById)
               const repo = repos[resolvedRepo.id]
               if (repo) initialRefresh = { id: repo.id, token: repo.instanceToken }
               const activeId = activeRepoIdAfterWorkspaceHydration(
@@ -98,14 +109,39 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
 
       set((s) => {
         const activeId = activeRepoIdAfterWorkspaceHydration(s.activeId, s.repos, s.order, activeRepo, managedActiveId)
+        const activeProjectId = restoredActiveProjectId(
+          activeProject,
+          activeRepo,
+          s.order,
+          workspaceActiveContextByRoot,
+        )
         if (s.activeId === null || s.activeId === managedActiveId) managedActiveId = activeId
         return {
           activeId,
+          activeProjectId,
           sessionReady: true,
         }
       })
     },
   }
+}
+
+function restoredActiveProjectId(
+  preferredProjectId: string | null,
+  activeRepoId: string | null,
+  order: string[],
+  workspaceActiveContextByRoot: Record<string, WorkspaceActiveContext>,
+): string | null {
+  if (preferredProjectId && order.includes(preferredProjectId)) return preferredProjectId
+  if (activeRepoId && order.includes(activeRepoId)) return activeRepoId
+  if (activeRepoId) {
+    const workspaceRootId = Object.entries(workspaceActiveContextByRoot).find(
+      ([rootId, context]) =>
+        order.includes(rootId) && context.kind === 'repository' && context.repositoryId === activeRepoId,
+    )?.[0]
+    if (workspaceRootId) return workspaceRootId
+  }
+  return order[0] ?? null
 }
 
 export function createLifecycleActions(set: ReposSet, get: ReposGet) {

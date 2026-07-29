@@ -4,7 +4,6 @@ import {
   setServerPortPreference,
   setTemporaryFilesDirectoryPreference,
   setTerminalThemeSyncEnabledPreference,
-  setToggleDetailOnActionBarBlankClickPreference,
 } from '#/web/settings-write-paths.ts'
 
 export function useRuntimeGeneralSettings() {
@@ -14,11 +13,6 @@ export function useRuntimeGeneralSettings() {
 
 export function useGeneralSettingsController() {
   return {
-    async setToggleDetailOnActionBarBlankClick(enabled: boolean): Promise<void> {
-      await runSettingsControllerAction('action bar blank toggle update', async () => {
-        await setToggleDetailOnActionBarBlankClickPreference(enabled)
-      })
-    },
     async setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
       await runSettingsControllerAction('terminal theme sync update', async () => {
         await setTerminalThemeSyncEnabledPreference(enabled)

@@ -55,6 +55,7 @@ vi.mock('#/web/hooks/useKeyboard.ts', () => ({ useKeyboard: vi.fn() }))
 vi.mock('#/web/hooks/useAppBootstrap.ts', () => ({ useAppBootstrap: vi.fn() }))
 vi.mock('#/web/hooks/useBackgroundFetch.ts', () => ({ useBackgroundFetch: vi.fn() }))
 vi.mock('#/web/hooks/useHeuristicRepoStatusRefresh.ts', () => ({ useHeuristicRepoStatusRefresh: vi.fn() }))
+vi.mock('#/web/hooks/useScheduledRepoStatusRefresh.ts', () => ({ useScheduledRepoStatusRefresh: vi.fn() }))
 vi.mock('#/web/hooks/useRendererEffectIntentRouter.ts', () => ({ useRendererEffectIntentRouter: vi.fn() }))
 vi.mock('#/web/hooks/useSessionPersistence.ts', () => ({ useSessionPersistence: vi.fn() }))
 vi.mock('#/web/hooks/useSettingsWriteErrorToast.ts', () => ({ useSettingsWriteErrorToast: vi.fn() }))
@@ -62,6 +63,10 @@ vi.mock('#/web/hooks/useRepoStoreInvalidationRefresh.ts', () => ({ useRepoStoreI
 vi.mock('#/web/settings-queries.ts', () => ({
   useSettingsQueryInvalidationSync: vi.fn(),
   useSettingsSnapshotQuery: () => ({ data: { repoSettings: [] } }),
+}))
+
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceInvalidationSync: vi.fn(),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   setServerSessionState: vi.fn(),
   updateServerSettingsPrefs: vi.fn(),
   updateServerWebAccessSettings: vi.fn(),
+  updateServerTelegramNotificationSettings: vi.fn(),
   settingsInvalidationScopesForPrefsPatch: vi.fn(),
 }))
 
@@ -30,6 +31,7 @@ vi.mock('#/server/modules/settings-source.ts', () => ({
   setServerSessionState: mocks.setServerSessionState,
   updateServerSettingsPrefs: mocks.updateServerSettingsPrefs,
   updateServerWebAccessSettings: mocks.updateServerWebAccessSettings,
+  updateServerTelegramNotificationSettings: mocks.updateServerTelegramNotificationSettings,
 }))
 
 vi.mock('#/shared/server-invalidation.ts', async () => {
@@ -57,13 +59,11 @@ describe('settings write paths', () => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       globalShortcut: 'CommandOrControl+Shift+G',
       terminalApp: 'auto',
       editorApp: 'auto',
       fileTreeFontSize: 12,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
@@ -96,13 +96,11 @@ describe('settings write paths', () => {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       globalShortcut: 'CommandOrControl+Shift+G',
       terminalApp: 'ghostty',
       editorApp: 'cursor',
       fileTreeFontSize: 12,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtons: [],
       lanEnabled: false,
@@ -146,11 +144,10 @@ describe('settings write paths', () => {
     const session = {
       openRepos: [],
       activeRepo: null,
-      detailCollapsed: true,
+      detailCollapsed: false,
       detailFocusMode: false,
-      workspaceLayout: 'top-bottom',
+      workspaceLayout: 'left-right',
       detailPaneSizes: {
-        'top-bottom': 40,
         'left-right': 50,
       },
       selectedTerminalByWorktree: {},
@@ -164,6 +161,48 @@ describe('settings write paths', () => {
     })
     expect(mocks.setServerSessionState).toHaveBeenCalledWith(session)
     expect(mocks.publishSettingsInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('updates the masked Telegram projection and publishes settings invalidation', async () => {
+    const telegramNotifications = {
+      enabled: true,
+      botTokenConfigured: true,
+      chatId: '-100123',
+      proxyEnabled: false,
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
+      includeTerminalOutput: true,
+      outputTailLength: 1024,
+    }
+    mocks.updateServerTelegramNotificationSettings.mockResolvedValue(telegramNotifications)
+    const { applyServerTelegramNotificationSettingsWrite } = await import('#/server/modules/settings-write-paths.ts')
+
+    await expect(
+      applyServerTelegramNotificationSettingsWrite({
+        enabled: true,
+        botToken: '123456:test-token',
+        chatId: '-100123',
+        proxyEnabled: false,
+        bellEnabled: true,
+        outputCompletionEnabled: true,
+        outputCompletionMinimumActivitySeconds: 30,
+        includeTerminalOutput: true,
+        outputTailLength: 1024,
+      }),
+    ).resolves.toEqual({ ok: true, telegramNotifications })
+    expect(mocks.updateServerTelegramNotificationSettings).toHaveBeenCalledWith({
+      enabled: true,
+      botToken: '123456:test-token',
+      chatId: '-100123',
+      proxyEnabled: false,
+      bellEnabled: true,
+      outputCompletionEnabled: true,
+      outputCompletionMinimumActivitySeconds: 30,
+      includeTerminalOutput: true,
+      outputTailLength: 1024,
+    })
+    expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
   })
 
   test('adds recent repos and publishes settings snapshot invalidation', async () => {

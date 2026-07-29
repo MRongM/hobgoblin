@@ -11,6 +11,7 @@ import {
   RPC_EVENT_CHANNEL,
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
+  SHELL_OPEN_DETACHED_FILE_AREA_WINDOW_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
@@ -33,9 +34,11 @@ function defaultBootstrap(): RendererBootstrapPayload {
       capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
     },
     homeDir: '/home/test',
+    hostPlatform: 'linux',
     i18n: { lang: 'en', pref: 'ja', dict: { hello: 'world' } },
     settings: {
       fetchIntervalSec: 120,
+      statusRefreshIntervalSec: 120,
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
@@ -43,7 +46,6 @@ function defaultBootstrap(): RendererBootstrapPayload {
       shortcutsDisabled: false,
       globalShortcutDisabled: false,
       swapCloseShortcuts: false,
-      toggleDetailOnActionBarBlankClick: false,
       terminalThemeSyncEnabled: true,
       temporaryFilesDirectory: '',
       globalShortcut: 'CommandOrControl+Shift+G',
@@ -53,10 +55,8 @@ function defaultBootstrap(): RendererBootstrapPayload {
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
-      fileTreeTopbarFontSize: 13,
       fileTreeClipboardMaxBytesMb: 30,
       terminalFontSize: 14,
-      remoteTerminalTmuxEnabled: false,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],
@@ -65,6 +65,7 @@ function defaultBootstrap(): RendererBootstrapPayload {
       serverPort: 32200,
     },
     server: null,
+    surface: { kind: 'main' },
   }
 }
 
@@ -129,6 +130,7 @@ describe('preload goblinNative bridge', () => {
       capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
     })
     expect(goblinNative.homeDir).toBe('/home/test')
+    expect(goblinNative.hostPlatform).toBe('linux')
     expect(goblinNative.initialI18n).toEqual({ lang: 'en', pref: 'ja', dict: { hello: 'world' } })
     expect(goblinNative.initialSettings).toMatchObject({
       fetchIntervalSec: 120,
@@ -136,6 +138,7 @@ describe('preload goblinNative bridge', () => {
       terminalThemeSyncEnabled: true,
       editorApp: 'cursor',
     })
+    expect(goblinNative.surface).toEqual({ kind: 'main' })
   })
 
   test('exposes bootstrap snapshots loaded through the short bootstrap id', () => {
@@ -153,6 +156,7 @@ describe('preload goblinNative bridge', () => {
       capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
     })
     expect(goblinNative.homeDir).toBe('/home/test')
+    expect(goblinNative.hostPlatform).toBe('linux')
     expect(goblinNative.initialI18n).toEqual({ lang: 'en', pref: 'ja', dict: { hello: 'world' } })
     expect(goblinNative.initialSettings).toMatchObject({
       fetchIntervalSec: 120,
@@ -215,6 +219,11 @@ describe('preload goblinNative bridge', () => {
       temporaryFilesDirectory: '',
       files: [{ name: 'image.png', type: 'image/png', bytes: new ArrayBuffer(3) }],
     })
+    await goblinNative.shell.openDetachedFileAreaWindow({
+      repo: { kind: 'local', id: '/repo' },
+      branch: 'feature/a',
+      tab: 'history',
+    })
 
     expect(invocations.map((entry) => entry.channel)).toEqual([
       SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
@@ -227,6 +236,7 @@ describe('preload goblinNative bridge', () => {
       SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
       SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
       SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+      SHELL_OPEN_DETACHED_FILE_AREA_WINDOW_CHANNEL,
     ])
     expect(sends).toEqual([])
   })

@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import electronBuilderConfig from '../../electron-builder.ts'
+import viteConfig from '../../vite.config.ts'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
 
@@ -23,6 +24,20 @@ interface DesktopBuilderConfig {
 }
 
 describe('desktop build scripts', () => {
+  test('injects the root package version into renderer build metadata', async () => {
+    const packageJson = JSON.parse(readText('package.json')) as { version: string }
+    if (typeof viteConfig !== 'function') throw new Error('Expected a functional Vite config')
+
+    const config = await viteConfig({
+      command: 'build',
+      mode: 'production',
+      isSsrBuild: false,
+      isPreview: false,
+    })
+
+    expect(config.define?.__APP_VERSION__).toBe(JSON.stringify(packageJson.version))
+  })
+
   test('do not delete local Electron caches', () => {
     const buildScript = readText('scripts/build.ts')
     const downloadCacheScript = readText('scripts/download-electron-cache.ts')
@@ -113,7 +128,7 @@ describe('desktop build scripts', () => {
     expect(buildScript).toContain("await timeStep('cleanup release'")
   })
 
-  test('manual release workflow builds macOS and Windows artifacts then publishes release assets', () => {
+  test('manual release workflow builds macOS, Windows, and Android artifacts then publishes release assets', () => {
     const workflowPath = path.join(repoRoot, '.github/workflows/release.yml')
 
     expect(existsSync(workflowPath)).toBe(true)
@@ -126,6 +141,7 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('contents: write')
     expect(workflow).toContain('build-macos:')
     expect(workflow).toContain('build-windows:')
+    expect(workflow).toContain('build-android:')
     expect(workflow).toContain('publish:')
     expect((workflow.match(/actions\/setup-node@v4/g) ?? []).length).toBe(3)
     expect((workflow.match(/node-version: 24/g) ?? []).length).toBe(3)
@@ -134,8 +150,14 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('bun run typecheck')
     expect(workflow).toContain('bun scripts/build-release-artifacts.ts --platform macos --arch ${{ matrix.arch }}')
     expect(workflow).toContain('bun scripts/build-release-artifacts.ts --platform windows --arch x64')
+    expect(workflow).toContain('actions/setup-java@v4')
+    expect(workflow).toContain('distribution: temurin')
+    expect(workflow).toContain('java-version: 17')
+    expect(workflow).toContain('./gradlew --no-daemon :app:assembleRelease')
+    expect(workflow).toContain('android/app/build/outputs/apk/release/app-release-unsigned.apk')
     expect(workflow).toContain('actions/upload-artifact@v4')
     expect(workflow).toContain('actions/download-artifact@v4')
+    expect(workflow).toContain('needs: [build-macos, build-windows, build-android]')
     expect(workflow).toContain('GITHUB_SHA')
     expect(workflow).toContain('gh release create "$TAG" --target "$GITHUB_SHA"')
     expect(workflow).toContain('gh release upload "$TAG"')
@@ -143,6 +165,8 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('Hobgoblin-${VERSION}-arm64.dmg')
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.dmg')
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.exe')
+    expect(workflow).toContain('Hobgoblin-${VERSION}-android.apk')
+    expect(workflow).toContain('Android: This APK is unsigned and must be signed before installation.')
   })
 
   test('release artifact script validates platform-specific standard artifact names', () => {
@@ -164,16 +188,16 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain('await $`bun ${viteCli} build`')
     expect(releaseScript).toContain('async function buildServerBundle()')
     expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
-    expect(releaseScript).toContain("const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')")
+    expect(releaseScript).toContain(
+      "const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')",
+    )
     expect(releaseScript).toContain('await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`')
   })
 
   test('desktop packaging includes bundled font notices and licenses', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
-    expect(config.files).toEqual(
-      expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']),
-    )
+    expect(config.files).toEqual(expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']))
   })
 
   test('desktop release packaging config includes Windows x64 NSIS output', () => {

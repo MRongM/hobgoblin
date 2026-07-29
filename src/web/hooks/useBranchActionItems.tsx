@@ -11,14 +11,13 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { createElement, Fragment, useEffect, useState, type ReactNode } from 'react'
+import { createElement, Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { GitHubOutlineIcon } from '#/web/components/GitHubOutlineIcon.tsx'
 import { GitLabLogoIcon } from '#/web/components/GitLabLogoIcon.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
-import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { CreateTagDialog } from '#/web/components/CreateTagDialog.tsx'
 import { useBranchActions, type BranchActionItemId } from '#/web/hooks/useBranchActions.tsx'
 import { branchActionDisplayPhase, type BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
@@ -27,15 +26,18 @@ import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-a
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
-import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreview } from '#/web/repo-client.ts'
-import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
-import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreview } from '#/shared/worktree-bootstrap-summary.ts'
+import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
+import type { WorktreeBootstrapDecision, WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
+import {
+  repositoryDependencySources,
+  type RepositoryDependencySource,
+} from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
-import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
+import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
+import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -58,6 +60,10 @@ export interface BranchActionItemGroups {
   destructiveItems: BranchActionItem[]
   dialogs: ReactNode
   inlinePanel?: ReactNode
+}
+
+export interface UseBranchActionItemsOptions {
+  onNavigateToInternalTerminal?: (target: TerminalSessionBase) => void | Promise<void>
 }
 
 export function visibleBranchActionItems({
@@ -94,19 +100,17 @@ function browserRemoteIcon(provider: BrowserRemoteProvider | undefined) {
   return ExternalLink
 }
 
-export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchState): BranchActionItemGroups {
+export function useBranchActionItems(
+  repo: BranchActionRepo,
+  branch: RepoBranchState,
+  options: UseBranchActionItemsOptions = {},
+): BranchActionItemGroups {
   const t = useT()
   const syncAndRefresh = useReposStore((s) => s.syncAndRefresh)
   const submitBranchAction = useReposStore((s) => s.submitBranchAction)
   const setDetailCollapsed = useReposStore((s) => s.setDetailCollapsed)
-  const {
-    terminalApp,
-    resolvedTerminalApp,
-    terminalAvailable,
-    editorApp,
-    resolvedEditorApp,
-    editorAvailable,
-  } = useRuntimeExternalAppSettings()
+  const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
+    useRuntimeExternalAppSettings()
   const navigation = useMainWindowNavigation()
   const { blocked, busyAction, capabilities, actions, dialogs } = useBranchActions(repo, branch)
   const writeActions = useBranchWriteActions(repo, branch, {
@@ -115,8 +119,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   })
   const createWorktreeDialog = useRetainedDialogState<string>()
   const createTagDialog = useRetainedDialogState<string>()
-  const closeAllTerminalsConfirm = useRetainedDialogState<string>()
-  const { createTerminal, closeTerminalAndDismissDetailIfLast } = useTerminalSessionContext()
+  const { createTerminal, restoreTmuxSessions } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
   const phase = branchActionDisplayPhase(repo, branch.name)
@@ -143,8 +146,11 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const terminalBase: TerminalSessionBase | null = branch.worktree?.path
     ? { repoRoot: repo.id, branch: branch.name, worktreePath: branch.worktree.path }
     : null
-  const terminalWorktreeKey = terminalBase ? worktreeTerminalKey(terminalBase.repoRoot, terminalBase.worktreePath) : null
-  const terminalSessions = useWorktreeTerminalSnapshot(terminalWorktreeKey).sessions
+  const terminalWorktreeKey = terminalBase
+    ? worktreeTerminalKey(terminalBase.repoRoot, terminalBase.worktreePath)
+    : null
+  const terminalWorktreeKeys = useMemo(() => (terminalWorktreeKey ? [terminalWorktreeKey] : []), [terminalWorktreeKey])
+  const closeTerminalScope = useCloseTerminalScope(terminalWorktreeKeys)
 
   function handleCreateWorktree(request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision): void {
     if (blocked) return
@@ -159,24 +165,20 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
     )
   }
 
-  function requestCloseAllTerminals(): void {
-    if (disabled || !terminalBase || terminalSessions.length === 0) return
-    closeAllTerminalsConfirm.openWith(terminalBase.worktreePath)
-  }
-
-  function closeAllTerminals(): void {
+  async function handleNewTerminal(launchMode: TerminalLaunchMode): Promise<void> {
     if (!terminalBase) return
-    closeAllTerminalsConfirm.close()
-    for (const session of terminalSessions) {
-      closeTerminalAndDismissDetailIfLast(session.key, terminalBase)
-    }
-  }
-
-  async function handleNewTerminal(): Promise<void> {
-    if (!terminalBase) return
-    navigation.showRepoDetailTab(repo.id, 'terminal')
+    if (options.onNavigateToInternalTerminal) await options.onNavigateToInternalTerminal(terminalBase)
+    else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
     setDetailCollapsed(false)
-    await createTerminal(terminalBase)
+    await createTerminal(terminalBase, launchMode)
+  }
+
+  async function handleRestoreTmuxTerminals(): Promise<void> {
+    if (!terminalBase) return
+    if (options.onNavigateToInternalTerminal) await options.onNavigateToInternalTerminal(terminalBase)
+    else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
+    setDetailCollapsed(false)
+    await restoreTmuxSessions(terminalBase)
   }
 
   async function handleSync(): Promise<void> {
@@ -283,7 +285,29 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       disabled: disabled || !terminalBase,
       visible: true,
       icon: createElement(Terminal),
-      onSelect: handleNewTerminal,
+      onSelect: () => handleNewTerminal('native'),
+    },
+    {
+      id: 'terminalTmux',
+      label: t('terminal.new-with-tmux'),
+      title: t('terminal.new-with-tmux'),
+      ariaLabel: t('terminal.new-with-tmux'),
+      disabled: disabled || !terminalBase,
+      visible: true,
+      menuOnly: true,
+      icon: createElement(Terminal),
+      onSelect: () => handleNewTerminal('tmux-if-available'),
+    },
+    {
+      id: 'restoreTmuxTerminals',
+      label: t('terminal.restore-directory-tmux'),
+      title: t('terminal.restore-directory-tmux'),
+      ariaLabel: t('terminal.restore-directory-tmux'),
+      disabled: disabled || !terminalBase,
+      visible: true,
+      menuOnly: true,
+      icon: createElement(Terminal),
+      onSelect: handleRestoreTmuxTerminals,
     },
     {
       id: 'externalTerminal',
@@ -312,13 +336,13 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
   const destructiveItems: BranchActionItem[] = [
     {
       id: 'closeAllTerminals',
-      label: t('terminal.close-all'),
-      disabled: disabled || terminalSessions.length === 0,
-      visible: terminalSessions.length > 0,
+      label: closeTerminalScope.label,
+      disabled: disabled || closeTerminalScope.disabled,
+      visible: closeTerminalScope.count > 0,
       destructive: true,
       menuOnly: true,
       icon: createElement(X),
-      onSelect: requestCloseAllTerminals,
+      onSelect: closeTerminalScope.requestClose,
     },
     {
       id: 'removeWorktree',
@@ -334,6 +358,21 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
       destructive: true,
       icon: createElement(Trash2),
       onSelect: actions.requestRemoveWorktree,
+    },
+    {
+      id: 'cleanupWorktree',
+      label: branchActionLabel(
+        'cleanupWorktree',
+        'action.cleanup-invalid-worktree',
+        'action.cleanup-invalid-worktree-cleaning-title',
+        'action.cleanup-invalid-worktree-queued-title',
+      ),
+      disabled: disabled || !capabilities.canCleanupWorktree,
+      busy: busy('cleanupWorktree'),
+      visible: capabilities.canCleanupWorktree,
+      destructive: true,
+      icon: createElement(Trash2),
+      onSelect: actions.requestCleanupWorktree,
     },
     {
       id: 'deleteBranch',
@@ -371,15 +410,7 @@ export function useBranchActionItems(repo: BranchActionRepo, branch: RepoBranchS
           if (!result.ok) throw new Error(t(result.message))
         },
       }),
-      createElement(ConfirmDialog, {
-        open: closeAllTerminalsConfirm.open,
-        title: t('terminal.close-all-confirm-title'),
-        message: t('terminal.close-all-confirm-body', { count: terminalSessions.length }),
-        confirmLabel: t('terminal.close-all-confirm-confirm'),
-        destructive: true,
-        onCancel: closeAllTerminalsConfirm.close,
-        onConfirm: closeAllTerminals,
-      }),
+      closeTerminalScope.dialog,
       createElement(CreateWorktreeDialogConnected, {
         repoId: repo.id,
         defaultBranch: createWorktreeDialog.payload ?? undefined,
@@ -406,73 +437,140 @@ function CreateWorktreeDialogConnected({
   onCreate: (request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision) => void | Promise<void>
 }) {
   const repo = useReposStore((s) => s.repos[repoId])
-  const [bootstrapPreview, setBootstrapPreview] = useState<WorktreeBootstrapPreview | null>(null)
-  const [bootstrapPreviewError, setBootstrapPreviewError] = useState(false)
-  const [bootstrapPreviewLoading, setBootstrapPreviewLoading] = useState(false)
-  const [configTrustChoice, setConfigTrustChoice] = useState<boolean | null>(null)
-  const settingsQuery = useSettingsSnapshotQuery()
+  const [bootstrapPreflight, setBootstrapPreflight] = useState<WorktreeBootstrapPreflight | null>(null)
+  const [bootstrapPreflightError, setBootstrapPreflightError] = useState(false)
+  const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
+  const [sourceContextBranch, setSourceContextBranch] = useState<string>()
+  const [requestedSource, setRequestedSource] = useState<RepositoryDependencySource>()
+  const [activeSource, setActiveSource] = useState<RepositoryDependencySource>()
+  const defaultSourceContextBranch = defaultBranch ?? repo?.data.currentBranch ?? ''
+  const effectiveSourceContextBranch = sourceContextBranch ?? defaultSourceContextBranch
+  const primaryWorktreePath = useMemo(
+    () => Object.values(repo?.data.worktreesByPath ?? {}).find((worktree) => worktree.isMain)?.path,
+    [repo?.data.worktreesByPath],
+  )
+  const sourceWorktreeByBranch = useMemo(
+    () =>
+      Object.fromEntries(
+        (repo?.data.branches ?? []).flatMap((branch) =>
+          branch.worktree?.path ? [[branch.name, branch.worktree.path] as const] : [],
+        ),
+      ),
+    [repo?.data.branches],
+  )
+  const sources = useMemo(
+    () =>
+      repositoryDependencySources({
+        baseBranch: effectiveSourceContextBranch,
+        primaryWorktreePath,
+        sourceWorktreeByBranch,
+      }),
+    [effectiveSourceContextBranch, primaryWorktreePath, sourceWorktreeByBranch],
+  )
+  const sourceOptions = useMemo(() => {
+    const baseWorktreePath = sourceWorktreeByBranch[effectiveSourceContextBranch]
+    const primaryMayBeSelected = !baseWorktreePath || !primaryWorktreePath || baseWorktreePath !== primaryWorktreePath
+    return uniqueRepositoryDependencySources([
+      ...(primaryMayBeSelected ? [sources.primary] : []),
+      ...sources.alternatives.filter((candidate) => candidate.kind === 'branch'),
+    ])
+  }, [effectiveSourceContextBranch, primaryWorktreePath, sourceWorktreeByBranch, sources])
+  const handleBootstrapContextBranchChange = useCallback(
+    (branch: string) => {
+      if (branch === effectiveSourceContextBranch) return
+      setSourceContextBranch(branch)
+      setRequestedSource(undefined)
+    },
+    [effectiveSourceContextBranch],
+  )
 
   useEffect(() => {
     if (!open) {
-      setBootstrapPreview(null)
-      setBootstrapPreviewError(false)
-      setBootstrapPreviewLoading(false)
-      setConfigTrustChoice(null)
+      setBootstrapPreflight(null)
+      setBootstrapPreflightError(false)
+      setBootstrapPreflightLoading(false)
+      setSourceContextBranch(undefined)
+      setRequestedSource(undefined)
+      setActiveSource(undefined)
       return
     }
     const controller = new AbortController()
-    setBootstrapPreview(null)
-    setBootstrapPreviewError(false)
-    setBootstrapPreviewLoading(true)
-    setConfigTrustChoice(null)
-    void getRepositoryWorktreeBootstrapPreview(repoId, controller.signal)
-      .then((result) => {
-        setBootstrapPreview(result.ok ? result.preview : null)
-        setBootstrapPreviewError(!result.ok)
-      })
+    setBootstrapPreflight(null)
+    setBootstrapPreflightError(false)
+    setBootstrapPreflightLoading(true)
+    void (async () => {
+      let source = requestedSource
+        ? sourceOptions.find((candidate) => candidate.id === requestedSource.id)
+        : sources.initial
+      source ??= sources.initial
+      setActiveSource(source)
+      let result = await getRepositoryWorktreeBootstrapPreflight(
+        repoId,
+        controller.signal,
+        undefined,
+        source.kind === 'branch' ? source.worktreePath : undefined,
+      )
+      if (controller.signal.aborted) return
+      if (result.ok && !requestedSource && source.kind === 'branch' && result.preflight.candidates.length === 0) {
+        source = sources.primary
+        setActiveSource(source)
+        result = await getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal, undefined, undefined)
+        if (controller.signal.aborted) return
+      }
+      setBootstrapPreflight(result.ok ? result.preflight : null)
+      setBootstrapPreflightError(!result.ok)
+    })()
       .catch(() => {
-        if (!controller.signal.aborted) setBootstrapPreviewError(true)
+        if (!controller.signal.aborted) setBootstrapPreflightError(true)
       })
       .finally(() => {
-        if (!controller.signal.aborted) setBootstrapPreviewLoading(false)
+        if (!controller.signal.aborted) setBootstrapPreflightLoading(false)
       })
     return () => controller.abort()
-  }, [open, repoId])
+  }, [open, repoId, requestedSource, sourceOptions, sources.initial, sources.primary])
 
   if (!repo) return null
 
-  function resolveWorktreeBootstrapDecision(): WorktreeBootstrapDecision {
-    const configHash = bootstrapPreview?.hasOperations ? bootstrapPreview.configHash : null
-    if (!configHash) return { kind: 'skip' }
-    const repoSettings = settingsQuery.data?.repoSettings ?? []
-    const trusted = configTrustChoice ?? isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, configHash)
-    return { kind: 'run', configHash, configTrusted: trusted }
+  function resolveWorktreeBootstrapDecision(request: CreateWorktreeRequest): WorktreeBootstrapDecision {
+    return request.selections.length > 0
+      ? {
+          kind: 'materialize',
+          selections: request.selections,
+          ...(request.sourceWorktreePath ? { sourceWorktreePath: request.sourceWorktreePath } : {}),
+        }
+      : { kind: 'skip' }
   }
 
   function handleCreate(request: CreateWorktreeRequest) {
-    return onCreate(request, resolveWorktreeBootstrapDecision())
+    return onCreate(request, resolveWorktreeBootstrapDecision(request))
   }
-
-  const configHash = bootstrapPreview?.configHash
-  const configTrusted =
-    configTrustChoice ??
-    isRepoWorktreeBootstrapConfigTrusted(settingsQuery.data?.repoSettings ?? [], repoId, configHash)
 
   return createElement(CreateWorktreeDialog, {
     open,
     repo,
     defaultBranch,
     worktreeBootstrap: {
-      loading:
-        bootstrapPreviewLoading ||
-        (bootstrapPreview?.hasOperations === true && !!bootstrapPreview.configHash && settingsQuery.isLoading),
-      preview: bootstrapPreview,
-      error: bootstrapPreviewError,
-      configTrusted,
-      onConfigTrustedChange: setConfigTrustChoice,
+      loading: bootstrapPreflightLoading,
+      preflight: bootstrapPreflight,
+      error: bootstrapPreflightError,
+      source: activeSource,
+      sourceOptions,
     },
+    onBootstrapContextBranchChange: handleBootstrapContextBranchChange,
+    onBootstrapSourceChange: setRequestedSource,
     onClose,
     onCreate: handleCreate,
+  })
+}
+
+function uniqueRepositoryDependencySources(
+  sources: readonly RepositoryDependencySource[],
+): RepositoryDependencySource[] {
+  const seen = new Set<string>()
+  return sources.filter((source) => {
+    if (seen.has(source.id)) return false
+    seen.add(source.id)
+    return true
   })
 }
 
@@ -487,12 +585,5 @@ function CreateTagDialogConnected({
   onClose: () => void
   onCreate: (request: { name: string; ref: string }) => void | Promise<void>
 }) {
-  return (
-    <CreateTagDialog
-      open={open}
-      defaultRef={defaultRef}
-      onClose={onClose}
-      onCreate={onCreate}
-    />
-  )
+  return <CreateTagDialog open={open} defaultRef={defaultRef} onClose={onClose} onCreate={onCreate} />
 }

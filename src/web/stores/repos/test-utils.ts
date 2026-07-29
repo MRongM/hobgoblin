@@ -9,6 +9,7 @@ import { stripBranchWorktreeMetadata, worktreeStatesFromBranches } from '#/web/s
 import type {
   TerminalAttachResult,
   TerminalCatalogMutationResult,
+  TerminalCloseResult,
   TerminalMutationResult,
   TerminalSessionSnapshot,
   TerminalSessionSummary,
@@ -33,7 +34,7 @@ interface TerminalBridgeTestOutputs {
   'terminal.write': TerminalMutationResult
   'terminal.resize': TerminalMutationResult
   'terminal.takeover': TerminalTakeoverResult
-  'terminal.close': TerminalMutationResult
+  'terminal.close': TerminalCloseResult
   'terminal.create': TerminalCatalogMutationResult
   'terminal.prune': { pruned: number; remaining: number }
   'terminal.listSessions': TerminalSessionSummary[]
@@ -95,15 +96,17 @@ export function resetReposStore(): void {
   useReposStore.setState({
     repos: {},
     workspaceProjects: {},
-    workspaceActiveRepoByRoot: {},
     restorableRepoCache: {},
     order: [],
     activeId: null,
+    activeProjectId: null,
+    workspaceActiveContextByRoot: {},
+    workspaceRepositoryListExpandedByRoot: {},
+    workspaceRepositoryListHeightByRoot: {},
     projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: false,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
-    detailFocusMode: false,
     workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
     detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
     fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,
@@ -235,10 +238,11 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
           return { ok: false, message: `unhandled ${name}` }
         case 'terminal.write':
         case 'terminal.resize':
-        case 'terminal.close':
         case 'terminal.reorder':
         case 'terminal.notifyBell':
           return true satisfies TerminalMutationResult
+        case 'terminal.close':
+          return { ok: true } satisfies TerminalCloseResult
         case 'terminal.takeover':
           return {
             ok: true as const,
@@ -390,6 +394,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
       takeover: async (input) => callTerminalHandler('terminal.takeover', input),
       close: async (input) => callTerminalHandler('terminal.close', input),
       create: async (input) => callTerminalHandler('terminal.create', input),
+      openTmuxSessions: async () => ({ ok: false as const, message: 'unhandled terminal tmux open' }),
       pruneTerminals: async (repoRoot) => callTerminalHandler('terminal.prune', { repoRoot }),
       listSessions: async (input) => callTerminalHandler('terminal.listSessions', input),
       getSessionSnapshot: async (input) => callTerminalHandler('terminal.getSessionSnapshot', input),
@@ -450,6 +455,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/delete-branch') return call('repo.deleteBranch', body)
         if (url.pathname === '/api/repo/delete-remote-branch') return call('repo.deleteRemoteBranch', body)
         if (url.pathname === '/api/repo/remove-worktree') return call('repo.removeWorktree', body)
+        if (url.pathname === '/api/repo/cleanup-worktree') return call('repo.cleanupWorktree', body)
         if (url.pathname === '/api/repo/patch') return call('repo.patch', body)
         if (url.pathname === '/api/repo/open-remote') return call('repo.openRemote', body)
         if (url.pathname === '/api/repo/open-terminal') return call('repo.openTerminal', body)
@@ -557,11 +563,12 @@ export function seedRepoState(options: {
     restorableRepoCache: {},
     order: [options.id],
     activeId: options.id,
+    activeProjectId: options.id,
+    workspaceRepositoryListHeightByRoot: {},
     projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
     sessionReady: true,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
-    detailFocusMode: false,
     workspaceLayout: repo.ui.workspaceLayout,
     detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
     fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,

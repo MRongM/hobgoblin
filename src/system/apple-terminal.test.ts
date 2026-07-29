@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { buildTmuxSessionName } from '#/system/tmux-session.ts'
 
 const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
@@ -10,17 +11,45 @@ vi.mock('node:fs', () => ({
   statSync: mocks.statSync,
 }))
 
-describe('openRemoteInAppleTerminal', () => {
+const REMOTE_TARGET = {
+  alias: 'prod',
+  projectRoot: '/srv/repo',
+  workingDirectory: '/srv/repo-feature',
+  terminalNumber: 1,
+}
+
+describe('Apple Terminal integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.statSync.mockReturnValue({ isDirectory: () => true })
     mocks.execa.mockResolvedValue({})
   })
 
+  test('opens a local tmux terminal using the shared terminal-1 identity', async () => {
+    const { openInAppleTerminal } = await import('#/system/apple-terminal.ts')
+
+    await expect(
+      openInAppleTerminal(
+        {
+          projectRoot: '/srv/projects/example',
+          workingDirectory: '/srv/projects/example/worktrees/feature',
+          terminalNumber: 1,
+        },
+        { useTmux: true },
+      ),
+    ).resolves.toEqual({ ok: true, message: '/srv/projects/example/worktrees/feature' })
+
+    const command = mocks.execa.mock.calls[0]![1][2]
+    expect(command).toContain('new-session -d')
+    expect(command).toContain('Use New terminal (Native).')
+    expect(command).toContain('hobgoblin-v1-aebf050981ac829e36100020')
+    expect(command).not.toContain("-s 'goblin-")
+  })
+
   test('opens Terminal.app with a prepared ssh command', async () => {
     const { openRemoteInAppleTerminal } = await import('#/system/apple-terminal.ts')
 
-    await expect(openRemoteInAppleTerminal({ alias: 'prod', worktreePath: '/srv/repo-feature' })).resolves.toEqual({
+    await expect(openRemoteInAppleTerminal(REMOTE_TARGET)).resolves.toEqual({
       ok: true,
       message: '/srv/repo-feature',
     })
@@ -35,14 +64,30 @@ describe('openRemoteInAppleTerminal', () => {
     expect(mocks.execa.mock.calls[0]![1][2]).not.toContain('tmux')
   })
 
+  test('opens a remote tmux terminal using the same endpoint-independent identity', async () => {
+    const { openRemoteInAppleTerminal } = await import('#/system/apple-terminal.ts')
+
+    await expect(openRemoteInAppleTerminal(REMOTE_TARGET, { useTmux: true })).resolves.toEqual({
+      ok: true,
+      message: '/srv/repo-feature',
+    })
+
+    const command = mocks.execa.mock.calls[0]![1][2]
+    expect(command).toContain('new-session -d')
+    expect(command).toContain('Use New terminal (Native).')
+    expect(command).toContain(buildTmuxSessionName(REMOTE_TARGET)!)
+    expect(command).not.toContain('detach')
+    expect(command).not.toContain('alice@example.com')
+  })
+
   test('rejects invalid remote inputs before invoking osascript', async () => {
     const { openRemoteInAppleTerminal } = await import('#/system/apple-terminal.ts')
 
-    await expect(openRemoteInAppleTerminal({ alias: 'bad alias', worktreePath: '/srv/repo' })).resolves.toEqual({
+    await expect(openRemoteInAppleTerminal({ ...REMOTE_TARGET, alias: 'bad alias' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
-    await expect(openRemoteInAppleTerminal({ alias: 'prod', worktreePath: 'relative/repo' })).resolves.toEqual({
+    await expect(openRemoteInAppleTerminal({ ...REMOTE_TARGET, workingDirectory: 'relative/repo' })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })

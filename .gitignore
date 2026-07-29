@@ -1,6 +1,8 @@
 node_modules
 dist
-release
+release/*
+!release/google-play/
+!release/google-play/**
 .DS_Store
 *.log
 .vscode
@@ -9,6 +11,6 @@ release
 .superpowers
 .electron-cache/
 
-android/
 .idea
 tmp
+.gstack/

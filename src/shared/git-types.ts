@@ -18,13 +18,14 @@ export interface BranchSnapshotInfo {
   lastCommitDate: string
   lastCommitAuthor: string
   worktree?: BranchWorktreeSnapshot
-  mergedToDefault?: boolean
+  createdFrom?: string
 }
 
 export interface BranchWorktreeSnapshot {
   path: string
   isPrimary?: boolean
   isLocked?: boolean
+  isPrunable?: boolean
   head?: string
   summary?: BranchWorktreeSnapshotSummary
 }
@@ -43,6 +44,7 @@ export interface WorktreeInfo {
   isDirty?: boolean
   changeCount?: number
   isLocked?: boolean
+  isPrunable?: boolean
 }
 
 export interface StatusEntry {

@@ -7,14 +7,19 @@ import {
   WorkspaceRepositoryList,
   type WorkspaceRepositoryListItem,
 } from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
 import type {
+  TerminalSessionContextValue,
   TerminalSessionReadContextValue,
   TerminalSessionSummary,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
+type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
 
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
@@ -27,6 +32,15 @@ const dndState = vi.hoisted(() => ({
   pointerSensor: {},
   keyboardSensor: {},
   verticalStrategy: {},
+}))
+
+const projectActionState = vi.hoisted(() => ({
+  editorOnSelect: vi.fn(),
+  externalTerminalOnSelect: vi.fn(),
+  internalTerminalOnSelect: vi.fn(),
+  editorDisabled: false,
+  externalTerminalDisabled: false,
+  internalTerminalDisabled: false,
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -84,6 +98,37 @@ vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => key,
 }))
 
+vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
+  useProjectExternalOpenActions: (projectId: string) => ({
+    visible: true,
+    editor: {
+      disabled: projectActionState.editorDisabled,
+      busy: false,
+      iconPref: 'cursor',
+      onSelect: () => projectActionState.editorOnSelect(projectId),
+    },
+    externalTerminal: {
+      disabled: projectActionState.externalTerminalDisabled,
+      busy: false,
+      iconPref: 'ghostty',
+      onSelect: () => projectActionState.externalTerminalOnSelect(projectId),
+    },
+  }),
+}))
+
+vi.mock('#/web/hooks/useProjectInternalTerminalAction.ts', () => ({
+  useProjectInternalTerminalAction: (projectId: string) => ({
+    disabled: projectActionState.internalTerminalDisabled,
+    busy: false,
+    onSelect: () => projectActionState.internalTerminalOnSelect(projectId),
+  }),
+}))
+
+vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
+  EditorAppIcon: () => <span data-testid="mock-editor-app-icon" />,
+  TerminalAppIcon: () => <span data-testid="mock-terminal-app-icon" />,
+}))
+
 const repositories: WorkspaceRepositoryListItem[] = [
   {
     id: '/workspace/api',
@@ -115,6 +160,12 @@ beforeEach(() => {
   dndState.sortableOptions.clear()
   dndState.sortableOnKeyDown.mockClear()
   dndState.useSensor.mockClear()
+  projectActionState.editorOnSelect.mockReset()
+  projectActionState.externalTerminalOnSelect.mockReset()
+  projectActionState.internalTerminalOnSelect.mockReset()
+  projectActionState.editorDisabled = false
+  projectActionState.externalTerminalDisabled = false
+  projectActionState.internalTerminalDisabled = false
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -128,27 +179,33 @@ afterEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
-function renderList(disabled = false, readContext: TerminalSessionReadContextValue = terminalReadContext(new Map())) {
+function renderList(
+  disabled = false,
+  readContext: TerminalSessionReadContextValue = terminalReadContext(new Map()),
+  closeTerminal: CloseTerminalMock = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>(),
+) {
   const onActivate = vi.fn()
   const onReorder = vi.fn()
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>
-        <WorkspaceRepositoryList
-          repositories={repositories}
-          currentRepoId="/workspace/api"
-          disabled={disabled}
-          onActivate={onActivate}
-          onReorder={onReorder}
-        />
-      </TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <WorkspaceRepositoryList
+            repositories={repositories}
+            currentRepoId="/workspace/api"
+            disabled={disabled}
+            onActivate={onActivate}
+            onReorder={onReorder}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onReorder }
+  return { onActivate, onReorder, closeTerminal }
 }
 
 describe('WorkspaceRepositoryList', () => {
-  test('registers ordered repository ids as full-row sortable activators', () => {
+  test('registers ordered repository ids with dedicated grip activators', () => {
     renderList()
 
     expect(dndState.sortableItems).toEqual(['/workspace/api', '/workspace/web'])
@@ -158,6 +215,7 @@ describe('WorkspaceRepositoryList', () => {
         node.getAttribute('data-sortable-activator-id'),
       ),
     ).toEqual(['/workspace/api', '/workspace/web'])
+    expect(container!.querySelectorAll('[data-workspace-list-item-main][data-sortable-id]')).toHaveLength(0)
   })
 
   test('uses project-list pointer and keyboard drag sensors', () => {
@@ -172,7 +230,7 @@ describe('WorkspaceRepositoryList', () => {
     )
   })
 
-  test('keeps native touch scrolling and accessible keyboard listeners on the row', () => {
+  test('keeps native touch scrolling and accessible keyboard listeners on the grip', () => {
     renderList()
     const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
 
@@ -184,13 +242,15 @@ describe('WorkspaceRepositoryList', () => {
 
   test('renders current repository metadata and activates from a click', () => {
     const { onActivate } = renderList()
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const item = repositoryItem('/workspace/api')
+    const row = item.querySelector('[data-workspace-list-item-main]')
 
     expect(row?.textContent).toContain('api')
     expect(row?.textContent).toContain('main')
     expect(row?.textContent).toContain('2')
     expect(row?.getAttribute('aria-current')).toBe('page')
-    expect(row?.querySelector('span')?.classList.contains('bg-selected')).toBe(true)
+    expect(item.getAttribute('data-selected')).toBe('true')
+    expect(row?.className).toContain('text-sm')
     act(() => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(onActivate).toHaveBeenCalledWith('/workspace/api')
   })
@@ -207,7 +267,8 @@ describe('WorkspaceRepositoryList', () => {
         ]),
       ),
     )
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const row = repositoryItem('/workspace/api')
+    const terminalRow = repositoryItem('/workspace/web')
     const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
     const changeBadge = row?.querySelector('[data-testid="workspace-repository-change-count-badge"]')
 
@@ -216,6 +277,7 @@ describe('WorkspaceRepositoryList', () => {
     expect(changeBadge?.textContent).toBe('2')
     expect(changeBadge?.querySelector('.lucide-git-compare-arrows')).not.toBeNull()
     expect(row?.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
+    expect(terminalRow.querySelector('span[aria-hidden="true"].absolute.bottom-0')).toBeNull()
   })
 
   test('keeps terminal, change, and unread bell badges in the left-aligned primary content group', () => {
@@ -224,7 +286,7 @@ describe('WorkspaceRepositoryList', () => {
       false,
       terminalReadContext(new Map([[mainKey, worktreeSnapshot(mainKey, terminalSession(mainKey, { hasBell: true }))]])),
     )
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/api"]')
+    const row = repositoryItem('/workspace/api')
     const primaryContent = row?.querySelector('[data-testid="workspace-repository-primary-content"]')
     const statusBadges = row?.querySelector('[data-testid="workspace-repository-status-badges"]')
     const terminalBadge = row?.querySelector('[data-testid="workspace-repository-terminal-count-badge"]')
@@ -239,14 +301,106 @@ describe('WorkspaceRepositoryList', () => {
 
   test('omits repository status badges when terminal, change, and bell state are all empty', () => {
     renderList()
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
+    const row = repositoryItem('/workspace/web')
 
     expect(row?.querySelector('[data-testid="workspace-repository-status-badges"]')).toBeNull()
   })
 
+  test('closes terminals across every listed worktree through the repository row context menu', async () => {
+    const mainKey = '/workspace/api\0/workspace/api'
+    const featureKey = '/workspace/api\0/worktrees/api-feature'
+    const closeTerminal = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+    renderList(
+      false,
+      terminalReadContext(
+        new Map([
+          [mainKey, worktreeSnapshot(mainKey, terminalSession(mainKey))],
+          [featureKey, worktreeSnapshot(featureKey, terminalSession(featureKey))],
+        ]),
+      ),
+      closeTerminal,
+    )
+    const row = container!.querySelector('[data-sortable-node-id="/workspace/api"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing workspace repository row')
+
+    await requestCloseAllFromContextMenu(row)
+
+    expect(closeTerminal).not.toHaveBeenCalled()
+    await confirmCloseAll()
+    expect(closeTerminal.mock.calls).toEqual([
+      [`${mainKey}\0terminal-1`, { repoRoot: '/workspace/api', worktreePath: '/workspace/api' }],
+      [`${featureKey}\0terminal-1`, { repoRoot: '/workspace/api', worktreePath: '/worktrees/api-feature' }],
+    ])
+  })
+
+  test('offers the four scoped repository actions from the row context menu', async () => {
+    renderList()
+    const row = container!.querySelector('[data-sortable-node-id="/workspace/api"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing workspace repository row')
+
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal',
+      'terminal.new-with-tmux',
+      'terminal.close-all',
+    ])
+
+    await clickContextMenuItem(row, 'worktrees.open-in-editor-label')
+    await clickContextMenuItem(row, 'terminal.external')
+    await clickContextMenuItem(row, 'terminal.internal')
+
+    expect(projectActionState.editorOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.externalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+  })
+
+  test('uses the shared frame and action dock without activating from row actions', async () => {
+    const { onActivate } = renderList()
+    const item = repositoryItem('/workspace/api')
+    const dock = item.querySelector('[data-workspace-list-item-action-dock]')
+    const editor = item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')
+    const internalTerminal = item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
+
+    expect(item.getAttribute('data-size')).toBe('primary')
+    expect(dock?.children).toHaveLength(3)
+    expect(item.querySelector('[data-workspace-list-item-drag-handle]')).not.toBeNull()
+    act(() => {
+      editor?.click()
+      internalTerminal?.click()
+    })
+    const externalTerminal = (await openRepositoryMenu('/workspace/api')).find((entry) =>
+      entry.textContent?.includes('terminal.external'),
+    )
+    await act(async () => {
+      externalTerminal?.click()
+      await Promise.resolve()
+    })
+
+    expect(projectActionState.editorOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(projectActionState.externalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('keeps disabled repository actions visible in their stable positions', async () => {
+    projectActionState.editorDisabled = true
+    projectActionState.internalTerminalDisabled = true
+    projectActionState.externalTerminalDisabled = true
+    renderList()
+
+    const item = repositoryItem('/workspace/api')
+    expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(true)
+    expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(true)
+    const menuItems = await openRepositoryMenu('/workspace/api')
+    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual(['terminal.new-with-tmux', 'terminal.external'])
+    expect(menuItems[0]?.hasAttribute('data-disabled')).toBe(true)
+  })
+
   test('shows unavailable repository state', () => {
     renderList()
-    const row = container!.querySelector('[data-sortable-activator-id="/workspace/web"]')
+    const item = repositoryItem('/workspace/web')
+    const row = item.querySelector('[data-workspace-list-item-main]')
 
     expect(row?.textContent).toContain('workspace.repository-unavailable')
     expect(row?.className).toContain('opacity-60')
@@ -274,6 +428,21 @@ describe('WorkspaceRepositoryList', () => {
   })
 })
 
+function repositoryItem(repositoryId: string): HTMLLIElement {
+  const item = container!.querySelector(`[data-sortable-node-id="${repositoryId}"]`)
+  if (!(item instanceof HTMLLIElement)) throw new Error(`missing repository item: ${repositoryId}`)
+  return item
+}
+
+async function openRepositoryMenu(repositoryId: string): Promise<HTMLElement[]> {
+  const trigger = repositoryItem(repositoryId).querySelector<HTMLButtonElement>('[aria-label="action.menu"]')
+  await act(async () => {
+    trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
 function terminalReadContext(
   snapshots: ReadonlyMap<string, WorktreeTerminalSnapshot>,
 ): TerminalSessionReadContextValue {
@@ -285,6 +454,31 @@ function terminalReadContext(
     subscribeRepoSync: () => () => {},
     snapshot: () => ({ phase: 'opening', message: null, processName: 'terminal' }),
     subscribeSnapshot: () => () => {},
+  }
+}
+
+function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: closeTerminal,
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
   }
 }
 
@@ -312,4 +506,41 @@ function terminalSession(
     hasBell: false,
     ...overrides,
   }
+}
+
+async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes('terminal.close-all'))
+  if (!item) throw new Error('missing close all terminals context menu item')
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function confirmCloseAll(): Promise<void> {
+  const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+    candidate.textContent?.includes('terminal.close-all-confirm-confirm'),
+  )
+  if (!confirm) throw new Error('missing close all terminals confirmation')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
+  })
 }

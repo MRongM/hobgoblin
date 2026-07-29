@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
-  getRepositoryWorktreeBootstrapPreview: vi.fn(),
+  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   commitRepositoryChanges: vi.fn(),
 }))
@@ -40,12 +40,20 @@ const settingsQueryMocks = vi.hoisted(() => ({
 let container: HTMLDivElement
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
 let terminalSnapshotsByWorktree: Map<string, WorktreeTerminalSnapshot>
 let closeTerminalAndDismissDetailIfLast: ReturnType<
   typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>
 >
 let createTerminal: ReturnType<typeof vi.fn<TerminalSessionContextValue['createTerminal']>>
+let restoreTmuxSessions: ReturnType<typeof vi.fn<TerminalSessionContextValue['restoreTmuxSessions']>>
 let openExternalTerminal: ReturnType<typeof vi.fn>
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
   useRuntimeExternalAppSettings: mocks.useRuntimeExternalAppSettings,
@@ -61,7 +69,7 @@ vi.mock('#/web/repo-client.ts', async () => {
   return {
     ...actual,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
-    getRepositoryWorktreeBootstrapPreview: repoClientMocks.getRepositoryWorktreeBootstrapPreview,
+    getRepositoryWorktreeBootstrapPreflight: repoClientMocks.getRepositoryWorktreeBootstrapPreflight,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
     commitRepositoryChanges: repoClientMocks.commitRepositoryChanges,
   }
@@ -74,6 +82,10 @@ describe('useBranchActionItems', () => {
   beforeEach(() => {
     resetReposStore()
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: MockResizeObserver,
+    })
     container = document.createElement('div')
     document.body.appendChild(container)
     mocks.useRuntimeExternalAppSettings.mockReturnValue({
@@ -92,6 +104,7 @@ describe('useBranchActionItems', () => {
         isCurrent: false,
         checkedOutInAnotherWorktree: true,
         canRemoveWorktree: false,
+        canCleanupWorktree: false,
         isRegularBranch: false,
         canCopyPatch: false,
         canPull: false,
@@ -110,21 +123,14 @@ describe('useBranchActionItems', () => {
         openRemote: vi.fn(),
         requestDeleteBranch: vi.fn(),
         requestRemoveWorktree: vi.fn(),
+        requestCleanupWorktree: vi.fn(),
       },
       dialogs: null,
     })
     repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
-    repoClientMocks.getRepositoryWorktreeBootstrapPreview.mockResolvedValue({
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
       ok: true,
-      preview: {
-        hasConfig: false,
-        hasOperations: false,
-        configHash: null,
-        copyCount: 0,
-        symlinkCount: 0,
-        hardlinkCount: 0,
-        excludeCount: 0,
-      },
+      preflight: { kind: 'candidates', candidates: [] },
     })
     settingsQueryMocks.useSettingsSnapshotQuery.mockReturnValue({
       data: { repoSettings: [] },
@@ -137,8 +143,8 @@ describe('useBranchActionItems', () => {
     })
     terminalSnapshotsByWorktree = new Map()
     createTerminal = vi.fn<TerminalSessionContextValue['createTerminal']>(async () => 't1')
-    closeTerminalAndDismissDetailIfLast =
-      vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+    restoreTmuxSessions = vi.fn<TerminalSessionContextValue['restoreTmuxSessions']>(async () => 0)
+    closeTerminalAndDismissDetailIfLast = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   })
 
   afterEach(async () => {
@@ -146,6 +152,10 @@ describe('useBranchActionItems', () => {
       root?.unmount()
     })
     container.remove()
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: originalResizeObserver,
+    })
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
     root = null
   })
@@ -176,37 +186,169 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(false)
   })
 
-  test('creates an internal terminal for the worktree without requiring an external terminal app', async () => {
-    const branch = createRepoBranch('feature/internal', { worktree: { path: '/tmp/repo-feature' } })
+  test('adds cleanup beside the retained remove action only for prunable worktrees', async () => {
+    const requestCleanupWorktree = vi.fn()
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: true,
+        canRemoveWorktree: false,
+        canCleanupWorktree: true,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: false,
+        canOpenRemote: false,
+        canOpenTerminal: false,
+        canOpenEditor: false,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push: vi.fn(),
+        openExternalTerminal: vi.fn(),
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+        requestCleanupWorktree,
+      },
+      dialogs: null,
+    })
+    const branch = createRepoBranch('feature/stale', { worktree: { path: '/tmp/repo-stale' } })
+    const repo = seedRepoState({ id: '/tmp/repo', branches: [branch] })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const visibleDestructive = groups.destructiveItems.filter((item) => item.visible)
+
+    expect(visibleDestructive.map((item) => item.id)).toContain('removeWorktree')
+    expect(visibleDestructive.map((item) => item.id)).toContain('cleanupWorktree')
+    expect(visibleDestructive.find((item) => item.id === 'removeWorktree')?.disabled).toBe(true)
+    expect(visibleDestructive.find((item) => item.id === 'cleanupWorktree')?.disabled).toBe(false)
+    visibleDestructive.find((item) => item.id === 'cleanupWorktree')?.onSelect()
+    expect(requestCleanupWorktree).toHaveBeenCalledTimes(1)
+  })
+
+  test('selects the target branch before creating an internal terminal', async () => {
+    const selectedBranch = createRepoBranch('feature/selected', {
+      worktree: { path: '/tmp/repo-selected' },
+    })
+    const targetBranch = createRepoBranch('feature/internal', {
+      worktree: { path: '/tmp/repo-feature' },
+    })
     const repo = seedRepoState({
       id: '/tmp/repo',
-      branches: [branch],
-      selectedBranch: branch.name,
+      branches: [selectedBranch, targetBranch],
+      selectedBranch: selectedBranch.name,
       detailTab: 'status',
     })
     useReposStore.setState({ detailCollapsed: true })
 
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
-    const groups = await renderItemGroups(useItems, repo, branch)
+    const groups = await renderItemGroups(useItems, repo, targetBranch)
     const terminal = groups.externalItems.find((item) => item.id === 'terminal')
+    const tmuxTerminal = groups.externalItems.find((item) => item.id === 'terminalTmux')
+    const restoreTmuxTerminals = groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals')
     if (!terminal) throw new Error('missing terminal action')
+    if (!tmuxTerminal) throw new Error('missing tmux terminal action')
+    if (!restoreTmuxTerminals) throw new Error('missing restore tmux terminals action')
 
     expect(terminal.disabled).toBe(false)
     expect(terminal.label).toBe('terminal.internal')
     expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(true)
 
+    createTerminal.mockImplementationOnce(async () => {
+      const current = useReposStore.getState()
+      expect(current.repos['/tmp/repo']?.ui.selectedBranch).toBe('feature/internal')
+      expect(current.repos['/tmp/repo']?.ui.detailTab).toBe('terminal')
+      expect(current.detailCollapsed).toBe(false)
+      return 't1'
+    })
+
     await act(async () => {
       await terminal.onSelect()
     })
 
-    expect(createTerminal).toHaveBeenCalledWith({
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: '/tmp/repo',
+        branch: 'feature/internal',
+        worktreePath: '/tmp/repo-feature',
+      },
+      'native',
+    )
+
+    createTerminal.mockClear()
+    await act(async () => {
+      await tmuxTerminal.onSelect()
+    })
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: '/tmp/repo',
+        branch: 'feature/internal',
+        worktreePath: '/tmp/repo-feature',
+      },
+      'tmux-if-available',
+    )
+
+    createTerminal.mockClear()
+    await act(async () => {
+      await restoreTmuxTerminals.onSelect()
+    })
+    expect(restoreTmuxSessions).toHaveBeenCalledWith({
       repoRoot: '/tmp/repo',
       branch: 'feature/internal',
       worktreePath: '/tmp/repo-feature',
     })
-    expect(useReposStore.getState().repos['/tmp/repo']?.ui.detailTab).toBe('terminal')
-    expect(useReposStore.getState().detailCollapsed).toBe(false)
+    expect(createTerminal).not.toHaveBeenCalled()
+    expect(useReposStore.getState().repos['/tmp/repo']?.ui.selectedBranch).toBe('feature/internal')
     expect(openExternalTerminal).not.toHaveBeenCalled()
+  })
+
+  test('uses a member navigation override before creating an internal terminal', async () => {
+    const selectedBranch = createRepoBranch('feature/selected', {
+      worktree: { path: '/tmp/repo-selected' },
+    })
+    const targetBranch = createRepoBranch('feature/member', {
+      worktree: { path: '/tmp/repo-member' },
+    })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [selectedBranch, targetBranch],
+      selectedBranch: selectedBranch.name,
+      detailTab: 'status',
+    })
+    useReposStore.setState({ detailCollapsed: true })
+    const events: string[] = []
+    const onNavigateToInternalTerminal = vi.fn(() => {
+      events.push('navigate-member')
+    })
+    createTerminal.mockImplementationOnce(async () => {
+      events.push('create-terminal')
+      expect(useReposStore.getState().detailCollapsed).toBe(false)
+      return 't1'
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, targetBranch, { onNavigateToInternalTerminal })
+    const terminal = groups.externalItems.find((item) => item.id === 'terminal')
+    if (!terminal) throw new Error('missing terminal action')
+
+    await act(async () => {
+      await terminal.onSelect()
+    })
+
+    expect(onNavigateToInternalTerminal).toHaveBeenCalledWith({
+      repoRoot: '/tmp/repo',
+      branch: 'feature/member',
+      worktreePath: '/tmp/repo-member',
+    })
+    expect(events).toEqual(['navigate-member', 'create-terminal'])
+    expect(useReposStore.getState().repos['/tmp/repo']?.ui.selectedBranch).toBe('feature/selected')
   })
 
   test('opens the external terminal without creating an internal session', async () => {
@@ -294,6 +436,8 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'editor',
       'terminal',
+      'terminalTmux',
+      'restoreTmuxTerminals',
       'externalTerminal',
       'remote',
     ])
@@ -309,6 +453,7 @@ describe('useBranchActionItems', () => {
       'pullRemoteBranch',
       'checkoutTo',
       'merge',
+      'mergeOut',
       'commit',
       'copyPatch',
     ])
@@ -374,12 +519,15 @@ describe('useBranchActionItems', () => {
       'pullRemoteBranch',
       'checkoutTo',
       'merge',
+      'mergeOut',
       'commit',
       'copyPatch',
     ])
     expect(groups.externalItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'editor',
       'terminal',
+      'terminalTmux',
+      'restoreTmuxTerminals',
       'externalTerminal',
       'remote',
     ])
@@ -399,8 +547,11 @@ describe('useBranchActionItems', () => {
     expect(disabledById.get('pullRemoteBranch')).toBe(true)
     expect(disabledById.get('checkoutTo')).toBe(true)
     expect(disabledById.get('merge')).toBe(true)
+    expect(disabledById.get('mergeOut')).toBe(true)
     expect(disabledById.get('commit')).toBe(true)
     expect(disabledById.get('terminal')).toBe(true)
+    expect(disabledById.get('terminalTmux')).toBe(true)
+    expect(disabledById.get('restoreTmuxTerminals')).toBe(true)
     expect(disabledById.get('externalTerminal')).toBe(true)
     expect(disabledById.get('editor')).toBe(true)
     expect(disabledById.get('remote')).toBe(true)
@@ -571,8 +722,8 @@ describe('useBranchActionItems', () => {
     clickButtonByText('terminal.close-all-confirm-confirm')
 
     expect(closeTerminalAndDismissDetailIfLast.mock.calls).toEqual([
-      ['t1', { repoRoot: '/tmp/repo', branch: 'feature/terminals', worktreePath: '/tmp/repo-feature' }],
-      ['t2', { repoRoot: '/tmp/repo', branch: 'feature/terminals', worktreePath: '/tmp/repo-feature' }],
+      ['t1', { repoRoot: '/tmp/repo', worktreePath: '/tmp/repo-feature' }],
+      ['t2', { repoRoot: '/tmp/repo', worktreePath: '/tmp/repo-feature' }],
     ])
   })
 
@@ -779,7 +930,7 @@ describe('useBranchActionItems', () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
     const current = createRepoBranch('main', { isCurrent: true })
-    const branch = createRepoBranch('feature/base')
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
     const repo = seedRepoState({
       id: '/tmp/repo',
       branches: [current, branch],
@@ -811,23 +962,181 @@ describe('useBranchActionItems', () => {
       { token: repo.instanceToken, refreshOnError: false },
     )
   })
+
+  test('forwards selected candidates as a one-time materialize decision', async () => {
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+    })
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => {
+      await createWorktree.onSelect()
+    })
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
+    })
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      undefined,
+      '/tmp/repo-base',
+    )
+    clickButton('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    clickButton('button[type="submit"]')
+
+    expect(submitBranchAction).toHaveBeenCalledWith(
+      '/tmp/repo',
+      {
+        kind: 'createWorktree',
+        input: {
+          worktreePath: '/tmp/repo-feature-new',
+          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+        },
+        worktreeBootstrap: {
+          kind: 'materialize',
+          selections: [{ path: '.env', mode: 'copy' }],
+          sourceWorktreePath: '/tmp/repo-base',
+        },
+      },
+      { token: repo.instanceToken, refreshOnError: false },
+    )
+  })
+
+  test('falls back from an empty branch source to the primary worktree', async () => {
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight
+      .mockResolvedValueOnce({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: { kind: 'candidates', candidates: [{ path: 'node_modules', kind: 'directory' }] },
+      })
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const other = createRepoBranch('feature/other', { worktree: { path: '/tmp/repo-other' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch, other],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+      worktreesByPath: createSourceWorktrees(),
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => createWorktree.onSelect())
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
+    })
+
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mock.calls).toEqual([
+      ['/tmp/repo', expect.any(AbortSignal), undefined, '/tmp/repo-base'],
+      ['/tmp/repo', expect.any(AbortSignal), undefined, undefined],
+    ])
+    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
+    const optionValues = [...sourceSelect().options].map((option) => option.value)
+    expect(optionValues).not.toContain('branch:feature/base')
+    expect(optionValues).toContain('branch:feature/other')
+  })
+
+  test('loads and submits dependencies from another non-context worktree', async () => {
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: { kind: 'candidates', candidates: [{ path: '.env.base', kind: 'file' }] },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: { kind: 'candidates', candidates: [{ path: '.env.other', kind: 'file' }] },
+      })
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const other = createRepoBranch('feature/other', { worktree: { path: '/tmp/repo-other' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch, other],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+      worktreesByPath: createSourceWorktrees(),
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => createWorktree.onSelect())
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item=".env.base"]')).not.toBeNull()
+    })
+    changeSource('branch:feature/other')
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-materialization-item=".env.other"]')).not.toBeNull()
+    })
+
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+      '/tmp/repo',
+      expect.any(AbortSignal),
+      undefined,
+      '/tmp/repo-other',
+    )
+    clickButton('[data-materialization-item=".env.other"] [data-materialization-choice="copy"]')
+    setInputValue('#cwt-branch', 'feature/new')
+    clickButton('button[type="submit"]')
+
+    expect(submitBranchAction).toHaveBeenCalledWith(
+      '/tmp/repo',
+      {
+        kind: 'createWorktree',
+        input: {
+          worktreePath: '/tmp/repo-feature-new',
+          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+        },
+        worktreeBootstrap: {
+          kind: 'materialize',
+          selections: [{ path: '.env.other', mode: 'copy' }],
+          sourceWorktreePath: '/tmp/repo-other',
+        },
+      },
+      { token: repo.instanceToken, refreshOnError: false },
+    )
+  })
 })
 
-async function renderItems(
-  useItems: typeof useBranchActionItems,
-  repo: ReturnType<typeof seedRepoState>,
-  branch: ReturnType<typeof createRepoBranch>,
-): Promise<string[]> {
-  const groups = await renderItemGroups(useItems, repo, branch)
-  return [...groups.patchItems, ...groups.mainItems, ...groups.externalItems, ...groups.destructiveItems].map(
-    (item) => item.id,
-  )
+function createSourceWorktrees() {
+  return {
+    '/tmp/repo': { path: '/tmp/repo', branch: 'main', isMain: true },
+    '/tmp/repo-base': { path: '/tmp/repo-base', branch: 'feature/base', isMain: false },
+    '/tmp/repo-other': { path: '/tmp/repo-other', branch: 'feature/other', isMain: false },
+  }
 }
 
 async function renderItemGroups(
   useItems: typeof useBranchActionItems,
   repo: ReturnType<typeof seedRepoState>,
   branch: ReturnType<typeof createRepoBranch>,
+  options?: Parameters<typeof useBranchActionItems>[2],
 ): Promise<ReturnType<typeof useBranchActionItems>> {
   let groups: ReturnType<typeof useBranchActionItems> | null = null
   root = createRoot(container)
@@ -836,7 +1145,13 @@ async function renderItemGroups(
       <InlineCommitDraftProvider>
         <TerminalSessionReadContext.Provider value={terminalReadContextValue()}>
           <TerminalSessionContext.Provider value={terminalContextValue()}>
-            <ItemsHarness useItems={useItems} repo={repo} branch={branch} onReady={(items) => (groups = items)} />
+            <ItemsHarness
+              useItems={useItems}
+              repo={repo}
+              branch={branch}
+              options={options}
+              onReady={(items) => (groups = items)}
+            />
           </TerminalSessionContext.Provider>
         </TerminalSessionReadContext.Provider>
       </InlineCommitDraftProvider>,
@@ -850,14 +1165,16 @@ function ItemsHarness({
   useItems,
   repo,
   branch,
+  options,
   onReady,
 }: {
   useItems: typeof useBranchActionItems
   repo: ReturnType<typeof seedRepoState>
   branch: ReturnType<typeof createRepoBranch>
+  options?: Parameters<typeof useBranchActionItems>[2]
   onReady: (items: ReturnType<typeof useBranchActionItems>) => void
 }) {
-  const items = useItems(repo, branch)
+  const items = useItems(repo, branch, options)
   React.useEffect(() => {
     onReady(items)
   }, [items, onReady])
@@ -929,6 +1246,19 @@ function clickButtonByText(text: string) {
   })
 }
 
+function sourceSelect(): HTMLSelectElement {
+  const element = document.body.querySelector('[data-worktree-bootstrap-source-select]')
+  if (!(element instanceof HTMLSelectElement)) throw new Error('Missing worktree bootstrap source select')
+  return element
+}
+
+function changeSource(value: string) {
+  const element = sourceSelect()
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => element.dispatchEvent(new Event('change', { bubbles: true })))
+}
+
 function setTerminalSessions(worktreeKey: string, sessions: TerminalSessionSummary[]) {
   terminalSnapshotsByWorktree.set(worktreeKey, {
     worktreeTerminalKey: worktreeKey,
@@ -979,6 +1309,7 @@ function terminalReadContextValue(): TerminalSessionReadContextValue {
 function terminalContextValue(): TerminalSessionContextValue {
   return {
     createTerminal,
+    restoreTmuxSessions,
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),
@@ -1004,4 +1335,18 @@ async function flush() {
   await act(async () => {
     await Promise.resolve()
   })
+}
+
+async function waitForAssertion(assertion: () => void) {
+  let lastError: unknown
+  for (let i = 0; i < 10; i += 1) {
+    try {
+      assertion()
+      return
+    } catch (err) {
+      lastError = err
+      await flush()
+    }
+  }
+  throw lastError
 }

@@ -10,6 +10,7 @@ import { isTerminalFocused } from '#/web/terminal-focus.ts'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import type {
   TerminalMutationResult,
+  TerminalCloseResult,
   TerminalNotifyBellInput,
   TerminalAttachInput,
   TerminalAttachResult,
@@ -553,7 +554,7 @@ const terminalCalls = {
   write: vi.fn<(input: TerminalWriteInput) => Promise<TerminalMutationResult>>(),
   resize: vi.fn<(input: TerminalResizeInput) => Promise<TerminalMutationResult>>(),
   takeover: vi.fn<(input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>>(),
-  close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalMutationResult>>(),
+  close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalCloseResult>>(),
   notifyBell: vi.fn<(input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>>(),
   setBadge: vi.fn<Window['goblinNative']['terminal']['setBadge']>(),
 }
@@ -645,7 +646,7 @@ beforeEach(() => {
         write: terminalCalls.write.mockResolvedValue(true),
         resize: terminalCalls.resize.mockResolvedValue(true),
         takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
-        close: terminalCalls.close.mockResolvedValue(true),
+        close: terminalCalls.close.mockResolvedValue({ ok: true }),
         notifyBell: terminalCalls.notifyBell.mockResolvedValue(true),
         reorder: vi.fn(),
         create: vi.fn(),
@@ -692,7 +693,7 @@ beforeEach(() => {
       write: terminalCalls.write.mockResolvedValue(true),
       resize: terminalCalls.resize.mockResolvedValue(true),
       takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
-      close: terminalCalls.close.mockResolvedValue(true),
+      close: terminalCalls.close.mockResolvedValue({ ok: true }),
       create: vi.fn(async (input?: { kind?: string }) =>
         input?.kind === 'primary'
           ? {
@@ -728,6 +729,7 @@ beforeEach(() => {
               sessions: [],
             },
       ),
+      openTmuxSessions: vi.fn(async () => ({ ok: false as const, message: 'unavailable' })),
       pruneTerminals: vi.fn(async () => ({ pruned: 0, remaining: 0 })),
       listSessions: vi.fn(async () => []),
       getSessionSnapshot: vi.fn(async () => null),
@@ -745,6 +747,22 @@ beforeEach(() => {
 })
 
 describe('ManagedTerminalSession', () => {
+  test('keeps render pending until the attached terminal has settled a paint opportunity', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    expect(session.snapshot().renderPending).toBe(true)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().renderPending !== true)
+
+    expect(session.snapshot().phase).toBe('open')
+    expect(session.snapshot().renderPending).toBeUndefined()
+  })
+
   test('opens xterm and attaches the primary terminal session with fitted dimensions', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -775,6 +793,31 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options).not.toHaveProperty(deletedEraseOption)
     expect(terminalCalls.restart).not.toHaveBeenCalled()
     expect(session.snapshot().phase).toBe('open')
+  })
+
+  test('keeps an initially hydrated session opening until its first visible frame is replayed', async () => {
+    const attachRequest = deferred<TerminalAttachResult>()
+    terminalCalls.attach.mockReturnValueOnce(attachRequest.promise)
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+
+    expect(session.snapshot().phase).toBe('opening')
+    await flushUntil(() => terminalCalls.attach.mock.calls.length === 1)
+    expect(session.snapshot().phase).toBe('opening')
+
+    attachRequest.resolve(
+      attachResult('session-1', {
+        snapshot: 'ready in /worktree',
+        snapshotSeq: 1,
+      }),
+    )
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('ready in /worktree', expect.any(Function))
   })
 
   test('uses the full fitted width while an alternate-screen TUI is active', async () => {
@@ -2602,7 +2645,12 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
 
     xtermMocks.terminals[0]!.emitBell()
-    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: true })
+    expect(onBell).toHaveBeenCalledWith(descriptor, {
+      sessionId: 'session-1',
+      processName: 'zsh',
+      canonicalTitle: null,
+      visible: true,
+    })
   })
 
   test('emits bell events for BEL output when no xterm view is attached', () => {
@@ -2615,7 +2663,12 @@ describe('ManagedTerminalSession', () => {
     expect(onBell).not.toHaveBeenCalled()
 
     session.handleOutput({ sessionId: 'session-1', data: 'done\x07', seq: 2, processName: 'claude' })
-    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'claude', canonicalTitle: null, visible: false })
+    expect(onBell).toHaveBeenCalledWith(descriptor, {
+      sessionId: 'session-1',
+      processName: 'claude',
+      canonicalTitle: null,
+      visible: false,
+    })
   })
 
   test('emits bell events for BEL output when the session is not the controller', () => {
@@ -2625,7 +2678,12 @@ describe('ManagedTerminalSession', () => {
     hydrateManagedSession(session, { role: 'viewer' })
 
     session.handleOutput({ sessionId: 'session-1', data: 'finished\x07', seq: 1, processName: 'zsh' })
-    expect(onBell).toHaveBeenCalledWith(descriptor, { processName: 'zsh', canonicalTitle: null, visible: false })
+    expect(onBell).toHaveBeenCalledWith(descriptor, {
+      sessionId: 'session-1',
+      processName: 'zsh',
+      canonicalTitle: null,
+      visible: false,
+    })
   })
 
   test('progress state appears in snapshot and clears on state 0', async () => {
@@ -2810,12 +2868,6 @@ async function flushResizeDebounce(): Promise<void> {
 async function flushFontRefit(): Promise<void> {
   await Promise.resolve()
   await new Promise((resolve) => setTimeout(resolve, 100))
-  await Promise.resolve()
-}
-
-async function flushTerminalRenderSettle(): Promise<void> {
-  await flushTerminalStart()
-  await new Promise((resolve) => setTimeout(resolve, 120))
   await Promise.resolve()
 }
 
