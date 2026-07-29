@@ -90,7 +90,7 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceActions', () => {
-  test('shows successful repository dependency warnings without changing settlement behavior', async () => {
+  test('shows successful one-time dependency warnings without changing settlement behavior', async () => {
     mocks.plan.mockResolvedValue({ ok: true, plan })
     mocks.execute.mockResolvedValue({
       ok: true,
@@ -101,6 +101,11 @@ describe('useBranchWorkspaceActions', () => {
           kind: 'repository-dependency-failed',
           repositoryName: 'api',
           message: 'link failed',
+        },
+        {
+          kind: 'workspace-dependency-failed',
+          entryName: 'README.md',
+          message: 'copy failed',
         },
       ],
     })
@@ -123,10 +128,13 @@ describe('useBranchWorkspaceActions', () => {
     )
     await act(async () => state!.confirm(['worktree-bootstrap']))
 
-    expect(mocks.warning).toHaveBeenCalledWith('workspace.branch-workspace.repository-dependency-warning:1', {
-      description: 'api: link failed',
+    expect(mocks.warning).toHaveBeenCalledWith('workspace.branch-workspace.dependency-warning:2', {
+      description: 'api: link failed\nREADME.md: copy failed',
     })
-    expect(state!.result).toMatchObject({ ok: true, warnings: [{ repositoryName: 'api' }] })
+    expect(state!.result).toMatchObject({
+      ok: true,
+      warnings: [{ repositoryName: 'api' }, { entryName: 'README.md' }],
+    })
   })
 
   test('writes a successful creation snapshot into cache without refetching', async () => {

@@ -4,46 +4,9 @@ import {
   formatWorktreeBootstrapSummary,
   hasWorktreeBootstrapSummaryDetails,
   normalizeWorktreeBootstrapSelections,
-  worktreeBootstrapPreviewFromConfig,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 describe('worktree bootstrap summary', () => {
-  test('builds an empty preview when no config exists', () => {
-    expect(worktreeBootstrapPreviewFromConfig(undefined)).toEqual({
-      hasConfig: false,
-      hasOperations: false,
-      configHash: null,
-      copyCount: 0,
-      symlinkCount: 0,
-      hardlinkCount: 0,
-      excludeCount: 0,
-    })
-  })
-
-  test('builds a counted preview from config', () => {
-    expect(
-      worktreeBootstrapPreviewFromConfig(
-        {
-          copy: ['.env'],
-          symlink: ['config/*.json'],
-          hardlink: ['cache.db'],
-          exclude: ['*.log'],
-          setup: 'bun install',
-        },
-        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      ),
-    ).toEqual({
-      hasConfig: true,
-      hasOperations: true,
-      configHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      copyCount: 1,
-      symlinkCount: 1,
-      hardlinkCount: 1,
-      excludeCount: 1,
-      setup: { command: 'bun install' },
-    })
-  })
-
   test('compacts path lists and formats fallback summary text', () => {
     const paths = Array.from({ length: 10 }, (_, index) => `file-${index}.txt`)
     const summary = {

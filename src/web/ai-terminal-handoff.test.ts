@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     worktreeSnapshot: vi.fn(),
     createTerminal: vi.fn(),
     selectTerminal: vi.fn(),
+    waitForInputReady: vi.fn(),
     writeInput: vi.fn(),
   },
   showRepoBranchDetailTab: vi.fn(),
@@ -31,6 +32,7 @@ beforeEach(() => {
     worktreeTerminalKey: '/repo\u0000/repo-worktree',
   })
   mocks.bridge.createTerminal.mockResolvedValue('/repo\u0000/repo-worktree\u0000terminal-1')
+  mocks.bridge.waitForInputReady.mockResolvedValue(true)
 })
 
 describe('AI terminal handoff', () => {
@@ -67,10 +69,59 @@ describe('AI terminal handoff', () => {
       branch: 'main',
       worktreePath: '/repo-worktree',
     })
+    expect(mocks.bridge.waitForInputReady).toHaveBeenCalledWith('/repo\u0000/repo-worktree\u0000terminal-1')
     expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
       '/repo\u0000/repo-worktree\u0000terminal-1',
       'codex exec "prompt"',
     )
+  })
+
+  test('keeps a new-terminal handoff command pending until the terminal is ready for input', async () => {
+    let resolveReady: (ready: boolean) => void = () => {}
+    mocks.bridge.waitForInputReady.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveReady = resolve
+      }),
+    )
+
+    const handoff = prefillAiTerminalCommand({
+      repoId: '/repo',
+      branch: 'main',
+      worktreePath: '/repo-worktree',
+      command: 'codex exec "prompt"',
+      navigation: { showRepoBranchDetailTab: mocks.showRepoBranchDetailTab },
+      setDetailCollapsed: mocks.setDetailCollapsed,
+    })
+
+    await vi.waitFor(() => {
+      expect(mocks.bridge.createTerminal).toHaveBeenCalled()
+    })
+    expect(mocks.bridge.writeInput).not.toHaveBeenCalled()
+
+    resolveReady(true)
+
+    await expect(handoff).resolves.toBe(true)
+    expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
+      '/repo\u0000/repo-worktree\u0000terminal-1',
+      'codex exec "prompt"',
+    )
+  })
+
+  test('does not report a handoff when the terminal cannot become input-ready', async () => {
+    mocks.bridge.waitForInputReady.mockResolvedValueOnce(false)
+
+    await expect(
+      prefillAiTerminalCommand({
+        repoId: '/repo',
+        branch: 'main',
+        worktreePath: '/repo-worktree',
+        command: 'codex exec "prompt"',
+        navigation: { showRepoBranchDetailTab: mocks.showRepoBranchDetailTab },
+        setDetailCollapsed: mocks.setDetailCollapsed,
+      }),
+    ).resolves.toBe(false)
+
+    expect(mocks.bridge.writeInput).not.toHaveBeenCalled()
   })
 
   test('reuses the selected terminal instead of creating another session', async () => {

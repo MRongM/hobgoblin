@@ -41,8 +41,6 @@ import {
   getRepositoryRemoteBranches,
   getRepositoryRemoteTags,
   createRepositoryLocalTag,
-  getRepositoryWorktreeBootstrapPreview,
-  initializeRepositoryWorktreeBootstrapConfig,
   initRepository,
   mergeRepositoryBranch,
   moveRepositoryFileTreeEntries,
@@ -62,7 +60,6 @@ import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
 import { buildRepositoryBranchMergeOutPlan } from '#/server/modules/repository-branch-merge-plan.ts'
 import { executeRepositoryBranchMergeOut } from '#/server/modules/repository-branch-merge-write-paths.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
-import { isWorktreeBootstrapConfigHash } from '#/shared/repo-settings.ts'
 import {
   normalizeWorktreeBootstrapSourcePath,
   normalizeWorktreeBootstrapSelections,
@@ -109,14 +106,6 @@ export function createRepoRoutes() {
     const sourceWorktreePath =
       raw.sourceWorktreePath === undefined ? undefined : normalizeWorktreeBootstrapSourcePath(raw.sourceWorktreePath)
     if (raw.sourceWorktreePath !== undefined && !sourceWorktreePath) return null
-    if (raw.kind === 'run' && isWorktreeBootstrapConfigHash(raw.configHash) && typeof raw.configTrusted === 'boolean') {
-      return {
-        kind: 'run',
-        configHash: raw.configHash,
-        configTrusted: raw.configTrusted,
-        ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
-      }
-    }
     if (raw.kind === 'materialize') {
       const selections = normalizeWorktreeBootstrapSelections(raw.selections)
       return selections
@@ -173,21 +162,6 @@ export function createRepoRoutes() {
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     return c.json(await jsonOr(() => getRepositoryLocalTags(cwd, c.req.raw.signal), [], 'local-tags'))
   })
-  app.post('/worktree-bootstrap-preview', async (c) => {
-    const body = await c.req.json().catch(() => null)
-    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
-    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : undefined
-    return c.json(
-      await jsonOr(
-        () =>
-          worktreePath === undefined
-            ? getRepositoryWorktreeBootstrapPreview(cwd, c.req.raw.signal)
-            : getRepositoryWorktreeBootstrapPreview(cwd, c.req.raw.signal, worktreePath),
-        { ok: false, message: 'error.failed-read-repo' },
-        'worktree-bootstrap-preview',
-      ),
-    )
-  })
   app.post('/worktree-bootstrap-preflight', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
@@ -196,9 +170,7 @@ export function createRepoRoutes() {
         ? body.candidateScope
         : undefined
     const sourceWorktreePath =
-      body?.sourceWorktreePath === undefined
-        ? undefined
-        : normalizeWorktreeBootstrapSourcePath(body.sourceWorktreePath)
+      body?.sourceWorktreePath === undefined ? undefined : normalizeWorktreeBootstrapSourcePath(body.sourceWorktreePath)
     if (body?.candidateScope !== undefined && candidateScope === undefined) {
       return c.json({ ok: false, message: 'error.invalid-arguments' })
     }
@@ -209,30 +181,12 @@ export function createRepoRoutes() {
       await jsonOr(
         () =>
           sourceWorktreePath
-            ? getRepositoryWorktreeBootstrapPreflight(
-                cwd,
-                c.req.raw.signal,
-                candidateScope,
-                sourceWorktreePath,
-              )
+            ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope, sourceWorktreePath)
             : candidateScope
-            ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
-            : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
+              ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
+              : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
         { ok: false, message: 'error.failed-read-repo' },
         'worktree-bootstrap-preflight',
-      ),
-    )
-  })
-  app.post('/worktree-bootstrap-config/init', async (c) => {
-    const body = await c.req.json().catch(() => null)
-    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
-    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
-    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
-    return c.json(
-      await jsonOr(
-        () => initializeRepositoryWorktreeBootstrapConfig(repoId, worktreePath, c.req.raw.signal, sourceToken),
-        { ok: false, message: 'error.failed-read-repo' },
-        'worktree-bootstrap-config-init',
       ),
     )
   })

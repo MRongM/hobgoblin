@@ -317,7 +317,7 @@ export function WorkspaceRepositoryRail({
     return [
       {
         id: repositoryId,
-        name: repo.name,
+        name: candidateNameById.get(repositoryId) ?? repo.name,
         branch: repo.data.currentBranch,
         changeCount: repo.data.status.reduce((total, status) => total + status.entries.length, 0),
         terminalWorktreePaths: repoTerminalWorktreePaths(repo),

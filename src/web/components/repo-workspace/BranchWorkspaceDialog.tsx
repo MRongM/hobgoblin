@@ -414,21 +414,12 @@ export function BranchWorkspaceDialog({
                               {t('workspace.branch-workspace.repository-dependencies-error')}
                             </p>
                           ) : null}
-                          {bootstrap?.status === 'ready' && bootstrap.preflight.kind === 'configured' ? (
-                            <p className="rounded-md border border-separator bg-muted/20 p-2 text-xs text-muted-foreground">
-                              {t('workspace.branch-workspace.repository-dependencies-configured')}
-                            </p>
-                          ) : null}
-                          {bootstrap?.status === 'ready' &&
-                          bootstrap.preflight.kind === 'candidates' &&
-                          bootstrap.preflight.candidates.length === 0 ? (
+                          {bootstrap?.status === 'ready' && bootstrap.preflight.candidates.length === 0 ? (
                             <p className="text-xs text-muted-foreground">
                               {t('workspace.branch-workspace.repository-dependencies-empty')}
                             </p>
                           ) : null}
-                          {bootstrap?.status === 'ready' &&
-                          bootstrap.preflight.kind === 'candidates' &&
-                          bootstrap.preflight.candidates.length > 0 ? (
+                          {bootstrap?.status === 'ready' && bootstrap.preflight.candidates.length > 0 ? (
                             <WorktreeBootstrapCandidateList
                               headingId={`branch-workspace-repository-dependencies-${repository.name}`}
                               label={t('workspace.branch-workspace.repository-dependencies')}

@@ -7,7 +7,6 @@ import type { CreateWorktreeMode } from '#/shared/worktree-create.ts'
 import {
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
-  type WorktreeBootstrapPreview,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
 export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hobgoblin-'
@@ -226,7 +225,6 @@ export interface BranchWorkspaceRepositoryPlan {
   worktreePath: string
   mode: CreateWorktreeMode
   worktreeBootstrap: WorktreeBootstrapDecision
-  bootstrapPreview?: WorktreeBootstrapPreview
   confirmationRequired: boolean
   satisfied: boolean
   action?: 'create-worktree' | 'remove-worktree' | 'delete-branch' | 'satisfied'
@@ -274,11 +272,17 @@ export type BranchWorkspacePlanResult =
   | { ok: true; plan: BranchWorkspacePlan }
   | { ok: false; message: string; detail?: string }
 
-export interface BranchWorkspaceExecutionWarning {
-  kind: 'repository-dependency-failed'
-  repositoryName: string
-  message: string
-}
+export type BranchWorkspaceExecutionWarning =
+  | {
+      kind: 'repository-dependency-failed'
+      repositoryName: string
+      message: string
+    }
+  | {
+      kind: 'workspace-dependency-failed'
+      entryName: string
+      message: string
+    }
 
 export type BranchWorkspaceExecuteResult =
   | {

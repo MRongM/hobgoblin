@@ -377,12 +377,12 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.dependency.remove.action']).toBe('移除依赖项')
   })
 
-  test('includes transient repository dependency warning copy in every locale', () => {
-    const key = 'workspace.branch-workspace.repository-dependency-warning' as const
+  test('includes transient one-time dependency warning copy in every locale', () => {
+    const key = 'workspace.branch-workspace.dependency-warning' as const
     for (const [lang, dict] of Object.entries(dicts)) {
       expect(dict[key], `${lang}.${key}`).toContain('{count}')
     }
-    expect(zh[key]).toContain('工作树已成功创建')
+    expect(zh[key]).toContain('子工作区已成功创建')
   })
 
   test('distinguishes internal and external terminal actions in every dictionary', () => {

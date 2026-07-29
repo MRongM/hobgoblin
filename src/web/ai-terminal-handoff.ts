@@ -43,8 +43,8 @@ export async function prefillAiTerminalCommand(input: AiTerminalHandoffInput): P
     })
   }
 
-  await Promise.resolve()
   if (!key) return false
+  if (!(await bridge.waitForInputReady(key))) return false
   bridge.writeInput(key, input.command)
   return true
 }

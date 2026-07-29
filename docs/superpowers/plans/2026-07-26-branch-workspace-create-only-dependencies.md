@@ -13,7 +13,7 @@
 - Do not use TypeScript enums, runtime namespaces, parameter properties, or import aliases.
 - Use repo-alias imports with explicit `.ts` / `.tsx` extensions.
 - Do not add package dependencies.
-- Manual and `goblin.toml` dependencies still resolve from the selected source worktree during initial creation.
+- Manually selected dependencies still resolve from the selected source worktree during initial creation.
 - A dependency failure is non-fatal only when Git already created the target worktree and the backend returns `repoChanged: true`.
 - Do not persist dependency decisions, progress, failures, or warnings.
 - Repair must use `worktreeBootstrap: { kind: 'skip' }` for missing worktrees and must not preflight existing dependency targets.

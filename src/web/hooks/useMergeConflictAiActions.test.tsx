@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     worktreeSnapshot: vi.fn(),
     createTerminal: vi.fn(),
     selectTerminal: vi.fn(),
+    waitForInputReady: vi.fn(),
     writeInput: vi.fn(),
   },
   showRepoBranchDetailTab: vi.fn(),
@@ -43,6 +44,7 @@ beforeEach(() => {
     worktreeTerminalKey: '/repo\u0000/worktree',
   })
   mocks.bridge.createTerminal.mockResolvedValue('/repo\u0000/worktree\u0000terminal-1')
+  mocks.bridge.waitForInputReady.mockResolvedValue(true)
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)

@@ -73,10 +73,14 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       if (!response.ok) setError(response.message)
       if (response.ok && response.warnings?.length) {
         toast.warning(
-          t('workspace.branch-workspace.repository-dependency-warning', { count: response.warnings.length }),
+          t('workspace.branch-workspace.dependency-warning', { count: response.warnings.length }),
           {
             description: response.warnings
-              .map((warning) => `${warning.repositoryName}: ${t(warning.message)}`)
+              .map((warning) => {
+                const name =
+                  warning.kind === 'repository-dependency-failed' ? warning.repositoryName : warning.entryName
+                return `${name}: ${t(warning.message)}`
+              })
               .join('\n'),
           },
         )

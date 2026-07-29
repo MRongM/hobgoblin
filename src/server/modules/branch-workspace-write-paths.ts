@@ -533,15 +533,18 @@ export function createBranchWorkspaceWriteService(
             }
           } catch (error) {
             const message = operationMessage(error)
+            warnings.push({
+              kind: 'workspace-dependency-failed',
+              entryName: entry.name,
+              message,
+            })
             await persistAuxiliaryProgress(
               persistExecution,
               rootId,
               plan.branchWorkspaceId,
               entry.name,
-              'failed',
-              message,
+              'complete',
             )
-            return failOperation(plan.branchWorkspaceId, message)
           }
         }
 

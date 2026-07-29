@@ -47,6 +47,7 @@ describe('workspace commands', () => {
       }),
       createTerminal,
       selectTerminal: vi.fn(),
+      waitForInputReady: vi.fn(async () => true),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -91,6 +92,7 @@ describe('workspace commands', () => {
       }),
       createTerminal,
       selectTerminal: vi.fn(),
+      waitForInputReady: vi.fn(async () => true),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -123,6 +125,7 @@ describe('workspace commands', () => {
       }),
       createTerminal,
       selectTerminal: vi.fn(),
+      waitForInputReady: vi.fn(async () => true),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -167,6 +170,7 @@ describe('workspace commands', () => {
       }),
       createTerminal,
       selectTerminal: vi.fn(),
+      waitForInputReady: vi.fn(async () => true),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -216,6 +220,7 @@ describe('workspace commands', () => {
       }),
       createTerminal: vi.fn(async () => 'terminal-3'),
       selectTerminal,
+      waitForInputReady: vi.fn(async () => true),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()
@@ -269,6 +274,7 @@ describe('workspace commands', () => {
       }),
       createTerminal: vi.fn(async () => 'session-key-2'),
       selectTerminal,
+      waitForInputReady: vi.fn(async () => true),
       writeInput: vi.fn(),
     })
     const navigation = navigationWith()

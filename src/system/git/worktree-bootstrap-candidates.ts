@@ -10,9 +10,6 @@ import {
 } from '#/shared/worktree-bootstrap-summary.ts'
 import { getRepoRoot } from '#/system/git/branches.ts'
 import { git } from '#/system/git/helper.ts'
-import { getWorktreeBootstrapPreview } from '#/system/git/worktree-bootstrap.ts'
-
-const CONFIG_FILE = 'goblin.toml'
 
 export async function getLocalWorktreeBootstrapPreflight(
   sourceCwd: string,
@@ -22,11 +19,6 @@ export async function getLocalWorktreeBootstrapPreflight(
     if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
     const sourceRoot = await getRepoRoot(sourceCwd, { signal: options.signal })
     if (!sourceRoot) return { ok: false, message: 'failed to resolve source repo root' }
-
-    if (await pathExistsWithLstat(path.join(sourceRoot, CONFIG_FILE))) {
-      const preview = await getWorktreeBootstrapPreview(sourceRoot, { signal: options.signal })
-      return preview.ok ? { ok: true, preflight: { kind: 'configured', preview: preview.preview } } : preview
-    }
 
     const candidates = await listCandidates(sourceRoot, options.candidateScope ?? 'all-untracked', options.signal)
     return { ok: true, preflight: { kind: 'candidates', candidates } }
@@ -121,13 +113,11 @@ async function pathExistsWithLstat(target: string): Promise<boolean> {
     await fs.lstat(target)
     return true
   } catch (err) {
-    if (isErrno(err, 'ENOENT')) return false
+    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 'ENOENT') {
+      return false
+    }
     throw err
   }
-}
-
-function isErrno(err: unknown, code: string): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === code
 }
 
 function errorMessage(err: unknown): string {

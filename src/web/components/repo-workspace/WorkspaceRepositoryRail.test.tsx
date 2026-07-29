@@ -882,6 +882,24 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
   })
 
+  test('uses the workspace member name when shared repository state keeps a remote project prefix', () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: {
+        ...state.repos,
+        [API]: replaceRepo(state.repos[API]!, (repo) => {
+          repo.name = 'prod:api'
+        }),
+      },
+    })
+
+    renderRail()
+
+    expect(repositoryListState.props?.repositories.find((repository) => repository.id === API)?.name).toBe(
+      'api',
+    )
+  })
+
   test('renders navigation sections without decorative separators', () => {
     useReposStore.setState({
       activeId: ROOT,

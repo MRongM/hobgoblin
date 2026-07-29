@@ -90,7 +90,7 @@
 - 保留 160 列人工回归文本：
 
 ```text
-- **worktree bootstrap 配置生成：** 在文件树工具栏初始化缺失的 `goblin.toml`，再用仓库相对路径配置 `copy`、`symlink`、`hardlink`、`exclude` 和 `setup`，作为新 worktree 的自动准备规则。
+- **worktree 依赖选择：** 创建 worktree 前，选择源 worktree 根目录下未跟踪的文件或目录，并复制或符号链接到新 worktree。
 ```
 
 DOM 单元测试不能可靠复现浏览器字体 glyph 裁切，因此不伪造像素断言。人工 UAT 在 160 列下确认第一行末尾的“空格 + `w`”可见，并在拖动左右分隔线后重复验证普通 shell 和全屏 TUI。

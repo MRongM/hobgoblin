@@ -140,8 +140,6 @@ export const en = {
     'Repository dependencies could not be loaded; deselect and select this repository to retry.',
   'workspace.branch-workspace.repository-dependencies-empty':
     'The selected base branch worktree has no selectable untracked entries.',
-  'workspace.branch-workspace.repository-dependencies-configured':
-    'This repository will use goblin.toml from the selected base branch worktree.',
   'workspace.branch-workspace.auxiliary': 'Branch workspace dependencies',
   'workspace.branch-workspace.auxiliary-refresh': 'Refresh branch workspace dependencies',
   'workspace.branch-workspace.auxiliary-named': 'Include branch workspace dependency {name}',
@@ -356,8 +354,8 @@ export const en = {
   'workspace.branch-workspace.plan-failed': 'Could not create a branch workspace plan.',
   'workspace.branch-workspace.plan-stale': 'Workspace state changed. Review the refreshed plan.',
   'workspace.branch-workspace.execute-failed': 'Could not complete the branch workspace operation.',
-  'workspace.branch-workspace.repository-dependency-warning':
-    '{count} repository dependencies could not be prepared. The worktrees were still created.',
+  'workspace.branch-workspace.dependency-warning':
+    '{count} one-time dependencies could not be prepared. The branch workspace was still created.',
   'workspace.branch-workspace.approval-required': 'Complete every required confirmation.',
   'workspace.branch-workspace.read-failed': 'Could not read branch workspaces.',
   'workspace.branch-workspace.reload': 'Reload branch workspaces',
@@ -672,11 +670,6 @@ export const en = {
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',
   'file-tree.open-local': 'Open locally',
-  'file-tree.init-worktree-bootstrap-config': 'Initialize goblin.toml',
-  'file-tree.init-worktree-bootstrap-config-created': 'goblin.toml created',
-  'file-tree.init-worktree-bootstrap-config-failed': 'Unable to initialize goblin.toml',
-  'file-tree.init-worktree-bootstrap-config-ai-command-failed':
-    'goblin.toml was created, but the AI command could not be placed in the terminal.',
   'file-tree.search-label': 'Search files',
   'file-tree.search-placeholder': 'Search files',
   'file-tree.search-clear': 'Clear search',
@@ -1003,7 +996,6 @@ export const en = {
   'action.create-worktree-path-label': 'Worktree path (optional)',
   'action.create-worktree-path-disabled-hint': 'Choose a branch or ref to auto-fill the path.',
   'action.create-worktree-base-current': 'current',
-  'action.create-worktree-bootstrap-config-trusted': 'Trust this config',
   'action.create-worktree-bootstrap-candidates-label': 'Bring untracked content',
   'action.create-worktree-bootstrap-candidates-description':
     'Choose what to bring into this worktree. These choices apply only once.',

@@ -27,8 +27,6 @@ import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
 import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
-import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
-import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
 import type { WorktreeBootstrapDecision, WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
@@ -438,8 +436,6 @@ function CreateWorktreeDialogConnected({
   const [bootstrapPreflight, setBootstrapPreflight] = useState<WorktreeBootstrapPreflight | null>(null)
   const [bootstrapPreflightError, setBootstrapPreflightError] = useState(false)
   const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
-  const [configTrustChoice, setConfigTrustChoice] = useState<boolean | null>(null)
-  const settingsQuery = useSettingsSnapshotQuery()
   const sourceBranch = defaultBranch ?? repo?.data.currentBranch
   const sourceWorktreePath = repo?.data.branches.find((branch) => branch.name === sourceBranch)?.worktree?.path
 
@@ -448,14 +444,12 @@ function CreateWorktreeDialogConnected({
       setBootstrapPreflight(null)
       setBootstrapPreflightError(false)
       setBootstrapPreflightLoading(false)
-      setConfigTrustChoice(null)
       return
     }
     const controller = new AbortController()
     setBootstrapPreflight(null)
     setBootstrapPreflightError(false)
     setBootstrapPreflightLoading(true)
-    setConfigTrustChoice(null)
     void getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal, undefined, sourceWorktreePath)
       .then((result) => {
         if (controller.signal.aborted) return
@@ -474,50 +468,27 @@ function CreateWorktreeDialogConnected({
   if (!repo) return null
 
   function resolveWorktreeBootstrapDecision(request: CreateWorktreeRequest): WorktreeBootstrapDecision {
-    if (bootstrapPreflight?.kind === 'candidates') {
-      return request.selections.length > 0
-        ? {
-            kind: 'materialize',
-            selections: request.selections,
-            ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
-          }
-        : { kind: 'skip' }
-    }
-    const preview = bootstrapPreflight?.kind === 'configured' ? bootstrapPreflight.preview : null
-    const configHash = preview?.hasOperations ? preview.configHash : null
-    if (!configHash) return { kind: 'skip' }
-    const repoSettings = settingsQuery.data?.repoSettings ?? []
-    const trusted = configTrustChoice ?? isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, configHash)
-    return {
-      kind: 'run',
-      configHash,
-      configTrusted: trusted,
-      ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
-    }
+    return request.selections.length > 0
+      ? {
+          kind: 'materialize',
+          selections: request.selections,
+          ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+        }
+      : { kind: 'skip' }
   }
 
   function handleCreate(request: CreateWorktreeRequest) {
     return onCreate(request, resolveWorktreeBootstrapDecision(request))
   }
 
-  const preview = bootstrapPreflight?.kind === 'configured' ? bootstrapPreflight.preview : null
-  const configHash = preview?.configHash
-  const configTrusted =
-    configTrustChoice ??
-    isRepoWorktreeBootstrapConfigTrusted(settingsQuery.data?.repoSettings ?? [], repoId, configHash)
-
   return createElement(CreateWorktreeDialog, {
     open,
     repo,
     defaultBranch,
     worktreeBootstrap: {
-      loading:
-        bootstrapPreflightLoading ||
-        (preview?.hasOperations === true && !!preview.configHash && settingsQuery.isLoading),
+      loading: bootstrapPreflightLoading,
       preflight: bootstrapPreflight,
       error: bootstrapPreflightError,
-      configTrusted,
-      onConfigTrustedChange: setConfigTrustChoice,
     },
     onClose,
     onCreate: handleCreate,

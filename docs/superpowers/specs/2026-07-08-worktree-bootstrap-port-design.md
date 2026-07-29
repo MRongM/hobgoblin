@@ -1,5 +1,7 @@
 # Worktree Bootstrap Port Design
 
+> **Superseded (2026-07-29):** Hobgoblin no longer reads, previews, trusts, or generates `goblin.toml`. Worktree dependencies are now selected manually from immediate untracked source entries and materialized by copy or symlink. This document is retained as implementation history.
+
 ## Goal
 
 Port the repo-configured worktree bootstrap feature into Hobgoblin's current codebase.

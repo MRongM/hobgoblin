@@ -7,7 +7,6 @@ import {
   Copy,
   Download,
   File,
-  FileCog,
   FilePlus,
   FileSymlink,
   Folder,
@@ -36,10 +35,7 @@ import {
   createRepositoryFileTreeFile,
   createRepositoryFileTreeDirectory,
   deleteRepositoryFileTreeEntries,
-  getCommitMessageProviders,
   getRepositoryFileTree,
-  getRepositoryWorktreeBootstrapPreview,
-  initializeRepositoryWorktreeBootstrapConfig,
   moveRepositoryFileTreeEntries,
   openRepositoryEditor,
   openRepositoryTerminal,
@@ -49,11 +45,6 @@ import {
   transferRepositoryFiles,
   exportRepositoryFilesToLocalDirectory,
 } from '#/web/repo-client.ts'
-import {
-  buildAiHandoffCommand,
-  preferredAiHandoffProvider,
-  prefillAiTerminalCommand,
-} from '#/web/ai-terminal-handoff.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   AlertDialog,
@@ -112,11 +103,8 @@ import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
-import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 
 const ROOT_DIR = ''
-const WORKTREE_DEPENDENCY_SYMLINK_PROMPT =
-  "Inspect this project's .gitignore files and dependency manifests. Identify dependency directories that are ignored by Git and suitable for reuse across Git worktrees, then configure them under [worktree].symlink in goblin.toml. Preserve all existing goblin.toml settings. Modify no other files, install no dependencies, and run no Git commands."
 
 interface DirectoryState {
   entries?: RepoFileTreeEntry[]
@@ -185,7 +173,6 @@ export interface FileTreeRevealRequest {
 }
 
 type FileTreeToolbarHeight = 'compact' | 'detail'
-type WorktreeBootstrapConfigStatus = 'idle' | 'loading' | 'missing' | 'present' | 'error'
 
 export function ProjectFileTree({
   repoId,
@@ -201,13 +188,10 @@ export function ProjectFileTree({
   toolbarLeading?: ReactNode
 }) {
   const t = useT()
-  const navigation = useMainWindowNavigation()
-  const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
   const { fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
   const { appFontSize } = useRuntimeFontSettings()
   const fileTreeClipboardMaxBytes = fileTreeClipboardMaxBytesFromMb(fileTreeClipboardMaxBytesMb)
   const view = useProjectFileTreeView(repoId, folderContext)
-  const branch = view.branch
   const worktreePath = view.worktreePath
   const activeWorktreeRef = useRef<string | null>(worktreePath)
   const directoriesRef = useRef<Record<string, DirectoryState>>({})
@@ -232,8 +216,6 @@ export function ProjectFileTree({
   const [createEntryName, setCreateEntryName] = useState('')
   const [createEntryPending, setCreateEntryPending] = useState(false)
   const [createEntryError, setCreateEntryError] = useState<string | null>(null)
-  const [bootstrapConfigStatus, setBootstrapConfigStatus] = useState<WorktreeBootstrapConfigStatus>('idle')
-  const [initializingBootstrapConfig, setInitializingBootstrapConfig] = useState(false)
   const protectedRootNames = useMemo(() => new Set(folderContext?.protectedRootNames ?? []), [folderContext])
   const isProtectedRoot = useCallback(
     (node: FileTreeNode) => !node.relativePath.includes('/') && protectedRootNames.has(node.name),
@@ -247,27 +229,6 @@ export function ProjectFileTree({
   useEffect(() => {
     directoriesRef.current = directories
   }, [directories])
-
-  useEffect(() => {
-    if (!view.exists || !view.isGitRepo || !worktreePath) {
-      setBootstrapConfigStatus('idle')
-      return
-    }
-
-    const controller = new AbortController()
-    setBootstrapConfigStatus('loading')
-    void getRepositoryWorktreeBootstrapPreview(repoId, worktreePath, controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return
-        setBootstrapConfigStatus(result.ok ? (result.preview.hasConfig ? 'present' : 'missing') : 'error')
-      })
-      .catch((err) => {
-        if (controller.signal.aborted) return
-        console.warn('[file-tree] worktree bootstrap config preview failed', err)
-        setBootstrapConfigStatus('error')
-      })
-    return () => controller.abort()
-  }, [repoId, view.exists, view.isGitRepo, worktreePath])
 
   const loadDirectory = useCallback(
     async (relativePath: string, absolutePath: string, signal?: AbortSignal): Promise<RepoFileTreeResult | null> => {
@@ -682,56 +643,6 @@ export function ProjectFileTree({
     },
     [loadDirectory],
   )
-
-  const initializeBootstrapConfig = useCallback(async () => {
-    if (!branch || !worktreePath || initializingBootstrapConfig || bootstrapConfigStatus !== 'missing') return
-    setInitializingBootstrapConfig(true)
-    try {
-      const result = await initializeRepositoryWorktreeBootstrapConfig(repoId, worktreePath)
-      if (result.ok) {
-        setBootstrapConfigStatus('present')
-        toast.success(t('file-tree.init-worktree-bootstrap-config-created'))
-        refreshTreeDirectory(rootCreateEntryTarget())
-        try {
-          const availability = await getCommitMessageProviders().catch(() => ({ codex: false, claude: false }))
-          const provider = preferredAiHandoffProvider(availability)
-          const handedOff = await prefillAiTerminalCommand({
-            repoId,
-            branch,
-            worktreePath,
-            command: buildAiHandoffCommand(provider, WORKTREE_DEPENDENCY_SYMLINK_PROMPT),
-            navigation,
-            setDetailCollapsed,
-          })
-          if (!handedOff) toast.error(t('file-tree.init-worktree-bootstrap-config-ai-command-failed'))
-        } catch (err) {
-          console.warn('[file-tree] worktree bootstrap AI command handoff failed', err)
-          toast.error(t('file-tree.init-worktree-bootstrap-config-ai-command-failed'))
-        }
-        return
-      }
-      if (result.message === 'error.file-exists') setBootstrapConfigStatus('present')
-      toast.error(t('file-tree.init-worktree-bootstrap-config-failed'), {
-        description: t(result.message),
-      })
-    } catch (err) {
-      console.warn('[file-tree] worktree bootstrap config initialization failed', err)
-      toast.error(t('file-tree.init-worktree-bootstrap-config-failed'))
-    } finally {
-      setInitializingBootstrapConfig(false)
-    }
-  }, [
-    bootstrapConfigStatus,
-    branch,
-    initializingBootstrapConfig,
-    navigation,
-    refreshTreeDirectory,
-    repoId,
-    rootCreateEntryTarget,
-    setDetailCollapsed,
-    t,
-    worktreePath,
-  ])
 
   const refreshDirectoryForContextNode = useCallback(
     (node: FileTreeNode | null) => {
@@ -1277,9 +1188,6 @@ export function ProjectFileTree({
             onRefresh={() => refreshTreeDirectory(rootCreateEntryTarget())}
             canOpenLocally={canOpenLocally}
             onOpenLocal={() => void openWorktreeLocally()}
-            showBootstrapConfigInit={bootstrapConfigStatus === 'missing'}
-            initializingBootstrapConfig={initializingBootstrapConfig}
-            onInitializeBootstrapConfig={() => void initializeBootstrapConfig()}
           />
           <div className="project-file-tree-scroll min-h-0 flex-1 overflow-auto py-1">
             {rootState?.loading && !rootState.entries ? (
@@ -1832,9 +1740,6 @@ function FileTreeToolbar({
   onRefresh,
   canOpenLocally,
   onOpenLocal,
-  showBootstrapConfigInit,
-  initializingBootstrapConfig,
-  onInitializeBootstrapConfig,
 }: {
   height: FileTreeToolbarHeight
   leading?: ReactNode
@@ -1844,9 +1749,6 @@ function FileTreeToolbar({
   onRefresh: () => void
   canOpenLocally: boolean
   onOpenLocal: () => void
-  showBootstrapConfigInit: boolean
-  initializingBootstrapConfig: boolean
-  onInitializeBootstrapConfig: () => void
 }) {
   const t = useT()
   const { toolbarHeightPx } = useRuntimeChromeSettings()
@@ -1907,19 +1809,6 @@ function FileTreeToolbar({
           onClick={onOpenLocal}
         >
           <HardDrive className="size-3.5" />
-        </Button>
-      ) : null}
-      {showBootstrapConfigInit ? (
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
-          aria-label={t('file-tree.init-worktree-bootstrap-config')}
-          title={t('file-tree.init-worktree-bootstrap-config')}
-          onClick={onInitializeBootstrapConfig}
-          disabled={initializingBootstrapConfig}
-        >
-          <FileCog className="size-3.5" />
         </Button>
       ) : null}
     </div>

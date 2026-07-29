@@ -35,11 +35,9 @@ import {
 import { isRemoteRepoId, parseRemoteRepoId, repoSessionEntryId, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 import {
   clearRepoSettingsEntryColorTheme,
-  isWorktreeBootstrapConfigHash,
   repoSettingsEntryHasPersistedFields,
   setRepoSettingsEntryColorTheme,
   type RepoSettingsEntry,
-  type WorktreeBootstrapTrust,
 } from '#/shared/repo-settings.ts'
 import { normalizeGlobalShortcut } from '#/shared/accelerator.ts'
 import { isColorTheme, normalizeColorTheme, type ColorTheme } from '#/shared/color-theme.ts'
@@ -650,19 +648,9 @@ function normalizeRepoSettings(value: unknown): RepoSettingsEntry[] {
     if (typeof raw.repoId !== 'string' || raw.repoId.length === 0) continue
     const next: RepoSettingsEntry = { repoId: raw.repoId }
     if (isColorTheme(raw.colorTheme)) next.colorTheme = raw.colorTheme
-    const trust = normalizeWorktreeBootstrapTrust(raw.worktreeBootstrapTrust)
-    if (trust) next.worktreeBootstrapTrust = trust
     if (repoSettingsEntryHasPersistedFields(next)) entries.set(next.repoId, next)
   }
   return Array.from(entries.values())
-}
-
-function normalizeWorktreeBootstrapTrust(value: unknown): WorktreeBootstrapTrust | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const raw = value as Partial<WorktreeBootstrapTrust>
-  if (!isWorktreeBootstrapConfigHash(raw.configHash)) return undefined
-  if (typeof raw.trustedAt !== 'string' || raw.trustedAt.length === 0) return undefined
-  return { configHash: raw.configHash, trustedAt: raw.trustedAt }
 }
 
 async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
@@ -1080,62 +1068,11 @@ export async function setServerRepoColorTheme(input: {
   return cloneRepoSettings(data.repoSettings)
 }
 
-export async function trustServerRepoWorktreeBootstrapConfig(input: {
-  repoId: string
-  configHash: string
-}): Promise<RepoSettingsEntry[]> {
-  const data = await loadServerSettings()
-  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return cloneRepoSettings(data.repoSettings)
-  const worktreeBootstrapTrust: WorktreeBootstrapTrust = {
-    configHash: input.configHash,
-    trustedAt: new Date().toISOString(),
-  }
-  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
-  data.repoSettings = upsertRepoSettingsEntry(data.repoSettings, {
-    repoId: input.repoId,
-    ...(existing?.colorTheme ? { colorTheme: existing.colorTheme } : {}),
-    worktreeBootstrapTrust,
-  })
-  await writeServerSettingsFile(data)
-  return cloneRepoSettings(data.repoSettings)
-}
-
-export async function untrustServerRepoWorktreeBootstrapConfig(input: {
-  repoId: string
-  configHash: string
-}): Promise<boolean> {
-  const data = await loadServerSettings()
-  if (!input.repoId || !isWorktreeBootstrapConfigHash(input.configHash)) return false
-  const existing = data.repoSettings.find((entry) => entry.repoId === input.repoId)
-  if (existing?.worktreeBootstrapTrust?.configHash !== input.configHash) return false
-  const next: RepoSettingsEntry = {
-    repoId: input.repoId,
-    ...(existing.colorTheme ? { colorTheme: existing.colorTheme } : {}),
-  }
-  data.repoSettings = repoSettingsEntryHasPersistedFields(next)
-    ? [next, ...data.repoSettings.filter((entry) => entry.repoId !== input.repoId)]
-    : data.repoSettings.filter((entry) => entry.repoId !== input.repoId)
-  await writeServerSettingsFile(data)
-  return true
-}
-
 function cloneRepoSettings(repoSettings: readonly RepoSettingsEntry[]): RepoSettingsEntry[] {
   return repoSettings.map((entry) => ({
     repoId: entry.repoId,
     ...(entry.colorTheme ? { colorTheme: entry.colorTheme } : {}),
-    ...(entry.worktreeBootstrapTrust
-      ? {
-          worktreeBootstrapTrust: {
-            configHash: entry.worktreeBootstrapTrust.configHash,
-            trustedAt: entry.worktreeBootstrapTrust.trustedAt,
-          },
-        }
-      : {}),
   }))
-}
-
-function upsertRepoSettingsEntry(entries: readonly RepoSettingsEntry[], next: RepoSettingsEntry): RepoSettingsEntry[] {
-  return [next, ...entries.filter((entry) => entry.repoId !== next.repoId)]
 }
 
 export async function addServerRecentRepo(repo: RepoSessionEntry): Promise<RepoSessionEntry[]> {

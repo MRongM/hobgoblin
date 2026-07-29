@@ -16,10 +16,7 @@ import {
   workspaceRepositoryPath,
   workspaceRootId,
 } from '#/server/modules/workspace-paths.ts'
-import {
-  getRepositorySnapshot,
-  getRepositoryWorktreeBootstrapPreflight,
-} from '#/server/modules/repo-read-paths.ts'
+import { getRepositorySnapshot, getRepositoryWorktreeBootstrapPreflight } from '#/server/modules/repo-read-paths.ts'
 import {
   normalizeBranchWorkspacePlanRequest,
   type BranchWorkspaceApproval,
@@ -270,8 +267,7 @@ async function buildReducePlan(
       return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
     }
   } else if (
-    manifest.repositories.some((member) => member.progress !== 'complete') ||
-    manifest.auxiliaryEntries.some((entry) => entry.progress !== 'complete')
+    manifest.repositories.some((member) => member.progress !== 'complete')
   ) {
     return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
   }
@@ -285,19 +281,6 @@ async function buildReducePlan(
     return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
   }
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
-  for (const entry of manifest.auxiliaryEntries) {
-    signal?.throwIfAborted()
-    const target = await inspect(manifest.rootId, entry.targetPath, signal).catch(() => null)
-    const ready =
-      !!target?.exists &&
-      (entry.mode === 'copy'
-        ? target.kind !== 'symlink'
-        : target.kind === 'symlink' &&
-          !!target.linkTarget &&
-          sameHostPath(manifest.rootId, target.linkTarget, entry.sourcePath))
-    if (!ready) return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
-  }
-
   const selectedMembers = configuredRepositories.flatMap((repositoryName) => {
     const member = memberByName.get(repositoryName)
     return member && requestedNames.has(repositoryName) ? [member] : []
@@ -706,8 +689,7 @@ async function planRemoveRepository(
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
 ): Promise<
-  | { ok: true; repository: BranchWorkspaceRepositoryPlan; unmanagedEntry?: string }
-  | { ok: false; message: string }
+  { ok: true; repository: BranchWorkspaceRepositoryPlan; unmanagedEntry?: string } | { ok: false; message: string }
 > {
   const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
@@ -1045,41 +1027,13 @@ async function planRepository(
     sourceWorktreePath,
   )
   if (!bootstrap.ok) return bootstrap
-  if (bootstrap.preflight.kind === 'candidates') {
-    const decision = requestedBootstrap ?? { kind: 'skip' }
-    if (decision.kind === 'run') return { ok: false, message: 'error.invalid-arguments' }
-    if (decision.kind === 'materialize') {
-      const candidates = new Set(bootstrap.preflight.candidates.map((candidate) => candidate.path))
-      if (decision.selections.some((selection) => !candidates.has(selection.path))) {
-        return { ok: false, message: 'error.worktree-bootstrap-selection-stale' }
-      }
-    }
-    return {
-      ok: true,
-      repository: {
-        repositoryName,
-        repoId,
-        targetBranch,
-        baseBranch,
-        branchOrigin: target ? 'pre-existing' : 'created',
-        worktreePath,
-        mode,
-        worktreeBootstrap:
-          decision.kind === 'materialize'
-            ? {
-                kind: 'materialize',
-                candidateScope: 'all-untracked',
-                selections: decision.selections.map((selection) => ({ ...selection })),
-                ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
-              }
-            : { kind: 'skip' },
-        confirmationRequired: false,
-        satisfied: false,
-      },
+  const decision = requestedBootstrap ?? { kind: 'skip' }
+  if (decision.kind === 'materialize') {
+    const candidates = new Set(bootstrap.preflight.candidates.map((candidate) => candidate.path))
+    if (decision.selections.some((selection) => !candidates.has(selection.path))) {
+      return { ok: false, message: 'error.worktree-bootstrap-selection-stale' }
     }
   }
-  const preview = bootstrap.preflight.preview
-  const confirmationRequired = preview.hasOperations && !!preview.configHash
   return {
     ok: true,
     repository: {
@@ -1090,16 +1044,16 @@ async function planRepository(
       branchOrigin: target ? 'pre-existing' : 'created',
       worktreePath,
       mode,
-      worktreeBootstrap: confirmationRequired
-        ? {
-            kind: 'run',
-            configHash: preview.configHash!,
-            configTrusted: false,
-            ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
-          }
-        : { kind: 'skip' },
-      bootstrapPreview: preview,
-      confirmationRequired,
+      worktreeBootstrap:
+        decision.kind === 'materialize'
+          ? {
+              kind: 'materialize',
+              candidateScope: 'all-untracked',
+              selections: decision.selections.map((selection) => ({ ...selection })),
+              ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+            }
+          : { kind: 'skip' },
+      confirmationRequired: false,
       satisfied: false,
     },
   }

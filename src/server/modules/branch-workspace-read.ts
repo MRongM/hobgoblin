@@ -9,7 +9,6 @@ import { workspaceRepositoryId } from '#/server/modules/workspace-paths.ts'
 import { getRepositorySnapshot } from '#/server/modules/repo-read-paths.ts'
 import type {
   BranchWorkspaceActiveOperation,
-  BranchWorkspaceAuxiliarySnapshot,
   BranchWorkspaceIssue,
   BranchWorkspaceManifest,
   BranchWorkspaceReadResult,
@@ -136,12 +135,9 @@ async function projectBranchWorkspace(
         ),
     ),
   )
-  const retainedAuxiliaryEntries = manifest.auxiliaryEntries.filter((entry) => entry.progress !== 'complete')
-  const auxiliaryEntries = await Promise.all(
-    retainedAuxiliaryEntries.map(
-      async (entry) => await reconcileAuxiliaryEntry(manifest, entry, inspect, signal, issues),
-    ),
-  )
+  const auxiliaryEntries = manifest.auxiliaryEntries
+    .filter((entry) => entry.progress !== 'complete')
+    .map((entry) => ({ ...entry, ready: false }))
   const activeOperation = dependencies.readActiveOperation
     ? await dependencies.readActiveOperation(manifest.rootId, manifest.id)
     : null
@@ -210,57 +206,6 @@ async function reconcileRepositoryMember(
   return { ...member, ready: true }
 }
 
-async function reconcileAuxiliaryEntry(
-  manifest: BranchWorkspaceManifest,
-  entry: BranchWorkspaceManifest['auxiliaryEntries'][number],
-  inspect: typeof inspectBranchWorkspacePath,
-  signal: AbortSignal | undefined,
-  issues: BranchWorkspaceIssue[],
-): Promise<BranchWorkspaceAuxiliarySnapshot> {
-  if (entry.progress === 'removed' && manifest.operation?.kind === 'remove') {
-    return { ...entry, ready: false }
-  }
-  if (entry.progress === 'pending') {
-    issues.push({ kind: 'auxiliary-pending', entryName: entry.name })
-    return { ...entry, ready: false }
-  }
-  if (entry.progress === 'failed') {
-    issues.push({
-      kind: 'auxiliary-failed',
-      entryName: entry.name,
-      ...(entry.lastError ? { message: entry.lastError } : {}),
-    })
-    return { ...entry, ready: false }
-  }
-
-  const observed = await inspect(manifest.rootId, entry.targetPath, signal).catch(() => null)
-  if (!observed || !observed.exists || observed.kind === 'missing') {
-    issues.push({ kind: 'auxiliary-missing', entryName: entry.name })
-    return { ...entry, ready: false }
-  }
-  if (entry.mode === 'symlink') {
-    if (
-      observed.kind !== 'symlink' ||
-      !observed.resolvedPath ||
-      !observed.linkTarget ||
-      !sameHostPath(manifest.rootId, observed.linkTarget, entry.sourcePath)
-    ) {
-      issues.push({ kind: 'auxiliary-path-mismatch', entryName: entry.name })
-      return {
-        ...entry,
-        ready: false,
-        ...(observed.resolvedPath ? { resolvedSourcePath: observed.resolvedPath } : {}),
-      }
-    }
-    return { ...entry, ready: true, resolvedSourcePath: observed.resolvedPath }
-  }
-  if (observed.kind === 'symlink') {
-    issues.push({ kind: 'auxiliary-path-mismatch', entryName: entry.name })
-    return { ...entry, ready: false }
-  }
-  return { ...entry, ready: true }
-}
-
 function projectState(
   manifest: BranchWorkspaceManifest,
   issues: BranchWorkspaceIssue[],
@@ -273,11 +218,9 @@ function projectState(
   const hasCreateProgress = issues.some(
     (issue) =>
       issue.kind === 'repository-pending' ||
-      issue.kind === 'repository-failed' ||
-      issue.kind === 'auxiliary-pending' ||
-      issue.kind === 'auxiliary-failed',
+      issue.kind === 'repository-failed',
   )
-  if (manifest.operation?.kind === 'create' || manifest.operation?.kind === 'extend' || hasCreateProgress) {
+  if (hasCreateProgress) {
     return { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
   }
   return issues.length > 0 ? { kind: 'needs-action', action: 'repair', reason: 'drift' } : { kind: 'ready' }

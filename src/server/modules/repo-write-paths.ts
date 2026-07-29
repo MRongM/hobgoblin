@@ -1,5 +1,5 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
-import { publishRepoQueryInvalidation, publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
+import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
 import {
@@ -8,12 +8,7 @@ import {
   resolveRepoBackend,
   runWithRepoBackend,
 } from '#/server/modules/repo-backend.ts'
-import {
-  getServerRepoSettings,
-  getServerSettingsPrefs,
-  trustServerRepoWorktreeBootstrapConfig,
-  untrustServerRepoWorktreeBootstrapConfig,
-} from '#/server/modules/settings-source.ts'
+import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { initRepository as gitInit } from '#/system/git/init.ts'
 import { createLocalTag as createLocalGitTag, deleteLocalTag as deleteLocalGitTag } from '#/system/git/tags.ts'
@@ -29,9 +24,7 @@ import {
 import {
   createRemoteFileTreeDirectory,
   createRemoteFileTreeFile,
-  createRemoteFileTreeTextFile,
   deleteRemoteFileTreeEntries,
-  getRemoteWorktreeBootstrapPreview,
   moveRemoteFileTreeEntries,
   replaceRemoteFileTreeBinaryFile,
   renameRemoteFileTreeEntry,
@@ -56,16 +49,7 @@ import {
   normalizeCreateWorktreeInput,
   type CreateWorktreeInput,
 } from '#/shared/worktree-create.ts'
-import { isRepoWorktreeBootstrapConfigTrusted } from '#/shared/repo-settings.ts'
-import type {
-  WorktreeBootstrapDecision,
-  WorktreeBootstrapPreviewResult,
-} from '#/shared/worktree-bootstrap-summary.ts'
-import {
-  DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
-  getWorktreeBootstrapPreview as getLocalWorktreeBootstrapPreview,
-  initializeWorktreeBootstrapConfig,
-} from '#/system/git/worktree-bootstrap.ts'
+import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
@@ -340,66 +324,12 @@ export async function createRepositoryWorktree(
   if (!normalized) return { ok: false, message: 'error.invalid-arguments' }
   return await runCreateWorktreeServiceOperation(cwd, async () => {
     const result = await runWithRepoBackend(cwd, async (backend) => {
-      const createResult = await backend.createWorktree(normalized, signal, { worktreeBootstrap })
-      return await syncWorktreeBootstrapTrustAfterSuccessfulRun(cwd, worktreeBootstrap, createResult)
+      return await backend.createWorktree(normalized, signal, { worktreeBootstrap })
     })
     return result.ok || result.repoChanged
       ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken)
       : result
   })
-}
-
-export async function getRepositoryWorktreeBootstrapPreview(
-  cwd: string,
-  signal?: AbortSignal,
-  worktreePath?: string,
-): Promise<WorktreeBootstrapPreviewResult> {
-  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
-  if (worktreePath !== undefined) {
-    if (!isValidRepositoryWorktreePath(cwd, worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-    if (isRemoteRepoId(cwd)) {
-      const target = await resolveRemoteRepoTarget(cwd)
-      return await getRemoteWorktreeBootstrapPreview(
-        { ...target, remotePath: path.posix.normalize(worktreePath) },
-        { signal },
-      )
-    }
-    return await getLocalWorktreeBootstrapPreview(worktreePath, { signal })
-  }
-  return await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeBootstrapPreview(signal))
-}
-
-export async function initializeRepositoryWorktreeBootstrapConfig(
-  repoId: string,
-  worktreePath: string,
-  signal?: AbortSignal,
-  sourceToken?: string,
-): Promise<ExecResult> {
-  if (!isValidRepoLocator(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-  if (!isValidRepositoryWorktreePath(repoId, worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
-  const result = isRemoteRepoId(repoId)
-    ? await initializeRemoteWorktreeBootstrapConfig(repoId, worktreePath, signal)
-    : await initializeWorktreeBootstrapConfig(worktreePath, { signal })
-  if (result.ok) publishRepoSnapshotInvalidation(repoId, sourceToken)
-  return result
-}
-
-async function initializeRemoteWorktreeBootstrapConfig(
-  repoId: string,
-  worktreePath: string,
-  signal?: AbortSignal,
-): Promise<ExecResult> {
-  const target = await resolveRemoteRepoTarget(repoId)
-  const sourceRoot = path.posix.normalize(worktreePath)
-  const result = await createRemoteFileTreeTextFile(
-    target,
-    sourceRoot,
-    sourceRoot,
-    'goblin.toml',
-    DEFAULT_WORKTREE_BOOTSTRAP_CONFIG,
-    { signal },
-  )
-  return result.ok ? { ok: true, message: 'goblin.toml created' } : result
 }
 
 async function runCreateWorktreeServiceOperation<T>(repoId: string, task: () => Promise<T>): Promise<T> {
@@ -425,31 +355,6 @@ function scheduleCreateWorktreeOperationQueueCleanup(repoId: string, queue: PQue
     if (createWorktreeOperationQueuesByRepo.get(repoId) !== queue) return
     if (queue.size === 0 && queue.pending === 0) createWorktreeOperationQueuesByRepo.delete(repoId)
   })
-}
-
-async function syncWorktreeBootstrapTrustAfterSuccessfulRun(
-  repoId: string,
-  decision: WorktreeBootstrapDecision,
-  result: ExecResult,
-): Promise<ExecResult> {
-  if (!result.ok || decision.kind !== 'run') return result
-  try {
-    const repoSettings = await getServerRepoSettings()
-    const currentlyTrusted = isRepoWorktreeBootstrapConfigTrusted(repoSettings, repoId, decision.configHash)
-    if (decision.configTrusted) {
-      if (currentlyTrusted) return result
-      await trustServerRepoWorktreeBootstrapConfig({ repoId, configHash: decision.configHash })
-      publishSettingsInvalidation(['settings-snapshot'])
-      return result
-    }
-    if (!currentlyTrusted) return result
-    if (await untrustServerRepoWorktreeBootstrapConfig({ repoId, configHash: decision.configHash })) {
-      publishSettingsInvalidation(['settings-snapshot'])
-    }
-    return result
-  } catch {
-    return { ...result, ok: false, message: 'error.settings-write-title', repoChanged: true }
-  }
 }
 
 export async function createRepositoryBranch(

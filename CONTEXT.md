@@ -181,11 +181,11 @@ A provider-specific CLI command placed into an internal terminal for review, wit
 _Avoid_: AI command, automatic AI action
 
 **Worktree bootstrap**:
-A repository-configured process that prepares a newly created worktree from its source worktree before normal development begins.
+A user-selected process that copies or symlinks immediate untracked entries from a source worktree into a newly created worktree before normal development begins.
 _Avoid_: Worktree setup script, post-create hook
 
 **Worktree bootstrap source**:
-The existing repository worktree whose current files and repository-owned `goblin.toml` define one worktree bootstrap decision. It is the worktree attached to the selected branch context or base branch when available, with the repository primary worktree as the fallback when that branch has no worktree, and remains fixed from preview through the corresponding create execution.
+The existing repository worktree whose current untracked entries supply one worktree bootstrap decision. It is the worktree attached to the selected branch context or base branch when available, with the repository primary worktree as the fallback when that branch has no worktree, and remains fixed from candidate discovery through the corresponding create execution.
 _Avoid_: Source branch, repository root, bootstrap template
 
 **Worktree bootstrap candidate**:
@@ -193,7 +193,7 @@ An immediate child file or directory of a worktree bootstrap source that Git doe
 _Avoid_: Bootstrap file, untracked path
 
 **Repository dependency candidate**:
-An existing worktree bootstrap candidate that may be selected for one newly materialized branch-workspace repository member. A `goblin.toml` in the same worktree bootstrap source takes precedence over manual dependency selection.
+An existing worktree bootstrap candidate that may be selected for one newly materialized branch-workspace repository member.
 _Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
 
 **Selected branch context**:
@@ -257,7 +257,7 @@ A project rooted at a readable non-Git directory, either local or reached throug
 _Avoid_: Monorepo, repository group, nested repository
 
 **Configured workspace**:
-A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Membership is stored in Hobgoblin application data; `goblin.toml` remains repository-owned worktree bootstrap configuration. Filesystem discovery supplies candidates but does not silently change a configured workspace, and a repository referenced by any branch workspace cannot be removed from configuration until those references are removed. Repository order controls workspace navigation order and sequential branch workspace member-operation order.
+A multi-repository workspace whose durable, ordered repository membership has been explicitly selected. Membership is stored in Hobgoblin application data. Filesystem discovery supplies candidates but does not silently change a configured workspace, and a repository referenced by any branch workspace cannot be removed from configuration until those references are removed. Repository order controls workspace navigation order and sequential branch workspace member-operation order.
 _Avoid_: Saved scan, repository registry, primary repository
 
 **Branch workspace**:
@@ -305,7 +305,7 @@ _Avoid_: Orphan worktree, detached worktree
 A server-coordinated creation, extension, reduction, repair, or removal of one branch workspace. Member work is applied sequentially with per-member results and no automatic rollback, but this cross-repository orchestration is not exposed as a separate batch concept.
 Creation succeeds only after final reconciliation observes the resulting branch workspace as ready; the successful result carries that observed state, while later reads continue to detect external drift. Whole-branch-workspace removal remains available from ready, incomplete, and drifted lifecycles, derives its managed scope from the durable manifest, and retains all destructive approvals and non-bypassable worktree safety boundaries.
 Once a confirmed whole-branch-workspace removal starts, its progress remains in the foreground modal until execution settles. Successful removal closes the modal only after the workspace has been fully removed; failed removal remains visible with its completed and remaining work instead of becoming a background operation.
-During reduction, selected dirty member worktrees require explicit approval before force removal, and internal terminals scoped below those member paths require separate close approval. Unselected member worktrees and auxiliary contents are verified but never modified.
+During reduction, selected dirty member worktrees require explicit approval before force removal, and internal terminals scoped below those member paths require separate close approval. Unselected member worktrees are verified but never modified; one-time dependency content is not inspected.
 When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Removing a branch workspace always force-removes its managed worktrees and may discard their uncommitted changes without a separate dirty-worktree preflight, while locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
 _Avoid_: Workspace batch operation, workspace transaction, multi-repository Git command
 

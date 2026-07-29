@@ -494,8 +494,8 @@ describe('branch workspace write service', () => {
     expect(source.manifests[0]?.auxiliaryEntries).toEqual([])
   })
 
-  test('releases each auxiliary entry as soon as its materialization succeeds', async () => {
-    const plan = repairPlanned()
+  test('continues with a warning and releases auxiliary intent when one-time materialization fails', async () => {
+    const plan = planned()
     const readmeTargetPath = `${plan.path}/README.md`
     plan.manifest.auxiliaryEntries.push({
       name: 'README.md',
@@ -513,7 +513,8 @@ describe('branch workspace write service', () => {
       satisfied: false,
       action: 'materialize',
     })
-    const source = inMemorySource([plan.manifest])
+    const source = inMemorySource()
+    const snapshot = readySnapshot(plan)
     const service = createBranchWorkspaceWriteService({
       buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
       readManifests: source.readManifests,
@@ -525,16 +526,37 @@ describe('branch workspace write service', () => {
       copyEntry: vi.fn(async () => {
         throw new Error('copy failed')
       }),
+      readSnapshot: vi.fn(async () => ({
+        ok: true as const,
+        rootId: ROOT,
+        items: [snapshot],
+        auxiliaryCandidates: [],
+      })),
     })
-    await service.plan(ROOT, { operation: 'repair', branchWorkspaceId: plan.branchWorkspaceId })
+    await service.plan(ROOT, {
+      operation: 'create',
+      branch: plan.branch,
+      repositories: [
+        { repositoryName: 'api', baseBranch: 'main' },
+        { repositoryName: 'web', baseBranch: 'develop' },
+      ],
+      auxiliaryEntries: [{ name: 'README.md', mode: 'copy' }],
+    })
 
-    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
-      ok: false,
-      message: 'copy failed',
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
+      ok: true,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      snapshot,
+      warnings: [
+        {
+          kind: 'workspace-dependency-failed',
+          entryName: 'README.md',
+          message: 'copy failed',
+        },
+      ],
     })
-    expect(source.manifests[0]?.auxiliaryEntries).toEqual([
-      expect.objectContaining({ name: 'README.md', progress: 'failed' }),
-    ])
+    expect(source.manifests[0]?.operation).toBeUndefined()
+    expect(source.manifests[0]?.auxiliaryEntries).toEqual([])
   })
 
   test('aborts remove before manifest and filesystem mutation when an approved terminal cannot close', async () => {

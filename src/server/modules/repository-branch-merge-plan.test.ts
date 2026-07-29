@@ -56,6 +56,20 @@ function dependencies(options: {
 }
 
 describe('repository branch merge-out plan', () => {
+  test('uses a lightweight repository snapshot because statuses are fetched independently', async () => {
+    const deps = dependencies()
+
+    await buildRepositoryBranchMergeOutPlan(
+      { repoId: REPO_ID, sourceBranch: 'feature/source', sourceWorktreePath: SOURCE_PATH },
+      deps,
+    )
+
+    expect(deps.getSnapshot).toHaveBeenCalledWith(REPO_ID, undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+  })
+
   test.each([
     [
       [branch('main')],
