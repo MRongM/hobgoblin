@@ -12,10 +12,13 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useShellOverlayActions } from '#/web/shell-overlay-actions.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ProjectThemeMenuConnected } from '#/web/components/repo-toolbar/ProjectThemeMenu.tsx'
 import { RepoActivityControl } from '#/web/components/repo-activity/RepoActivityControl.tsx'
 import { TerminalStatusActions } from '#/web/components/terminal/TerminalStatusActions.tsx'
+import { refreshBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { cn } from '#/web/lib/cn.ts'
 
 interface Props {
@@ -45,6 +48,18 @@ export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea, workspa
     },
     (a, b) => a === b || (!!a && !!b && a.branch === b.branch && a.isGitRepo === b.isGitRepo),
   )
+
+  async function refreshRepositoryState() {
+    if (!repoId) return
+    const state = useReposStore.getState()
+    const repo = state.repos[repoId]
+    if (!repo || repo.isGitRepo === false) return
+    const refreshes: Promise<unknown>[] = [state.refreshCoreData(repo.id, { token: repo.instanceToken })]
+    if (repo.workspaceRootId) {
+      refreshes.push(refreshBranchWorkspaceQuery(mainWindowQueryClient, repo.workspaceRootId))
+    }
+    await Promise.allSettled(refreshes)
+  }
 
   return (
     <footer
@@ -96,10 +111,23 @@ export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea, workspa
             <RepoActivityControl repoId={repoId} compact mutedForegroundClassName="text-topbar-muted-foreground" />
           )}
           {summary.branch && (
-            <>
-              <GitBranch className="size-3 shrink-0" aria-hidden="true" />
-              <span className="min-w-0 truncate text-topbar-foreground">{summary.branch}</span>
-            </>
+            <Tip label={t('action.fetch-local-title')}>
+              <AsyncButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-w-0 max-w-full shrink gap-1.5 px-1 font-normal text-topbar-foreground"
+                aria-label={t('action.fetch-local-title')}
+                onClick={refreshRepositoryState}
+              >
+                {({ busy }) => (
+                  <>
+                    <GitBranch className={cn('size-3 shrink-0', busy && 'animate-pulse')} aria-hidden="true" />
+                    <span className="min-w-0 truncate">{summary.branch}</span>
+                  </>
+                )}
+              </AsyncButton>
+            </Tip>
           )}
         </div>
       )}
