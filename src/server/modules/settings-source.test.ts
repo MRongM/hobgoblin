@@ -60,6 +60,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     theme: 'auto',
     colorTheme: 'macos',
     fontFamily: 'mono',
+    statusRefreshIntervalSec: 120,
     gitNetworkProxyEnabled: false,
     gitNetworkProxyUrl: '',
     gitNetworkTimeoutSec: 120,
@@ -90,6 +91,22 @@ test('initializes server-settings.json with defaults when no persisted settings 
   vi.resetModules()
   const reloaded = await import('#/server/modules/settings-source.ts')
   expect(await reloaded.getServerFetchIntervalSec()).toBe(120)
+})
+
+test('normalizes and persists the scheduled status refresh interval', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ statusRefreshIntervalSec: 'invalid' })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ statusRefreshIntervalSec: 120 })
+  await expect(mod.updateServerSettingsPrefs({ statusRefreshIntervalSec: 300 })).resolves.toMatchObject({
+    statusRefreshIntervalSec: 300,
+  })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ statusRefreshIntervalSec: 300 })
 })
 
 test('retains the 30 most recently opened repositories', async () => {

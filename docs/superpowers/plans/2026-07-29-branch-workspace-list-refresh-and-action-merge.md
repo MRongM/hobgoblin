@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add one always-available branch-workspace refresh that reloads the latest list and member change counts, remove the redundant item-level change refresh, and merge branch-workspace actions into the status bar when the workspace repository list is hidden.
+**Goal:** Add an always-available manual branch-workspace list refresh and merge branch-workspace actions into the status bar when the workspace repository list is hidden.
 
 **Architecture:** `WorkspaceRepositoryRail` remains the owner of branch-workspace queries, action state, and dialogs. `StatusBar` exposes a presentation-only portal host, and `BranchWorkspacePane` wires that host to the Rail so hidden-list actions move without lifting business orchestration.
 
@@ -14,8 +14,6 @@
 - Do not add packages, persistence fields, server APIs, polling, realtime events, or Git writes.
 - Keep “配置工作区” and “重新扫描仓库” exclusive to the visible workspace repository header.
 - Reuse `workspace.branch-workspace.reload` and the existing `branchQuery.refresh()` flow.
-- After a successful list read, refresh Git status only for distinct, available repositories referenced by the returned latest snapshot.
-- Remove `workspace.branch-workspace.refresh-changes` from each branch-workspace More menu and delete its Rail/List callback state.
 - Use Chinese “子工作区” and “成员工作树”; do not introduce “子仓库”.
 - Do not commit: repository instructions prohibit Git writes unless explicitly requested.
 
@@ -290,73 +288,3 @@ git diff -- src/web/components/StatusBar.tsx src/web/components/StatusBar.test.t
 Expected: no whitespace errors; the scoped hunks are limited to the documented UI, tests, design, and plan files.
 The worktree also contains pre-existing/concurrent repository-dependency changes, which are preserved and excluded
 from this task's review boundary.
-
----
-
-### Task 4: Consolidate list and change-count refresh
-
-**Files:**
-- Modify: `src/web/components/repo-workspace/WorkspaceRepositoryRail.tsx`
-- Modify: `src/web/components/repo-workspace/BranchWorkspaceList.tsx`
-- Test: `src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx`
-- Test: `src/web/components/repo-workspace/BranchWorkspaceList.test.tsx`
-
-**Interfaces:**
-- Consumes: `branchQuery.refresh(): Promise<BranchWorkspaceReadResult>`.
-- Consumes: `useReposStore.getState().refreshStatus(repositoryId, { token })`.
-- Removes: `BranchWorkspaceListProps.onRefreshChanges` and `refreshingChangeIds`.
-- Produces: one titlebar refresh transaction covering the latest list and its distinct available member repositories.
-
-- [x] **Step 1: Write failing consolidation tests**
-
-Update the Rail manual-refresh test so the query resolves with a fresh snapshot whose members differ from the stale
-rendered snapshot. Assert that only distinct, non-removed, available repositories from the returned snapshot receive
-`refreshStatus`, the button remains disabled until every status request settles, and a second click does not start a
-new list read. Assert that the mocked `BranchWorkspaceList` receives neither `onRefreshChanges` nor
-`refreshingChangeIds`.
-
-Update the real `BranchWorkspaceList` menu expectations to omit `workspace.branch-workspace.refresh-changes` in ready
-and drifted states. Delete the obsolete busy-menu test and callback assertions.
-
-- [x] **Step 2: Run RED**
-
-Run:
-
-```bash
-bun run test src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx src/web/components/repo-workspace/BranchWorkspaceList.test.tsx
-```
-
-Expected: Rail does not call `refreshStatus`, still passes item-level refresh props, and the real list still exposes the
-menu action.
-
-- [x] **Step 3: Implement the minimal combined refresh**
-
-Make `reloadBranchWorkspaces()` await the successful read result, derive unique configured repository IDs from
-`result.items`, skip removed and unavailable members, and await `Promise.allSettled` around `refreshStatus`. Keep the
-existing synchronous duplicate guard around the whole sequence.
-
-Delete `refreshingBranchChangesRef`, `refreshingBranchChanges`, `refreshBranchWorkspaceChanges`, the two props passed
-from Rail, and the matching `BranchWorkspaceList` props, icon, action construction, and menu projection.
-
-- [ ] **Step 4: Run GREEN and full verification**
-
-Run:
-
-```bash
-bun run test src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx src/web/components/repo-workspace/BranchWorkspaceList.test.tsx
-bun run typecheck
-bun run check:architecture
-bun run test
-git diff --check
-```
-
-Expected: every command exits `0`, with no failed tests or architecture violations.
-
-Current evidence: the scoped suite passes `80/80`, architecture and `git diff --check` pass, and typecheck passed after
-the implementation fix. A later full-suite rerun is temporarily blocked by concurrent, out-of-scope
-`WorktreeBootstrapSourcePicker` / `CreateWorktreeDialog` RED tests in the shared worktree; do not alter those files here.
-
-- [x] **Step 5: Review the scoped diff**
-
-Confirm the only behavioral expansion is Git status refresh after a successful latest-list read, and the only removed
-capability is the duplicate item-level menu entry. Preserve all unrelated concurrent worktree changes.

@@ -57,6 +57,7 @@ import { useRepoDrop } from '#/web/hooks/useRepoDrop.ts'
 import { useAppBootstrap } from '#/web/hooks/useAppBootstrap.ts'
 import { useBackgroundFetch } from '#/web/hooks/useBackgroundFetch.ts'
 import { useHeuristicRepoStatusRefresh } from '#/web/hooks/useHeuristicRepoStatusRefresh.ts'
+import { useScheduledRepoStatusRefresh } from '#/web/hooks/useScheduledRepoStatusRefresh.ts'
 import { useRendererEffectIntentRouter } from '#/web/hooks/useRendererEffectIntentRouter.ts'
 import { useSessionPersistence } from '#/web/hooks/useSessionPersistence.ts'
 import { useSettingsWriteErrorToast } from '#/web/hooks/useSettingsWriteErrorToast.ts'
@@ -101,6 +102,7 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
   useSettingsWriteErrorToast()
   useBackgroundFetch()
   useHeuristicRepoStatusRefresh()
+  useScheduledRepoStatusRefresh()
   useRepoStoreInvalidationRefresh()
   useSettingsQueryInvalidationSync()
   useBranchWorkspaceInvalidationSync()

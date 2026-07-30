@@ -5,6 +5,7 @@ import {
   DEFAULT_GIT_NETWORK_PROXY_ENABLED,
   DEFAULT_GIT_NETWORK_PROXY_URL,
   DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
+  DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
   DEFAULT_TOPBAR_HEIGHT_PX,
   DEFAULT_TOOLBAR_HEIGHT_PX,
   DEFAULT_FILE_TREE_FONT_SIZE,
@@ -95,5 +96,12 @@ describe('settings defaults', () => {
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
     })
+  })
+
+  test('defaults scheduled status refresh to 120 seconds without overriding explicit values', () => {
+    expect(DEFAULT_STATUS_REFRESH_INTERVAL_SEC).toBe(120)
+    expect(defaultSettingsPrefs().statusRefreshIntervalSec).toBe(120)
+    expect(defaultInitialSettingsSnapshot().statusRefreshIntervalSec).toBe(120)
+    expect(defaultSettingsPrefs({ statusRefreshIntervalSec: 300 }).statusRefreshIntervalSec).toBe(300)
   })
 })

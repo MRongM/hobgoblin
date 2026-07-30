@@ -33,6 +33,7 @@ import {
   setPreferredTerminalApp,
   setProjectColorTheme,
   setSettingsFetchInterval,
+  setStatusRefreshInterval,
   setShortcutsDisabled,
   setSwapCloseShortcuts,
   setTemporaryFilesDirectory,
@@ -77,6 +78,12 @@ export async function setFetchIntervalPreference(sec: number): Promise<number> {
   const fetchIntervalSec = await setSettingsFetchInterval(sec)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, fetchIntervalSec }))
   return fetchIntervalSec
+}
+
+export async function setStatusRefreshIntervalPreference(sec: number): Promise<number> {
+  const statusRefreshIntervalSec = await setStatusRefreshInterval(sec)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, statusRefreshIntervalSec }))
+  return statusRefreshIntervalSec
 }
 
 export async function setWebAccessSettingsPreference(

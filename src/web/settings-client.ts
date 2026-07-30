@@ -219,6 +219,11 @@ export async function setSettingsFetchInterval(sec: number): Promise<number> {
   return result.fetchIntervalSec
 }
 
+export async function setStatusRefreshInterval(sec: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ statusRefreshIntervalSec: sec })
+  return result.settings.statusRefreshIntervalSec
+}
+
 export async function setTerminalNotificationsEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalNotificationsEnabled: enabled })
 }

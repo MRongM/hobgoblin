@@ -42,6 +42,7 @@ describe('renderer bootstrap', () => {
   test('reads bootstrap snapshots from the goblin bridge', async () => {
     const initialSettings: InitialSettingsSnapshot = {
       fetchIntervalSec: 120,
+      statusRefreshIntervalSec: 120,
       gitNetworkProxyEnabled: false,
       gitNetworkProxyUrl: '',
       gitNetworkTimeoutSec: 120,
