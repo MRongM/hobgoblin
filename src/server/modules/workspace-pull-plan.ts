@@ -17,7 +17,7 @@ import type {
 
 export interface WorkspacePullPlanDependencies {
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
-  getSnapshot?: (repoId: string, signal?: AbortSignal) => Promise<RepoSnapshot | null>
+  getSnapshot?: typeof getRepositorySnapshot
 }
 
 export async function buildWorkspacePullPlan(
@@ -47,7 +47,11 @@ export async function buildWorkspacePullPlan(
   for (const repoId of repositoryIds as string[]) {
     if (signal?.aborted) return { ok: false, message: 'cancelled' }
     const snapshot = await readResource(
-      () => (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal),
+      () =>
+        (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+          includeWorktreeStatus: false,
+          includeRemote: false,
+        }),
       'workspace.pull.repository-unavailable',
     )
     if (!snapshot.ok) return snapshot

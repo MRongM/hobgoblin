@@ -25,6 +25,13 @@ describe('workspace pull plan', () => {
     })
     if (!result.ok) return
     await expect(validateWorkspacePullRetryPlan(result.plan, new Set(), dependencies)).resolves.toEqual({ ok: true })
+    expect(dependencies.getSnapshot).toHaveBeenCalledTimes(4)
+    for (const [index, repoId] of [API, WEB, API, WEB].entries()) {
+      expect(dependencies.getSnapshot).toHaveBeenNthCalledWith(index + 1, repoId, undefined, {
+        includeWorktreeStatus: false,
+        includeRemote: false,
+      })
+    }
   })
 
   test('fails explicitly when a configured repository has no primary pull target', async () => {

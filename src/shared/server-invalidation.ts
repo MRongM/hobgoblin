@@ -1,4 +1,5 @@
 import { isRepoQueryInvalidationEvent, type RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
+import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 
 export const SETTINGS_INVALIDATION_SCOPES = ['settings-snapshot', 'external-apps', 'i18n', 'theme'] as const
 
@@ -15,7 +16,15 @@ export interface WorkspaceInvalidationEvent {
   sourceToken?: string
 }
 
+export interface BranchWorkspaceOperationUpdatedEvent {
+  type: 'branch-workspace-operation-updated'
+  rootId: string
+  branchWorkspaceId: string
+  operation: BranchWorkspaceActiveOperation | null
+}
+
 export type ServerInvalidationEvent =
+  | BranchWorkspaceOperationUpdatedEvent
   | RepoQueryInvalidationEvent
   | SettingsInvalidationEvent
   | WorkspaceInvalidationEvent
@@ -48,9 +57,25 @@ export function isWorkspaceInvalidationEvent(value: unknown): value is Workspace
   )
 }
 
+export function isBranchWorkspaceOperationUpdatedEvent(
+  value: unknown,
+): value is BranchWorkspaceOperationUpdatedEvent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const event = value as Partial<BranchWorkspaceOperationUpdatedEvent>
+  return (
+    event.type === 'branch-workspace-operation-updated' &&
+    isSafeEventText(event.rootId) &&
+    isSafeEventText(event.branchWorkspaceId) &&
+    (event.operation === null || isBranchWorkspaceActiveOperation(event.operation))
+  )
+}
+
 export function isServerInvalidationEvent(value: unknown): value is ServerInvalidationEvent {
   return (
-    isRepoQueryInvalidationEvent(value) || isSettingsInvalidationEvent(value) || isWorkspaceInvalidationEvent(value)
+    isBranchWorkspaceOperationUpdatedEvent(value) ||
+    isRepoQueryInvalidationEvent(value) ||
+    isSettingsInvalidationEvent(value) ||
+    isWorkspaceInvalidationEvent(value)
   )
 }
 
@@ -60,4 +85,54 @@ export function settingsInvalidationScopesForPrefsPatch(patch: Record<string, un
   if ('theme' in patch || 'colorTheme' in patch) scopes.add('theme')
   if ('terminalApp' in patch || 'editorApp' in patch) scopes.add('external-apps')
   return [...scopes]
+}
+
+function isBranchWorkspaceActiveOperation(value: unknown): value is BranchWorkspaceActiveOperation {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const operation = value as Partial<BranchWorkspaceActiveOperation>
+  return (
+    isBranchWorkspaceGitActionKind(operation.kind) &&
+    isProgressCount(operation.currentStep) &&
+    isProgressCount(operation.completedCount) &&
+    isProgressCount(operation.totalCount) &&
+    operation.currentStep <= operation.totalCount &&
+    operation.completedCount <= operation.totalCount &&
+    typeof operation.cancellable === 'boolean' &&
+    (operation.repositoryName === undefined || isSafeEventText(operation.repositoryName)) &&
+    (operation.step === undefined || isBranchWorkspaceGitActionStep(operation.step))
+  )
+}
+
+function isBranchWorkspaceGitActionKind(value: unknown): boolean {
+  return (
+    value === 'batch-commit' ||
+    value === 'batch-merge-in' ||
+    value === 'batch-merge-out' ||
+    value === 'pull' ||
+    value === 'push'
+  )
+}
+
+function isBranchWorkspaceGitActionStep(value: unknown): boolean {
+  return (
+    value === 'commit' ||
+    value === 'prepare' ||
+    value === 'pull' ||
+    value === 'merge' ||
+    value === 'push' ||
+    value === 'cleanup'
+  )
+}
+
+function isProgressCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function isSafeEventText(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.trim() === value &&
+    !/[\x00-\x1f\x7f]/.test(value)
+  )
 }
