@@ -43,6 +43,11 @@ const mergeAiMocks = vi.hoisted(() => ({
   input: null as unknown,
 }))
 
+const aiTerminalHandoffMocks = vi.hoisted(() => ({
+  buildMergeConflictAiCommand: vi.fn((provider: string) => `${provider} conflict command`),
+  prefillAiTerminalCommand: vi.fn(async () => true),
+}))
+
 vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
@@ -56,6 +61,8 @@ vi.mock('#/web/hooks/useMergeConflictAiActions.ts', () => ({
     return mergeAiMocks
   },
 }))
+
+vi.mock('#/web/ai-terminal-handoff.ts', () => aiTerminalHandoffMocks)
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -247,6 +254,38 @@ describe('MergeInDialog', () => {
     expect(document.body.textContent).toContain('CONFLICT (content)')
     expect(buttonByText('Codex')).not.toBeNull()
     expect(buttonByText('Claude')).not.toBeNull()
+  })
+
+  test('adapts a worktree conflict to the shared provider handoff callback', async () => {
+    render(
+      <MergeInDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo-feature"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onMerge={async () => ({ ok: false, message: 'CONFLICT (content)', reason: 'merge-conflict' })}
+      />,
+    )
+
+    selectFirstMergeCandidate()
+    clickButtonByText('action.merge-in-confirm')
+    await flush()
+
+    const input = mergeAiMocks.input as {
+      onHandoff: (provider: 'codex' | 'claude') => Promise<boolean>
+    }
+    await expect(input.onHandoff('codex')).resolves.toBe(true)
+    expect(aiTerminalHandoffMocks.buildMergeConflictAiCommand).toHaveBeenCalledWith('codex')
+    expect(aiTerminalHandoffMocks.prefillAiTerminalCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoId: '/repo',
+        branch: 'feature/current',
+        worktreePath: '/repo-feature',
+        command: 'codex conflict command',
+      }),
+    )
   })
 
   test('runs pull, merge and push from the pull-merge-push action', async () => {
@@ -519,7 +558,18 @@ describe('MergeOutDialog', () => {
     await flush()
 
     expect(buttonByText('Codex')).not.toBeNull()
-    expect(mergeAiMocks.input).toMatchObject({ repoId: '/repo', branch: 'main', worktreePath: '/repo-main' })
+    const input = mergeAiMocks.input as {
+      onHandoff: (provider: 'codex' | 'claude') => Promise<boolean>
+    }
+    await expect(input.onHandoff('claude')).resolves.toBe(true)
+    expect(aiTerminalHandoffMocks.prefillAiTerminalCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoId: '/repo',
+        branch: 'main',
+        worktreePath: '/repo-main',
+        command: 'claude conflict command',
+      }),
+    )
   })
 
   test('aborts plan loading when closed', async () => {
@@ -655,7 +705,9 @@ describe('PullRemoteBranchDialog', () => {
       'origin/release/searchable-branch',
     ])
 
-    render(<PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={vi.fn()} />)
+    render(
+      <PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={vi.fn()} />,
+    )
     await flush()
     await flush()
 
@@ -680,7 +732,9 @@ describe('PullRemoteBranchDialog', () => {
       'origin/feature/really-long-remote-branch-name-that-should-not-push-the-popover-sideways',
     ])
 
-    render(<PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={vi.fn()} />)
+    render(
+      <PullRemoteBranchDialog open repoId="/repo" allBranches={[]} busy={false} onClose={vi.fn()} onTrack={vi.fn()} />,
+    )
     await flush()
     await flush()
 

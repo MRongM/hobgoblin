@@ -185,8 +185,12 @@ The modal surface for changing application preferences while keeping the current
 _Avoid_: Settings screen, full-page settings
 
 **AI handoff command**:
-A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted worktree context. The handoff selects an existing open terminal for that worktree or creates one when no open terminal exists before filling the command text.
+A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted directory context. The handoff selects an existing open terminal for that directory or creates one when no open terminal exists before filling the command text.
 _Avoid_: AI command, automatic AI action
+
+**Branch workspace merge-conflict AI handoff**:
+An AI handoff offered only when a branch workspace batch merge leaves a retained conflict site. It opens the branch workspace root terminal and identifies the failed repository and exact conflict worktree; a conflict cleaned with an application temporary worktree is not eligible.
+_Avoid_: Batch error AI, automatic conflict resolution, member-terminal handoff
 
 **Worktree bootstrap**:
 A user-selected process that copies or symlinks immediate untracked entries from a source worktree into a newly created worktree before normal development begins.

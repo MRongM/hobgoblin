@@ -274,7 +274,16 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     ).resolves.toMatchObject({
       ok: false,
       members: [
-        { repositoryName: 'api', phase: 'failed', step: 'merge', reason: 'merge-conflict' },
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'merge',
+          reason: 'merge-conflict',
+          conflictWorktree: {
+            branch: 'feature/a',
+            path: '/workspace/goblin-feature-a/api',
+          },
+        },
         { repositoryName: 'web', phase: 'not-started' },
       ],
     })
@@ -663,6 +672,48 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     expect(push).not.toHaveBeenCalled()
   })
 
+  test('returns an existing merge-out destination worktree as the retained conflict site', async () => {
+    const plan = mergeOutPlan()
+    const createWorktree = vi.fn()
+    const removeWorktree = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      createWorktree,
+      removeWorktree,
+      merge: vi.fn(async () => ({
+        ok: false as const,
+        message: 'conflict',
+        reason: 'merge-conflict' as const,
+      })),
+      publishInvalidation: vi.fn(),
+    })
+    await service.plan(ROOT, { kind: 'batch-merge-out', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-merge-out',
+        planToken: plan.token,
+        mode: 'merge',
+        targets: [{ repositoryName: 'api', destinationBranch: 'main' }],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'merge',
+          reason: 'merge-conflict',
+          conflictWorktree: { branch: 'main', path: '/workspace/api' },
+        },
+        { repositoryName: 'web', phase: 'not-started' },
+      ],
+    })
+    expect(createWorktree).not.toHaveBeenCalled()
+    expect(removeWorktree).not.toHaveBeenCalled()
+  })
+
   test('creates and removes an application temporary worktree for an unchecked-out destination', async () => {
     const plan = mergeOutPlan()
     const createWorktree = vi.fn(
@@ -736,14 +787,16 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind: 'batch-merge-out', branchWorkspaceId: 'ws-1' })
 
-    await expect(
-      service.execute(ROOT, {
-        kind: 'batch-merge-out',
-        planToken: plan.token,
-        mode: 'merge',
-        targets: [{ repositoryName: 'api', destinationBranch: 'staging' }],
-      }),
-    ).resolves.toMatchObject({ ok: false })
+    const result = await service.execute(ROOT, {
+      kind: 'batch-merge-out',
+      planToken: plan.token,
+      mode: 'merge',
+      targets: [{ repositoryName: 'api', destinationBranch: 'staging' }],
+    })
+    expect(result).toMatchObject({ ok: false })
+    if ('members' in result) {
+      expect(result.members.find((member) => member.repositoryName === 'api')).not.toHaveProperty('conflictWorktree')
+    }
     expect(removeWorktree).toHaveBeenCalledTimes(1)
   })
 

@@ -12,8 +12,15 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
-import { BranchWorkspaceGitActionPanel } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
-import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import {
+  BranchWorkspaceGitActionPanel,
+  type BranchWorkspaceMergeConflictAiHandoffInput,
+} from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
+import {
+  BranchWorkspaceList,
+  branchWorkspaceFolderContext,
+} from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import { branchWorkspaceTerminalBase } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceMemberPresentation } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
@@ -45,6 +52,10 @@ import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-pr
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
+import {
+  buildBranchWorkspaceMergeConflictAiCommand,
+  prefillAiTerminalTargetCommand,
+} from '#/web/ai-terminal-handoff.ts'
 
 interface Props {
   workspaceRootId: string
@@ -335,6 +346,21 @@ export function WorkspaceRepositoryRail({
     activeContext.kind === 'branch-workspace' ? activeContext.memberRepositoryName : null
   const gitActionTarget = branchItems.find((item) => item.id === gitActionTargetId) ?? null
 
+  const handoffMergeConflictToBranchWorkspace = async (
+    input: BranchWorkspaceMergeConflictAiHandoffInput,
+  ): Promise<boolean> => {
+    if (!gitActionTarget) return false
+    const context = branchWorkspaceFolderContext(workspaceRootId, gitActionTarget)
+    return await prefillAiTerminalTargetCommand({
+      terminalBase: branchWorkspaceTerminalBase(context),
+      activate: () => {
+        activateBranchWorkspace(workspaceRootId, gitActionTarget.id)
+        onOpenDetailArea?.()
+      },
+      command: buildBranchWorkspaceMergeConflictAiCommand(input.provider, input.repositoryName, input.conflictWorktree),
+    })
+  }
+
   const openGitAction = (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => {
     branchGitActions.reset()
     setGitActionTargetId(item.id)
@@ -394,6 +420,7 @@ export function WorkspaceRepositoryRail({
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
               onCancel={branchGitActions.cancel}
+              onMergeConflictAiHandoff={handoffMergeConflictToBranchWorkspace}
             />
           ),
         }

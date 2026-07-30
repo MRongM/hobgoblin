@@ -31,7 +31,7 @@ import {
   type BranchWorkspaceMergeMode,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
-import type { ExecResult } from '#/shared/git-types.ts'
+import type { ExecResult, GitConflictWorktree } from '#/shared/git-types.ts'
 
 interface PendingAction {
   plan: BranchWorkspaceGitActionPlan
@@ -486,7 +486,16 @@ async function executeBatchMergeIn(
       updateActive(active.get(rootId), index + 1, state.completed.size, member.repositoryName, 'merge')
       publishInvalidation(rootId)
       const merged = await operations.merge(member.repoId, member.targetWorktreePath, member.source.branch, signal)
-      if (!merged.ok) return actionFailure(state.plan, state.completed, member.repositoryName, 'merge', merged)
+      if (!merged.ok) {
+        return actionFailure(
+          state.plan,
+          state.completed,
+          member.repositoryName,
+          'merge',
+          merged,
+          retainedConflictWorktree(merged, member.targetBranch, member.targetWorktreePath),
+        )
+      }
       progress = 'merged'
       state.mergeProgress.set(member.repositoryName, progress)
     }
@@ -731,8 +740,12 @@ async function batchMergeFailureAfterCleanup(
     publishInvalidation,
     active,
   )
+  const conflictWorktree =
+    step === 'merge' && !member.destination.requiresTemporaryWorktree
+      ? retainedConflictWorktree(result, member.destination.branch, member.destination.worktreePath)
+      : undefined
   return cleaned.ok
-    ? actionFailure(state.plan, state.completed, member.repositoryName, step, result)
+    ? actionFailure(state.plan, state.completed, member.repositoryName, step, result, conflictWorktree)
     : actionFailure(state.plan, state.completed, member.repositoryName, 'cleanup', cleaned)
 }
 
@@ -852,6 +865,7 @@ function actionFailure(
   failedRepositoryName: string,
   step: BranchWorkspaceGitActionMemberResult['step'],
   result: ExecResult,
+  conflictWorktree?: GitConflictWorktree,
 ): BranchWorkspaceGitActionResult {
   return {
     ...failureResult(plan, completed, result.message),
@@ -865,10 +879,23 @@ function actionFailure(
             ? 'satisfied'
             : 'not-started',
       ...(member.repositoryName === failedRepositoryName
-        ? { step, message: result.message, ...(result.reason ? { reason: result.reason } : {}) }
+        ? {
+            step,
+            message: result.message,
+            ...(result.reason ? { reason: result.reason } : {}),
+            ...(conflictWorktree ? { conflictWorktree } : {}),
+          }
         : {}),
     })),
   }
+}
+
+function retainedConflictWorktree(
+  result: ExecResult,
+  branch: string,
+  path: string | undefined,
+): GitConflictWorktree | undefined {
+  return result.reason === 'merge-conflict' && path ? { branch, path } : undefined
 }
 
 function failureResult(

@@ -11,6 +11,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
+import type { GitConflictWorktree } from '#/shared/git-types.ts'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
   BranchWorkspaceBatchMergeOutTargetInput,
@@ -24,6 +25,7 @@ import type {
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 import { Button } from '#/web/components/ui/button.tsx'
+import { MergeConflictAiActions } from '#/web/components/MergeConflictAiActions.tsx'
 import { Checkbox } from '#/web/components/ui/checkbox.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import {
@@ -63,6 +65,13 @@ interface BranchWorkspaceGitActionPanelProps {
   ) => Promise<BranchWorkspaceGitActionResult | null>
   onSync: (kind: 'pull' | 'push') => Promise<BranchWorkspaceGitActionResult | null>
   onCancel: () => Promise<unknown>
+  onMergeConflictAiHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
+}
+
+export interface BranchWorkspaceMergeConflictAiHandoffInput {
+  provider: CommitMessageProvider
+  repositoryName: string
+  conflictWorktree: GitConflictWorktree
 }
 
 type GenerationState = 'idle' | 'generating' | 'ready' | 'failed'
@@ -81,6 +90,7 @@ export function BranchWorkspaceGitActionPanel({
   onBatchMergeOut,
   onSync,
   onCancel,
+  onMergeConflictAiHandoff,
 }: BranchWorkspaceGitActionPanelProps) {
   const t = useT()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -170,6 +180,7 @@ export function BranchWorkspaceGitActionPanel({
         }
         onExecute={executeMerge}
         onClose={close}
+        onMergeConflictAiHandoff={onMergeConflictAiHandoff}
       />
     )
   }
@@ -204,6 +215,7 @@ export function BranchWorkspaceGitActionPanel({
         }
         onExecute={executeMerge}
         onClose={close}
+        onMergeConflictAiHandoff={onMergeConflictAiHandoff}
       />
     )
   }
@@ -467,6 +479,7 @@ function BranchWorkspaceBatchMergeInDialog({
   onSourceChange,
   onExecute,
   onClose,
+  onMergeConflictAiHandoff,
 }: {
   plan: Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge-in' }> | null
   result: BranchWorkspaceGitActionResult | null
@@ -480,6 +493,7 @@ function BranchWorkspaceBatchMergeInDialog({
   onSourceChange: (repositoryName: string, sourceBranch: string) => void
   onExecute: (mode: BranchWorkspaceMergeMode) => Promise<void>
   onClose: () => void
+  onMergeConflictAiHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
 }) {
   const t = useT()
   const locked = pending || startedMode !== null
@@ -677,6 +691,11 @@ function BranchWorkspaceBatchMergeInDialog({
         )}
 
         {error ? <DialogError>{t(error)}</DialogError> : null}
+        <BranchWorkspaceMergeConflictAiActions
+          result={result}
+          onHandoff={onMergeConflictAiHandoff}
+          onHandoffComplete={onClose}
+        />
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             {t('dialog.cancel')}
@@ -732,6 +751,7 @@ function BranchWorkspaceBatchMergeOutDialog({
   onDestinationChange,
   onExecute,
   onClose,
+  onMergeConflictAiHandoff,
 }: {
   plan: Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge-out' }> | null
   result: BranchWorkspaceGitActionResult | null
@@ -745,6 +765,7 @@ function BranchWorkspaceBatchMergeOutDialog({
   onDestinationChange: (repositoryName: string, destinationBranch: string) => void
   onExecute: (mode: BranchWorkspaceMergeMode) => Promise<void>
   onClose: () => void
+  onMergeConflictAiHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
 }) {
   const t = useT()
   const locked = pending || startedMode !== null
@@ -952,6 +973,11 @@ function BranchWorkspaceBatchMergeOutDialog({
         )}
 
         {error ? <DialogError>{t(error)}</DialogError> : null}
+        <BranchWorkspaceMergeConflictAiActions
+          result={result}
+          onHandoff={onMergeConflictAiHandoff}
+          onHandoffComplete={onClose}
+        />
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             {t('dialog.cancel')}
@@ -991,6 +1017,39 @@ function BranchWorkspaceBatchMergeOutDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function BranchWorkspaceMergeConflictAiActions({
+  result,
+  onHandoff,
+  onHandoffComplete,
+}: {
+  result: BranchWorkspaceGitActionResult | null
+  onHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
+  onHandoffComplete: () => void
+}) {
+  const failedMember = result?.members.find(
+    (member) =>
+      member.phase === 'failed' &&
+      member.step === 'merge' &&
+      member.reason === 'merge-conflict' &&
+      member.conflictWorktree !== undefined,
+  )
+  const conflictWorktree = failedMember?.conflictWorktree
+  if (!failedMember || !conflictWorktree) return null
+
+  return (
+    <MergeConflictAiActions
+      onHandoff={(provider) =>
+        onHandoff({
+          provider,
+          repositoryName: failedMember.repositoryName,
+          conflictWorktree,
+        })
+      }
+      onHandoffComplete={onHandoffComplete}
+    />
   )
 }
 
