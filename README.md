@@ -14,6 +14,23 @@ Hobgoblin = multi-project x multi-worktree / multi-branch x multi-terminal
 
 This is the intended workflow: every project, worktree, branch, terminal, and AI CLI session stays connected to the same Git-aware workspace.
 
+## Workspace Development Model
+
+Hobgoblin treats a product workspace and its Git repositories as related but separate levels:
+
+- A **multi-repository workspace** groups selected repositories under one readable root. The root owns shared files and root-level terminals, while every member repository keeps its own branches, worktrees, status, history, and Git writes.
+- A **Branch workspace** creates one branch-focused context inside that parent workspace. It uses a common branch name across selected repository worktrees, but each member remains an independent Git operation boundary.
+
+The recommended flow is:
+
+1. Configure the repositories that belong to the workspace.
+2. Create a Branch workspace, choosing the base branch for each selected repository.
+3. Copy or symlink any optional workspace dependencies, then work from the Branch workspace root or an individual member worktree.
+4. Keep AI CLI and terminal sessions attached to that root or member context while developing and testing.
+5. Commit, pull, push, merge in, or merge out across selected members when the work is ready.
+
+Cross-repository actions run in configured order, stop at the first failure, retain completed results, and never pretend to be an atomic transaction with automatic rollback.
+
 ## Origins
 
 Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, focused macOS desktop app for seeing Git branches and worktrees across repositories at a glance. If you want the original lightweight branch/worktree overview, Goblin is still worth a look; Hobgoblin extends that idea into a broader workspace for AI CLI sessions, multiple terminals, server mode, and richer repository workflows.
@@ -21,13 +38,16 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 ## Product Features
 
 - **AI CLI-ready workflow:** Keep coding agents, shell tasks, and Git state together instead of scattering them across unrelated terminal windows.
-- **Multi-project workspace:** Open repositories in tabs, reorder them, and restore your previous session.
+- **Projects and multi-repository workspaces:** Open a repository, a plain directory, or a configured group of independent repositories and restore it later.
+- **Branch workspaces:** Develop one feature across selected repository worktrees under a common branch context, with root-level and member-level files and terminals.
 - **Desktop or web browser:** Use Hobgoblin as a packaged desktop app, or run server mode and open the same workspace from a browser.
 - **Multi-worktree branch development:** Create and inspect worktrees so multiple branches can move independently without dirtying one checkout.
 - **Branch and worktree overview:** See branch status, worktree state, latest commits, diffs, and working tree changes in one window.
 - **Git actions in context:** Checkout, pull, push, create worktrees, open branches in external tools, and jump to GitHub.
 - **Multi-terminal execution surface:** Keep multiple server-backed terminals attached to the workspace and the branch/worktree they belong to.
 - **Local and SSH remote repositories:** Work with local paths, SSH clone URLs, and remote repositories opened through SSH-config aliases and remote paths.
+- **Android mobile client:** Save SSH Hosts, open remote Projects and Worktrees, retain terminal sessions, manage port forwards, and continue work away from the desktop.
+- **tmux session continuity:** Explicitly create or reconnect deterministic Hobgoblin sessions on project-scoped tmux servers, and discover or recover Hobgoblin and default tmux sessions from Android.
 - **Visual workflow controls:** Navigate branches, switch repositories, trigger Git actions, and jump to external tools from clear interface context.
 - **Themes and languages:** Use light, dark, and themed presets with English, Simplified Chinese, Korean, and Japanese UI strings.
 
@@ -40,7 +60,8 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 - **Terminal tab jump:** Double-click the active terminal tab to scroll that terminal to the bottom.
 - **Terminal-to-file-tree navigation:** Click detected repository-relative paths in terminal output to reveal them in the file tree.
 - **Terminal path editor jump:** Double-click detected repository-relative paths in terminal output, including `path:line` and `path:line:column`, to open the configured editor at that file position.
-- **Explicit tmux session reuse:** Internal terminals use the native login shell by default. Choose **New terminal with tmux** from terminal or item menus to create or attach to a stable local or SSH `hobgoblin-v1-*` session; if tmux is unavailable on the target, Hobgoblin falls back to the native login shell. External-terminal actions stay native, and legacy `goblin-*` sessions are not migrated.
+- **Explicit tmux session reuse:** Internal terminals use the native login shell by default. Choose **New terminal with tmux** from terminal or item menus to create or attach to a stable local or SSH `hobgoblin-v1-*` session on a project-scoped tmux server. If tmux is unavailable or startup fails, the terminal exits with guidance to choose Native instead; it never silently starts a native shell. External-terminal actions stay native, and legacy `goblin-*` sessions are not migrated.
+- **Android tmux recovery:** The Android tmux tab scans a selected SSH Host for current-protocol Hobgoblin sessions on project-scoped and compatibility default servers, alongside ordinary default tmux sessions, so an existing session can be opened without creating a replacement.
 - **Browser project access:** Run server mode and open the project workspace from a web browser.
 - **Mobile terminal takeover:** Use browser-accessible mode from a phone browser to take over terminal sessions when you need to continue from mobile.
 
@@ -53,6 +74,8 @@ Choose the artifact for your platform:
 - **macOS Apple Silicon:** download the `arm64.dmg` file.
 - **macOS Intel:** download the `x64.dmg` file.
 - **Windows x64:** download the `.exe` installer.
+- **Android:** download the `android.apk` file. The APK is unsigned and must be signed before installation.
+- **Linux Server Mode:** download `Hobgoblin-<version>-linux-source.tar.gz` for the deployment-focused source archive.
 
 The current builds are unsigned.
 
@@ -107,6 +130,40 @@ Override the listen address when you need to expose it on a different interface 
 ```sh
 ./serve.sh --host 127.0.0.1 --port 32200
 ```
+
+### Linux systemd deployment
+
+On a Linux host that uses systemd, install Node.js 24+ and Bun 1.3.11, download `Hobgoblin-<version>-linux-source.tar.gz` from GitHub Releases, then extract and install it:
+
+```sh
+tar -xzf Hobgoblin-<version>-linux-source.tar.gz
+cd Hobgoblin-<version>
+./scripts/serve-systemd.sh
+```
+
+On the first run, the command installs the service. On later runs, it updates the existing deployment. To configure the listen address, port, and persistent data directory explicitly during the first installation:
+
+```sh
+./scripts/serve-systemd.sh install \
+  --host 0.0.0.0 \
+  --port 32200 \
+  --data-dir ./data/server
+```
+
+`0.0.0.0` listens on all network interfaces. Use `127.0.0.1` instead when the service should only be reachable from the local host.
+
+Installation runs `bun install`, builds the Web UI, writes `/etc/systemd/system/hobgoblin.service` and `/etc/hobgoblin/server.env`, then enables and starts the service. The script uses `sudo` when it is not run as root.
+
+Common maintenance commands:
+
+```sh
+./scripts/serve-systemd.sh update --no-pull
+./scripts/serve-systemd.sh status
+./scripts/serve-systemd.sh logs
+./scripts/serve-systemd.sh uninstall
+```
+
+The deployment archive has no Git metadata, so use `update --no-pull` after replacing its files with a newer archive. A Git clone may use `update` without that flag to attempt `git pull --ff-only`. `uninstall` stops and removes the service but keeps `/etc/hobgoblin/server.env`; delete that file manually if it is no longer needed.
 
 ## Links
 
