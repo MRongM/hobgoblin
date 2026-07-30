@@ -691,10 +691,14 @@ describe('WorkspaceRepositoryRail', () => {
     })
     expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
     expect(rescanWorkspace).not.toHaveBeenCalled()
+    expect(refreshCoreData).not.toHaveBeenCalled()
     expect(refresh?.disabled).toBe(true)
 
     await act(async () => finishRefresh?.())
     expect(refresh?.disabled).toBe(false)
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
   })
 
   test('reloads branch workspaces after a remote read failure without offering registry cleanup', async () => {
@@ -974,15 +978,12 @@ describe('WorkspaceRepositoryRail', () => {
     expect(overview?.className).toContain('text-[13px]')
   })
 
-  test('merges branch workspace actions into the status bar when the repository section is hidden', () => {
+  test('keeps hidden workspace actions in the branch workspace titlebar rather than the status bar', () => {
     useReposStore.setState({
       activeId: ROOT,
       workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
     })
-    const statusBarActionHost = document.createElement('div')
-    statusBarActionHost.dataset.testid = 'statusbar-workspace-actions'
-    container?.append(statusBarActionHost)
-    renderRail({ currentRepoId: ROOT, statusBarActionHost })
+    renderRail({ currentRepoId: ROOT })
 
     const repositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     const branchWorkspaceSection = container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')
@@ -1012,23 +1013,18 @@ describe('WorkspaceRepositoryRail', () => {
     )
     expect(migratedSection?.querySelector('[aria-label="workspace.branch-workspace.reload"]')).not.toBeNull()
     for (const label of [
+      'workspace.branch-workspace.reload',
       'workspace.branch-workspace.create',
       'workspace.pull-all',
-      'workspace.configure',
-      'workspace.rescan',
+      'workspace.repositories.show',
     ]) {
-      expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).toBeNull()
+      expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
-    for (const label of ['workspace.branch-workspace.create', 'workspace.pull-all', 'workspace.repositories.show']) {
-      expect(statusBarActionHost.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-    }
-    expect(statusBarActionHost.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
-    expect(statusBarActionHost.querySelector('[aria-label="workspace.configure"]')).toBeNull()
-    expect(statusBarActionHost.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
 
-    act(() =>
-      statusBarActionHost.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')?.click(),
-    )
+    act(() => migratedSection?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')?.click())
 
     const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     expect(restoredRepositorySection).not.toBeNull()
@@ -1040,7 +1036,6 @@ describe('WorkspaceRepositoryRail', () => {
     ]) {
       expect(restoredRepositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
-    expect(statusBarActionHost.childElementCount).toBe(0)
   })
 
   test('shows the branch workspace recovery header while repositories are hidden from a member repository', () => {
@@ -1695,7 +1690,6 @@ function renderRail({
   currentRepoId = API,
   onOpenFileArea,
   onToggleFileArea,
-  statusBarActionHost,
 }: {
   terminalCount?: number
   outputActive?: boolean
@@ -1704,7 +1698,6 @@ function renderRail({
   currentRepoId?: string
   onOpenFileArea?: () => void
   onToggleFileArea?: () => void
-  statusBarActionHost?: HTMLDivElement | null
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
   const readContext: TerminalSessionReadContextValue = {
@@ -1744,7 +1737,6 @@ function renderRail({
           currentRepoId={currentRepoId}
           onOpenFileArea={onOpenFileArea}
           onToggleFileArea={onToggleFileArea}
-          statusBarActionHost={statusBarActionHost}
         />
       </TerminalSessionReadContext.Provider>,
     )

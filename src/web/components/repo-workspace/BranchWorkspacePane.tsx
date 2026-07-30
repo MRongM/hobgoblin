@@ -48,7 +48,6 @@ export function BranchWorkspacePane({
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(true)
   const [terminalFocusMode, setTerminalFocusMode] = useState(false)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>(memberTarget ? 'files' : 'detail')
-  const [statusBarActionHost, setStatusBarActionHost] = useState<HTMLDivElement | null>(null)
   const compactNavigationIntent = useRef<CompactWorkspaceSurface | null>(null)
   const [memberRevealRequest, setMemberRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const context = branchWorkspaceFolderContext(rootId, workspace)
@@ -209,7 +208,6 @@ export function BranchWorkspacePane({
                 fill
                 onOpenFileArea={openFileArea}
                 onToggleFileArea={toggleFileAreaFromWorkspaceItem}
-                statusBarActionHost={statusBarActionHost}
               />
             </div>
           }
@@ -226,7 +224,6 @@ export function BranchWorkspacePane({
           repoId={memberTarget?.repositoryId ?? rootId}
           fileAreaCollapsed={desktopFileAreaCollapsed}
           onToggleFileArea={() => setFileAreaCollapsed((collapsed) => !collapsed)}
-          workspaceActionsHostRef={setStatusBarActionHost}
         />
       </div>
     </RepoWorkspacePane>
@@ -272,9 +269,8 @@ export function BranchWorkspacePane({
             onOpenFileArea={() => showCompactSurface('files')}
             onToggleFileArea={toggleFileAreaFromWorkspaceItem}
             onOpenDetailArea={() => showCompactSurface('detail')}
-            statusBarActionHost={statusBarActionHost}
           />
-          <StatusBar repoId={memberTarget?.repositoryId ?? rootId} workspaceActionsHostRef={setStatusBarActionHost} />
+          <StatusBar repoId={memberTarget?.repositoryId ?? rootId} />
         </div>
       </RepoWorkspacePane>
     ) : compactSurface === 'files' ? (

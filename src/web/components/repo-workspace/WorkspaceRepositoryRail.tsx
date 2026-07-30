@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
@@ -54,7 +53,6 @@ interface Props {
   onOpenFileArea?: () => void
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
-  statusBarActionHost?: HTMLDivElement | null
 }
 
 export function WorkspaceRepositoryRail({
@@ -64,7 +62,6 @@ export function WorkspaceRepositoryRail({
   onOpenFileArea,
   onToggleFileArea,
   onOpenDetailArea,
-  statusBarActionHost,
 }: Props) {
   const t = useT()
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
@@ -204,16 +201,19 @@ export function WorkspaceRepositoryRail({
       }),
     [candidateNameById, repos, workspace?.repositoryIds],
   )
+  const refreshWorkspaceMemberCoreData = useCallback(() => {
+    const state = useReposStore.getState()
+    const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
+    return Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
+  }, [workspaceRootId])
   const settlePull = useCallback(
     async (result: WorkspacePullResult) => {
       if (result.ok) toast.success(t('workspace.pull-all-success'))
       else
         toast.error(t('workspace.pull-all-incomplete'), result.message ? { description: t(result.message) } : undefined)
-      const state = useReposStore.getState()
-      const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
-      await Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
+      await refreshWorkspaceMemberCoreData()
     },
-    [t, workspaceRootId],
+    [refreshWorkspaceMemberCoreData, t],
   )
   const pullActions = useWorkspacePullActions(workspaceRootId, settlePull)
 
@@ -354,6 +354,7 @@ export function WorkspaceRepositoryRail({
       branchReloadPendingRef.current = false
       setBranchReloadPending(false)
     }
+    void refreshWorkspaceMemberCoreData().catch(() => undefined)
   }
   const cleanupRegistry = async () => {
     const result = await cleanupBranchWorkspaceRegistry(workspaceRootId).catch(() => ({
@@ -602,7 +603,7 @@ export function WorkspaceRepositoryRail({
                 {t('workspace.branch-workspace.list')}
               </span>
               {branchListRefreshAction}
-              {!repositoryListVisible && !statusBarActionHost ? hiddenRepositoryActions : null}
+              {!repositoryListVisible ? hiddenRepositoryActions : null}
             </div>
             {branchQuery.isPending ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
@@ -700,9 +701,6 @@ export function WorkspaceRepositoryRail({
           </div>
         )}
       </div>
-      {!repositoryListVisible && statusBarActionHost
-        ? createPortal(hiddenRepositoryActions, statusBarActionHost)
-        : null}
       <WorkspaceConfigurationDialog
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
