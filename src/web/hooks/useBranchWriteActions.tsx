@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import type { ReactNode } from 'react'
-import { GitBranch, GitMerge, RadioTower, RotateCcw, SendHorizontal } from 'lucide-react'
+import { GitBranch, GitMerge, RotateCcw, SendHorizontal } from 'lucide-react'
 import type { ExecResult } from '#/shared/git-types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
@@ -10,7 +10,6 @@ import {
   CreateBranchDialog,
   MergeInDialog,
   MergeOutDialog,
-  PullRemoteBranchDialog,
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
 import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
 import {
@@ -32,6 +31,7 @@ import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { RepositoryBranchMergeOutExecuteInput } from '#/shared/repository-branch-merge.ts'
+import { useTrackRemoteBranchAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
 
 interface BranchWriteActions {
   mainItems: BranchActionItem[]
@@ -68,8 +68,8 @@ export function useBranchWriteActions(
   const mergeInDialog = useRetainedDialogState<string>()
   const mergeOutDialog = useRetainedDialogState<string>()
   const createBranchDialog = useRetainedDialogState<string>()
-  const pullRemoteBranchDialog = useRetainedDialogState<string>()
   const resetDialog = useRetainedDialogState<string>()
+  const trackRemoteBranch = useTrackRemoteBranchAction(repo)
 
   async function submitBranchWriteAction(action: Parameters<typeof runBranchAction>[1]) {
     const result = await runBranchAction(repo.id, action, { token: repo.instanceToken })
@@ -138,15 +138,6 @@ export function useBranchWriteActions(
     createBranchDialog.close()
   }
 
-  async function handleTrackRemoteBranch(input: { localBranch: string; remoteRef: string }) {
-    await submitBranchWriteAction({
-      kind: 'trackRemoteBranch',
-      localBranch: input.localBranch,
-      remoteRef: input.remoteRef,
-    })
-    pullRemoteBranchDialog.close()
-  }
-
   function handleResetHard() {
     if (!worktreePath) return
     void resetRepositoryHard(repo.id, worktreePath).then((result) => {
@@ -165,15 +156,7 @@ export function useBranchWriteActions(
       icon: createElement(GitBranch),
       onSelect: () => createBranchDialog.openWith(''),
     },
-    {
-      id: 'pullRemoteBranch',
-      label: t('action.pull-remote-branch'),
-      title: t('action.pull-remote-branch-title'),
-      disabled: repo.remote.hasRemotes === false || branchActionBusy,
-      visible: true,
-      icon: createElement(RadioTower),
-      onSelect: () => pullRemoteBranchDialog.openWith(''),
-    },
+    trackRemoteBranch.item,
     {
       id: 'checkoutTo',
       label: t('action.checkout-to'),
@@ -244,14 +227,7 @@ export function useBranchWriteActions(
         onClose={createBranchDialog.close}
         onCreate={handleCreateBranch}
       />
-      <PullRemoteBranchDialog
-        open={pullRemoteBranchDialog.open}
-        repoId={repo.id}
-        allBranches={allBranches}
-        busy={repo.operations.branchAction.phase !== 'idle'}
-        onClose={pullRemoteBranchDialog.close}
-        onTrack={handleTrackRemoteBranch}
-      />
+      {trackRemoteBranch.dialog}
       <CheckoutToDialog
         open={checkoutToDialog.open}
         branch={branch}

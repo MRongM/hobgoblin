@@ -21,14 +21,21 @@ vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
     onShowCompactDetail,
     onShowCompactFiles,
     onMaximizeTerminal,
+    onFileAreaItemDoubleClick,
   }: {
     repoId: string
     onShowCompactDetail?: () => void
     onShowCompactFiles?: () => void
     onMaximizeTerminal?: () => void
+    onFileAreaItemDoubleClick?: () => void
   }) => (
     <div data-testid="header">
       {repoId}
+      {onFileAreaItemDoubleClick ? (
+        <button type="button" data-testid="header-project-item" onDoubleClick={onFileAreaItemDoubleClick}>
+          project
+        </button>
+      ) : null}
       {onMaximizeTerminal ? (
         <button type="button" data-testid="header-maximize-terminal" onClick={onMaximizeTerminal}>
           focus
@@ -183,9 +190,7 @@ vi.mock('#/web/components/StatusBar.tsx', () => ({
           toggle
         </button>
       ) : null}
-      {workspaceActionsHostRef ? (
-        <div ref={workspaceActionsHostRef} data-testid="statusbar-workspace-actions" />
-      ) : null}
+      {workspaceActionsHostRef ? <div ref={workspaceActionsHostRef} data-testid="statusbar-workspace-actions" /> : null}
     </div>
   ),
 }))
@@ -482,6 +487,19 @@ describe('BranchWorkspacePane', () => {
     expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
 
     act(() => toggle?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+  })
+
+  test('toggles the desktop file area when the active project item is double-clicked', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    const projectItem = container.querySelector<HTMLButtonElement>('[data-testid="header-project-item"]')
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+
+    act(() => projectItem?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
+
+    act(() => projectItem?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
     expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
   })
 

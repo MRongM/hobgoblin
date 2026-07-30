@@ -197,6 +197,7 @@ export function BranchWorkspacePane({
         <SidebarProjectHeader
           repoId={memberTarget?.repositoryId ?? rootId}
           onMaximizeTerminal={maximizeTerminalFromExplorer}
+          onFileAreaItemDoubleClick={toggleFileAreaFromWorkspaceItem}
         />
         <FileAreaSplitPane
           orientation="vertical"
@@ -262,6 +263,7 @@ export function BranchWorkspacePane({
             repoId={memberTarget?.repositoryId ?? rootId}
             onShowCompactDetail={() => showCompactSurface('detail')}
             onShowCompactFiles={() => showCompactSurface('files')}
+            onFileAreaItemDoubleClick={toggleFileAreaFromWorkspaceItem}
           />
           <WorkspaceRepositoryRail
             workspaceRootId={rootId}
@@ -272,10 +274,7 @@ export function BranchWorkspacePane({
             onOpenDetailArea={() => showCompactSurface('detail')}
             statusBarActionHost={statusBarActionHost}
           />
-          <StatusBar
-            repoId={memberTarget?.repositoryId ?? rootId}
-            workspaceActionsHostRef={setStatusBarActionHost}
-          />
+          <StatusBar repoId={memberTarget?.repositoryId ?? rootId} workspaceActionsHostRef={setStatusBarActionHost} />
         </div>
       </RepoWorkspacePane>
     ) : compactSurface === 'files' ? (

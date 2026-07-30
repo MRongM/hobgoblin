@@ -132,6 +132,7 @@ export function RepoExplorerPane({
           terminalFocusMode={terminalFocusMode}
           onMaximizeTerminal={onMaximizeTerminal}
           onExitTerminalFocus={onExitTerminalFocus}
+          onFileAreaItemDoubleClick={handleWorktreeDoubleClick}
         />
       </div>
     )
@@ -149,6 +150,7 @@ export function RepoExplorerPane({
           repoId={repoId}
           onShowCompactDetail={onShowCompactDetail}
           onShowCompactFiles={onShowCompactFiles}
+          onFileAreaItemDoubleClick={handleWorktreeDoubleClick}
         />
         {surface === 'scope' ? (
           <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
@@ -176,7 +178,11 @@ export function RepoExplorerPane({
 
   return (
     <div data-file-tree-layout={layout} className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <SidebarProjectHeader repoId={repoId} onMaximizeTerminal={onMaximizeTerminal} />
+      <SidebarProjectHeader
+        repoId={repoId}
+        onMaximizeTerminal={onMaximizeTerminal}
+        onFileAreaItemDoubleClick={handleWorktreeDoubleClick}
+      />
       <FileAreaSplitPane
         orientation="vertical"
         navigationArea={
@@ -186,6 +192,7 @@ export function RepoExplorerPane({
                 workspaceRootId={workspaceRootId}
                 currentRepoId={repoId}
                 onOpenFileArea={onOpenFileArea}
+                onToggleFileArea={handleWorktreeDoubleClick}
               />
             )}
             <BranchSectionLabel repoId={repoId} />

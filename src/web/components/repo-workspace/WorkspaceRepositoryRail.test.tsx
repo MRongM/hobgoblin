@@ -55,6 +55,7 @@ const repositoryListState = vi.hoisted(() => ({
     disabled: boolean
     onActivate: (id: string) => void
     onReorder: (fromId: string, toId: string) => void
+    onToggleFileArea?: () => void
   },
 }))
 
@@ -1026,9 +1027,7 @@ describe('WorkspaceRepositoryRail', () => {
     expect(statusBarActionHost.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
 
     act(() =>
-      statusBarActionHost
-        .querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')
-        ?.click(),
+      statusBarActionHost.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')?.click(),
     )
 
     const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
@@ -1183,6 +1182,15 @@ describe('WorkspaceRepositoryRail', () => {
 
     const item = branchWorkspaceState.items[0]!
     act(() => branchWorkspaceListState.props?.onToggleFileArea?.(item))
+
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('forwards repository item file area toggles to the owning pane', () => {
+    const onToggleFileArea = vi.fn()
+    renderRail({ currentRepoId: API, onToggleFileArea })
+
+    act(() => repositoryListState.props?.onToggleFileArea?.())
 
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })

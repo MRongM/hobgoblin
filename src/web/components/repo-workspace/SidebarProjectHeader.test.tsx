@@ -64,7 +64,15 @@ vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', () => ({
 }))
 
 vi.mock('#/web/components/repo-workspace/SidebarProjectList.tsx', () => ({
-  SidebarProjectList: ({ id }: { id: string }) => <ul id={id} />,
+  SidebarProjectList: ({ id, onToggleFileArea }: { id: string; onToggleFileArea?: () => void }) => (
+    <ul id={id}>
+      <li>
+        <button type="button" data-testid="mock-project-item" onDoubleClick={onToggleFileArea}>
+          project
+        </button>
+      </li>
+    </ul>
+  ),
 }))
 
 vi.mock('#/web/components/ConfirmDialog.tsx', () => ({
@@ -163,6 +171,22 @@ describe('SidebarProjectHeader', () => {
     expect(repoState.toggleProjectListExpanded).toHaveBeenCalledTimes(1)
     expect(nextTrigger?.getAttribute('aria-expanded')).toBe('true')
     expect(container!.querySelector('ul')).not.toBeNull()
+  })
+
+  test('forwards project item double-clicks to the owning file area', () => {
+    const onFileAreaItemDoubleClick = vi.fn()
+    repoState.projectListExpanded = true
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" onFileAreaItemDoubleClick={onFileAreaItemDoubleClick} />)
+    })
+
+    act(() =>
+      container!
+        .querySelector<HTMLButtonElement>('[data-testid="mock-project-item"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })),
+    )
+
+    expect(onFileAreaItemDoubleClick).toHaveBeenCalledTimes(1)
   })
 
   test('uses a folder icon when the active project is a plain workspace', () => {

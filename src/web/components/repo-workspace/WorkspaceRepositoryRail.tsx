@@ -587,6 +587,7 @@ export function WorkspaceRepositoryRail({
               disabled={!reorderReady}
               onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
               onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
+              onToggleFileArea={onToggleFileArea}
             />
           </WorkspaceRepositoryListPane>
         ) : null}

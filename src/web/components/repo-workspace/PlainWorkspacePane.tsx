@@ -26,6 +26,7 @@ interface PlainWorkspacePaneProps {
   terminalFocusMode?: boolean
   onMaximizeTerminal?: () => void
   onExitTerminalFocus?: () => void
+  onFileAreaItemDoubleClick?: () => void
 }
 
 export function PlainWorkspacePane({
@@ -42,6 +43,7 @@ export function PlainWorkspacePane({
   terminalFocusMode = false,
   onMaximizeTerminal,
   onExitTerminalFocus,
+  onFileAreaItemDoubleClick,
 }: PlainWorkspacePaneProps) {
   const compact = useIsCompactUi()
   const repoUnavailable = useReposStore((state) => state.repos[repoId]?.availability.phase === 'unavailable')
@@ -65,6 +67,7 @@ export function PlainWorkspacePane({
           repoId={repoId}
           onShowCompactDetail={onShowCompactDetail}
           onShowCompactFiles={onShowCompactFiles}
+          onFileAreaItemDoubleClick={onFileAreaItemDoubleClick}
         />
         <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
           {surface === 'scope' && multiRepositoryWorkspace ? (
@@ -73,6 +76,7 @@ export function PlainWorkspacePane({
               currentRepoId={repoId}
               fill
               onOpenFileArea={onOpenFileArea}
+              onToggleFileArea={onFileAreaItemDoubleClick}
             />
           ) : (
             fileBrowser
@@ -99,7 +103,11 @@ export function PlainWorkspacePane({
   const branchPane = (
     <RepoWorkspacePane>
       <div className="project-file-area-tone flex min-h-0 min-w-0 flex-1 flex-col bg-topbar">
-        <SidebarProjectHeader repoId={repoId} onMaximizeTerminal={onMaximizeTerminal} />
+        <SidebarProjectHeader
+          repoId={repoId}
+          onMaximizeTerminal={onMaximizeTerminal}
+          onFileAreaItemDoubleClick={onFileAreaItemDoubleClick}
+        />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {desktopWorkspaceOverview ? (
             <FileAreaSplitPane
@@ -111,6 +119,7 @@ export function PlainWorkspacePane({
                     currentRepoId={repoId}
                     fill
                     onOpenFileArea={onOpenFileArea}
+                    onToggleFileArea={onFileAreaItemDoubleClick}
                   />
                 </div>
               }
