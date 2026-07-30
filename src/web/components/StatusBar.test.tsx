@@ -6,12 +6,16 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
 import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 import { buildTerminalDeepLinkUrl } from '#/web/lib/terminal-deep-link.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { BranchWorkspaceMemberContext } from '#/web/components/repo-workspace/BranchWorkspaceMemberContext.tsx'
 
-const { openExternalUrlMock } = vi.hoisted(() => ({
+const { openExternalUrlMock, readBranchWorkspacesMock } = vi.hoisted(() => ({
   openExternalUrlMock: vi.fn(async (_url: string) => ({ ok: true, message: '' })),
+  readBranchWorkspacesMock: vi.fn(),
 }))
 
 const shellOverlayMock = vi.hoisted(() => ({
@@ -33,6 +37,11 @@ vi.mock('#/web/settings-queries.ts', () => ({
   useLanInfoQuery: () => ({
     data: { host: '0.0.0.0', port: 32215, lanUrls: ['http://192.0.2.10:32215'], qrCodes: {} },
   }),
+}))
+
+vi.mock('#/web/workspace-client.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('#/web/workspace-client.ts')>()),
+  readBranchWorkspaces: readBranchWorkspacesMock,
 }))
 
 let terminalSessions: TerminalSessionSummary[] = []
@@ -73,7 +82,10 @@ vi.mock('#/web/components/repo-activity/RepoActivityControl.tsx', () => ({
 
 const REPO_ID = '/repo'
 const WORKTREE_PATH = '/repo'
+const WORKSPACE_ROOT_ID = '/workspace'
 const REMOTE_REPO_ID = 'ssh-config://example/srv%2Fplain'
+const originalRefreshCoreData = useReposStore.getState().refreshCoreData
+const originalSyncAndRefresh = useReposStore.getState().syncAndRefresh
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -101,6 +113,13 @@ beforeEach(() => {
   ]
   terminalSnapshotKeys.length = 0
   openExternalUrlMock.mockClear()
+  readBranchWorkspacesMock.mockReset()
+  readBranchWorkspacesMock.mockResolvedValue({
+    ok: true,
+    rootId: WORKSPACE_ROOT_ID,
+    items: [],
+    auxiliaryCandidates: [],
+  })
   shellOverlayMock.state = null
   container = document.createElement('div')
   document.body.append(container)
@@ -112,6 +131,10 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  useReposStore.setState({
+    refreshCoreData: originalRefreshCoreData,
+    syncAndRefresh: originalSyncAndRefresh,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -123,26 +146,6 @@ describe('StatusBar file area control', () => {
     expect(statusBar?.className).toContain('h-7')
     expect(statusBar?.className).not.toContain('border-t')
     expect(statusBar?.className).not.toContain('border-topbar-border')
-  })
-
-  test('exposes a layout-neutral host for workspace actions', () => {
-    let actionHost: HTMLDivElement | null = null
-
-    act(() =>
-      root!.render(
-        <StatusBar
-          repoId={REPO_ID}
-          workspaceActionsHostRef={(element) => {
-            actionHost = element
-          }}
-        />,
-      ),
-    )
-
-    const renderedHost = container?.querySelector<HTMLDivElement>('[data-testid="statusbar-workspace-actions"]')
-    if (!renderedHost) throw new Error('missing status bar workspace action host')
-    expect(actionHost).toBe(renderedHost)
-    expect(renderedHost.className).toContain('contents')
   })
 
   test('keeps the active settings trigger above the dialog scrim and toggles it closed', () => {
@@ -320,6 +323,80 @@ describe('StatusBar file area control', () => {
         terminalId: 'remote-terminal-1',
       }),
     )
+  })
+})
+
+describe('StatusBar repository refresh', () => {
+  test('refreshes local branches and status without running remote sync', async () => {
+    const refreshCoreData = vi.fn(async () => undefined)
+    const syncAndRefresh = vi.fn(async () => undefined)
+    const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
+    useReposStore.setState({ refreshCoreData, syncAndRefresh })
+
+    act(() => root!.render(<StatusBar repoId={REPO_ID} />))
+
+    const refresh = container?.querySelector<HTMLButtonElement>('button[aria-label="action.fetch-local-title"]')
+    expect(refresh).not.toBeNull()
+
+    await act(async () => refresh?.click())
+
+    expect(refreshCoreData).toHaveBeenCalledWith(REPO_ID, { token })
+    expect(syncAndRefresh).not.toHaveBeenCalled()
+    expect(readBranchWorkspacesMock).not.toHaveBeenCalled()
+  })
+
+  test('also refreshes the parent branch workspace snapshot for a configured workspace repository', async () => {
+    const refreshCoreData = vi.fn(async () => undefined)
+    const refreshedWorkspace = {
+      ok: true as const,
+      rootId: WORKSPACE_ROOT_ID,
+      items: [],
+      auxiliaryCandidates: [],
+    }
+    readBranchWorkspacesMock.mockResolvedValueOnce(refreshedWorkspace)
+    useReposStore.setState((state) => ({
+      refreshCoreData,
+      repos: {
+        ...state.repos,
+        [REPO_ID]: { ...state.repos[REPO_ID]!, workspaceRootId: WORKSPACE_ROOT_ID },
+      },
+    }))
+    const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
+
+    act(() => root!.render(<StatusBar repoId={REPO_ID} />))
+
+    const refresh = container?.querySelector<HTMLButtonElement>('button[aria-label="action.fetch-local-title"]')
+    await act(async () => refresh?.click())
+
+    expect(refreshCoreData).toHaveBeenCalledWith(REPO_ID, { token })
+    expect(readBranchWorkspacesMock).toHaveBeenCalledWith(WORKSPACE_ROOT_ID)
+    expect(mainWindowQueryClient.getQueryData(branchWorkspaceQueryKey(WORKSPACE_ROOT_ID))).toEqual(refreshedWorkspace)
+  })
+
+  test('prevents duplicate refreshes until the current refresh settles', async () => {
+    let resolveRefresh: (() => void) | undefined
+    const refreshCoreData = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefresh = resolve
+        }),
+    )
+    useReposStore.setState({ refreshCoreData })
+
+    act(() => root!.render(<StatusBar repoId={REPO_ID} />))
+
+    const refresh = container?.querySelector<HTMLButtonElement>('button[aria-label="action.fetch-local-title"]')
+    act(() => {
+      refresh?.click()
+      refresh?.click()
+    })
+
+    expect(refreshCoreData).toHaveBeenCalledTimes(1)
+    expect(refresh?.disabled).toBe(true)
+
+    await act(async () => resolveRefresh?.())
+
+    expect(refresh?.disabled).toBe(false)
   })
 })
 

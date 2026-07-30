@@ -30,7 +30,7 @@ class RemoteWorktreeService(
     }
 
     fun removeWorktree(target: RemoteTarget, worktree: RemoteRepositoryWorktree) {
-        val safety = evaluateWorktreeRemoval(worktree)
+        val safety = evaluateWorktreeRemoval(target.remotePath, worktree)
         require(safety.allowed) { safety.reason ?: "Remote worktree remove is blocked" }
         val fingerprint = trustedFingerprint(target)
         val result = client.runCommand(
@@ -69,44 +69,53 @@ enum class WorktreeRemovalBlockReason {
     Dirty,
     Locked,
     Missing,
-    ProtectedBranch,
+    IdentityChanged,
 }
 
-fun evaluateWorktreeRemoval(worktree: RemoteRepositoryWorktree): WorktreeRemovalSafety = when {
-    worktree.isPrimary -> WorktreeRemovalSafety(
-        false,
-        "Primary worktree cannot be removed.",
-        WorktreeRemovalBlockReason.Primary,
-    )
-    worktree.isDirty -> WorktreeRemovalSafety(
-        false,
-        "Dirty worktree cannot be removed.",
-        WorktreeRemovalBlockReason.Dirty,
-    )
-    worktree.isLocked -> WorktreeRemovalSafety(
-        false,
-        "Locked worktree cannot be removed.",
-        WorktreeRemovalBlockReason.Locked,
-    )
-    worktree.isMissing -> WorktreeRemovalSafety(
-        false,
-        "Missing worktree cleanup is not supported here.",
-        WorktreeRemovalBlockReason.Missing,
-    )
-    isProtectedBranch(worktree.branch) -> WorktreeRemovalSafety(
-        false,
-        "Protected branch worktree cannot be removed.",
-        WorktreeRemovalBlockReason.ProtectedBranch,
-    )
-    else -> WorktreeRemovalSafety(true, null)
+fun evaluateWorktreeRemoval(
+    repositoryPath: String,
+    worktree: RemoteRepositoryWorktree,
+): WorktreeRemovalSafety {
+    val pathIdentifiesPrimary = normalizeRemoteWorktreePath(repositoryPath) ==
+        normalizeRemoteWorktreePath(worktree.path)
+    if (pathIdentifiesPrimary != worktree.isPrimary) {
+        return WorktreeRemovalSafety(
+            false,
+            "Worktree identity changed; refresh and try again.",
+            WorktreeRemovalBlockReason.IdentityChanged,
+        )
+    }
+    return when {
+        pathIdentifiesPrimary -> WorktreeRemovalSafety(
+            false,
+            "Primary worktree cannot be removed.",
+            WorktreeRemovalBlockReason.Primary,
+        )
+        worktree.isDirty -> WorktreeRemovalSafety(
+            false,
+            "Dirty worktree cannot be removed.",
+            WorktreeRemovalBlockReason.Dirty,
+        )
+        worktree.isLocked -> WorktreeRemovalSafety(
+            false,
+            "Locked worktree cannot be removed.",
+            WorktreeRemovalBlockReason.Locked,
+        )
+        worktree.isMissing -> WorktreeRemovalSafety(
+            false,
+            "Missing worktree cleanup is not supported here.",
+            WorktreeRemovalBlockReason.Missing,
+        )
+        else -> WorktreeRemovalSafety(true, null)
+    }
 }
 
 fun worktreeRemovalConfirmationText(worktree: RemoteRepositoryWorktree): String =
     "Remove remote worktree ${worktree.path} from the SSH server? This does not delete the branch."
 
-private fun isProtectedBranch(branch: String?): Boolean {
-    val value = branch ?: return false
-    return value == "main" || value == "master" || value == "develop" || value.startsWith("release/")
+private fun normalizeRemoteWorktreePath(value: String): String {
+    val collapsed = value.trim().replace(Regex("/+"), "/")
+    return if (collapsed == "/") collapsed else collapsed.trimEnd('/')
 }
 
 private fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"

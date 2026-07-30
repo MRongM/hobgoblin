@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   disconnectAllInvalidationSockets,
+  publishBranchWorkspaceOperationUpdate,
   publishRepoQueryInvalidation,
   publishWorkspaceInvalidation,
   registerInvalidationSocket,
@@ -46,6 +47,42 @@ describe('invalidation broker', () => {
         type: 'workspace-invalidated',
         rootId: '/workspace',
         sourceToken: 'workspace_create_1',
+      }),
+    )
+  })
+
+  test('publishes a branch workspace operation update payload', () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerInvalidationSocket(socket)
+    const operation = {
+      kind: 'pull' as const,
+      currentStep: 1,
+      completedCount: 0,
+      totalCount: 2,
+      cancellable: true,
+      repositoryName: 'api',
+      step: 'pull' as const,
+    }
+
+    publishBranchWorkspaceOperationUpdate('/workspace', 'workspace_1', operation)
+    publishBranchWorkspaceOperationUpdate('/workspace', 'workspace_1', null)
+
+    expect(socket.send).toHaveBeenNthCalledWith(
+      1,
+      JSON.stringify({
+        type: 'branch-workspace-operation-updated',
+        rootId: '/workspace',
+        branchWorkspaceId: 'workspace_1',
+        operation,
+      }),
+    )
+    expect(socket.send).toHaveBeenNthCalledWith(
+      2,
+      JSON.stringify({
+        type: 'branch-workspace-operation-updated',
+        rootId: '/workspace',
+        branchWorkspaceId: 'workspace_1',
+        operation: null,
       }),
     )
   })

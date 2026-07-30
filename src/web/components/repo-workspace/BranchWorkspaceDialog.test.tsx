@@ -42,6 +42,7 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   document.querySelectorAll('[data-slot="dialog-portal"]').forEach((node) => node.remove())
+  vi.useRealTimers()
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -51,6 +52,15 @@ describe('BranchWorkspaceDialog', () => {
 
     expect(document.body.textContent).toContain('dialog.cancel')
     expect(document.body.textContent).not.toContain('common.cancel')
+  })
+
+  test('prefills a dated feature branch name when creating a branch workspace', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 30, 12))
+
+    renderDialog({})
+
+    expect(inputValue('workspace.branch-workspace.branch')).toBe('feat/20260730')
   })
 
   test('shows live create progress and the completed step count after confirmation', () => {
@@ -88,6 +98,46 @@ describe('BranchWorkspaceDialog', () => {
     expect(stepProgress('repository:api')).toBe('complete')
     expect(stepProgress('repository:web')).toBe('active')
     expect(document.querySelector('[data-action="confirm"] .lucide-loader-circle')).not.toBeNull()
+  })
+
+  test('closes a completed creation after only the final remote read failed', () => {
+    const onOpenChange = vi.fn()
+    renderDialog({
+      plan: planWithSteps('create', [
+        { id: 'directory', kind: 'create-directory', label: 'goblin-feature-auth' },
+        { id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' },
+      ]),
+      progressWorkspace: existingWorkspace(),
+      result: {
+        ok: false,
+        message: 'workspace.branch-workspace.remote-operation-failed',
+        branchWorkspaceId: 'branch-1',
+      },
+      error: 'workspace.branch-workspace.remote-operation-failed',
+      onOpenChange,
+    })
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('keeps a completed creation open for a non-read execution failure', () => {
+    const onOpenChange = vi.fn()
+    renderDialog({
+      plan: planWithSteps('create', [
+        { id: 'directory', kind: 'create-directory', label: 'goblin-feature-auth' },
+        { id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' },
+      ]),
+      progressWorkspace: existingWorkspace(),
+      result: {
+        ok: false,
+        message: 'workspace.branch-workspace.execute-failed',
+        branchWorkspaceId: 'branch-1',
+      },
+      error: 'workspace.branch-workspace.execute-failed',
+      onOpenChange,
+    })
+
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 
   test('shows live remove progress without changing the destructive confirmation style', () => {
@@ -242,6 +292,7 @@ describe('BranchWorkspaceDialog', () => {
     await flushAsyncWork()
     changeSelect('workspace.branch-workspace.base-named', 'develop')
     await flushAsyncWork()
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
     clickSelector('[data-materialization-item="docs"] [data-materialization-choice="copy"]')
     await clickAction('preview')
 
@@ -251,6 +302,121 @@ describe('BranchWorkspaceDialog', () => {
       repositories: [{ repositoryName: 'api', baseBranch: 'develop' }],
       auxiliaryEntries: [{ name: 'docs', mode: 'copy' }],
     })
+  })
+
+  test('keeps repository dependencies disabled until explicitly enabled', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+      ok: true,
+      preflight: {
+        kind: 'candidates',
+        candidates: [{ path: 'node_modules', kind: 'directory' }],
+      },
+    })
+    renderDialog({})
+
+    click('workspace.branch-workspace.repository-named')
+    await flushAsyncWork()
+
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+    const dependencySwitch = document.querySelector<HTMLElement>(
+      '[aria-label="workspace.branch-workspace.repository-dependencies-toggle-named"]',
+    )
+    expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
+    const repositoryRow = dependencySwitch?.closest('[data-branch-workspace-repository-row="api"]')
+    expect(repositoryRow?.children[1]?.contains(dependencySwitch ?? null)).toBe(true)
+    expect(repositoryRow?.children[2]?.matches('select')).toBe(true)
+
+    act(() => dependencySwitch?.click())
+    await flushAsyncWork()
+
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+      '/workspace/api',
+      expect.any(AbortSignal),
+      'all-untracked',
+      '/workspace/api-main',
+    )
+    expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
+  })
+
+  test('clears repository dependency choices when disabled', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        kind: 'candidates',
+        candidates: [{ path: 'node_modules', kind: 'directory' }],
+      },
+    })
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ onPreview })
+    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await flushAsyncWork()
+    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await flushAsyncWork()
+
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2)
+    expect(choiceState('node_modules', 'skip')).toBe('on')
+    await clickAction('preview')
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [],
+    })
+  })
+
+  test('aborts an in-flight repository dependency read when disabled', async () => {
+    let finishRead: ((result: { ok: true; preflight: { kind: 'candidates'; candidates: [] } }) => void) | undefined
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishRead = resolve
+      }),
+    )
+    renderDialog({})
+    click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+
+    const signal = mocks.getRepositoryWorktreeBootstrapPreflight.mock.calls[0]?.[1] as AbortSignal | undefined
+    expect(signal?.aborted).toBe(false)
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    expect(signal?.aborted).toBe(true)
+
+    await act(async () => {
+      finishRead?.({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
+      await Promise.resolve()
+    })
+  })
+
+  test('resets repository dependencies when the repository is deselected', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+      ok: true,
+      preflight: {
+        kind: 'candidates',
+        candidates: [{ path: 'node_modules', kind: 'directory' }],
+      },
+    })
+    renderDialog({})
+    click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await flushAsyncWork()
+
+    click('workspace.branch-workspace.repository-named')
+
+    const dependencySwitch = document.querySelector<HTMLElement>(
+      '[aria-label="workspace.branch-workspace.repository-dependencies-toggle-named"]',
+    )
+    expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
+    expect(dependencySwitch?.getAttribute('data-disabled')).not.toBeNull()
+    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
+
+    click('workspace.branch-workspace.repository-named')
+    expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(1)
   })
 
   test('loads and submits untracked repository dependencies from the selected base worktree', async () => {
@@ -265,6 +431,7 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({ onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
     expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
@@ -304,6 +471,7 @@ describe('BranchWorkspaceDialog', () => {
     })
     renderDialog({})
     click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
     expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
       '/workspace/api',
@@ -339,6 +507,7 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
 
     await vi.waitFor(() => expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2))
 
@@ -392,6 +561,7 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await vi.waitFor(() => expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2))
 
     clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
@@ -453,6 +623,7 @@ describe('BranchWorkspaceDialog', () => {
     })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
     const repositoryList = '[aria-labelledby="branch-workspace-repository-dependencies-api"]'
@@ -613,6 +784,7 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({})
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
     expect(document.body.textContent).toContain('workspace.branch-workspace.repository-dependencies-error')

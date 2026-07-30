@@ -4,16 +4,11 @@ import {
   type CommitMessageProvider,
   type CommitMessageProviderAvailability,
 } from '#/shared/commit-message-ai.ts'
-import { buildAiHandoffCommand, prefillAiTerminalCommand } from '#/web/ai-terminal-handoff.ts'
 import { getCommitMessageProviders } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface MergeConflictAiActionsInput {
-  repoId: string
-  branch: string
-  worktreePath: string
-  navigation: { showRepoBranchDetailTab: (repoId: string, branch: string, tab: 'terminal') => void }
-  setDetailCollapsed: (collapsed: boolean) => void
+  onHandoff: (provider: CommitMessageProvider) => Promise<boolean>
 }
 
 interface MergeConflictAiAction {
@@ -60,7 +55,7 @@ export function useMergeConflictAiActions(input: MergeConflictAiActionsInput): {
         setPending(provider)
         setError(null)
         try {
-          const ok = await prefillMergeConflictCommand(input, provider)
+          const ok = await input.onHandoff(provider)
           if (!ok) {
             setError(t('action.merge-conflict-ai-prefill-failed'))
             return false
@@ -77,20 +72,4 @@ export function useMergeConflictAiActions(input: MergeConflictAiActionsInput): {
   }, [input, pending, providers, t])
 
   return { actions, error }
-}
-
-async function prefillMergeConflictCommand(
-  input: MergeConflictAiActionsInput,
-  provider: CommitMessageProvider,
-): Promise<boolean> {
-  return await prefillAiTerminalCommand({
-    ...input,
-    command: buildMergeConflictAiCommand(provider),
-  })
-}
-
-export function buildMergeConflictAiCommand(provider: CommitMessageProvider): string {
-  const prompt =
-    'Resolve the current Git merge conflicts in this working tree. Inspect conflicted files, make minimal edits, and do not run git add, git commit, or git merge --continue.'
-  return buildAiHandoffCommand(provider, prompt)
 }

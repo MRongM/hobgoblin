@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
 import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
@@ -55,6 +56,7 @@ const repositoryListState = vi.hoisted(() => ({
     disabled: boolean
     onActivate: (id: string) => void
     onReorder: (fromId: string, toId: string) => void
+    onToggleFileArea?: () => void
   },
 }))
 
@@ -150,6 +152,11 @@ const branchGitPanelState = vi.hoisted(() => ({
     kind: BranchWorkspaceGitActionKind
     activeOperation: BranchWorkspaceSnapshot['activeOperation'] | null
     onOpenChange: (open: boolean) => void
+    onMergeConflictAiHandoff: (input: {
+      provider: 'codex' | 'claude'
+      repositoryName: string
+      conflictWorktree: { branch: string; path: string }
+    }) => Promise<boolean>
   },
 }))
 
@@ -267,6 +274,17 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx', ()
 }))
 
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceList.tsx', () => ({
+  branchWorkspaceFolderContext: (rootId: string, item: BranchWorkspaceSnapshot) => ({
+    rootId,
+    id: item.id,
+    branch: item.branch,
+    path: item.path,
+    available: item.available,
+    busy: item.activeOperation !== undefined,
+    managedRootNames: Array.from(
+      new Set(item.repositories.map((member) => member.worktreePath.split('/').filter(Boolean).at(-1) ?? '')),
+    ).filter(Boolean),
+  }),
   BranchWorkspaceList: (props: NonNullable<typeof branchWorkspaceListState.props>) => {
     branchWorkspaceListState.props = props
     return (
@@ -385,6 +403,19 @@ const configureWorkspace = vi.fn(
     ok: true,
   }),
 )
+const terminalCommandBridge: NonNullable<Parameters<typeof setTerminalSessionCommandBridge>[0]> = {
+  worktreeSnapshot: vi.fn(() => ({
+    worktreeTerminalKey: '',
+    selectedDescriptor: null,
+    sessions: [],
+    count: 0,
+  })),
+  createTerminal: vi.fn(async () => `${ROOT}\0/workspace/goblin-feature-auth\0terminal-1`),
+  selectTerminal: vi.fn(),
+  waitForInputReady: vi.fn(async () => true),
+  writeInput: vi.fn(),
+}
+let clearTerminalCommandBridge: () => void = () => {}
 
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -429,6 +460,22 @@ beforeEach(() => {
   branchGitActionState.pending = false
   branchGitActionState.error = null
   branchGitPanelState.props = null
+  vi.mocked(terminalCommandBridge.worktreeSnapshot).mockReset()
+  vi.mocked(terminalCommandBridge.worktreeSnapshot).mockReturnValue({
+    worktreeTerminalKey: `${ROOT}\0/workspace/goblin-feature-auth`,
+    selectedDescriptor: null,
+    sessions: [],
+    count: 0,
+  })
+  vi.mocked(terminalCommandBridge.createTerminal).mockReset()
+  vi.mocked(terminalCommandBridge.createTerminal).mockResolvedValue(
+    `${ROOT}\0/workspace/goblin-feature-auth\0terminal-1`,
+  )
+  vi.mocked(terminalCommandBridge.selectTerminal).mockReset()
+  vi.mocked(terminalCommandBridge.waitForInputReady).mockReset()
+  vi.mocked(terminalCommandBridge.waitForInputReady).mockResolvedValue(true)
+  vi.mocked(terminalCommandBridge.writeInput).mockReset()
+  clearTerminalCommandBridge = setTerminalSessionCommandBridge(terminalCommandBridge)
   branchDependencyState.read.mockReset()
   branchDependencyState.read.mockResolvedValue({ ok: true, candidates: [] })
   branchDependencyState.requestPlan.mockReset()
@@ -510,6 +557,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  clearTerminalCommandBridge()
   act(() => root?.unmount())
   container?.remove()
   root = null
@@ -690,10 +738,14 @@ describe('WorkspaceRepositoryRail', () => {
     })
     expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
     expect(rescanWorkspace).not.toHaveBeenCalled()
+    expect(refreshCoreData).not.toHaveBeenCalled()
     expect(refresh?.disabled).toBe(true)
 
     await act(async () => finishRefresh?.())
     expect(refresh?.disabled).toBe(false)
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
   })
 
   test('reloads branch workspaces after a remote read failure without offering registry cleanup', async () => {
@@ -973,15 +1025,12 @@ describe('WorkspaceRepositoryRail', () => {
     expect(overview?.className).toContain('text-[13px]')
   })
 
-  test('merges branch workspace actions into the status bar when the repository section is hidden', () => {
+  test('keeps hidden workspace actions in the branch workspace titlebar rather than the status bar', () => {
     useReposStore.setState({
       activeId: ROOT,
       workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
     })
-    const statusBarActionHost = document.createElement('div')
-    statusBarActionHost.dataset.testid = 'statusbar-workspace-actions'
-    container?.append(statusBarActionHost)
-    renderRail({ currentRepoId: ROOT, statusBarActionHost })
+    renderRail({ currentRepoId: ROOT })
 
     const repositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     const branchWorkspaceSection = container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')
@@ -1011,25 +1060,18 @@ describe('WorkspaceRepositoryRail', () => {
     )
     expect(migratedSection?.querySelector('[aria-label="workspace.branch-workspace.reload"]')).not.toBeNull()
     for (const label of [
+      'workspace.branch-workspace.reload',
       'workspace.branch-workspace.create',
       'workspace.pull-all',
-      'workspace.configure',
-      'workspace.rescan',
+      'workspace.repositories.show',
     ]) {
-      expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).toBeNull()
+      expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
-    for (const label of ['workspace.branch-workspace.create', 'workspace.pull-all', 'workspace.repositories.show']) {
-      expect(statusBarActionHost.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-    }
-    expect(statusBarActionHost.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
-    expect(statusBarActionHost.querySelector('[aria-label="workspace.configure"]')).toBeNull()
-    expect(statusBarActionHost.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
 
-    act(() =>
-      statusBarActionHost
-        .querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')
-        ?.click(),
-    )
+    act(() => migratedSection?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')?.click())
 
     const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     expect(restoredRepositorySection).not.toBeNull()
@@ -1041,7 +1083,6 @@ describe('WorkspaceRepositoryRail', () => {
     ]) {
       expect(restoredRepositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
-    expect(statusBarActionHost.childElementCount).toBe(0)
   })
 
   test('shows the branch workspace recovery header while repositories are hidden from a member repository', () => {
@@ -1187,6 +1228,26 @@ describe('WorkspaceRepositoryRail', () => {
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
+  test('forwards repository item file area toggles to the owning pane', () => {
+    const onToggleFileArea = vi.fn()
+    renderRail({ currentRepoId: API, onToggleFileArea })
+
+    act(() => repositoryListState.props?.onToggleFileArea?.())
+
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('forwards workspace main directory item double-clicks to the owning pane', () => {
+    const onToggleFileArea = vi.fn()
+    renderRail({ currentRepoId: ROOT, onToggleFileArea })
+
+    act(() => {
+      overviewButton()?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
   test('plans a Git action for the clicked branch workspace and mounts its panel below that item', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[1]!
@@ -1203,6 +1264,87 @@ describe('WorkspaceRepositoryRail', () => {
       'push',
     )
     expect(branchGitPanelState.props?.activeOperation).toBeNull()
+  })
+
+  test('hands a retained conflict to a new branch workspace root terminal', async () => {
+    const onOpenDetailArea = vi.fn()
+    renderRail({ currentRepoId: ROOT, onOpenDetailArea })
+    const item = branchWorkspaceState.items[0]!
+
+    await act(async () => {
+      branchWorkspaceListState.props?.onGitAction?.(item, 'batch-merge-in')
+      await Promise.resolve()
+    })
+
+    const handoff = branchGitPanelState.props?.onMergeConflictAiHandoff
+    expect(handoff).toBeTypeOf('function')
+    if (!handoff) return
+    await expect(
+      handoff({
+        provider: 'codex',
+        repositoryName: 'api',
+        conflictWorktree: { branch: 'feature/auth', path: '/workspace/goblin-feature-auth/api' },
+      }),
+    ).resolves.toBe(true)
+
+    expect(activateBranchWorkspace).toHaveBeenCalledWith(ROOT, item.id)
+    expect(onOpenDetailArea).toHaveBeenCalledOnce()
+    expect(terminalCommandBridge.createTerminal).toHaveBeenCalledWith({
+      repoRoot: ROOT,
+      branch: 'feature/auth',
+      worktreePath: '/workspace/goblin-feature-auth',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+    })
+    expect(terminalCommandBridge.writeInput).toHaveBeenCalledWith(
+      `${ROOT}\0/workspace/goblin-feature-auth\0terminal-1`,
+      expect.stringContaining('/workspace/goblin-feature-auth/api'),
+    )
+    expect(vi.mocked(terminalCommandBridge.writeInput).mock.calls[0]![1]).not.toMatch(/[\r\n]$/)
+  })
+
+  test('reuses the selected open branch workspace root terminal for AI handoff', async () => {
+    const worktreeTerminalKey = `${ROOT}\0/workspace/goblin-feature-auth`
+    const terminalKey = `${worktreeTerminalKey}\0terminal-2`
+    vi.mocked(terminalCommandBridge.worktreeSnapshot).mockReturnValue({
+      worktreeTerminalKey,
+      selectedDescriptor: null,
+      sessions: [
+        {
+          key: terminalKey,
+          worktreeTerminalKey,
+          terminalId: 'terminal-2',
+          index: 2,
+          title: 'terminal',
+          phase: 'open',
+          selected: true,
+          hasBell: false,
+        },
+      ],
+      count: 1,
+    })
+    renderRail({ currentRepoId: ROOT })
+    const item = branchWorkspaceState.items[0]!
+
+    await act(async () => {
+      branchWorkspaceListState.props?.onGitAction?.(item, 'batch-merge-out')
+      await Promise.resolve()
+    })
+    const handoff = branchGitPanelState.props?.onMergeConflictAiHandoff
+    expect(handoff).toBeTypeOf('function')
+    if (!handoff) return
+    await handoff({
+      provider: 'claude',
+      repositoryName: 'api',
+      conflictWorktree: { branch: 'main', path: '/workspace/api' },
+    })
+
+    expect(terminalCommandBridge.createTerminal).not.toHaveBeenCalled()
+    expect(terminalCommandBridge.selectTerminal).toHaveBeenCalledWith(worktreeTerminalKey, terminalKey)
+    expect(terminalCommandBridge.writeInput).toHaveBeenCalledWith(
+      terminalKey,
+      expect.stringContaining('claude --print'),
+    )
   })
 
   test('opens directional member dialogs and resumes durable reduction intent', async () => {
@@ -1428,6 +1570,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     const badge = overviewButton()?.querySelector('[data-testid="overview-terminal-count-badge"]')
     expect(badge?.textContent).toBe('2')
+    expect(badge?.className).toContain('font-semibold')
     expect(badge?.getAttribute('aria-label')).toBe('terminal.open-count:2')
     expect(badge?.querySelector('.lucide-terminal')).not.toBeNull()
     expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).toBeNull()
@@ -1676,7 +1819,7 @@ function renderRail({
   currentRepoId = API,
   onOpenFileArea,
   onToggleFileArea,
-  statusBarActionHost,
+  onOpenDetailArea,
 }: {
   terminalCount?: number
   outputActive?: boolean
@@ -1685,7 +1828,7 @@ function renderRail({
   currentRepoId?: string
   onOpenFileArea?: () => void
   onToggleFileArea?: () => void
-  statusBarActionHost?: HTMLDivElement | null
+  onOpenDetailArea?: () => void
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
   const readContext: TerminalSessionReadContextValue = {
@@ -1725,7 +1868,7 @@ function renderRail({
           currentRepoId={currentRepoId}
           onOpenFileArea={onOpenFileArea}
           onToggleFileArea={onToggleFileArea}
-          statusBarActionHost={statusBarActionHost}
+          onOpenDetailArea={onOpenDetailArea}
         />
       </TerminalSessionReadContext.Provider>,
     )

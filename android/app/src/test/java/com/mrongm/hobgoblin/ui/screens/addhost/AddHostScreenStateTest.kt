@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.mrongm.hobgoblin.ssh.SshInitializationCheck
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 
 class AddHostScreenStateTest {
@@ -36,24 +35,6 @@ class AddHostScreenStateTest {
         assertFalse(canOfferSshInitialization(host = "example.com", user = "", port = "22"))
         assertFalse(canOfferSshInitialization(host = "example.com", user = "lee", port = "0"))
         assertTrue(canOfferSshInitialization(host = "example.com", user = "lee", port = "22"))
-    }
-
-    @Test
-    fun `temporary password input is visible after manual host fields are valid`() {
-        assertTrue(shouldShowSshInitializationPasswordInput(enabled = true, check = null))
-        assertTrue(
-            shouldShowSshInitializationPasswordInput(
-                enabled = true,
-                check = SshInitializationCheck.NeedsServerPassword,
-            ),
-        )
-        assertFalse(shouldShowSshInitializationPasswordInput(enabled = false, check = null))
-        assertFalse(
-            shouldShowSshInitializationPasswordInput(
-                enabled = true,
-                check = SshInitializationCheck.NeedsHostKeyTrust("SHA256:test"),
-            ),
-        )
     }
 
     @Test

@@ -14,13 +14,6 @@ import java.util.concurrent.TimeUnit
 import net.schmizz.sshj.common.KeyType
 import net.schmizz.sshj.transport.verification.HostKeyVerifier
 
-sealed interface SshInitializationCheck {
-    data object Ready : SshInitializationCheck
-    data object NeedsServerPassword : SshInitializationCheck
-    data class NeedsHostKeyTrust(val fingerprint: String) : SshInitializationCheck
-    data class HostKeyChanged(val previousFingerprint: String, val currentFingerprint: String) : SshInitializationCheck
-}
-
 data class SshInitializationResult(
     val profile: SshHostProfile,
 )
@@ -56,22 +49,6 @@ class SshInitializationService(
     private val keyGenerator: SshKeyGenerator = DefaultSshKeyGenerator(),
     private val publicKeyReader: SshPublicKeyReader = SshjPublicKeyReader(),
 ) {
-    fun check(profile: SshHostProfile): SshInitializationCheck {
-        val target = RemoteTarget.fromHostProfile(profile)
-        val fingerprint = client.fetchHostFingerprint(target)
-        return when (val trust = hostKeyStore.evaluate(target, fingerprint)) {
-            HostKeyTrust.Unknown -> SshInitializationCheck.NeedsHostKeyTrust(fingerprint)
-            is HostKeyTrust.Changed -> SshInitializationCheck.HostKeyChanged(
-                previousFingerprint = trust.previousFingerprint,
-                currentFingerprint = trust.currentFingerprint,
-            )
-            is HostKeyTrust.Rejected -> SshInitializationCheck.NeedsHostKeyTrust(trust.fingerprint)
-            is HostKeyTrust.Trusted -> {
-                if (hasUsableIdentity(profile)) SshInitializationCheck.Ready else SshInitializationCheck.NeedsServerPassword
-            }
-        }
-    }
-
     fun trustHostKey(profile: SshHostProfile, fingerprint: String): HostKeyTrust.Trusted =
         hostKeyStore.trust(RemoteTarget.fromHostProfile(profile), fingerprint)
 
@@ -79,8 +56,7 @@ class SshInitializationService(
         try {
             val target = RemoteTarget.fromHostProfile(profile)
             val fingerprint = client.fetchHostFingerprint(target)
-            val trust = hostKeyStore.evaluate(target, fingerprint)
-            require(trust is HostKeyTrust.Trusted) { "Trust this host key before initializing SSH access" }
+            ensureTrustedHostKey(target, fingerprint)
 
             val prepared = prepareIdentity(profile)
             val installTarget = RemoteTarget.fromHostProfile(prepared.profile)
@@ -93,6 +69,18 @@ class SshInitializationService(
             return SshInitializationResult(profile = prepared.profile)
         } finally {
             password.fill('\u0000')
+        }
+    }
+
+    private fun ensureTrustedHostKey(target: RemoteTarget, fingerprint: String) {
+        when (val trust = hostKeyStore.evaluate(target, fingerprint)) {
+            HostKeyTrust.Unknown -> hostKeyStore.trust(target, fingerprint)
+            is HostKeyTrust.Trusted -> Unit
+            is HostKeyTrust.Changed -> throw SshHostKeyChangedException(
+                previousFingerprint = trust.previousFingerprint,
+                currentFingerprint = trust.currentFingerprint,
+            )
+            is HostKeyTrust.Rejected -> throw SshInitializationException("Host key rejected")
         }
     }
 
@@ -122,11 +110,6 @@ class SshInitializationService(
         val profile: SshHostProfile,
         val publicKeyLine: String,
     )
-
-    private fun hasUsableIdentity(profile: SshHostProfile): Boolean {
-        val identityRefId = profile.identityRefId ?: return false
-        return readExistingPublicKey(identityRefId) != null
-    }
 
     private fun readExistingPublicKey(identityRefId: String): String? =
         runCatching {
@@ -268,4 +251,9 @@ internal fun authorizedKeysInstallScript(publicKeyLine: String): String {
 
 private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 
-class SshInitializationException(message: String) : RuntimeException(message)
+open class SshInitializationException(message: String) : RuntimeException(message)
+
+class SshHostKeyChangedException(
+    val previousFingerprint: String,
+    val currentFingerprint: String,
+) : SshInitializationException("Host key changed")

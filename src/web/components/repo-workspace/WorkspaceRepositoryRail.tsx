@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
@@ -13,8 +12,15 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
-import { BranchWorkspaceGitActionPanel } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
-import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import {
+  BranchWorkspaceGitActionPanel,
+  type BranchWorkspaceMergeConflictAiHandoffInput,
+} from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
+import {
+  BranchWorkspaceList,
+  branchWorkspaceFolderContext,
+} from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import { branchWorkspaceTerminalBase } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceMemberPresentation } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
 import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
@@ -46,6 +52,10 @@ import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-pr
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
+import {
+  buildBranchWorkspaceMergeConflictAiCommand,
+  prefillAiTerminalTargetCommand,
+} from '#/web/ai-terminal-handoff.ts'
 
 interface Props {
   workspaceRootId: string
@@ -54,7 +64,6 @@ interface Props {
   onOpenFileArea?: () => void
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
-  statusBarActionHost?: HTMLDivElement | null
 }
 
 export function WorkspaceRepositoryRail({
@@ -64,7 +73,6 @@ export function WorkspaceRepositoryRail({
   onOpenFileArea,
   onToggleFileArea,
   onOpenDetailArea,
-  statusBarActionHost,
 }: Props) {
   const t = useT()
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
@@ -204,16 +212,19 @@ export function WorkspaceRepositoryRail({
       }),
     [candidateNameById, repos, workspace?.repositoryIds],
   )
+  const refreshWorkspaceMemberCoreData = useCallback(() => {
+    const state = useReposStore.getState()
+    const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
+    return Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
+  }, [workspaceRootId])
   const settlePull = useCallback(
     async (result: WorkspacePullResult) => {
       if (result.ok) toast.success(t('workspace.pull-all-success'))
       else
         toast.error(t('workspace.pull-all-incomplete'), result.message ? { description: t(result.message) } : undefined)
-      const state = useReposStore.getState()
-      const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
-      await Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
+      await refreshWorkspaceMemberCoreData()
     },
-    [t, workspaceRootId],
+    [refreshWorkspaceMemberCoreData, t],
   )
   const pullActions = useWorkspacePullActions(workspaceRootId, settlePull)
 
@@ -335,6 +346,21 @@ export function WorkspaceRepositoryRail({
     activeContext.kind === 'branch-workspace' ? activeContext.memberRepositoryName : null
   const gitActionTarget = branchItems.find((item) => item.id === gitActionTargetId) ?? null
 
+  const handoffMergeConflictToBranchWorkspace = async (
+    input: BranchWorkspaceMergeConflictAiHandoffInput,
+  ): Promise<boolean> => {
+    if (!gitActionTarget) return false
+    const context = branchWorkspaceFolderContext(workspaceRootId, gitActionTarget)
+    return await prefillAiTerminalTargetCommand({
+      terminalBase: branchWorkspaceTerminalBase(context),
+      activate: () => {
+        activateBranchWorkspace(workspaceRootId, gitActionTarget.id)
+        onOpenDetailArea?.()
+      },
+      command: buildBranchWorkspaceMergeConflictAiCommand(input.provider, input.repositoryName, input.conflictWorktree),
+    })
+  }
+
   const openGitAction = (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => {
     branchGitActions.reset()
     setGitActionTargetId(item.id)
@@ -354,6 +380,7 @@ export function WorkspaceRepositoryRail({
       branchReloadPendingRef.current = false
       setBranchReloadPending(false)
     }
+    void refreshWorkspaceMemberCoreData().catch(() => undefined)
   }
   const cleanupRegistry = async () => {
     const result = await cleanupBranchWorkspaceRegistry(workspaceRootId).catch(() => ({
@@ -393,6 +420,7 @@ export function WorkspaceRepositoryRail({
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
               onCancel={branchGitActions.cancel}
+              onMergeConflictAiHandoff={handoffMergeConflictToBranchWorkspace}
             />
           ),
         }
@@ -580,6 +608,7 @@ export function WorkspaceRepositoryRail({
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
               onActivate={() => activateWorkspaceOverview(workspaceRootId)}
+              onToggleFileArea={onToggleFileArea}
             />
             <WorkspaceRepositoryList
               repositories={repositoryItems}
@@ -587,6 +616,7 @@ export function WorkspaceRepositoryRail({
               disabled={!reorderReady}
               onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
               onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
+              onToggleFileArea={onToggleFileArea}
             />
           </WorkspaceRepositoryListPane>
         ) : null}
@@ -600,7 +630,7 @@ export function WorkspaceRepositoryRail({
                 {t('workspace.branch-workspace.list')}
               </span>
               {branchListRefreshAction}
-              {!repositoryListVisible && !statusBarActionHost ? hiddenRepositoryActions : null}
+              {!repositoryListVisible ? hiddenRepositoryActions : null}
             </div>
             {branchQuery.isPending ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
@@ -698,9 +728,6 @@ export function WorkspaceRepositoryRail({
           </div>
         )}
       </div>
-      {!repositoryListVisible && statusBarActionHost
-        ? createPortal(hiddenRepositoryActions, statusBarActionHost)
-        : null}
       <WorkspaceConfigurationDialog
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
@@ -784,6 +811,7 @@ function ManifestRow({
   hasTerminalBell,
   hasTerminalOutputActivity,
   onActivate,
+  onToggleFileArea,
 }: {
   active: boolean
   name: string
@@ -791,6 +819,7 @@ function ManifestRow({
   hasTerminalBell: boolean
   hasTerminalOutputActivity: boolean
   onActivate: () => void
+  onToggleFileArea?: () => void
 }) {
   const t = useT()
   return (
@@ -803,6 +832,7 @@ function ManifestRow({
         active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
       )}
       onClick={onActivate}
+      onDoubleClick={onToggleFileArea}
     >
       <Folder className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -813,7 +843,7 @@ function ManifestRow({
             data-testid="overview-terminal-count-badge"
             aria-label={t('terminal.open-count', { count: terminalCount })}
             variant="brand"
-            className="h-4 gap-1 rounded-full px-1.5 text-[10px] tabular-nums"
+            className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
           >
             {hasTerminalOutputActivity ? (
               <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />

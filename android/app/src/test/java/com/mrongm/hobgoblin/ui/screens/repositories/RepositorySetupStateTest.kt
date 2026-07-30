@@ -820,8 +820,8 @@ class RepositorySetupStateTest {
             worktreeRemovalBlockedText(WorktreeRemovalBlockReason.Primary),
         )
         assertEquals(
-            LocalizedText(R.string.repository_worktree_protected_blocked),
-            worktreeRemovalBlockedText(WorktreeRemovalBlockReason.ProtectedBranch),
+            LocalizedText(R.string.repository_worktree_identity_changed),
+            worktreeRemovalBlockedText(WorktreeRemovalBlockReason.IdentityChanged),
         )
         assertNull(worktreeRemovalBlockedText(null))
     }

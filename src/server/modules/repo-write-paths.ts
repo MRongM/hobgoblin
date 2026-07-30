@@ -53,6 +53,10 @@ import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summ
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
+export interface RepoMutationInvalidationOptions {
+  publishInvalidation?: boolean
+}
+
 const MAX_CLONE_URL_LENGTH = 4096
 const MAX_CLONE_DIR_NAME_LENGTH = 255
 const CLONE_URL_SCHEME_RE = /^(?:https?|ssh|git|file):\/\/\S+$/i
@@ -135,18 +139,28 @@ function publishRepoSnapshotInvalidation(cwd: string, sourceToken?: string): voi
   publishRepoQueryInvalidation(repoSnapshotInvalidationEvent(cwd, sourceToken))
 }
 
+export function publishRepositorySnapshotInvalidation(cwd: string, sourceToken?: string): void {
+  publishRepoSnapshotInvalidation(cwd, sourceToken)
+}
+
 async function publishSnapshotInvalidationAfterMutation(
   cwd: string,
   result: ExecResult,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
-  if (!result.ok) return result
+  if (!result.ok || options?.publishInvalidation === false) return result
   publishRepoSnapshotInvalidation(cwd, sourceToken)
   return result
 }
 
-function publishSnapshotInvalidationAfterGitAttempt(cwd: string, result: ExecResult, sourceToken?: string): ExecResult {
-  publishRepoSnapshotInvalidation(cwd, sourceToken)
+function publishSnapshotInvalidationAfterGitAttempt(
+  cwd: string,
+  result: ExecResult,
+  sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
+): ExecResult {
+  if (options?.publishInvalidation !== false) publishRepoSnapshotInvalidation(cwd, sourceToken)
   return result
 }
 
@@ -194,6 +208,7 @@ async function runUserNetworkMutation(
   signal: AbortSignal | undefined,
   sourceToken: string | undefined,
   task: (signal: AbortSignal | undefined) => Promise<ExecResult>,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   return await publishSnapshotInvalidationAfterMutation(
     cwd,
@@ -201,6 +216,7 @@ async function runUserNetworkMutation(
       return await withMergedAbortSignal([signal, networkSignal], task)
     }),
     sourceToken,
+    options,
   )
 }
 
@@ -290,12 +306,17 @@ export async function pullRepositoryBranch(
   worktreePath?: string,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   const backend = await resolveRepoBackend(cwd)
   const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
-  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
-    return await backend.pull(branch, worktreePath, mergedSignal, networkOptions)
-  })
+  return await runUserNetworkMutation(
+    cwd,
+    signal,
+    sourceToken,
+    async (mergedSignal) => await backend.pull(branch, worktreePath, mergedSignal, networkOptions),
+    options,
+  )
 }
 
 export async function pushRepositoryBranch(
@@ -303,12 +324,17 @@ export async function pushRepositoryBranch(
   branch: string,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   const backend = await resolveRepoBackend(cwd)
   const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
-  return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
-    return await backend.push(branch, mergedSignal, networkOptions)
-  })
+  return await runUserNetworkMutation(
+    cwd,
+    signal,
+    sourceToken,
+    async (mergedSignal) => await backend.push(branch, mergedSignal, networkOptions),
+    options,
+  )
 }
 
 export async function createRepositoryWorktree(
@@ -317,6 +343,7 @@ export async function createRepositoryWorktree(
   worktreeBootstrap: WorktreeBootstrapDecision,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
   if (!isWorktreePathInputAbsolute(input)) return { ok: false, message: 'error.invalid-path' }
@@ -327,7 +354,7 @@ export async function createRepositoryWorktree(
       return await backend.createWorktree(normalized, signal, { worktreeBootstrap })
     })
     return result.ok || result.repoChanged
-      ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken)
+      ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken, options)
       : result
   })
 }
@@ -520,9 +547,15 @@ export async function removeRepositoryWorktree(
   },
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => {
-    return await publishSnapshotInvalidationAfterMutation(cwd, await backend.removeWorktree(input, signal), sourceToken)
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.removeWorktree(input, signal),
+      sourceToken,
+      options,
+    )
   })
 }
 
@@ -735,6 +768,7 @@ export async function commitRepositoryChanges(
   message: string,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath)) {
     return { ok: false, message: 'error.invalid-arguments' }
@@ -744,6 +778,7 @@ export async function commitRepositoryChanges(
       repoId,
       await backend.commitAll(worktreePath, message, signal),
       sourceToken,
+      options,
     )
   })
 }
@@ -754,6 +789,7 @@ export async function mergeRepositoryBranch(
   branch: string,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath)) {
     return { ok: false, message: 'error.invalid-arguments' }
@@ -763,6 +799,7 @@ export async function mergeRepositoryBranch(
       repoId,
       await backend.merge(worktreePath, branch, signal),
       sourceToken,
+      options,
     )
   })
 }

@@ -127,6 +127,23 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe('buildBranchWorkspaceGitActionPlan', () => {
+  test('skips snapshot worktree status because member status is read separately', async () => {
+    const deps = dependencies()
+
+    await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID },
+      deps,
+    )
+
+    expect(deps.getSnapshot).toHaveBeenNthCalledWith(1, '/workspace/api', undefined, {
+      includeWorktreeStatus: false,
+    })
+    expect(deps.getSnapshot).toHaveBeenNthCalledWith(2, '/workspace/web', undefined, {
+      includeWorktreeStatus: false,
+    })
+  })
+
   test('ignores legacy repository dependency recovery fields when checking readiness', async () => {
     const current = manifest()
     Object.assign(current.repositories[0]!, {

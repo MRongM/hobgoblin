@@ -7,23 +7,11 @@ import { useMergeConflictAiActions } from '#/web/hooks/useMergeConflictAiActions
 
 const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
-  bridge: {
-    worktreeSnapshot: vi.fn(),
-    createTerminal: vi.fn(),
-    selectTerminal: vi.fn(),
-    waitForInputReady: vi.fn(),
-    writeInput: vi.fn(),
-  },
-  showRepoBranchDetailTab: vi.fn(),
-  setDetailCollapsed: vi.fn(),
+  onHandoff: vi.fn(),
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
-}))
-
-vi.mock('#/web/components/terminal/terminal-session-command-bridge.ts', () => ({
-  readTerminalSessionCommandBridge: () => mocks.bridge,
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -33,18 +21,13 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
 beforeEach(() => {
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   vi.clearAllMocks()
   mocks.getCommitMessageProviders.mockResolvedValue({ codex: true, claude: true })
-  mocks.bridge.worktreeSnapshot.mockReturnValue({
-    count: 0,
-    selectedDescriptor: null,
-    sessions: [],
-    worktreeTerminalKey: '/repo\u0000/worktree',
-  })
-  mocks.bridge.createTerminal.mockResolvedValue('/repo\u0000/worktree\u0000terminal-1')
-  mocks.bridge.waitForInputReady.mockResolvedValue(true)
+  mocks.onHandoff.mockResolvedValue(true)
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -55,10 +38,11 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
 describe('useMergeConflictAiActions', () => {
-  test('creates a worktree terminal and writes merge conflict command without executing', async () => {
+  test('delegates the selected available provider to the target handoff', async () => {
     let actions: ReturnType<typeof useMergeConflictAiActions> | null = null
     await act(async () => {
       root!.render(<Harness onReady={(value) => (actions = value)} />)
@@ -69,25 +53,12 @@ describe('useMergeConflictAiActions', () => {
       await actions!.actions.find((action) => action.provider === 'codex')!.onSelect()
     })
 
-    expect(mocks.bridge.createTerminal).toHaveBeenCalledWith({
-      repoRoot: '/repo',
-      branch: 'feature/conflict',
-      worktreePath: '/worktree',
-    })
-    expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
-      '/repo\u0000/worktree\u0000terminal-1',
-      expect.stringContaining('codex exec'),
-    )
-    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toMatch(/[\r\n]$/)
+    expect(mocks.onHandoff).toHaveBeenCalledWith('codex')
+    expect(actions!.error).toBeNull()
   })
 
-  test('uses the selected terminal when one already exists', async () => {
-    mocks.bridge.worktreeSnapshot.mockReturnValue({
-      count: 1,
-      selectedDescriptor: { key: '/repo\u0000/worktree\u0000terminal-1' },
-      sessions: [{ key: '/repo\u0000/worktree\u0000terminal-1', phase: 'open', selected: true }],
-      worktreeTerminalKey: '/repo\u0000/worktree',
-    })
+  test('reports a target handoff failure without hiding the provider actions', async () => {
+    mocks.onHandoff.mockResolvedValueOnce(false)
     let actions: ReturnType<typeof useMergeConflictAiActions> | null = null
     await act(async () => {
       root!.render(<Harness onReady={(value) => (actions = value)} />)
@@ -98,26 +69,15 @@ describe('useMergeConflictAiActions', () => {
       await actions!.actions.find((action) => action.provider === 'claude')!.onSelect()
     })
 
-    expect(mocks.bridge.createTerminal).not.toHaveBeenCalled()
-    expect(mocks.bridge.selectTerminal).toHaveBeenCalledWith(
-      '/repo\u0000/worktree',
-      '/repo\u0000/worktree\u0000terminal-1',
-    )
-    expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
-      '/repo\u0000/worktree\u0000terminal-1',
-      expect.stringContaining('claude --print'),
-    )
-    expect(mocks.bridge.writeInput.mock.calls[0]![1]).not.toMatch(/[\r\n]$/)
+    expect(mocks.onHandoff).toHaveBeenCalledWith('claude')
+    expect(actions!.actions).toHaveLength(2)
+    expect(actions!.error).toBe('action.merge-conflict-ai-prefill-failed')
   })
 })
 
 function Harness({ onReady }: { onReady: (value: ReturnType<typeof useMergeConflictAiActions>) => void }) {
   const value = useMergeConflictAiActions({
-    repoId: '/repo',
-    branch: 'feature/conflict',
-    worktreePath: '/worktree',
-    navigation: { showRepoBranchDetailTab: mocks.showRepoBranchDetailTab },
-    setDetailCollapsed: mocks.setDetailCollapsed,
+    onHandoff: mocks.onHandoff,
   })
   onReady(value)
   return null

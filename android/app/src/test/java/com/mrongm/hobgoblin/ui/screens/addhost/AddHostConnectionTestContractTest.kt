@@ -7,6 +7,27 @@ import org.junit.Test
 
 class AddHostConnectionTestContractTest {
     @Test
+    fun `temporary password submission initializes and diagnoses without a precheck callback`() {
+        val screen = sourceFile(
+            "src/main/java/com/mrongm/hobgoblin/ui/screens/addhost/AddHostScreen.kt",
+            "app/src/main/java/com/mrongm/hobgoblin/ui/screens/addhost/AddHostScreen.kt",
+            "android/app/src/main/java/com/mrongm/hobgoblin/ui/screens/addhost/AddHostScreen.kt",
+        )
+        val app = sourceFile(
+            "src/main/java/com/mrongm/hobgoblin/HobgoblinAndroidApp.kt",
+            "app/src/main/java/com/mrongm/hobgoblin/HobgoblinAndroidApp.kt",
+            "android/app/src/main/java/com/mrongm/hobgoblin/HobgoblinAndroidApp.kt",
+        )
+
+        assertTrue(screen.contains("runHostInitializationFlow("))
+        assertTrue(screen.contains("HostInitializationFlowResult.Diagnosed"))
+        assertTrue(screen.contains("HostInitializationFlowResult.DiagnosticFailed"))
+        assertTrue(screen.contains("SshHostKeyChangedException"))
+        assertFalse(screen.contains("onCheckSshInitialization"))
+        assertFalse(app.contains("initializationService.check(input)"))
+    }
+
+    @Test
     fun `newly initialized identities expose an inline connection test`() {
         val source = sourceFile(
             "src/main/java/com/mrongm/hobgoblin/ui/screens/addhost/AddHostScreen.kt",

@@ -1,4 +1,4 @@
-import type { GitFailureReason } from '#/shared/git-types.ts'
+import type { GitConflictWorktree, GitFailureReason } from '#/shared/git-types.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 export type BranchWorkspaceGitActionKind = 'batch-commit' | 'batch-merge-in' | 'batch-merge-out' | 'pull' | 'push'
@@ -161,6 +161,7 @@ export interface BranchWorkspaceGitActionMemberResult {
   step?: BranchWorkspaceGitActionStep
   message?: string
   reason?: GitFailureReason
+  conflictWorktree?: GitConflictWorktree
 }
 
 export interface BranchWorkspaceGitActionResult {

@@ -32,6 +32,7 @@ import com.mrongm.hobgoblin.ssh.HostPortForwardManager
 import com.mrongm.hobgoblin.ssh.HostPortForwardStatus
 import com.mrongm.hobgoblin.ssh.RemoteRepositoryGitService
 import com.mrongm.hobgoblin.ssh.RemoteWorktreeService
+import com.mrongm.hobgoblin.ssh.RemoteWorktreeMergeService
 import com.mrongm.hobgoblin.ssh.SshDiagnosticsService
 import com.mrongm.hobgoblin.ssh.SshInitializationService
 import com.mrongm.hobgoblin.terminals.TerminalForegroundBridge
@@ -127,6 +128,7 @@ fun HobgoblinAndroidApp(
     diagnosticsService: SshDiagnosticsService,
     remoteRepositoryGitService: RemoteRepositoryGitService,
     remoteWorktreeService: RemoteWorktreeService,
+    remoteWorktreeMergeService: RemoteWorktreeMergeService,
     initializationService: SshInitializationService,
     terminalSettingsStore: TerminalSettingsStore,
     terminalSessionManager: TerminalSessionManager,
@@ -538,7 +540,6 @@ fun HobgoblinAndroidApp(
             initialHost = null,
             onBack = { route = AppRoute.Hosts },
             onImportPrivateKey = { displayName, bytes -> secureIdentityStore.importPrivateKey(displayName, bytes) },
-            onCheckSshInitialization = { input -> initializationService.check(input) },
             onTrustHostKey = { input, fingerprint ->
                 initializationService.trustHostKey(input, fingerprint)
             },
@@ -568,7 +569,6 @@ fun HobgoblinAndroidApp(
                     onExportPrivateKey = { identityId, output ->
                         secureIdentityStore.exportPrivateKey(identityId, output)
                     },
-                    onCheckSshInitialization = { input -> initializationService.check(input) },
                     onTrustHostKey = { input, fingerprint ->
                         initializationService.trustHostKey(input, fingerprint)
                     },
@@ -769,6 +769,20 @@ fun HobgoblinAndroidApp(
                         )
                         terminalSessionManager.removeWorkspaceSessions(repository.id, worktree.path)
                         terminalForegroundBridge.sync()
+                    },
+                    onMergeInto = { destination, sourceBranch ->
+                        remoteWorktreeMergeService.mergeInto(
+                            target = RemoteTarget.fromHostProfile(host, repository.remotePath),
+                            destination = destination,
+                            sourceBranch = sourceBranch,
+                        )
+                    },
+                    onMergeOut = { source, destination ->
+                        remoteWorktreeMergeService.mergeOut(
+                            target = RemoteTarget.fromHostProfile(host, repository.remotePath),
+                            source = source,
+                            destination = destination,
+                        )
                     },
                     initialWorktreeOrder = manualItemOrderStore.load(
                         ManualItemOrderScope.Worktrees(repository.id),

@@ -817,8 +817,8 @@
             Git-aware high-productivity workspace,<br /><span>not just branch management</span>
           </h1>
           <p class="hero-sub" data-i18n="hero_sub">
-            Hobgoblin connects multi-project tabs, isolated worktrees, branch context, server-backed terminals, and AI
-            CLI sessions so parallel development stays visible and controllable.
+            Hobgoblin connects repositories, multi-repository workspaces, Branch workspaces, terminals, Android, and
+            tmux so parallel development stays visible and controllable.
           </p>
           <div class="hero-actions">
             <a
@@ -868,8 +868,8 @@
         <div class="section-label" data-i18n="features_label">Features</div>
         <h2 class="section-title" data-i18n-html="features_title">One workspace for<br />parallel development</h2>
         <p class="section-desc" data-i18n="features_desc">
-          The workflow model is multi-project x multi-worktree / multi-branch x multi-terminal, with Git state always
-          attached to the work in progress.
+          Configure independent repositories once, isolate a feature in a Branch workspace, and keep every terminal and
+          Git action attached to the right root or member context.
         </p>
         <div class="features-grid">
           <!-- f1: Multi-Repo Tabs -->
@@ -890,10 +890,10 @@
                 <line x1="9" y1="3" x2="9" y2="9" />
               </svg>
             </div>
-            <h3 data-i18n="f1_title">Multi-project workspace</h3>
+            <h3 data-i18n="f1_title">Multi-repository workspaces</h3>
             <p data-i18n="f1_desc">
-              Open several repositories in tabs, reorder them, and restore your previous session so project switching
-              does not reset your context.
+              Group selected repositories under one root for shared files and terminals while each member keeps its own
+              Git history, worktrees, and writes.
             </p>
           </div>
           <!-- f2: Branch & Worktree Management -->
@@ -915,10 +915,10 @@
                 <path d="M18 9a9 9 0 0 1-9 9" />
               </svg>
             </div>
-            <h3 data-i18n="f2_title">Worktree-based development</h3>
+            <h3 data-i18n="f2_title">Branch workspaces</h3>
             <p data-i18n="f2_desc">
-              Isolate parallel branches in separate worktrees, inspect their state, and move between them without
-              dirtying one checkout.
+              Build one feature across selected same-named repository worktrees, with an explorable root and independent
+              member contexts.
             </p>
           </div>
           <!-- f3: AI CLI-ready terminals -->
@@ -940,8 +940,8 @@
             </div>
             <h3 data-i18n="f3_title">AI CLI-ready terminals</h3>
             <p data-i18n="f3_desc">
-              Keep coding agents, shell tasks, and terminals attached to the repository, branch, and worktree they
-              belong to instead of scattering context across windows.
+              Run coding agents and shell tasks at the Branch workspace root or inside one member without losing their
+              Git and directory context.
             </p>
           </div>
           <!-- f4: Commit Log & Status -->
@@ -960,9 +960,10 @@
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
             </div>
-            <h3 data-i18n="f4_title">Git context in one window</h3>
+            <h3 data-i18n="f4_title">Android mobile client</h3>
             <p data-i18n="f4_desc">
-              Branch status, latest commits, diffs, and working tree changes stay next to the work they describe.
+              Use saved SSH Hosts, remote Projects and Worktrees, retained terminals, and port forwards when working
+              away from the desktop.
             </p>
           </div>
           <!-- f5: Visual workflow controls -->
@@ -982,10 +983,10 @@
                 <polyline points="7 9 12 4 17 9" />
               </svg>
             </div>
-            <h3 data-i18n="f5_title">Visual workflow controls</h3>
+            <h3 data-i18n="f5_title">Project-scoped tmux</h3>
             <p data-i18n="f5_desc">
-              Navigate branches, switch repositories, toggle views, checkout, pull, push, create worktrees, and jump to
-              external tools from clear interface context.
+              Explicitly create or reconnect deterministic Hobgoblin sessions and recover Hobgoblin or default tmux
+              sessions from Android.
             </p>
           </div>
           <!-- f6: Local, SSH, themes, and languages -->
@@ -1006,10 +1007,10 @@
                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
               </svg>
             </div>
-            <h3 data-i18n="f6_title">Ready for real repositories</h3>
+            <h3 data-i18n="f6_title">Git coordination with clear boundaries</h3>
             <p data-i18n="f6_desc">
-              Work with local paths and SSH repositories, then keep the workspace comfortable with persistent themes and
-              English, Chinese, Korean, and Japanese UI strings.
+              Inspect local or SSH repository state individually, then run ordered workspace commit, pull, push, and
+              merge flows that stop visibly on failure.
             </p>
           </div>
         </div>
@@ -1072,14 +1073,28 @@
             <p data-i18n="install_windows_desc">Download the Windows x64 installer from the latest GitHub Release.</p>
           </div>
           <div class="install-card fade-in">
+            <h3 data-i18n="install_android_title">Android</h3>
+            <p data-i18n="install_android_desc">Download the unsigned Android APK and sign it before installation.</p>
+          </div>
+          <div class="install-card fade-in">
+            <h3 data-i18n="install_linux_title">Linux Server Mode</h3>
+            <p data-i18n="install_linux_desc">
+              Download the deployment-focused source archive for a Node.js 24+ and Bun host.
+            </p>
+          </div>
+          <div class="install-card fade-in">
             <h3 data-i18n="install_source_title">Develop from source</h3>
             <p data-i18n="install_source_desc">Install dependencies with Bun and start the development app locally.</p>
           </div>
         </div>
         <pre class="install-code"><code>bun install
 bun run dev</code></pre>
+        <p class="install-note" data-i18n="install_linux_command_label">Linux systemd deployment:</p>
+        <pre class="install-code"><code>tar -xzf Hobgoblin-&lt;version&gt;-linux-source.tar.gz
+cd Hobgoblin-&lt;version&gt;
+./scripts/serve-systemd.sh</code></pre>
         <p class="install-note" data-i18n="install_note">
-          Current release builds are unsigned. macOS Gatekeeper or Windows SmartScreen may show a warning.
+          Current desktop builds and the Android APK are unsigned. The Android APK must be signed before installation.
         </p>
         <div class="hero-actions" style="margin-top: 28px">
           <a
@@ -1108,37 +1123,37 @@ bun run dev</code></pre>
         <div class="section-label" data-i18n="how_label">How It Works</div>
         <h2 class="section-title" data-i18n="how_title">From repositories to focused workspaces</h2>
         <p class="section-desc" data-i18n="how_desc">
-          Point Hobgoblin at your repositories, isolate work in worktrees, and keep terminals, AI CLI sessions, and Git
-          state in the same operating surface.
+          Model the product once, create an isolated Branch workspace for the task, and coordinate its independent Git
+          members without flattening their boundaries.
         </p>
         <div class="steps">
           <div class="step fade-in">
             <div class="step-num">1</div>
             <div class="step-content">
-              <h3 data-i18n="s1_title">Open projects</h3>
+              <h3 data-i18n="s1_title">Configure repository members</h3>
               <p data-i18n="s1_desc">
-                Add local or SSH-backed repositories. Hobgoblin opens each project in a tab and restores the workspace
-                when you return.
+                Open a local or SSH workspace root and choose the independent repositories that belong to this product
+                context.
               </p>
             </div>
           </div>
           <div class="step fade-in">
             <div class="step-num">2</div>
             <div class="step-content">
-              <h3 data-i18n="s2_title">Isolate parallel work</h3>
+              <h3 data-i18n="s2_title">Create a Branch workspace</h3>
               <p data-i18n="s2_desc">
-                Create and inspect worktrees so multiple branches can move independently, each with clear sync status,
-                commits and changes.
+                Select each repository's base branch, materialize same-named member worktrees, and optionally copy or
+                link shared workspace dependencies.
               </p>
             </div>
           </div>
           <div class="step fade-in">
             <div class="step-num">3</div>
             <div class="step-content">
-              <h3 data-i18n="s3_title">Execute in context</h3>
+              <h3 data-i18n="s3_title">Develop and coordinate in context</h3>
               <p data-i18n="s3_desc">
-                Attach terminals and AI CLI sessions to the right worktree, then checkout, pull, push, open external
-                tools, and jump to GitHub from the same visual workspace.
+                Work from the root or one member, then run repository-scoped or ordered workspace Git actions with
+                explicit progress and failure boundaries.
               </p>
             </div>
           </div>
@@ -1204,32 +1219,32 @@ bun run dev</code></pre>
           hero_badge: 'AI CLI-ready Desktop Workspace',
           hero_title: 'Git-aware high-productivity workspace,<br/><span>not just branch management</span>',
           hero_sub:
-            'Hobgoblin connects multi-project tabs, isolated worktrees, branch context, server-backed terminals, and AI CLI sessions so parallel development stays visible and controllable.',
+            'Hobgoblin connects repositories, multi-repository workspaces, Branch workspaces, terminals, Android, and tmux so parallel development stays visible and controllable.',
           btn_download: 'Download',
           btn_source: 'Source Code',
           btn_github: 'View on GitHub',
           features_label: 'Features',
           features_title: 'One workspace for<br/>parallel development',
           features_desc:
-            'The workflow model is multi-project x multi-worktree / multi-branch x multi-terminal, with Git state always attached to the work in progress.',
-          f1_title: 'Multi-project workspace',
+            'Configure independent repositories once, isolate a feature in a Branch workspace, and keep every terminal and Git action attached to the right root or member context.',
+          f1_title: 'Multi-repository workspaces',
           f1_desc:
-            'Open several repositories in tabs, reorder them, and restore your previous session so project switching does not reset your context.',
-          f2_title: 'Worktree-based development',
+            'Group selected repositories under one root for shared files and terminals while each member keeps its own Git history, worktrees, and writes.',
+          f2_title: 'Branch workspaces',
           f2_desc:
-            'Isolate parallel branches in separate worktrees, inspect their state, and move between them without dirtying one checkout.',
+            'Build one feature across selected same-named repository worktrees, with an explorable root and independent member contexts.',
           f3_title: 'AI CLI-ready terminals',
           f3_desc:
-            'Keep coding agents, shell tasks, and terminals attached to the repository, branch, and worktree they belong to instead of scattering context across windows.',
-          f4_title: 'Git context in one window',
+            'Run coding agents and shell tasks at the Branch workspace root or inside one member without losing their Git and directory context.',
+          f4_title: 'Android mobile client',
           f4_desc:
-            'Branch status, latest commits, diffs, and working tree changes stay next to the work they describe.',
-          f5_title: 'Visual workflow controls',
+            'Use saved SSH Hosts, remote Projects and Worktrees, retained terminals, and port forwards when working away from the desktop.',
+          f5_title: 'Project-scoped tmux',
           f5_desc:
-            'Navigate branches, switch repositories, toggle views, checkout, pull, push, create worktrees, and jump to external tools from clear interface context.',
-          f6_title: 'Ready for real repositories',
+            'Explicitly create or reconnect deterministic Hobgoblin sessions and recover Hobgoblin or default tmux sessions from Android.',
+          f6_title: 'Git coordination with clear boundaries',
           f6_desc:
-            'Work with local paths and SSH repositories, then keep the workspace comfortable with persistent themes and English, Chinese, Korean, and Japanese UI strings.',
+            'Inspect local or SSH repository state individually, then run ordered workspace commit, pull, push, and merge flows that stop visibly on failure.',
           origin_label: 'Origin',
           origin_title: 'From Goblin<br/>to Hobgoblin',
           origin_desc:
@@ -1238,30 +1253,36 @@ bun run dev</code></pre>
           origin_source: 'Goblin source',
           install_label: 'Install',
           install_title: 'Choose the build<br/>for your machine',
-          install_desc: 'Download Hobgoblin from GitHub Releases, or run it from source with Bun during development.',
+          install_desc:
+            'Download Hobgoblin for macOS, Windows, Android, or Linux Server Mode, or run it from source with Bun during development.',
           install_macos_arm_title: 'macOS Apple Silicon',
           install_macos_arm_desc: 'Download the arm64 DMG from the latest GitHub Release.',
           install_macos_intel_title: 'macOS Intel',
           install_macos_intel_desc: 'Download the x64 DMG from the latest GitHub Release.',
           install_windows_title: 'Windows x64',
           install_windows_desc: 'Download the Windows x64 installer from the latest GitHub Release.',
+          install_android_title: 'Android',
+          install_android_desc: 'Download the unsigned Android APK and sign it before installation.',
+          install_linux_title: 'Linux Server Mode',
+          install_linux_desc: 'Download the deployment-focused source archive for a Node.js 24+ and Bun host.',
           install_source_title: 'Develop from source',
           install_source_desc: 'Install dependencies with Bun and start the development app locally.',
+          install_linux_command_label: 'Linux systemd deployment:',
           install_note:
-            'Current release builds are unsigned. macOS Gatekeeper or Windows SmartScreen may show a warning.',
+            'Current desktop builds and the Android APK are unsigned. The Android APK must be signed before installation.',
           how_label: 'How It Works',
           how_title: 'From repositories to focused workspaces',
           how_desc:
-            'Point Hobgoblin at your repositories, isolate work in worktrees, and keep terminals, AI CLI sessions, and Git state in the same operating surface.',
-          s1_title: 'Open projects',
+            'Model the product once, create an isolated Branch workspace for the task, and coordinate its independent Git members without flattening their boundaries.',
+          s1_title: 'Configure repository members',
           s1_desc:
-            'Add local or SSH-backed repositories. Hobgoblin opens each project in a tab and restores the workspace when you return.',
-          s2_title: 'Isolate parallel work',
+            'Open a local or SSH workspace root and choose the independent repositories that belong to this product context.',
+          s2_title: 'Create a Branch workspace',
           s2_desc:
-            'Create and inspect worktrees so multiple branches can move independently, each with clear sync status, commits, and changes.',
-          s3_title: 'Execute in context',
+            "Select each repository's base branch, materialize same-named member worktrees, and optionally copy or link shared workspace dependencies.",
+          s3_title: 'Develop and coordinate in context',
           s3_desc:
-            'Attach terminals and AI CLI sessions to the right worktree, then checkout, pull, push, open external tools, and jump to GitHub from the same visual workspace.',
+            'Work from the root or one member, then run repository-scoped or ordered workspace Git actions with explicit progress and failure boundaries.',
           cta_title: 'Bring parallel Git work<br/>into one workspace',
           cta_desc: 'Hobgoblin is a free, open-source productivity workspace for developers who live in Git.',
           footer_made: 'Made by',
@@ -1273,27 +1294,26 @@ bun run dev</code></pre>
           hero_badge: '面向 AI CLI 的桌面工作区',
           hero_title: '基于 Git 感知的高生产力工作区，<br/><span>不只是分支管理</span>',
           hero_sub:
-            'Hobgoblin 把多项目标签页、隔离 worktree、分支上下文、服务端终端和 AI CLI 会话连接起来，让并行开发始终可见、可控。',
+            'Hobgoblin 把仓库、多仓库工作区、Branch workspace、终端、Android 与 tmux 连接起来，让并行开发始终可见、可控。',
           btn_download: '下载',
           btn_source: '源代码',
           btn_github: '在 GitHub 上查看',
           features_label: '功能特性',
           features_title: '并行开发，<br/>一个工作区完成',
           features_desc:
-            '核心模型是 multi-project x multi-worktree / multi-branch x multi-terminal，Git 状态始终贴合正在进行的工作。',
-          f1_title: '多项目工作区',
-          f1_desc: '以标签页打开多个仓库，拖拽排序，并在下次启动时恢复会话，让项目切换不会打断上下文。',
-          f2_title: '基于 Worktree 的开发',
-          f2_desc: '把并行分支隔离在独立 worktree 中，检查各自状态，并在它们之间切换，而不会弄脏同一个 checkout。',
+            '一次配置独立仓库，在 Branch workspace 中隔离一个功能，并让每个终端和 Git 操作始终绑定到正确的根级或成员上下文。',
+          f1_title: '多仓库工作区',
+          f1_desc: '在一个根目录下组织选定仓库以共享文件和终端，同时让每个成员独立保有 Git 历史、worktree 与写操作。',
+          f2_title: 'Branch workspace',
+          f2_desc: '在选定的同名仓库 worktree 中开发一个功能，同时获得可浏览的根目录和相互独立的成员上下文。',
           f3_title: 'AI CLI 就绪的终端',
-          f3_desc: '让编码代理、shell 任务和终端始终附着在对应的仓库、分支与 worktree 上，而不是散落在无关窗口里。',
-          f4_title: '一个窗口里的 Git 上下文',
-          f4_desc: '分支状态、最新提交、diff、工作区变更、关联 PR、Review 状态和 CI 信号，都贴在对应工作旁边。',
-          f5_title: '可视化操作工作流',
-          f5_desc:
-            '浏览分支、切换仓库、切换视图、checkout、pull、push、创建 worktree、跳转外部工具，都可以在清晰的界面上下文中完成。',
-          f6_title: '适配真实仓库工作流',
-          f6_desc: '支持本地路径与 SSH 仓库，并提供持久化主题以及英语、中文、韩语、日语 UI，让工作区长期可用。',
+          f3_desc: '在 Branch workspace 根目录或单个成员中运行编码代理与 shell 任务，不丢失对应 Git 和目录上下文。',
+          f4_title: 'Android 移动端',
+          f4_desc: '离开桌面时仍可使用已保存的 SSH Host、远程 Project 与 Worktree、保留终端和端口转发。',
+          f5_title: '项目级 tmux',
+          f5_desc: '显式创建或重连确定性的 Hobgoblin 会话，并从 Android 恢复 Hobgoblin 或默认 tmux 会话。',
+          f6_title: '边界清晰的 Git 协作',
+          f6_desc: '分别检查本地或 SSH 仓库状态，再执行按序运行、失败时明确停止的工作区提交、拉取、推送和合并流程。',
           origin_label: '起源',
           origin_title: '从 Goblin<br/>到 Hobgoblin',
           origin_desc:
@@ -1302,26 +1322,31 @@ bun run dev</code></pre>
           origin_source: 'Goblin 源代码',
           install_label: '安装',
           install_title: '选择适合你设备的<br/>构建版本',
-          install_desc: '从 GitHub Releases 下载 Hobgoblin，或在开发时使用 Bun 从源码运行。',
+          install_desc:
+            '从 GitHub Releases 下载 macOS、Windows、Android 或 Linux Server Mode 版本，也可在开发时使用 Bun 从源码运行。',
           install_macos_arm_title: 'macOS Apple Silicon',
           install_macos_arm_desc: '从最新 GitHub Release 下载 arm64 DMG。',
           install_macos_intel_title: 'macOS Intel',
           install_macos_intel_desc: '从最新 GitHub Release 下载 x64 DMG。',
           install_windows_title: 'Windows x64',
           install_windows_desc: '从最新 GitHub Release 下载 Windows x64 安装程序。',
+          install_android_title: 'Android',
+          install_android_desc: '下载未签名 Android APK，并在安装前完成签名。',
+          install_linux_title: 'Linux Server Mode',
+          install_linux_desc: '为安装了 Node.js 24+ 与 Bun 的主机下载面向部署的源码包。',
           install_source_title: '从源码开发',
           install_source_desc: '使用 Bun 安装依赖，并在本地启动开发应用。',
-          install_note: '当前发布构建未签名。macOS Gatekeeper 或 Windows SmartScreen 可能会显示警告。',
+          install_linux_command_label: 'Linux systemd 部署：',
+          install_note: '当前桌面构建与 Android APK 均未签名；Android APK 必须先签名才能安装。',
           how_label: '使用方式',
           how_title: '从仓库到专注工作区',
-          how_desc: '把仓库交给 Hobgoblin，在 worktree 中隔离工作，并让终端、AI CLI 会话和 Git 状态留在同一个操作面。',
-          s1_title: '打开项目',
-          s1_desc: '添加本地或 SSH 仓库。Hobgoblin 会把每个项目打开为标签页，并在你回来时恢复工作区。',
-          s2_title: '隔离并行工作',
-          s2_desc: '创建并检查 worktree，让多个分支独立推进，并清晰看到各自的同步状态、提交、变更和 PR 上下文。',
-          s3_title: '在上下文中执行',
-          s3_desc:
-            '把终端和 AI CLI 会话附着到正确的 worktree，然后在同一个可视化工作区中 checkout、pull、push、打开外部工具并跳转 GitHub。',
+          how_desc: '先建立一次产品模型，再为任务创建隔离的 Branch workspace，在不抹平边界的前提下协调独立 Git 成员。',
+          s1_title: '配置成员仓库',
+          s1_desc: '打开本地或 SSH 工作区根目录，并选择属于当前产品上下文的独立仓库。',
+          s2_title: '创建 Branch workspace',
+          s2_desc: '选择各仓库的基线分支，物化同名成员 worktree，并按需复制或链接共享工作区依赖。',
+          s3_title: '在上下文中开发与协作',
+          s3_desc: '从根目录或单个成员开始工作，再执行仓库级或按序工作区 Git 操作，获得明确的进度与失败边界。',
           cta_title: '把并行 Git 工作<br/>收进一个工作区',
           cta_desc: 'Hobgoblin 是免费、开源的开发者生产力工作区，面向长期使用 Git 的工作流。',
           footer_made: '由',
@@ -1333,32 +1358,31 @@ bun run dev</code></pre>
           hero_badge: 'AI CLI-ready 데스크톱 워크스페이스',
           hero_title: 'Git 인식 기반 고생산성 워크스페이스,<br/><span>단순한 브랜치 관리가 아닙니다</span>',
           hero_sub:
-            'Hobgoblin은 멀티 프로젝트 탭, 격리된 워크트리, 브랜치 컨텍스트, 서버 기반 터미널, AI CLI 세션을 연결해 병렬 개발을 계속 보이고 제어 가능하게 유지합니다.',
+            'Hobgoblin은 리포지토리, 멀티 리포지토리 워크스페이스, Branch workspace, 터미널, Android, tmux를 연결해 병렬 개발을 계속 보이고 제어 가능하게 유지합니다.',
           btn_download: '다운로드',
           btn_source: '소스 코드',
           btn_github: 'GitHub에서 보기',
           features_label: '기능',
           features_title: '병렬 개발을 위한<br/>하나의 워크스페이스',
           features_desc:
-            '워크플로 모델은 multi-project x multi-worktree / multi-branch x multi-terminal이며, Git 상태는 항상 진행 중인 작업에 붙어 있습니다.',
-          f1_title: '멀티 프로젝트 워크스페이스',
+            '독립 리포지토리를 한 번 구성하고 Branch workspace에 기능을 격리해 모든 터미널과 Git 작업을 올바른 루트 또는 멤버 컨텍스트에 연결합니다.',
+          f1_title: '멀티 리포지토리 워크스페이스',
           f1_desc:
-            '여러 리포지토리를 탭으로 열고, 순서를 바꾸고, 이전 세션을 복원해 프로젝트 전환이 컨텍스트를 끊지 않게 합니다.',
-          f2_title: '워크트리 기반 개발',
+            '선택한 리포지토리를 한 루트 아래 묶어 파일과 터미널을 공유하면서 각 멤버의 Git 이력, worktree, 쓰기 작업은 독립적으로 유지합니다.',
+          f2_title: 'Branch workspace',
           f2_desc:
-            '병렬 브랜치를 별도 워크트리에 격리하고 상태를 확인하며, 하나의 체크아웃을 더럽히지 않고 이동합니다.',
+            '선택한 같은 이름의 리포지토리 worktree를 가로질러 하나의 기능을 개발하며 탐색 가능한 루트와 독립 멤버 컨텍스트를 제공합니다.',
           f3_title: 'AI CLI-ready 터미널',
           f3_desc:
-            '코딩 에이전트, 셸 작업, 터미널을 해당 리포지토리, 브랜치, 워크트리에 붙여 두어 컨텍스트가 여러 창에 흩어지지 않게 합니다.',
-          f4_title: '한 창 안의 Git 컨텍스트',
-          f4_desc:
-            '브랜치 상태, 최신 커밋, diff, 워킹 트리 변경, 연결된 PR, 리뷰 상태, CI 신호가 해당 작업 옆에 유지됩니다.',
-          f5_title: '시각적 워크플로 제어',
+            'Branch workspace 루트 또는 한 멤버에서 코딩 에이전트와 셸 작업을 실행해 Git 및 디렉터리 컨텍스트를 잃지 않습니다.',
+          f4_title: 'Android 모바일 클라이언트',
+          f4_desc: '데스크톱 밖에서도 저장된 SSH Host, 원격 Project와 Worktree, 유지 터미널, 포트 포워드를 사용합니다.',
+          f5_title: '프로젝트별 tmux',
           f5_desc:
-            '브랜치 탐색, 리포 전환, 뷰 토글, 체크아웃, 풀, 푸시, 워크트리 생성, 외부 도구 이동을 명확한 인터페이스 컨텍스트에서 수행합니다.',
-          f6_title: '실제 리포지토리 워크플로 준비',
+            '결정적인 Hobgoblin 세션을 명시적으로 만들거나 다시 연결하고 Android에서 Hobgoblin 또는 기본 tmux 세션을 복구합니다.',
+          f6_title: '경계가 분명한 Git 조정',
           f6_desc:
-            '로컬 경로와 SSH 리포지토리로 작업하고, 지속되는 테마와 영어, 중국어, 한국어, 일본어 UI로 워크스페이스를 편하게 유지합니다.',
+            '로컬 또는 SSH 리포지토리 상태를 개별 확인한 뒤 실패 시 명확히 중단되는 순차 워크스페이스 커밋, 풀, 푸시, 머지 흐름을 실행합니다.',
           origin_label: '기원',
           origin_title: 'Goblin에서<br/>Hobgoblin으로',
           origin_desc:
@@ -1367,30 +1391,35 @@ bun run dev</code></pre>
           origin_source: 'Goblin 소스',
           install_label: '설치',
           install_title: '내 환경에 맞는<br/>빌드 선택',
-          install_desc: 'GitHub Releases에서 Hobgoblin을 다운로드하거나 개발 중에는 Bun으로 소스에서 실행하세요.',
+          install_desc:
+            'GitHub Releases에서 macOS, Windows, Android, Linux Server Mode용 Hobgoblin을 받거나 개발 중 Bun으로 소스에서 실행하세요.',
           install_macos_arm_title: 'macOS Apple Silicon',
           install_macos_arm_desc: '최신 GitHub Release에서 arm64 DMG를 다운로드하세요.',
           install_macos_intel_title: 'macOS Intel',
           install_macos_intel_desc: '최신 GitHub Release에서 x64 DMG를 다운로드하세요.',
           install_windows_title: 'Windows x64',
           install_windows_desc: '최신 GitHub Release에서 Windows x64 설치 파일을 다운로드하세요.',
+          install_android_title: 'Android',
+          install_android_desc: '서명되지 않은 Android APK를 다운로드하고 설치 전에 서명하세요.',
+          install_linux_title: 'Linux Server Mode',
+          install_linux_desc: 'Node.js 24+와 Bun이 설치된 호스트용 배포 소스 아카이브를 다운로드하세요.',
           install_source_title: '소스에서 개발',
           install_source_desc: 'Bun으로 의존성을 설치하고 로컬 개발 앱을 시작하세요.',
+          install_linux_command_label: 'Linux systemd 배포:',
           install_note:
-            '현재 릴리스 빌드는 서명되지 않았습니다. macOS Gatekeeper 또는 Windows SmartScreen이 경고를 표시할 수 있습니다.',
+            '현재 데스크톱 빌드와 Android APK는 서명되지 않았습니다. Android APK는 설치 전에 서명해야 합니다.',
           how_label: '사용 방법',
           how_title: '리포지토리에서 집중 워크스페이스로',
           how_desc:
-            'Hobgoblin에 리포지토리를 연결하고, 워크트리로 작업을 격리하며, 터미널, AI CLI 세션, Git 상태를 같은 실행 표면에 둡니다.',
-          s1_title: '프로젝트 열기',
-          s1_desc:
-            '로컬 또는 SSH 기반 리포지토리를 추가합니다. Hobgoblin은 각 프로젝트를 탭으로 열고 돌아왔을 때 워크스페이스를 복원합니다.',
-          s2_title: '병렬 작업 격리',
+            '제품 모델을 한 번 구성하고 작업용 Branch workspace를 격리해 독립 Git 멤버의 경계를 지우지 않고 조정합니다.',
+          s1_title: '리포지토리 멤버 구성',
+          s1_desc: '로컬 또는 SSH 워크스페이스 루트를 열고 이 제품 컨텍스트에 속한 독립 리포지토리를 선택합니다.',
+          s2_title: 'Branch workspace 만들기',
           s2_desc:
-            '워크트리를 생성하고 확인해 여러 브랜치가 독립적으로 진행되게 하며, 동기화 상태, 커밋, 변경 사항, PR 컨텍스트를 명확히 봅니다.',
-          s3_title: '컨텍스트 안에서 실행',
+            '각 리포지토리의 기준 브랜치를 선택하고 같은 이름의 멤버 worktree를 생성하며 공유 워크스페이스 의존 항목을 선택적으로 복사하거나 연결합니다.',
+          s3_title: '컨텍스트 안에서 개발하고 조정',
           s3_desc:
-            '터미널과 AI CLI 세션을 올바른 워크트리에 붙인 뒤, 체크아웃, 풀, 푸시, 외부 도구 열기, GitHub 이동을 같은 시각적 워크스페이스에서 수행합니다.',
+            '루트 또는 한 멤버에서 작업한 뒤 명확한 진행 상황과 실패 경계를 가진 리포지토리별 또는 순차 워크스페이스 Git 작업을 실행합니다.',
           cta_title: '병렬 Git 작업을<br/>하나의 워크스페이스로',
           cta_desc: 'Hobgoblin은 Git 안에서 일하는 개발자를 위한 무료 오픈소스 생산성 워크스페이스입니다.',
           footer_made: '만든이',
@@ -1402,32 +1431,32 @@ bun run dev</code></pre>
           hero_badge: 'AI CLI-ready デスクトップワークスペース',
           hero_title: 'Git 認識に基づく高生産性ワークスペース、<br/><span>単なるブランチ管理ではありません</span>',
           hero_sub:
-            'Hobgoblin はマルチプロジェクトタブ、分離されたワークツリー、ブランチコンテキスト、サーバー管理のターミナル、AI CLI セッションをつなぎ、並行開発を常に見える状態で制御できます。',
+            'Hobgoblin はリポジトリ、マルチリポジトリワークスペース、Branch workspace、ターミナル、Android、tmux をつなぎ、並行開発を常に見える状態で制御できます。',
           btn_download: 'ダウンロード',
           btn_source: 'ソースコード',
           btn_github: 'GitHub で見る',
           features_label: '機能',
           features_title: '並行開発のための<br/>ひとつのワークスペース',
           features_desc:
-            'ワークフローモデルは multi-project x multi-worktree / multi-branch x multi-terminal。Git 状態は常に進行中の作業に結びつきます。',
-          f1_title: 'マルチプロジェクトワークスペース',
+            '独立したリポジトリを一度設定し、Branch workspace に機能を分離して、すべてのターミナルと Git 操作を正しいルートまたはメンバーコンテキストに結びつけます。',
+          f1_title: 'マルチリポジトリワークスペース',
           f1_desc:
-            '複数リポジトリをタブで開き、並べ替え、前回セッションを復元して、プロジェクト切替でコンテキストを失わないようにします。',
-          f2_title: 'ワークツリー基盤の開発',
+            '選択したリポジトリを一つのルートにまとめてファイルとターミナルを共有しつつ、各メンバーの Git 履歴、worktree、書き込みは独立させます。',
+          f2_title: 'Branch workspace',
           f2_desc:
-            '並行ブランチを別々のワークツリーに分離し、状態を確認しながら、ひとつの checkout を汚さずに移動できます。',
+            '選択した同名のリポジトリ worktree を横断して一つの機能を開発し、探索可能なルートと独立したメンバーコンテキストを利用できます。',
           f3_title: 'AI CLI-ready ターミナル',
           f3_desc:
-            'コーディングエージェント、シェルタスク、ターミナルを対象のリポジトリ、ブランチ、ワークツリーに結びつけ、コンテキストを複数ウィンドウに散らしません。',
-          f4_title: '一画面の Git コンテキスト',
+            'Branch workspace ルートまたは一つのメンバーでコーディングエージェントとシェルタスクを実行し、Git とディレクトリのコンテキストを失いません。',
+          f4_title: 'Android モバイルクライアント',
           f4_desc:
-            'ブランチ状態、最新コミット、diff、ワーキングツリー変更、リンクされた PR、レビュー状態、CI シグナルを作業の横に保ちます。',
-          f5_title: '視覚的なワークフロー操作',
+            'デスクトップを離れても、保存済み SSH Host、リモート Project と Worktree、保持ターミナル、ポートフォワードを利用できます。',
+          f5_title: 'プロジェクト単位の tmux',
           f5_desc:
-            'ブランチ移動、リポジトリ切替、ビュー切替、チェックアウト、プル、プッシュ、ワークツリー作成、外部ツール移動を明確な画面コンテキストで実行できます。',
-          f6_title: '実運用のリポジトリワークフローへ',
+            '決定的な Hobgoblin セッションを明示的に作成・再接続し、Android から Hobgoblin またはデフォルト tmux セッションを復元します。',
+          f6_title: '境界が明確な Git 連携',
           f6_desc:
-            'ローカルパスと SSH リポジトリで作業し、永続化されるテーマと英語、中国語、韓国語、日本語 UI で快適なワークスペースを保ちます。',
+            'ローカルまたは SSH リポジトリの状態を個別に確認し、失敗時に明確に停止する順序付きワークスペースのコミット、プル、プッシュ、マージを実行します。',
           origin_label: '起源',
           origin_title: 'Goblin から<br/>Hobgoblin へ',
           origin_desc:
@@ -1436,30 +1465,36 @@ bun run dev</code></pre>
           origin_source: 'Goblin ソース',
           install_label: 'インストール',
           install_title: '環境に合うビルドを<br/>選択',
-          install_desc: 'GitHub Releases から Hobgoblin をダウンロードするか、開発時は Bun でソースから実行します。',
+          install_desc:
+            'GitHub Releases から macOS、Windows、Android、Linux Server Mode 向け Hobgoblin を取得するか、開発時は Bun でソースから実行します。',
           install_macos_arm_title: 'macOS Apple Silicon',
           install_macos_arm_desc: '最新の GitHub Release から arm64 DMG をダウンロードしてください。',
           install_macos_intel_title: 'macOS Intel',
           install_macos_intel_desc: '最新の GitHub Release から x64 DMG をダウンロードしてください。',
           install_windows_title: 'Windows x64',
           install_windows_desc: '最新の GitHub Release から Windows x64 インストーラーをダウンロードしてください。',
+          install_android_title: 'Android',
+          install_android_desc: '未署名 Android APK をダウンロードし、インストール前に署名してください。',
+          install_linux_title: 'Linux Server Mode',
+          install_linux_desc: 'Node.js 24+ と Bun を備えたホスト向けのデプロイ用ソースアーカイブをダウンロードします。',
           install_source_title: 'ソースから開発',
           install_source_desc: 'Bun で依存関係をインストールし、ローカルで開発アプリを起動します。',
+          install_linux_command_label: 'Linux systemd デプロイ:',
           install_note:
-            '現在のリリースビルドは未署名です。macOS Gatekeeper または Windows SmartScreen が警告を表示する場合があります。',
+            '現在のデスクトップビルドと Android APK は未署名です。Android APK はインストール前に署名が必要です。',
           how_label: '使い方',
           how_title: 'リポジトリから集中ワークスペースへ',
           how_desc:
-            'Hobgoblin にリポジトリを指定し、ワークツリーで作業を分離し、ターミナル、AI CLI セッション、Git 状態を同じ操作面に置きます。',
-          s1_title: 'プロジェクトを開く',
+            'プロダクトモデルを一度設定し、タスク用 Branch workspace を分離して、独立した Git メンバーの境界を保ったまま連携します。',
+          s1_title: 'リポジトリメンバーを設定',
           s1_desc:
-            'ローカルまたは SSH ベースのリポジトリを追加。Hobgoblin は各プロジェクトをタブで開き、戻ったときにワークスペースを復元します。',
-          s2_title: '並行作業を分離',
+            'ローカルまたは SSH ワークスペースルートを開き、このプロダクトコンテキストに属する独立リポジトリを選択します。',
+          s2_title: 'Branch workspace を作成',
           s2_desc:
-            'ワークツリーを作成・確認して複数ブランチを独立して進め、同期状態、コミット、変更、PR コンテキストを明確に把握します。',
-          s3_title: 'コンテキスト内で実行',
+            '各リポジトリのベースブランチを選び、同名のメンバー worktree を作成し、共有ワークスペース依存項目を必要に応じてコピーまたはリンクします。',
+          s3_title: 'コンテキスト内で開発・連携',
           s3_desc:
-            'ターミナルと AI CLI セッションを正しいワークツリーに結びつけ、チェックアウト、プル、プッシュ、外部ツール起動、GitHub への移動を同じ視覚的ワークスペースで実行します。',
+            'ルートまたは一つのメンバーで作業し、明確な進行状況と失敗境界を持つリポジトリ単位または順序付きワークスペース Git 操作を実行します。',
           cta_title: '並行する Git 作業を<br/>ひとつのワークスペースへ',
           cta_desc: 'Hobgoblin は Git を中心に働く開発者のための無料オープンソース生産性ワークスペースです。',
           footer_made: '作者',

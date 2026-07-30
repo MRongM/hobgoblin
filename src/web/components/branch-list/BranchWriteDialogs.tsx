@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import type { CommitMessageProvider } from '#/shared/commit-message-ai.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { buildMergeConflictAiCommand, prefillAiTerminalCommand } from '#/web/ai-terminal-handoff.ts'
+import { MergeConflictAiActions } from '#/web/components/MergeConflictAiActions.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { DialogFooter } from '#/web/components/ui/dialog.tsx'
 import { FormDialog } from '#/web/components/ui/form-dialog.tsx'
@@ -11,7 +14,6 @@ import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
 import { getRepositoryBranchMergeOutPlan, getRepositoryRemoteBranches } from '#/web/repo-client.ts'
-import { useMergeConflictAiActions } from '#/web/hooks/useMergeConflictAiActions.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -213,7 +215,12 @@ export function MergeInDialog({
         </Field>
         {error && <MergeDialogError>{error.startsWith('error.merge-out') ? t(error) : error}</MergeDialogError>}
         {errorReason === 'merge-conflict' && (
-          <MergeConflictAiActions repoId={repoId} branch={branch.name} worktreePath={worktreePath} onClose={onClose} />
+          <WorktreeMergeConflictAiActions
+            repoId={repoId}
+            branch={branch.name}
+            worktreePath={worktreePath}
+            onClose={onClose}
+          />
         )}
         <DialogFooter>
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
@@ -402,7 +409,7 @@ export function MergeOutDialog({
         </Field>
         {error && <MergeDialogError>{error.startsWith('error.merge-out') ? t(error) : error}</MergeDialogError>}
         {conflictWorktree && (
-          <MergeConflictAiActions
+          <WorktreeMergeConflictAiActions
             repoId={repoId}
             branch={conflictWorktree.branch}
             worktreePath={conflictWorktree.path}
@@ -449,7 +456,7 @@ function MergeDialogError({ children }: { children: string }) {
   )
 }
 
-function MergeConflictAiActions({
+function WorktreeMergeConflictAiActions({
   repoId,
   branch,
   worktreePath,
@@ -460,47 +467,22 @@ function MergeConflictAiActions({
   worktreePath: string
   onClose: () => void
 }) {
-  const t = useT()
   const navigation = useMainWindowNavigation()
   const setDetailCollapsed = useReposStore((s) => s.setDetailCollapsed)
-  const mergeConflictAi = useMergeConflictAiActions({
-    repoId,
-    branch,
-    worktreePath,
-    navigation,
-    setDetailCollapsed,
-  })
-  if (mergeConflictAi.actions.length === 0) return null
-
-  return (
-    <div
-      data-slot="merge-conflict-ai-actions"
-      className="min-w-0 max-w-full rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border border-app-region-border bg-app-region p-2"
-    >
-      <div className="mb-2 text-xs font-medium text-muted-foreground">{t('action.merge-conflict-ai-title')}</div>
-      <div className="flex flex-wrap gap-2">
-        {mergeConflictAi.actions.map((action) => (
-          <Button
-            key={action.provider}
-            type="button"
-            variant="outline"
-            size="sm"
-            title={action.title}
-            disabled={action.disabled}
-            onClick={() => {
-              void action.onSelect().then((ok) => {
-                if (ok) onClose()
-              })
-            }}
-          >
-            {action.pending && <Loader2 className="animate-spin" />}
-            {action.label}
-          </Button>
-        ))}
-      </div>
-      {mergeConflictAi.error && <p className="mt-2 text-xs text-destructive">{mergeConflictAi.error}</p>}
-    </div>
+  const onHandoff = useCallback(
+    async (provider: CommitMessageProvider) =>
+      await prefillAiTerminalCommand({
+        repoId,
+        branch,
+        worktreePath,
+        navigation,
+        setDetailCollapsed,
+        command: buildMergeConflictAiCommand(provider),
+      }),
+    [branch, navigation, repoId, setDetailCollapsed, worktreePath],
   )
+
+  return <MergeConflictAiActions onHandoff={onHandoff} onHandoffComplete={onClose} />
 }
 
 // ── Create branch dialog ─────────────────────────────────────────────────────

@@ -471,6 +471,142 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
   })
 
+  test('hands a retained merge-in conflict to AI and closes after a successful handoff', async () => {
+    const plan = mergeInPlan()
+    const conflictWorktree = {
+      branch: 'feature/a',
+      path: '/workspace/goblin-feature-a/api',
+    }
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-in',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'conflict',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'merge',
+          message: 'conflict',
+          reason: 'merge-conflict',
+          conflictWorktree,
+        },
+        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'docs', phase: 'not-started' },
+      ],
+    }
+    const onOpenChange = vi.fn()
+    const onMergeConflictAiHandoff = vi.fn(async () => true)
+
+    render({
+      kind: 'batch-merge-in',
+      plan,
+      result,
+      error: 'conflict',
+      onOpenChange,
+      onMergeConflictAiHandoff,
+    })
+    await flush()
+
+    const actions = document.querySelector('[data-slot="merge-conflict-ai-actions"]')
+    const codex = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'action.merge-conflict-ai-codex',
+    )
+    expect(actions).not.toBeNull()
+    expect(codex).not.toBeUndefined()
+
+    await act(async () => codex?.click())
+    await flush()
+
+    expect(onMergeConflictAiHandoff).toHaveBeenCalledWith({
+      provider: 'codex',
+      repositoryName: 'api',
+      conflictWorktree,
+    })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test.each([
+    ['ordinary merge failure', { step: 'merge' as const }],
+    ['cleaned temporary conflict', { step: 'merge' as const, reason: 'merge-conflict' as const }],
+    [
+      'non-merge failure',
+      {
+        step: 'pull' as const,
+        reason: 'merge-conflict' as const,
+        conflictWorktree: { branch: 'main', path: '/workspace/api' },
+      },
+    ],
+  ])('does not offer AI handoff for %s', async (_label, failureFields) => {
+    const plan = mergeOutPlan()
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-out',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'merge failed',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          message: 'merge failed',
+          ...failureFields,
+        },
+        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'docs', phase: 'not-started' },
+      ],
+    }
+
+    render({ kind: 'batch-merge-out', plan, result, error: 'merge failed' })
+    await flush()
+
+    expect(document.querySelector('[data-slot="merge-conflict-ai-actions"]')).toBeNull()
+  })
+
+  test('keeps the merge dialog open and reports a failed AI terminal handoff', async () => {
+    const plan = mergeOutPlan()
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-out',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'conflict',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'merge',
+          message: 'conflict',
+          reason: 'merge-conflict',
+          conflictWorktree: { branch: 'main', path: '/workspace/api' },
+        },
+        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'docs', phase: 'not-started' },
+      ],
+    }
+    const onOpenChange = vi.fn()
+
+    render({
+      kind: 'batch-merge-out',
+      plan,
+      result,
+      error: 'conflict',
+      onOpenChange,
+      onMergeConflictAiHandoff: vi.fn(async () => false),
+    })
+    await flush()
+
+    const claude = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'action.merge-conflict-ai-claude',
+    )
+    await act(async () => claude?.click())
+    await flush()
+
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('action.merge-conflict-ai-prefill-failed')
+  })
+
   test.each([
     ['pull', '.lucide-arrow-down'],
     ['push', '.lucide-arrow-up'],
@@ -529,6 +665,7 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         onBatchMergeOut={async () => null}
         onSync={async () => null}
         onCancel={async () => {}}
+        onMergeConflictAiHandoff={async () => false}
         {...overrides}
       />,
     ),

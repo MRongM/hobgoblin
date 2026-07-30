@@ -38,6 +38,8 @@ import {
   WorkspaceListItemMenu,
   type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { useRepositoryCreationActions } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const restrictToVerticalRepositoryList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -56,9 +58,17 @@ interface Props {
   disabled: boolean
   onActivate: (id: string) => void
   onReorder: (fromId: string, toId: string) => void
+  onToggleFileArea?: () => void
 }
 
-export function WorkspaceRepositoryList({ repositories, currentRepoId, disabled, onActivate, onReorder }: Props) {
+export function WorkspaceRepositoryList({
+  repositories,
+  currentRepoId,
+  disabled,
+  onActivate,
+  onReorder,
+  onToggleFileArea,
+}: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -85,6 +95,7 @@ export function WorkspaceRepositoryList({ repositories, currentRepoId, disabled,
               active={currentRepoId === repository.id}
               disabled={disabled}
               onActivate={onActivate}
+              onToggleFileArea={onToggleFileArea}
             />
           ))}
         </ul>
@@ -98,11 +109,13 @@ function SortableWorkspaceRepositoryRow({
   active,
   disabled,
   onActivate,
+  onToggleFileArea,
 }: {
   repository: WorkspaceRepositoryListItem
   active: boolean
   disabled: boolean
   onActivate: (id: string) => void
+  onToggleFileArea?: () => void
 }) {
   const t = useT()
   const terminalCount = useRepoTerminalCount(repository.id, repository.terminalWorktreePaths)
@@ -119,6 +132,10 @@ function SortableWorkspaceRepositoryRow({
   )
   const externalActions = useProjectExternalOpenActions(repository.id)
   const internalTerminalAction = useProjectInternalTerminalAction(repository.id)
+  const repo = useReposStore((state) => state.repos[repository.id])
+  const creation = useRepositoryCreationActions(repo, {
+    forceDisabled: repository.unavailable,
+  })
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: repository.id,
     disabled,
@@ -159,7 +176,7 @@ function SortableWorkspaceRepositoryRow({
     onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
   }
 
-  return (
+  const row = (
     <WorkspaceItemContextMenu
       editor={{ ...externalActions.editor, icon: <EditorAppIcon pref={externalActions.editor.iconPref} /> }}
       externalTerminal={{
@@ -209,13 +226,17 @@ function SortableWorkspaceRepositoryRow({
             .join('. '),
           title: repository.unavailable ? t('workspace.repository-unavailable') : repository.name,
           onClick: () => onActivate(repository.id),
+          onDoubleClick: onToggleFileArea,
         }}
         actions={
           <WorkspaceListItemActionDock
             editor={editorAction}
             internalTerminal={internalAction}
             moreMenu={
-              <WorkspaceListItemMenu label={t('action.menu')} groups={[[tmuxTerminalAction, externalTerminalAction]]} />
+              <WorkspaceListItemMenu
+                label={t('action.menu')}
+                groups={[creation.items, [tmuxTerminalAction, externalTerminalAction]]}
+              />
             }
           />
         }
@@ -264,5 +285,12 @@ function SortableWorkspaceRepositoryRow({
         ) : null}
       </WorkspaceListItemFrame>
     </WorkspaceItemContextMenu>
+  )
+
+  return (
+    <>
+      {row}
+      {creation.dialogs}
+    </>
   )
 }
