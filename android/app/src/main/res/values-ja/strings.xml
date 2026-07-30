@@ -81,7 +81,6 @@
     <string name="host_identity_import_failed">ID のインポートに失敗しました</string>
     <string name="host_identity_read_failed">選択した ID を読み取れません</string>
     <string name="host_ssh_identity">SSH ID</string>
-    <string name="host_ssh_initialization_check_failed">SSH 初期化チェックに失敗しました</string>
     <string name="host_key_trust_failed">ホスト鍵の信頼に失敗しました</string>
     <string name="host_ssh_initialization_failed">SSH 初期化に失敗しました</string>
     <string name="host_validation_error">検証エラー</string>
@@ -90,16 +89,13 @@
     <string name="host_identity_ready_key">鍵</string>
     <string name="host_ssh_key_setup_optional">SSH 鍵の設定（任意）</string>
     <string name="host_temporary_password_explanation">一時サーバーパスワードを一度だけ使用し、以後は保存した秘密鍵で接続します。</string>
-    <string name="host_setup_ssh_key">SSH 鍵を設定</string>
     <string name="host_ssh_access_initialized">SSH アクセスは初期化済みです。</string>
     <string name="host_future_connections_saved_key">今後の接続には保存した秘密鍵を使用します。</string>
     <string name="host_saved_identity_available">このホストには保存済み ID があります。</string>
     <string name="host_testing_connection">接続をテスト中…</string>
     <string name="host_test_connection">接続をテスト</string>
     <string name="host_setup_again">再設定</string>
-    <string name="host_trust_before_initializing">SSH アクセスを初期化する前にこのホスト鍵を信頼してください。</string>
     <string name="host_trust_host_key">ホスト鍵を信頼</string>
-    <string name="host_install_public_key">一時サーバーパスワードで Hobgoblin Android の公開鍵をインストールします。</string>
     <string name="host_key_changed">ホスト鍵が変更されました。再度信頼する前にサーバーを確認してください。</string>
     <string name="host_previous_fingerprint">以前：%1$s</string>
     <string name="host_current_fingerprint">現在：%1$s</string>
@@ -107,7 +103,7 @@
     <string name="host_private_key_connection_succeeded">秘密鍵での接続に成功しました。オンライン状態を保持するにはこのホストを保存してください。</string>
     <string name="host_temporary_password">一時パスワード</string>
     <string name="host_initialize_ssh_access">SSH アクセスを初期化</string>
-    <string name="host_initializing_ssh_access">SSH アクセスを初期化しています…</string>
+    <string name="host_initializing_ssh_access">SSH アクセスを初期化して接続をテストしています…</string>
     <string name="host_after_setup_saved_key">設定後、このホストは保存した秘密鍵を使用します。</string>
     <string name="host_optional">任意</string>
     <string name="diagnostics_title">ホスト診断</string>
