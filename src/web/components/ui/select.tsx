@@ -42,6 +42,7 @@ function SelectContent({
   header,
   matchTriggerWidth = false,
   onFocusCapture,
+  onInputCapture,
   onPointerDownCapture,
   position = 'popper',
   ...props
@@ -59,21 +60,22 @@ function SelectContent({
     input.focus({ preventScroll: true })
   }
 
-  function scheduleHeaderInputFocus() {
-    queueMicrotask(focusHeaderInput)
-    window.setTimeout(focusHeaderInput, 0)
-  }
-
   function handleFocusCapture(event: React.FocusEvent<HTMLDivElement>) {
     onFocusCapture?.(event)
+    if (!header || event.defaultPrevented || !restoreHeaderFocusRef.current) return
+    const headerEl = headerElement()
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (headerEl && target && headerEl.contains(target)) return
+    restoreHeaderFocusRef.current = false
+    queueMicrotask(focusHeaderInput)
+  }
+
+  function handleInputCapture(event: React.InputEvent<HTMLDivElement>) {
+    onInputCapture?.(event)
     if (!header || event.defaultPrevented) return
     const headerEl = headerElement()
     const target = event.target instanceof HTMLElement ? event.target : null
-    if (headerEl && target && headerEl.contains(target)) {
-      restoreHeaderFocusRef.current = true
-      return
-    }
-    if (restoreHeaderFocusRef.current) scheduleHeaderInputFocus()
+    if (headerEl && target && headerEl.contains(target)) restoreHeaderFocusRef.current = true
   }
 
   function handlePointerDownCapture(event: React.PointerEvent<HTMLDivElement>) {
@@ -98,6 +100,7 @@ function SelectContent({
           className,
         )}
         onFocusCapture={handleFocusCapture}
+        onInputCapture={handleInputCapture}
         onPointerDownCapture={handlePointerDownCapture}
         position={position}
       >

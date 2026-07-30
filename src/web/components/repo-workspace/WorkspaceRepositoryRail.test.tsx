@@ -1195,6 +1195,17 @@ describe('WorkspaceRepositoryRail', () => {
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
+  test('forwards workspace main directory item double-clicks to the owning pane', () => {
+    const onToggleFileArea = vi.fn()
+    renderRail({ currentRepoId: ROOT, onToggleFileArea })
+
+    act(() => {
+      overviewButton()?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
   test('plans a Git action for the clicked branch workspace and mounts its panel below that item', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[1]!

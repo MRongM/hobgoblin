@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Project list items and multi-repository workspace Repository items toggle the current File area on double-click, with ordinary worktree behavior.
+**Goal:** Make Project list items, multi-repository workspace Repository items, and the workspace main-directory (`./` / Overview) row toggle the current File area on double-click, with ordinary worktree behavior.
 
-**Architecture:** Keep File area visibility in its existing local owner. Add optional intent callbacks to the two list components and forward the existing owning-pane double-click handlers through the Project header, plain workspace pane, and workspace Repository rail.
+**Architecture:** Keep File area visibility in its existing local owner. Add optional intent callbacks to the two list components and workspace main-directory row, then forward the existing owning-pane double-click handlers through the Project header, plain workspace pane, and workspace Repository rail.
 
 **Tech Stack:** React 19, TypeScript 6 strip-only mode, Vitest, Bun.
 
@@ -126,3 +126,26 @@ bun run check:architecture
 ```
 
 Expected: all commands exit successfully. If unrelated pre-existing worktree changes fail a gate, record the exact failing test and keep this feature's focused suites green.
+
+### Task 4: Extend the interaction to the workspace main directory
+
+**Files:**
+
+- Modify: `src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx`
+- Modify: `src/web/components/repo-workspace/WorkspaceRepositoryRail.tsx`
+
+- [x] **Step 1: Write and verify the failing main-directory test**
+
+Dispatch `dblclick` on the rendered `./` row and expect the owning pane's `onToggleFileArea` callback exactly once. Verify RED because `ManifestRow` only handles single-click activation.
+
+- [x] **Step 2: Forward the existing toggle intent**
+
+Pass `WorkspaceRepositoryRail.onToggleFileArea` into `ManifestRow` and attach it to the row's `onDoubleClick`, without changing `onClick` or introducing state.
+
+- [x] **Step 3: Verify the focused suite**
+
+```sh
+bun run test src/web/components/repo-workspace/WorkspaceRepositoryRail.test.tsx
+```
+
+Expected: all 53 tests pass.

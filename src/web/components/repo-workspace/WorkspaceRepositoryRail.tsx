@@ -580,6 +580,7 @@ export function WorkspaceRepositoryRail({
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
               onActivate={() => activateWorkspaceOverview(workspaceRootId)}
+              onToggleFileArea={onToggleFileArea}
             />
             <WorkspaceRepositoryList
               repositories={repositoryItems}
@@ -785,6 +786,7 @@ function ManifestRow({
   hasTerminalBell,
   hasTerminalOutputActivity,
   onActivate,
+  onToggleFileArea,
 }: {
   active: boolean
   name: string
@@ -792,6 +794,7 @@ function ManifestRow({
   hasTerminalBell: boolean
   hasTerminalOutputActivity: boolean
   onActivate: () => void
+  onToggleFileArea?: () => void
 }) {
   const t = useT()
   return (
@@ -804,6 +807,7 @@ function ManifestRow({
         active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
       )}
       onClick={onActivate}
+      onDoubleClick={onToggleFileArea}
     >
       <Folder className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
