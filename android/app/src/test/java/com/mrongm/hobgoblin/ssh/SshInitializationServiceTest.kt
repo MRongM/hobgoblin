@@ -10,62 +10,82 @@ import com.mrongm.hobgoblin.domain.ssh.SshIdentityRef
 import java.nio.file.Files
 import java.nio.file.Path
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SshInitializationServiceTest {
     @Test
-    fun `check asks for host key trust before password installation`() {
-        val service = service(trustedFingerprint = null, fingerprint = "SHA256:new")
+    fun `initialize automatically trusts a first seen host key before installing`() {
+        val trustStore = FakeHostKeyTrustStore(trustedFingerprint = null)
+        val client = FakeInitializationClient(fingerprint = "SHA256:new")
+        val password = "temporary-password".toCharArray()
 
-        val check = service.check(profile())
-
-        assertEquals(SshInitializationCheck.NeedsHostKeyTrust("SHA256:new"), check)
-    }
-
-    @Test
-    fun `check asks for temporary server password when host key is trusted but no identity exists`() {
-        val service = service(trustedFingerprint = "SHA256:new", fingerprint = "SHA256:new")
-
-        val check = service.check(profile())
-
-        assertEquals(SshInitializationCheck.NeedsServerPassword, check)
-    }
-
-    @Test
-    fun `check is ready when host key is trusted and identity exists`() {
-        val service = service(
-            identityStore = FakeIdentityStore(existingBytesById = mapOf("identity-1" to "existing-private-key".toByteArray())),
-            trustedFingerprint = "SHA256:new",
+        val result = service(
+            hostKeyStore = trustStore,
+            client = client,
             fingerprint = "SHA256:new",
-        )
+        ).initialize(profile(), password)
 
-        val check = service.check(profile(identityRefId = "identity-1"))
-
-        assertEquals(SshInitializationCheck.Ready, check)
+        assertEquals(listOf("SHA256:new"), trustStore.trustedFingerprints)
+        assertEquals("generated-identity", result.profile.identityRefId)
+        assertEquals(1, client.installedPublicKeys.size)
+        assertTrue(password.all { it == '\u0000' })
     }
 
     @Test
-    fun `check asks for temporary server password when stored identity cannot be read`() {
-        val service = service(
-            identityStore = FakeIdentityStore(existingBytesById = mapOf("identity-1" to "bad-private-key".toByteArray())),
-            publicKeyReader = FailingPublicKeyReader(),
-            trustedFingerprint = "SHA256:new",
+    fun `initialize does not rewrite matching host trust`() {
+        val trustStore = FakeHostKeyTrustStore(trustedFingerprint = "SHA256:new")
+
+        service(
+            hostKeyStore = trustStore,
             fingerprint = "SHA256:new",
-        )
+        ).initialize(profile(), "temporary-password".toCharArray())
 
-        val check = service.check(profile(identityRefId = "identity-1"))
-
-        assertEquals(SshInitializationCheck.NeedsServerPassword, check)
+        assertTrue(trustStore.trustedFingerprints.isEmpty())
     }
 
     @Test
-    fun `changed host key blocks initialization`() {
-        val service = service(trustedFingerprint = "SHA256:old", fingerprint = "SHA256:new")
+    fun `changed host key blocks identity generation and installation`() {
+        val identityStore = FakeIdentityStore()
+        val client = FakeInitializationClient(fingerprint = "SHA256:new")
+        val keyGenerator = FakeSshKeyGenerator()
+        val password = "temporary-password".toCharArray()
 
-        val check = service.check(profile())
+        val error = assertThrows(SshHostKeyChangedException::class.java) {
+            service(
+                identityStore = identityStore,
+                hostKeyStore = FakeHostKeyTrustStore("SHA256:old"),
+                client = client,
+                keyGenerator = keyGenerator,
+                fingerprint = "SHA256:new",
+            ).initialize(profile(), password)
+        }
 
-        assertEquals(SshInitializationCheck.HostKeyChanged("SHA256:old", "SHA256:new"), check)
+        assertEquals("SHA256:old", error.previousFingerprint)
+        assertEquals("SHA256:new", error.currentFingerprint)
+        assertTrue(keyGenerator.generatedProfiles.isEmpty())
+        assertTrue(identityStore.importedPayloads.isEmpty())
+        assertTrue(client.installedPublicKeys.isEmpty())
+        assertTrue(password.all { it == '\u0000' })
+    }
+
+    @Test
+    fun `explicitly rejected host key remains blocked`() {
+        val password = "temporary-password".toCharArray()
+
+        val error = assertThrows(SshInitializationException::class.java) {
+            service(
+                hostKeyStore = FakeHostKeyTrustStore(
+                    trustedFingerprint = null,
+                    evaluatedTrust = HostKeyTrust.Rejected("SHA256:new"),
+                ),
+                fingerprint = "SHA256:new",
+            ).initialize(profile(), password)
+        }
+
+        assertEquals("Host key rejected", error.message)
+        assertTrue(password.all { it == '\u0000' })
     }
 
     @Test
@@ -222,11 +242,12 @@ class SshInitializationServiceTest {
         client: FakeInitializationClient = FakeInitializationClient(fingerprint = "SHA256:new"),
         keyGenerator: SshKeyGenerator = FakeSshKeyGenerator(),
         publicKeyReader: SshPublicKeyReader = FakePublicKeyReader("ssh-ed25519 existing-public-key imported"),
-        trustedFingerprint: String?,
-        fingerprint: String,
+        trustedFingerprint: String? = null,
+        fingerprint: String = "SHA256:new",
+        hostKeyStore: FakeHostKeyTrustStore = FakeHostKeyTrustStore(trustedFingerprint),
     ): SshInitializationService = SshInitializationService(
         identityStore = identityStore,
-        hostKeyStore = FakeHostKeyTrustStore(trustedFingerprint),
+        hostKeyStore = hostKeyStore,
         client = client.also { it.fingerprint = fingerprint },
         keyGenerator = keyGenerator,
         publicKeyReader = publicKeyReader,
@@ -261,11 +282,15 @@ class SshInitializationServiceTest {
 
     private class FakeHostKeyTrustStore(
         private var trustedFingerprint: String?,
+        private val evaluatedTrust: HostKeyTrust? = null,
     ) : HostKeyTrustStore {
+        val trustedFingerprints = mutableListOf<String>()
+
         override fun evaluate(target: RemoteTarget, fingerprint: String): HostKeyTrust =
-            HostKeyTrustPolicy.evaluate(trustedFingerprint, fingerprint)
+            evaluatedTrust ?: HostKeyTrustPolicy.evaluate(trustedFingerprint, fingerprint)
 
         override fun trust(target: RemoteTarget, fingerprint: String): HostKeyTrust.Trusted {
+            trustedFingerprints += fingerprint
             trustedFingerprint = fingerprint
             return HostKeyTrust.Trusted(fingerprint)
         }
@@ -292,10 +317,15 @@ class SshInitializationServiceTest {
     }
 
     private class FakeSshKeyGenerator : SshKeyGenerator {
-        override fun generate(profile: SshHostProfile): GeneratedSshKey = GeneratedSshKey(
-            privateKeyBytes = "generated-private-key".toByteArray(),
-            publicKeyLine = "ssh-ed25519 generated-public-key hobgoblin-android",
-        )
+        val generatedProfiles = mutableListOf<SshHostProfile>()
+
+        override fun generate(profile: SshHostProfile): GeneratedSshKey {
+            generatedProfiles += profile
+            return GeneratedSshKey(
+                privateKeyBytes = "generated-private-key".toByteArray(),
+                publicKeyLine = "ssh-ed25519 generated-public-key hobgoblin-android",
+            )
+        }
     }
 
     private class FakePublicKeyReader(private val publicKeyLine: String) : SshPublicKeyReader {

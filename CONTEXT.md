@@ -354,11 +354,11 @@ The optional server-owned authentication gate for browser clients. When enabled,
 _Avoid_: Security mode, LAN password
 
 **Android SSH access initialization**:
-The explicit first-time flow that may use a temporary server password to install a Hobgoblin-managed public key for one Android SSH host profile. The password is used only for that installation and is never part of later connectivity diagnostics.
+The explicit first-time flow that uses a temporary server password to generate or reuse a Hobgoblin-managed identity, install its public key for one Android SSH host profile, and then run an Android host connectivity diagnostic. A first-seen host key is trusted automatically as part of this flow, while a changed host key fails closed and requires separate review. The password is used only for public-key installation and is never part of connectivity diagnostics.
 _Avoid_: Host diagnostic, password login, saved server password
 
 **Android host connectivity diagnostic**:
-An explicit SSH reachability and shell probe that authenticates with the private key already associated with an Android SSH host profile. It never creates or installs an identity and never requests a server password.
+A key-only SSH reachability and shell probe that authenticates with the private key already associated with an Android SSH host profile. It may be started directly by the user or automatically after successful Android SSH access initialization. It never creates or installs an identity and never requests or receives a server password.
 _Avoid_: SSH access initialization, realtime presence check
 
 **Android private key export**:

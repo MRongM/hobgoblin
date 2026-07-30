@@ -540,7 +540,6 @@ fun HobgoblinAndroidApp(
             initialHost = null,
             onBack = { route = AppRoute.Hosts },
             onImportPrivateKey = { displayName, bytes -> secureIdentityStore.importPrivateKey(displayName, bytes) },
-            onCheckSshInitialization = { input -> initializationService.check(input) },
             onTrustHostKey = { input, fingerprint ->
                 initializationService.trustHostKey(input, fingerprint)
             },
@@ -570,7 +569,6 @@ fun HobgoblinAndroidApp(
                     onExportPrivateKey = { identityId, output ->
                         secureIdentityStore.exportPrivateKey(identityId, output)
                     },
-                    onCheckSshInitialization = { input -> initializationService.check(input) },
                     onTrustHostKey = { input, fingerprint ->
                         initializationService.trustHostKey(input, fingerprint)
                     },

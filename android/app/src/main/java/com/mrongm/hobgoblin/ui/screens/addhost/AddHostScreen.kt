@@ -47,7 +47,7 @@ import com.mrongm.hobgoblin.domain.ssh.HOST_DIAGNOSTIC_STATUS_UNHEALTHY
 import com.mrongm.hobgoblin.domain.ssh.SshIdentityRef
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.domain.ssh.withDiagnosticResult
-import com.mrongm.hobgoblin.ssh.SshInitializationCheck
+import com.mrongm.hobgoblin.ssh.SshHostKeyChangedException
 import com.mrongm.hobgoblin.ui.screens.diagnostics.HostDiagnosticsContent
 import com.mrongm.hobgoblin.ui.theme.HobgoblinColors
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
@@ -62,11 +62,6 @@ internal fun canOfferSshInitialization(host: String, user: String, port: String)
 internal fun initialHostUser(initialHost: SshHostProfile?): String = initialHost?.user ?: DefaultSshUser
 
 internal fun shouldShowSavedHostDiagnostics(initialHost: SshHostProfile?): Boolean = initialHost != null
-
-internal fun shouldShowSshInitializationPasswordInput(
-    enabled: Boolean,
-    check: SshInitializationCheck?,
-): Boolean = enabled && (check == null || check == SshInitializationCheck.NeedsServerPassword)
 
 internal fun resolveHostIdentityRefId(
     selectedIdentityId: String?,
@@ -117,7 +112,6 @@ fun AddHostScreen(
     onBack: () -> Unit,
     onImportPrivateKey: (displayName: String, bytes: ByteArray) -> SshIdentityRef,
     onExportPrivateKey: ((String, OutputStream) -> Unit)? = null,
-    onCheckSshInitialization: (SshHostProfile) -> SshInitializationCheck = { SshInitializationCheck.Ready },
     onTrustHostKey: (SshHostProfile, String) -> Unit = { _, _ -> },
     onInitializeSshAccess: (SshHostProfile, CharArray) -> SshHostProfile = { profile, _ -> profile },
     onRunDiagnostics: (SshHostProfile) -> DiagnosticsResult,
@@ -129,7 +123,6 @@ fun AddHostScreen(
     val identityImportFailed = stringResource(R.string.host_identity_import_failed)
     val privateKeyExportOpenFailed = stringResource(R.string.host_private_key_export_open_failed)
     val privateKeyExportFailed = stringResource(R.string.host_private_key_export_failed)
-    val initializationCheckFailed = stringResource(R.string.host_ssh_initialization_check_failed)
     val hostKeyTrustFailed = stringResource(R.string.host_key_trust_failed)
     val initializationFailed = stringResource(R.string.host_ssh_initialization_failed)
     val validationError = stringResource(R.string.host_validation_error)
@@ -145,7 +138,7 @@ fun AddHostScreen(
     var pendingPrivateKeyExportIdentityId by remember(initialHost) { mutableStateOf<String?>(null) }
     var privateKeyExportSucceeded by remember(initialHost) { mutableStateOf(false) }
     var privateKeyExportError by remember(initialHost) { mutableStateOf<String?>(null) }
-    var initializationCheck by remember(initialHost) { mutableStateOf<SshInitializationCheck?>(null) }
+    var initializationHostKeyChange by remember(initialHost) { mutableStateOf<SshHostKeyChangedException?>(null) }
     var initializationPassword by remember(initialHost) { mutableStateOf("") }
     var initializationError by remember(initialHost) { mutableStateOf<String?>(null) }
     var initializedIdentityRefId by remember(initialHost) { mutableStateOf<String?>(null) }
@@ -163,7 +156,7 @@ fun AddHostScreen(
     }
 
     fun clearInitializationState() {
-        initializationCheck = null
+        initializationHostKeyChange = null
         initializationPassword = ""
         initializationError = null
         initializedIdentityRefId = null
@@ -231,31 +224,14 @@ fun AddHostScreen(
             identityRefId = identityRefId,
         ).copy(lastDiagnosticStatus = lastDiagnosticStatus)
 
-    fun runInitializationCheck() {
-        initializationError = null
-        scope.launch {
-            runCatching {
-                val profile = currentDraftProfile()
-                withContext(Dispatchers.IO) { onCheckSshInitialization(profile) }
-            }.onSuccess {
-                initializationCheck = it
-                error = null
-            }.onFailure {
-                initializationCheck = null
-                initializationError = it.message ?: initializationCheckFailed
-            }
-        }
-    }
-
-    fun trustHostKey(fingerprint: String) {
+    fun trustChangedHostKey(fingerprint: String) {
         initializationError = null
         scope.launch {
             runCatching {
                 val profile = currentDraftProfile()
                 withContext(Dispatchers.IO) { onTrustHostKey(profile, fingerprint) }
-                withContext(Dispatchers.IO) { onCheckSshInitialization(profile) }
             }.onSuccess {
-                initializationCheck = it
+                initializationHostKeyChange = null
                 error = null
             }.onFailure {
                 initializationError = it.message ?: hostKeyTrustFailed
@@ -272,49 +248,56 @@ fun AddHostScreen(
                     initializationError = it.message ?: validationError
                     return@launch
                 }
-                val check = if (initializationCheck == SshInitializationCheck.NeedsServerPassword) {
-                    SshInitializationCheck.NeedsServerPassword
-                } else {
+                connectionTestGeneration += 1
+                val requestGeneration = connectionTestGeneration
+                connectionTestState = ResourceState.Loading
+                initializationHostKeyChange = null
+                val password = initializationPassword.toCharArray()
+                val result = try {
                     runCatching {
-                        withContext(Dispatchers.IO) { onCheckSshInitialization(profile) }
-                    }.getOrElse {
-                        initializationError = it.message ?: initializationCheckFailed
-                        return@launch
+                        withContext(Dispatchers.IO) {
+                            runHostInitializationFlow(
+                                draftProfile = profile,
+                                password = password,
+                                initialize = onInitializeSshAccess,
+                                diagnose = onRunDiagnostics,
+                            )
+                        }
                     }
+                } finally {
+                    password.fill('\u0000')
+                    initializationPassword = ""
                 }
-                when (check) {
-                    SshInitializationCheck.Ready -> {
-                        initializationPassword = ""
-                        initializationCheck = SshInitializationCheck.Ready
-                        error = null
-                    }
-
-                    SshInitializationCheck.NeedsServerPassword -> {
-                        val password = initializationPassword.toCharArray()
-                        val result = try {
-                            runCatching {
-                                withContext(Dispatchers.IO) { onInitializeSshAccess(profile, password) }
-                            }
-                        } finally {
-                            password.fill('\u0000')
+                if (!isLatestConnectionTest(requestGeneration, connectionTestGeneration)) {
+                    return@launch
+                }
+                result.onSuccess { flow ->
+                    initializedIdentityRefId = flow.profile.identityRefId
+                    initializationHostKeyChange = null
+                    initializationError = null
+                    error = null
+                    when (flow) {
+                        is HostInitializationFlowResult.Diagnosed -> {
+                            connectionTestState = ResourceState.Loaded(flow.diagnostics)
+                            lastDiagnosticStatus = flow.profile
+                                .withDiagnosticResult(flow.diagnostics)
+                                .lastDiagnosticStatus
                         }
-                        result.onSuccess { initializedProfile ->
-                            initializationPassword = ""
-                            initializedIdentityRefId = initializedProfile.identityRefId
-                            initializationCheck = SshInitializationCheck.Ready
-                            resetConnectionTestState()
-                            error = null
-                        }.onFailure {
-                            initializationPassword = ""
-                            initializationError = it.message ?: initializationFailed
+
+                        is HostInitializationFlowResult.DiagnosticFailed -> {
+                            connectionTestState = ResourceState.Error(
+                                flow.error.message ?: connectionTestFailed,
+                                flow.error,
+                            )
+                            lastDiagnosticStatus = HOST_DIAGNOSTIC_STATUS_UNHEALTHY
                         }
                     }
-
-                    is SshInitializationCheck.NeedsHostKeyTrust,
-                    is SshInitializationCheck.HostKeyChanged,
-                    -> {
-                        initializationCheck = check
-                        error = null
+                }.onFailure { failure ->
+                    connectionTestState = ResourceState.Idle
+                    if (failure is SshHostKeyChangedException) {
+                        initializationHostKeyChange = failure
+                    } else {
+                        initializationError = failure.message ?: initializationFailed
                     }
                 }
             } finally {
@@ -507,15 +490,14 @@ fun AddHostScreen(
             }
             SshInitializationSection(
                 enabled = canOfferSshInitialization(host = host, user = user, port = port),
-                check = initializationCheck,
                 password = initializationPassword,
                 error = initializationError,
                 initializedIdentityRefId = initializedIdentityRefId,
+                hostKeyChange = initializationHostKeyChange,
                 initializationInProgress = initializationSubmission.inProgress,
                 connectionTestState = connectionTestState,
-                onStartCheck = { runInitializationCheck() },
                 onPasswordChange = { initializationPassword = it },
-                onTrustHostKey = { trustHostKey(it) },
+                onTrustHostKey = { trustChangedHostKey(it) },
                 onInitialize = { prepareOrInitializeSshAccess() },
                 onTestConnection = { testConnection() },
                 onReset = { clearInitializationState() },
@@ -610,21 +592,19 @@ private fun PrivateKeyActions(
 @Composable
 private fun SshInitializationSection(
     enabled: Boolean,
-    check: SshInitializationCheck?,
     password: String,
     error: String?,
     initializedIdentityRefId: String?,
+    hostKeyChange: SshHostKeyChangedException?,
     initializationInProgress: Boolean,
     connectionTestState: ResourceState<DiagnosticsResult>,
-    onStartCheck: () -> Unit,
     onPasswordChange: (String) -> Unit,
     onTrustHostKey: (String) -> Unit,
     onInitialize: () -> Unit,
     onTestConnection: () -> Unit,
     onReset: () -> Unit,
 ) {
-    val success = check == SshInitializationCheck.Ready
-    val showPasswordInput = shouldShowSshInitializationPasswordInput(enabled = enabled, check = check)
+    val success = initializedIdentityRefId != null
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.outlinedCardColors(
@@ -658,85 +638,28 @@ private fun SshInitializationSection(
                 )
                 OptionalBadge()
             }
-            when (check) {
-                null -> {
+            when {
+                hostKeyChange != null -> {
                     Text(
-                        text = stringResource(R.string.host_temporary_password_explanation),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (showPasswordInput) {
-                        TemporaryPasswordSetup(
-                            password = password,
-                            enabled = enabled,
-                            initializationInProgress = initializationInProgress,
-                            onPasswordChange = onPasswordChange,
-                            onInitialize = onInitialize,
-                        )
-                    } else {
-                        OutlinedButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = false,
-                            onClick = onStartCheck,
-                        ) {
-                            Text(stringResource(R.string.host_setup_ssh_key))
-                        }
-                    }
-                }
-
-                SshInitializationCheck.Ready -> {
-                    Text(
-                        text = stringResource(R.string.host_ssh_access_initialized),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = HobgoblinColors.Success,
+                        stringResource(R.string.host_key_changed),
+                        color = MaterialTheme.colorScheme.error,
                     )
                     Text(
-                        text = stringResource(R.string.host_future_connections_saved_key),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        stringResource(R.string.host_previous_fingerprint, hostKeyChange.previousFingerprint),
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    val identityText = if (initializedIdentityRefId != null) {
-                        stringResource(R.string.host_generated_identity_saved)
-                    } else {
-                        stringResource(R.string.host_saved_identity_available)
-                    }
-                    Text(identityText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (initializedIdentityRefId != null) {
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = connectionTestState !is ResourceState.Loading,
-                            onClick = onTestConnection,
-                        ) {
-                            Text(
-                                if (connectionTestState is ResourceState.Loading) {
-                                    stringResource(R.string.host_testing_connection)
-                                } else {
-                                    stringResource(R.string.host_test_connection)
-                                },
-                            )
-                        }
-                        ConnectionTestFeedback(connectionTestState)
-                    }
-                    TextButton(onClick = onReset) {
-                        Text(stringResource(R.string.host_setup_again))
-                    }
-                }
-
-                is SshInitializationCheck.NeedsHostKeyTrust -> {
                     Text(
-                        text = stringResource(R.string.host_trust_before_initializing),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        stringResource(R.string.host_current_fingerprint, hostKeyChange.currentFingerprint),
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(check.fingerprint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = { onTrustHostKey(check.fingerprint) }) {
+                    Button(onClick = { onTrustHostKey(hostKeyChange.currentFingerprint) }) {
                         Text(stringResource(R.string.host_trust_host_key))
                     }
                 }
 
-                SshInitializationCheck.NeedsServerPassword -> {
+                !success -> {
                     Text(
-                        text = stringResource(R.string.host_install_public_key),
+                        text = stringResource(R.string.host_temporary_password_explanation),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -749,19 +672,39 @@ private fun SshInitializationSection(
                     )
                 }
 
-                is SshInitializationCheck.HostKeyChanged -> {
+                else -> {
                     Text(
-                        stringResource(R.string.host_key_changed),
-                        color = MaterialTheme.colorScheme.error,
+                        text = stringResource(R.string.host_ssh_access_initialized),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = HobgoblinColors.Success,
                     )
                     Text(
-                        stringResource(R.string.host_previous_fingerprint, check.previousFingerprint),
-                        style = MaterialTheme.typography.bodySmall,
+                        text = stringResource(R.string.host_future_connections_saved_key),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        stringResource(R.string.host_current_fingerprint, check.currentFingerprint),
-                        style = MaterialTheme.typography.bodySmall,
+                        stringResource(R.string.host_saved_identity_available),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = connectionTestState !is ResourceState.Loading,
+                        onClick = onTestConnection,
+                    ) {
+                        Text(
+                            if (connectionTestState is ResourceState.Loading) {
+                                stringResource(R.string.host_testing_connection)
+                            } else {
+                                stringResource(R.string.host_test_connection)
+                            },
+                        )
+                    }
+                    ConnectionTestFeedback(connectionTestState)
+                    TextButton(onClick = onReset) {
+                        Text(stringResource(R.string.host_setup_again))
+                    }
                 }
             }
             if (!enabled) {

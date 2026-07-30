@@ -82,7 +82,6 @@
     <string name="host_identity_import_failed">Identity import failed</string>
     <string name="host_identity_read_failed">Unable to read selected identity</string>
     <string name="host_ssh_identity">SSH identity</string>
-    <string name="host_ssh_initialization_check_failed">SSH initialization check failed</string>
     <string name="host_key_trust_failed">Host key trust failed</string>
     <string name="host_ssh_initialization_failed">SSH initialization failed</string>
     <string name="host_validation_error">Validation error</string>
@@ -91,16 +90,13 @@
     <string name="host_identity_ready_key">Key</string>
     <string name="host_ssh_key_setup_optional">SSH key setup (optional)</string>
     <string name="host_temporary_password_explanation">Use the temporary server password once, then connect with the saved private key.</string>
-    <string name="host_setup_ssh_key">Set up SSH key</string>
     <string name="host_ssh_access_initialized">SSH access is initialized.</string>
     <string name="host_future_connections_saved_key">Future connections will use the saved private key.</string>
     <string name="host_saved_identity_available">Saved identity is available for this host.</string>
     <string name="host_testing_connection">Testing connection…</string>
     <string name="host_test_connection">Test connection</string>
     <string name="host_setup_again">Set up again</string>
-    <string name="host_trust_before_initializing">Trust this host key before initializing SSH access.</string>
     <string name="host_trust_host_key">Trust host key</string>
-    <string name="host_install_public_key">Install Hobgoblin Android\'s public key using the temporary server password.</string>
     <string name="host_key_changed">Host key changed. Review this server before trusting it again.</string>
     <string name="host_previous_fingerprint">Previous: %1$s</string>
     <string name="host_current_fingerprint">Current: %1$s</string>
@@ -108,7 +104,7 @@
     <string name="host_private_key_connection_succeeded">Private-key connection succeeded. Save this host to keep its online status.</string>
     <string name="host_temporary_password">Temporary password</string>
     <string name="host_initialize_ssh_access">Initialize SSH access</string>
-    <string name="host_initializing_ssh_access">Initializing SSH access…</string>
+    <string name="host_initializing_ssh_access">Initializing and testing SSH access…</string>
     <string name="host_after_setup_saved_key">After setup, this host will use the saved private key.</string>
     <string name="host_optional">Optional</string>
     <string name="diagnostics_title">Host diagnostics</string>
