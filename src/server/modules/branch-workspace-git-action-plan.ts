@@ -23,7 +23,7 @@ import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 export interface BranchWorkspaceGitActionPlanDependencies {
   readManifests?: typeof readBranchWorkspaceManifests
-  getSnapshot?: (repoId: string, signal?: AbortSignal) => Promise<RepoSnapshot | null>
+  getSnapshot?: typeof getRepositorySnapshot
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
   getPatch?: (repoId: string, worktreePath: string, signal?: AbortSignal) => Promise<ExecResult>
 }
@@ -377,7 +377,7 @@ async function readMemberFacts(
   const repoId = workspaceRepositoryId(rootId, repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable', repositoryName }
   const [snapshot, statuses] = await Promise.all([
-    (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal),
+    (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, { includeWorktreeStatus: false }),
     (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal),
   ])
   if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable', repositoryName }

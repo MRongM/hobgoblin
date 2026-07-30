@@ -1,9 +1,11 @@
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type {
+  BranchWorkspaceOperationUpdatedEvent,
   SettingsInvalidationEvent,
   SettingsInvalidationScope,
   WorkspaceInvalidationEvent,
 } from '#/shared/server-invalidation.ts'
+import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 
 interface InvalidationSocket {
   send(data: string): unknown
@@ -62,5 +64,20 @@ export function publishWorkspaceInvalidation(rootId: string, sourceToken?: strin
       rootId,
       ...(normalizedSourceToken ? { sourceToken: normalizedSourceToken } : {}),
     } satisfies WorkspaceInvalidationEvent),
+  )
+}
+
+export function publishBranchWorkspaceOperationUpdate(
+  rootId: string,
+  branchWorkspaceId: string,
+  operation: BranchWorkspaceActiveOperation | null,
+): void {
+  publishInvalidationPayload(
+    JSON.stringify({
+      type: 'branch-workspace-operation-updated',
+      rootId,
+      branchWorkspaceId,
+      operation,
+    } satisfies BranchWorkspaceOperationUpdatedEvent),
   )
 }

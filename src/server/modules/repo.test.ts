@@ -1667,6 +1667,45 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('pullRepositoryBranch can defer its snapshot invalidation', async () => {
+    const { pullRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await pullRepositoryBranch('/tmp/repo', 'feature/a', undefined, undefined, undefined, {
+      publishInvalidation: false,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('commitRepositoryChanges can defer its snapshot invalidation', async () => {
+    const { commitRepositoryChanges } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await commitRepositoryChanges(
+      '/tmp/repo',
+      '/tmp/repo-worktree',
+      'feat: local commit',
+      undefined,
+      undefined,
+      { publishInvalidation: false },
+    )
+
+    expect(result).toEqual({ ok: true, message: 'committed local' })
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('publishRepositorySnapshotInvalidation publishes the canonical snapshot event', async () => {
+    const { publishRepositorySnapshotInvalidation } = await import('#/server/modules/repo-write-paths.ts')
+
+    publishRepositorySnapshotInvalidation('/tmp/repo', 'batch_1')
+
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'batch_1',
+    })
+  })
+
   test.each([
     [
       'pullRepositoryBranch',
