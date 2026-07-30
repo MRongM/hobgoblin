@@ -843,7 +843,7 @@ function ManifestRow({
             data-testid="overview-terminal-count-badge"
             aria-label={t('terminal.open-count', { count: terminalCount })}
             variant="brand"
-            className="h-4 gap-1 rounded-full px-1.5 text-[10px] tabular-nums"
+            className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
           >
             {hasTerminalOutputActivity ? (
               <TerminalOutputActivityIndicator label={t('terminal.output-active')} className="size-2.5" size={10} />

@@ -1570,6 +1570,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     const badge = overviewButton()?.querySelector('[data-testid="overview-terminal-count-badge"]')
     expect(badge?.textContent).toBe('2')
+    expect(badge?.className).toContain('font-semibold')
     expect(badge?.getAttribute('aria-label')).toBe('terminal.open-count:2')
     expect(badge?.querySelector('.lucide-terminal')).not.toBeNull()
     expect(badge?.querySelector('[data-terminal-output-activity-indicator="active"]')).toBeNull()
