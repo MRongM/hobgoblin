@@ -185,8 +185,12 @@ The modal surface for changing application preferences while keeping the current
 _Avoid_: Settings screen, full-page settings
 
 **AI handoff command**:
-A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted worktree context. The handoff selects an existing open terminal for that worktree or creates one when no open terminal exists before filling the command text.
+A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted directory context. The handoff selects an existing open terminal for that directory or creates one when no open terminal exists before filling the command text.
 _Avoid_: AI command, automatic AI action
+
+**Branch workspace merge-conflict AI handoff**:
+An AI handoff offered only when a branch workspace batch merge leaves a retained conflict site. It opens the branch workspace root terminal and identifies the failed repository and exact conflict worktree; a conflict cleaned with an application temporary worktree is not eligible.
+_Avoid_: Batch error AI, automatic conflict resolution, member-terminal handoff
 
 **Worktree bootstrap**:
 A user-selected process that copies or symlinks immediate untracked entries from a source worktree into a newly created worktree before normal development begins.
@@ -315,7 +319,7 @@ _Avoid_: Orphan worktree, detached worktree
 
 **Branch workspace operation**:
 A server-coordinated creation, extension, reduction, repair, or removal of one branch workspace. Member work is applied sequentially with per-member results and no automatic rollback, but this cross-repository orchestration is not exposed as a separate batch concept.
-Creation succeeds only after final reconciliation observes the resulting branch workspace as ready; the successful result carries that observed state, while later reads continue to detect external drift. Whole-branch-workspace removal remains available from ready, incomplete, and drifted lifecycles, derives its managed scope from the durable manifest, and retains all destructive approvals and non-bypassable worktree safety boundaries.
+Creation succeeds only after final reconciliation observes the resulting branch workspace as ready; the successful result carries that observed state, while later reads continue to detect external drift. If the final remote read fails after the foreground UI has independently observed the workspace as ready with every planned step complete, the creation modal closes; all other failures remain visible and retryable. Whole-branch-workspace removal remains available from ready, incomplete, and drifted lifecycles, derives its managed scope from the durable manifest, and retains all destructive approvals and non-bypassable worktree safety boundaries.
 Once a confirmed whole-branch-workspace removal starts, its progress remains in the foreground modal until execution settles. Successful removal closes the modal only after the workspace has been fully removed; failed removal remains visible with its completed and remaining work instead of becoming a background operation.
 During reduction, selected dirty member worktrees require explicit approval before force removal, and internal terminals scoped below those member paths require separate close approval. Unselected member worktrees are verified but never modified; one-time dependency content is not inspected.
 When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Removing a branch workspace always force-removes its managed worktrees and may discard their uncommitted changes without a separate dirty-worktree preflight, while locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.

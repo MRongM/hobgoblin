@@ -125,12 +125,14 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.repositories': '저장소 작업 트리',
   'workspace.branch-workspace.repository-named': '저장소 {name} 포함',
   'workspace.branch-workspace.base-named': '{name}의 기준 브랜치',
+  'workspace.branch-workspace.repository-dependencies-toggle': '의존 항목',
+  'workspace.branch-workspace.repository-dependencies-toggle-named': '{name} 저장소 의존 항목 선택',
   'workspace.branch-workspace.repository-dependencies': '저장소 의존 항목',
   'workspace.branch-workspace.repository-dependencies-description':
     '현재 의존 항목 원본에서 새 작업 트리로 복사하거나 링크할 추적되지 않은 항목을 선택합니다.',
   'workspace.branch-workspace.repository-dependencies-loading': '저장소 의존 항목 불러오는 중…',
   'workspace.branch-workspace.repository-dependencies-error':
-    '저장소 의존 항목을 불러오지 못했습니다. 이 저장소를 선택 해제한 후 다시 선택하세요.',
+    '저장소 의존 항목을 불러오지 못했습니다. 이 저장소의 의존 항목 스위치를 껐다가 다시 켜세요.',
   'workspace.branch-workspace.repository-dependencies-empty':
     '현재 의존 항목 원본에 선택할 수 있는 추적되지 않은 항목이 없습니다.',
   'worktree-bootstrap.source-primary': '기본 작업 트리의 의존 항목을 사용하고 있습니다.',

@@ -16,6 +16,7 @@ import type {
   TerminalSessionSummary,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
+import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
@@ -55,6 +56,11 @@ const hostTmuxInventoryState = vi.hoisted(() => ({
   calls: [] as Array<{ projectRoot?: string; disabled?: boolean }>,
   onSelect: vi.fn(),
   visible: true,
+}))
+
+const repoClientMocks = vi.hoisted(() => ({
+  getRepositoryRemoteBranches: vi.fn(),
+  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -190,6 +196,15 @@ vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
 }))
 
+vi.mock('#/web/repo-client.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
+  return {
+    ...actual,
+    getRepositoryRemoteBranches: repoClientMocks.getRepositoryRemoteBranches,
+    getRepositoryWorktreeBootstrapPreflight: repoClientMocks.getRepositoryWorktreeBootstrapPreflight,
+  }
+})
+
 vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', async () => {
   const actual = await vi.importActual<typeof import('#/web/components/repo-workspace/project-switcher-model.tsx')>(
     '#/web/components/repo-workspace/project-switcher-model.tsx',
@@ -223,6 +238,13 @@ let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
 beforeEach(() => {
+  resetReposStore()
+  seedRepoState({
+    id: '/repo-a',
+    branches: [createRepoBranch('main', { isCurrent: true, worktree: { path: '/repo-a' } })],
+    currentBranch: 'main',
+    remote: { hasRemotes: true },
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   dndState.lastDragEnd = null
   dndState.contextSensors = null
@@ -246,6 +268,13 @@ beforeEach(() => {
   hostTmuxInventoryState.calls = []
   hostTmuxInventoryState.onSelect.mockReset()
   hostTmuxInventoryState.visible = true
+  repoClientMocks.getRepositoryRemoteBranches.mockReset()
+  repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
+  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockReset()
+  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+    ok: true,
+    preflight: { kind: 'candidates', candidates: [] },
+  })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -257,6 +286,7 @@ afterEach(() => {
   root = null
   container = null
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+  resetReposStore()
 })
 
 function renderList(
@@ -269,6 +299,7 @@ function renderList(
   const onActivate = vi.fn()
   const onClose = vi.fn()
   const onReorder = vi.fn()
+  const onToggleFileArea = vi.fn()
   const closeTerminal =
     fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   act(() => {
@@ -282,12 +313,13 @@ function renderList(
             onActivate={onActivate}
             onClose={onClose}
             onReorder={onReorder}
+            onToggleFileArea={onToggleFileArea}
           />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onClose, onReorder, closeTerminal }
+  return { onActivate, onClose, onReorder, onToggleFileArea, closeTerminal }
 }
 
 describe('SidebarProjectList', () => {
@@ -411,10 +443,27 @@ describe('SidebarProjectList', () => {
     expect(onActivate).toHaveBeenCalledWith('/repo-a')
   })
 
+  test('requests a file area toggle from a project row double-click', () => {
+    const { onActivate, onToggleFileArea } = renderList()
+    const firstRow = projectRow('/repo-a').querySelector('[data-workspace-list-item-main]')
+
+    act(() => {
+      firstRow?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      firstRow?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }))
+      firstRow?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(onActivate).toHaveBeenCalledTimes(2)
+    expect(onActivate).toHaveBeenLastCalledWith('/repo-a')
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
   test('closes a project from More without activating it', async () => {
     const { onActivate, onClose } = renderList()
     const items = await openProjectMenu('/repo-a')
     expect(items.map((item) => item.textContent?.trim())).toEqual([
+      'action.pull-remote-branch',
+      'action.create-worktree',
       'terminal.new-with-tmux',
       'terminal.external',
       'Close Repo A',
@@ -430,6 +479,45 @@ describe('SidebarProjectList', () => {
 
     expect(onClose).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('offers repository creation only for Git projects without activating or closing them', async () => {
+    const { onActivate, onClose } = renderList()
+    const gitMenu = await openProjectMenu('/repo-a')
+
+    expect(gitMenu.map((item) => item.textContent?.trim())).toEqual(
+      expect.arrayContaining(['action.pull-remote-branch', 'action.create-worktree']),
+    )
+
+    const remoteBranch = gitMenu.find((item) => item.textContent?.includes('action.pull-remote-branch'))
+    await act(async () => {
+      remoteBranch?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain('action.pull-remote-branch-title')
+    await clickDialogButton('dialog.cancel')
+
+    const worktree = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('action.create-worktree'),
+    )
+    await act(async () => {
+      worktree?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain('action.create-worktree-title')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-new')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-existing')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-remote')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-detached')
+    expect(document.querySelector('#cwt-base')?.textContent).toContain('main')
+    await clickDialogButton('dialog.cancel')
+
+    const plainMenu = await openProjectMenu('/repo-b')
+    const plainMenuLabels = plainMenu.map((item) => item.textContent?.trim())
+    expect(plainMenuLabels).not.toContain('action.pull-remote-branch')
+    expect(plainMenuLabels).not.toContain('action.create-worktree')
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   test('offers destructive tmux cleanup from More without activating or closing the project', async () => {
@@ -608,6 +696,17 @@ async function openProjectMenu(projectId: string): Promise<HTMLElement[]> {
     await Promise.resolve()
   })
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickDialogButton(label: string): Promise<void> {
+  const button = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+  if (!button) throw new Error(`missing dialog button: ${label}`)
+  await act(async () => {
+    button.click()
+    await Promise.resolve()
+  })
 }
 
 async function requestCloseAllFromContextMenu(row: HTMLElement): Promise<void> {

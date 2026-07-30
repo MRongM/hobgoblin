@@ -116,6 +116,11 @@ export const GIT_HASH_RE = /^[0-9a-fA-F]{7,64}$/
 
 export type GitFailureReason = 'merge-conflict'
 
+export interface GitConflictWorktree {
+  branch: string
+  path: string
+}
+
 export interface ExecResult {
   ok: boolean
   message: string

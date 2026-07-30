@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   buildAiHandoffCommand,
+  buildBranchWorkspaceMergeConflictAiCommand,
+  buildMergeConflictAiCommand,
   preferredAiHandoffProvider,
   prefillAiTerminalCommand,
+  prefillAiTerminalTargetCommand,
 } from '#/web/ai-terminal-handoff.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -16,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   },
   showRepoBranchDetailTab: vi.fn(),
   setDetailCollapsed: vi.fn(),
+  activate: vi.fn(),
 }))
 
 vi.mock('#/web/components/terminal/terminal-session-command-bridge.ts', () => ({
@@ -48,6 +52,49 @@ describe('AI terminal handoff', () => {
     )
     expect(buildAiHandoffCommand('claude', 'Inspect deps.')).toBe('claude --print "Inspect deps."')
     expect(buildAiHandoffCommand('codex', 'Inspect deps.')).not.toMatch(/[\r\n]/)
+  })
+
+  test('builds worktree and branch-workspace merge conflict commands without executing them', () => {
+    expect(buildMergeConflictAiCommand('claude')).toContain('current Git merge conflicts in this working tree')
+
+    const command = buildBranchWorkspaceMergeConflictAiCommand('codex', 'api', {
+      branch: 'main',
+      path: '/workspace/api "quoted"',
+    })
+    expect(command).toContain('codex exec')
+    expect(command).toContain('api')
+    expect(command).toContain('/workspace/api \\"quoted\\"')
+    expect(command).not.toMatch(/[\r\n]/)
+  })
+
+  test('activates a branch workspace and preserves its full terminal identity', async () => {
+    await expect(
+      prefillAiTerminalTargetCommand({
+        terminalBase: {
+          repoRoot: '/workspace',
+          branch: 'feature/a',
+          worktreePath: '/workspace/goblin-feature-a',
+          targetKind: 'branch-workspace',
+          branchWorkspaceId: 'ws-1',
+        },
+        activate: mocks.activate,
+        command: 'codex exec "prompt"',
+      }),
+    ).resolves.toBe(true)
+
+    expect(mocks.activate).toHaveBeenCalledOnce()
+    expect(mocks.bridge.createTerminal).toHaveBeenCalledWith({
+      repoRoot: '/workspace',
+      branch: 'feature/a',
+      worktreePath: '/workspace/goblin-feature-a',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'ws-1',
+    })
+    expect(mocks.bridge.waitForInputReady).toHaveBeenCalledWith('/repo\u0000/repo-worktree\u0000terminal-1')
+    expect(mocks.bridge.writeInput).toHaveBeenCalledWith(
+      '/repo\u0000/repo-worktree\u0000terminal-1',
+      'codex exec "prompt"',
+    )
   })
 
   test('opens the target terminal and fills a newly created session', async () => {

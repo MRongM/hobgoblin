@@ -17,6 +17,7 @@ import type {
   TerminalSessionSummary,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
+import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
@@ -41,6 +42,11 @@ const projectActionState = vi.hoisted(() => ({
   editorDisabled: false,
   externalTerminalDisabled: false,
   internalTerminalDisabled: false,
+}))
+
+const repoClientMocks = vi.hoisted(() => ({
+  getRepositoryRemoteBranches: vi.fn(),
+  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -129,6 +135,15 @@ vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   TerminalAppIcon: () => <span data-testid="mock-terminal-app-icon" />,
 }))
 
+vi.mock('#/web/repo-client.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
+  return {
+    ...actual,
+    getRepositoryRemoteBranches: repoClientMocks.getRepositoryRemoteBranches,
+    getRepositoryWorktreeBootstrapPreflight: repoClientMocks.getRepositoryWorktreeBootstrapPreflight,
+  }
+})
+
 const repositories: WorkspaceRepositoryListItem[] = [
   {
     id: '/workspace/api',
@@ -152,6 +167,13 @@ let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
 beforeEach(() => {
+  resetReposStore()
+  seedRepoState({
+    id: '/workspace/api',
+    branches: [createRepoBranch('main', { isCurrent: true, worktree: { path: '/workspace/api' } })],
+    currentBranch: 'main',
+    remote: { hasRemotes: true },
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   dndState.lastDragEnd = null
   dndState.contextSensors = null
@@ -166,6 +188,13 @@ beforeEach(() => {
   projectActionState.editorDisabled = false
   projectActionState.externalTerminalDisabled = false
   projectActionState.internalTerminalDisabled = false
+  repoClientMocks.getRepositoryRemoteBranches.mockReset()
+  repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
+  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockReset()
+  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+    ok: true,
+    preflight: { kind: 'candidates', candidates: [] },
+  })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -177,6 +206,7 @@ afterEach(() => {
   root = null
   container = null
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+  resetReposStore()
 })
 
 function renderList(
@@ -186,6 +216,7 @@ function renderList(
 ) {
   const onActivate = vi.fn()
   const onReorder = vi.fn()
+  const onToggleFileArea = vi.fn()
   act(() => {
     root!.render(
       <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
@@ -196,12 +227,13 @@ function renderList(
             disabled={disabled}
             onActivate={onActivate}
             onReorder={onReorder}
+            onToggleFileArea={onToggleFileArea}
           />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onReorder, closeTerminal }
+  return { onActivate, onReorder, onToggleFileArea, closeTerminal }
 }
 
 describe('WorkspaceRepositoryList', () => {
@@ -253,6 +285,21 @@ describe('WorkspaceRepositoryList', () => {
     expect(row?.className).toContain('text-sm')
     act(() => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
     expect(onActivate).toHaveBeenCalledWith('/workspace/api')
+  })
+
+  test('requests a file area toggle from a repository row double-click', () => {
+    const { onActivate, onToggleFileArea } = renderList()
+    const row = repositoryItem('/workspace/api').querySelector('[data-workspace-list-item-main]')
+
+    act(() => {
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }))
+      row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(onActivate).toHaveBeenCalledTimes(2)
+    expect(onActivate).toHaveBeenLastCalledWith('/workspace/api')
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
   test('shows aggregate terminal count, output activity, changes, and unread bell on a repository row', () => {
@@ -383,6 +430,45 @@ describe('WorkspaceRepositoryList', () => {
     expect(onActivate).not.toHaveBeenCalled()
   })
 
+  test('opens both repository creation flows without activating the workspace repository', async () => {
+    const { onActivate } = renderList()
+    const menuItems = await openRepositoryMenu('/workspace/api')
+
+    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual(
+      expect.arrayContaining(['action.pull-remote-branch', 'action.create-worktree']),
+    )
+    const remoteBranch = menuItems.find((entry) => entry.textContent?.includes('action.pull-remote-branch'))
+    await act(async () => {
+      remoteBranch?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain('action.pull-remote-branch-title')
+    await clickDialogButton('dialog.cancel')
+
+    const worktree = (await openRepositoryMenu('/workspace/api')).find((entry) =>
+      entry.textContent?.includes('action.create-worktree'),
+    )
+    await act(async () => {
+      worktree?.click()
+      await Promise.resolve()
+    })
+    expect(document.body.textContent).toContain('action.create-worktree-title')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-new')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-existing')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-remote')
+    expect(document.body.textContent).toContain('action.create-worktree-mode-detached')
+    expect(document.querySelector('#cwt-base')?.textContent).toContain('main')
+    await clickDialogButton('dialog.cancel')
+
+    const unavailableItems = await openRepositoryMenu('/workspace/web')
+    const unavailableCreationItems = unavailableItems.filter((entry) =>
+      ['pullRemoteBranch', 'createWorktree'].includes(entry.getAttribute('data-action') ?? ''),
+    )
+    expect(unavailableCreationItems).toHaveLength(2)
+    expect(unavailableCreationItems.every((entry) => entry.hasAttribute('data-disabled'))).toBe(true)
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
   test('keeps disabled repository actions visible in their stable positions', async () => {
     projectActionState.editorDisabled = true
     projectActionState.internalTerminalDisabled = true
@@ -393,8 +479,23 @@ describe('WorkspaceRepositoryList', () => {
     expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(true)
     expect(item.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(true)
     const menuItems = await openRepositoryMenu('/workspace/api')
-    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual(['terminal.new-with-tmux', 'terminal.external'])
-    expect(menuItems[0]?.hasAttribute('data-disabled')).toBe(true)
+    expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual([
+      'action.pull-remote-branch',
+      'action.create-worktree',
+      'terminal.new-with-tmux',
+      'terminal.external',
+    ])
+    expect(menuItems[2]?.hasAttribute('data-disabled')).toBe(true)
+  })
+
+  test('keeps repository creation available when only list reordering is disabled', async () => {
+    renderList(true)
+
+    const creationItems = (await openRepositoryMenu('/workspace/api')).filter((entry) =>
+      ['pullRemoteBranch', 'createWorktree'].includes(entry.getAttribute('data-action') ?? ''),
+    )
+    expect(creationItems).toHaveLength(2)
+    expect(creationItems.every((entry) => !entry.hasAttribute('data-disabled'))).toBe(true)
   })
 
   test('shows unavailable repository state', () => {
@@ -441,6 +542,17 @@ async function openRepositoryMenu(repositoryId: string): Promise<HTMLElement[]> 
     await Promise.resolve()
   })
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickDialogButton(label: string): Promise<void> {
+  const button = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  )
+  if (!button) throw new Error(`missing dialog button: ${label}`)
+  await act(async () => {
+    button.click()
+    await Promise.resolve()
+  })
 }
 
 function terminalReadContext(

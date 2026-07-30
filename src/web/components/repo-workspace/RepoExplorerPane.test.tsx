@@ -187,17 +187,26 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
     workspaceRootId,
     currentRepoId,
     fill,
+    onToggleFileArea,
   }: {
     workspaceRootId: string
     currentRepoId: string
     fill?: boolean
+    onToggleFileArea?: () => void
   }) => (
     <div
       data-testid="workspace-repository-rail"
       data-workspace-root-id={workspaceRootId}
       data-current-repo-id={currentRepoId}
       data-fill={String(!!fill)}
-    />
+      data-has-toggle={String(!!onToggleFileArea)}
+    >
+      {onToggleFileArea ? (
+        <button type="button" data-testid="mock-double-click-workspace-repository" onDoubleClick={onToggleFileArea}>
+          repository
+        </button>
+      ) : null}
+    </div>
   ),
 }))
 
@@ -209,13 +218,20 @@ vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
     onShowCompactDetail,
     onShowCompactFiles,
     onMaximizeTerminal,
+    onFileAreaItemDoubleClick,
   }: {
     repoId: string
     onShowCompactDetail?: () => void
     onShowCompactFiles?: () => void
     onMaximizeTerminal?: () => void
+    onFileAreaItemDoubleClick?: () => void
   }) => (
     <div data-testid="sidebar-project-header" data-repo-id={repoId}>
+      {onFileAreaItemDoubleClick && (
+        <button type="button" data-testid="mock-double-click-project" onDoubleClick={onFileAreaItemDoubleClick}>
+          project
+        </button>
+      )}
       {onShowCompactDetail && (
         <button type="button" data-testid="mock-show-compact-detail" onClick={onShowCompactDetail}>
           show detail
@@ -892,11 +908,20 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-file-tree"]')).not.toBeNull()
     const rail = container.querySelector('[data-testid="workspace-repository-rail"]')
     expect(rail).not.toBeNull()
+    expect(rail?.getAttribute('data-has-toggle')).toBe('true')
     expect(rail?.getAttribute('data-fill')).toBe('true')
     expect(rail?.closest('.project-navigation-tone')).not.toBeNull()
     expect(container.querySelector('[data-testid="plain-workspace-terminal"]')).not.toBeNull()
     expect(container.querySelectorAll('[data-testid="statusbar"]')).toHaveLength(1)
     expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-project"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    onToggleFileArea.mockClear()
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
@@ -1273,6 +1298,7 @@ describe('RepoExplorerPane', () => {
       repo.workspaceRootId = '/workspace'
       return {
         repos: { ...state.repos, [REPO_ID]: repo },
+        activeProjectId: '/workspace',
         workspaceProjects: {
           '/workspace': {
             rootId: '/workspace',
@@ -1311,6 +1337,17 @@ describe('RepoExplorerPane', () => {
     expect(branchList?.parentElement?.parentElement?.className).toContain('project-navigation-tone')
     expect(container.querySelector('[data-testid="statusbar"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
 
+    const repositoryItem = container.querySelector<HTMLButtonElement>(
+      '[data-testid="mock-double-click-workspace-repository"]',
+    )
+    expect(repositoryItem).not.toBeNull()
+
+    await act(async () => {
+      repositoryItem?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    onToggleFileArea.mockClear()
+
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="statusbar-file-area-toggle"]')?.click()
     })
@@ -1339,6 +1376,35 @@ describe('RepoExplorerPane', () => {
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-worktree"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('opens a collapsed project file area on the Files tab when its item is double-clicked', async () => {
+    const onToggleFileArea = vi.fn()
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          fileAreaCollapsed
+          onToggleFileArea={onToggleFileArea}
+        />,
+      )
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-project"]')
         ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
     })
 

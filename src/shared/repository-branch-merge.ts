@@ -1,4 +1,4 @@
-import type { ExecResult } from '#/shared/git-types.ts'
+import type { ExecResult, GitConflictWorktree } from '#/shared/git-types.ts'
 
 export type RepositoryBranchMergeMode = 'merge' | 'pull-merge-push'
 
@@ -41,10 +41,7 @@ export interface RepositoryBranchMergeOutExecuteInput extends RepositoryBranchMe
   mode: RepositoryBranchMergeMode
 }
 
-export interface RepositoryBranchMergeOutConflictWorktree {
-  branch: string
-  path: string
-}
+export type RepositoryBranchMergeOutConflictWorktree = GitConflictWorktree
 
 export interface RepositoryBranchMergeOutResult extends ExecResult {
   conflictWorktree?: RepositoryBranchMergeOutConflictWorktree

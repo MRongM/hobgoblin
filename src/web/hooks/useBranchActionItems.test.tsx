@@ -794,6 +794,22 @@ describe('useBranchActionItems', () => {
     expect(groups.mainItems.find((item) => item.id === 'push')?.label).toBe('action.push')
   })
 
+  test('disables create worktree while another local branch action is pending', async () => {
+    const branchActions = mocks.useBranchActions()
+    mocks.useBranchActions.mockReturnValue({
+      ...branchActions,
+      blocked: true,
+      busyAction: 'copyPatch',
+    })
+    const branch = createRepoBranch('feature/other')
+    const repo = seedRepoState({ id: '/tmp/repo', branches: [branch] })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+
+    expect(groups.mainItems.find((item) => item.id === 'createWorktree')?.disabled).toBe(true)
+  })
+
   test('does not show create-worktree loading on non-target branches', async () => {
     mocks.useBranchActions.mockReturnValue({
       blocked: true,

@@ -36,6 +36,8 @@ import {
   type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { useRepositoryCreationActions } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const restrictToVerticalProjectList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -46,6 +48,7 @@ interface SidebarProjectListProps {
   onActivate: (id: string) => void
   onClose: (id: string) => void
   onReorder: (fromId: string, toId: string) => void
+  onToggleFileArea?: () => void
 }
 
 export function SidebarProjectList({
@@ -55,6 +58,7 @@ export function SidebarProjectList({
   onActivate,
   onClose,
   onReorder,
+  onToggleFileArea,
 }: SidebarProjectListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -82,6 +86,7 @@ export function SidebarProjectList({
               active={project.id === activeRepoId}
               onActivate={onActivate}
               onClose={onClose}
+              onToggleFileArea={onToggleFileArea}
             />
           ))}
         </ul>
@@ -95,11 +100,13 @@ function SortableProjectRow({
   active,
   onActivate,
   onClose,
+  onToggleFileArea,
 }: {
   project: ProjectSummary
   active: boolean
   onActivate: (id: string) => void
   onClose: (id: string) => void
+  onToggleFileArea?: () => void
 }) {
   const t = useT()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
@@ -114,6 +121,8 @@ function SortableProjectRow({
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
+  const repo = useReposStore((state) => state.repos[project.id])
+  const creation = useRepositoryCreationActions(repo, { forceDisabled: project.unavailable })
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: project.id,
     itemPath: remote?.remotePath ?? project.id,
@@ -209,6 +218,7 @@ function SortableProjectRow({
           }}
           buttonProps={{
             onClick: () => onActivate(project.id),
+            onDoubleClick: onToggleFileArea,
             'data-project-kind': projectKind,
             'aria-current': active ? 'page' : undefined,
             title: project.unavailable ? t('repo-unavailable.title') : location,
@@ -221,6 +231,7 @@ function SortableProjectRow({
                 <WorkspaceListItemMenu
                   label={t('action.menu')}
                   groups={[
+                    project.isGitRepo ? creation.items : [],
                     [tmuxTerminalAction, externalTerminalAction],
                     [closeAction],
                     ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),
@@ -251,6 +262,7 @@ function SortableProjectRow({
           </span>
         </WorkspaceListItemFrame>
       </WorkspaceItemContextMenu>
+      {project.isGitRepo ? creation.dialogs : null}
       {hostTmuxInventory.dialog}
       {tmuxCleanup.dialog}
     </>

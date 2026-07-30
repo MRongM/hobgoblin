@@ -3,7 +3,6 @@ import {
   ArrowUp,
   ClipboardCopy,
   ExternalLink,
-  FolderPlus,
   GitBranch,
   RefreshCw,
   Tag,
@@ -11,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { createElement, Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createElement, Fragment, useMemo, type ReactNode } from 'react'
 import { GitHubOutlineIcon } from '#/web/components/GitHubOutlineIcon.tsx'
 import { GitLabLogoIcon } from '#/web/components/GitLabLogoIcon.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
@@ -25,19 +24,14 @@ import type { BrowserRemoteProvider } from '#/web/types.ts'
 import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
-import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
-import { createRepositoryLocalTag, getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
-import {
-  repositoryDependencySources,
-  type RepositoryDependencySource,
-} from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
+import { createRepositoryLocalTag } from '#/web/repo-client.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
 import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
+import { useCreateWorktreeAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -107,7 +101,6 @@ export function useBranchActionItems(
 ): BranchActionItemGroups {
   const t = useT()
   const syncAndRefresh = useReposStore((s) => s.syncAndRefresh)
-  const submitBranchAction = useReposStore((s) => s.submitBranchAction)
   const setDetailCollapsed = useReposStore((s) => s.setDetailCollapsed)
   const { terminalApp, resolvedTerminalApp, terminalAvailable, editorApp, resolvedEditorApp, editorAvailable } =
     useRuntimeExternalAppSettings()
@@ -117,15 +110,16 @@ export function useBranchActionItems(
     canPush: capabilities.canPush,
     onPush: actions.push,
   })
-  const createWorktreeDialog = useRetainedDialogState<string>()
+  const createWorktree = useCreateWorktreeAction(repo, {
+    defaultBranch: branch.name,
+    busyTargetBranch: branch.name,
+    forceDisabled: blocked,
+  })
   const createTagDialog = useRetainedDialogState<string>()
   const { createTerminal, restoreTmuxSessions } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
   const phase = branchActionDisplayPhase(repo, branch.name)
-  const createWorktreePhase =
-    repo.operations.branchAction.reason === 'branch:createWorktree' ? branchActionDisplayPhase(repo, branch.name) : null
-  const createWorktreeBusy = createWorktreePhase !== null
   const syncBusy = repo.operations.manualRefresh.phase !== 'idle' || repo.operations.fetch.phase !== 'idle'
   const branchActionLabel = (
     id: BranchActionItemId,
@@ -133,10 +127,9 @@ export function useBranchActionItems(
     loadingKey: string,
     queuedKey?: string,
   ): string => {
-    const itemBusy = busy(id) || (id === 'createWorktree' && createWorktreeBusy)
+    const itemBusy = busy(id)
     if (!itemBusy) return t(idleKey)
-    const itemPhase = id === 'createWorktree' ? createWorktreePhase : phase
-    if (itemPhase === 'queued' && queuedKey) return t(queuedKey)
+    if (phase === 'queued' && queuedKey) return t(queuedKey)
     return t(loadingKey)
   }
   const remoteIcon = browserRemoteIcon(branchBrowserRemoteProvider(repo, branch))
@@ -151,19 +144,6 @@ export function useBranchActionItems(
     : null
   const terminalWorktreeKeys = useMemo(() => (terminalWorktreeKey ? [terminalWorktreeKey] : []), [terminalWorktreeKey])
   const closeTerminalScope = useCloseTerminalScope(terminalWorktreeKeys)
-
-  function handleCreateWorktree(request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision): void {
-    if (blocked) return
-    submitBranchAction(
-      repo.id,
-      {
-        kind: 'createWorktree',
-        input: request.input,
-        worktreeBootstrap,
-      },
-      { token: repo.instanceToken, refreshOnError: false },
-    )
-  }
 
   async function handleNewTerminal(launchMode: TerminalLaunchMode): Promise<void> {
     if (!terminalBase) return
@@ -239,21 +219,7 @@ export function useBranchActionItems(
       icon: createElement(ArrowUp),
       onSelect: actions.push,
     },
-    {
-      id: 'createWorktree',
-      label: branchActionLabel(
-        'createWorktree',
-        'action.create-worktree',
-        'action.create-worktree-creating-title',
-        'action.create-worktree-queued-title',
-      ),
-      title: t('action.create-worktree-title'),
-      disabled,
-      busy: createWorktreeBusy,
-      visible: true,
-      icon: createElement(FolderPlus),
-      onSelect: () => createWorktreeDialog.openWith(branch.name),
-    },
+    createWorktree.item,
     {
       id: 'sync',
       label: t('action.refresh'),
@@ -411,167 +377,10 @@ export function useBranchActionItems(
         },
       }),
       closeTerminalScope.dialog,
-      createElement(CreateWorktreeDialogConnected, {
-        repoId: repo.id,
-        defaultBranch: createWorktreeDialog.payload ?? undefined,
-        open: createWorktreeDialog.open,
-        onClose: createWorktreeDialog.close,
-        onCreate: handleCreateWorktree,
-      }),
+      createWorktree.dialog,
     ),
     inlinePanel: writeActions.inlinePanel,
   }
-}
-
-function CreateWorktreeDialogConnected({
-  repoId,
-  defaultBranch,
-  open,
-  onClose,
-  onCreate,
-}: {
-  repoId: string
-  defaultBranch?: string
-  open: boolean
-  onClose: () => void
-  onCreate: (request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision) => void | Promise<void>
-}) {
-  const repo = useReposStore((s) => s.repos[repoId])
-  const [bootstrapPreflight, setBootstrapPreflight] = useState<WorktreeBootstrapPreflight | null>(null)
-  const [bootstrapPreflightError, setBootstrapPreflightError] = useState(false)
-  const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
-  const [sourceContextBranch, setSourceContextBranch] = useState<string>()
-  const [requestedSource, setRequestedSource] = useState<RepositoryDependencySource>()
-  const [activeSource, setActiveSource] = useState<RepositoryDependencySource>()
-  const defaultSourceContextBranch = defaultBranch ?? repo?.data.currentBranch ?? ''
-  const effectiveSourceContextBranch = sourceContextBranch ?? defaultSourceContextBranch
-  const primaryWorktreePath = useMemo(
-    () => Object.values(repo?.data.worktreesByPath ?? {}).find((worktree) => worktree.isMain)?.path,
-    [repo?.data.worktreesByPath],
-  )
-  const sourceWorktreeByBranch = useMemo(
-    () =>
-      Object.fromEntries(
-        (repo?.data.branches ?? []).flatMap((branch) =>
-          branch.worktree?.path ? [[branch.name, branch.worktree.path] as const] : [],
-        ),
-      ),
-    [repo?.data.branches],
-  )
-  const sources = useMemo(
-    () =>
-      repositoryDependencySources({
-        baseBranch: effectiveSourceContextBranch,
-        primaryWorktreePath,
-        sourceWorktreeByBranch,
-      }),
-    [effectiveSourceContextBranch, primaryWorktreePath, sourceWorktreeByBranch],
-  )
-  const sourceOptions = useMemo(() => {
-    const baseWorktreePath = sourceWorktreeByBranch[effectiveSourceContextBranch]
-    const primaryMayBeSelected = !baseWorktreePath || !primaryWorktreePath || baseWorktreePath !== primaryWorktreePath
-    return uniqueRepositoryDependencySources([
-      ...(primaryMayBeSelected ? [sources.primary] : []),
-      ...sources.alternatives.filter((candidate) => candidate.kind === 'branch'),
-    ])
-  }, [effectiveSourceContextBranch, primaryWorktreePath, sourceWorktreeByBranch, sources])
-  const handleBootstrapContextBranchChange = useCallback(
-    (branch: string) => {
-      if (branch === effectiveSourceContextBranch) return
-      setSourceContextBranch(branch)
-      setRequestedSource(undefined)
-    },
-    [effectiveSourceContextBranch],
-  )
-
-  useEffect(() => {
-    if (!open) {
-      setBootstrapPreflight(null)
-      setBootstrapPreflightError(false)
-      setBootstrapPreflightLoading(false)
-      setSourceContextBranch(undefined)
-      setRequestedSource(undefined)
-      setActiveSource(undefined)
-      return
-    }
-    const controller = new AbortController()
-    setBootstrapPreflight(null)
-    setBootstrapPreflightError(false)
-    setBootstrapPreflightLoading(true)
-    void (async () => {
-      let source = requestedSource
-        ? sourceOptions.find((candidate) => candidate.id === requestedSource.id)
-        : sources.initial
-      source ??= sources.initial
-      setActiveSource(source)
-      let result = await getRepositoryWorktreeBootstrapPreflight(
-        repoId,
-        controller.signal,
-        undefined,
-        source.kind === 'branch' ? source.worktreePath : undefined,
-      )
-      if (controller.signal.aborted) return
-      if (result.ok && !requestedSource && source.kind === 'branch' && result.preflight.candidates.length === 0) {
-        source = sources.primary
-        setActiveSource(source)
-        result = await getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal, undefined, undefined)
-        if (controller.signal.aborted) return
-      }
-      setBootstrapPreflight(result.ok ? result.preflight : null)
-      setBootstrapPreflightError(!result.ok)
-    })()
-      .catch(() => {
-        if (!controller.signal.aborted) setBootstrapPreflightError(true)
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setBootstrapPreflightLoading(false)
-      })
-    return () => controller.abort()
-  }, [open, repoId, requestedSource, sourceOptions, sources.initial, sources.primary])
-
-  if (!repo) return null
-
-  function resolveWorktreeBootstrapDecision(request: CreateWorktreeRequest): WorktreeBootstrapDecision {
-    return request.selections.length > 0
-      ? {
-          kind: 'materialize',
-          selections: request.selections,
-          ...(request.sourceWorktreePath ? { sourceWorktreePath: request.sourceWorktreePath } : {}),
-        }
-      : { kind: 'skip' }
-  }
-
-  function handleCreate(request: CreateWorktreeRequest) {
-    return onCreate(request, resolveWorktreeBootstrapDecision(request))
-  }
-
-  return createElement(CreateWorktreeDialog, {
-    open,
-    repo,
-    defaultBranch,
-    worktreeBootstrap: {
-      loading: bootstrapPreflightLoading,
-      preflight: bootstrapPreflight,
-      error: bootstrapPreflightError,
-      source: activeSource,
-      sourceOptions,
-    },
-    onBootstrapContextBranchChange: handleBootstrapContextBranchChange,
-    onBootstrapSourceChange: setRequestedSource,
-    onClose,
-    onCreate: handleCreate,
-  })
-}
-
-function uniqueRepositoryDependencySources(
-  sources: readonly RepositoryDependencySource[],
-): RepositoryDependencySource[] {
-  const seen = new Set<string>()
-  return sources.filter((source) => {
-    if (seen.has(source.id)) return false
-    seen.add(source.id)
-    return true
-  })
 }
 
 function CreateTagDialogConnected({

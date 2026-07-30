@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type SyntheticEvent } from 'react'
+import { useEffect, useRef, type SyntheticEvent } from 'react'
 import { Input } from '#/web/components/ui/input.tsx'
 
 interface Props {
@@ -22,13 +22,15 @@ export function RemoteBranchSearchInput({
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  useLayoutEffect(() => {
-    focusInput(active, disabled, inputRef.current)
-  })
-
   useEffect(() => {
-    focusInput(active, disabled, inputRef.current)
-  })
+    let cancelled = false
+    queueMicrotask(() => {
+      if (!cancelled) focusInput(active, disabled, inputRef.current)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [active, disabled])
 
   return (
     <Input
@@ -54,6 +56,6 @@ function stopSelectEvent(event: SyntheticEvent) {
 }
 
 function focusInput(active: boolean, disabled: boolean, input: HTMLInputElement | null) {
-  if (!active || disabled) return
-  input?.focus({ preventScroll: true })
+  if (!active || disabled || !input || document.activeElement === input) return
+  input.focus({ preventScroll: true })
 }

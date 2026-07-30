@@ -47,9 +47,16 @@ interface Props {
   onShowCompactDetail?: () => void
   onShowCompactFiles?: () => void
   onMaximizeTerminal?: () => void
+  onFileAreaItemDoubleClick?: () => void
 }
 
-export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompactFiles, onMaximizeTerminal }: Props) {
+export function SidebarProjectHeader({
+  repoId,
+  onShowCompactDetail,
+  onShowCompactFiles,
+  onMaximizeTerminal,
+  onFileAreaItemDoubleClick,
+}: Props) {
   const t = useT()
   const listId = useId()
   const listExpanded = useReposStore((state) => state.projectListExpanded)
@@ -209,6 +216,7 @@ export function SidebarProjectHeader({ repoId, onShowCompactDetail, onShowCompac
             onActivate={navigation.activateRepo}
             onClose={navigation.closeRepo}
             onReorder={reorderRepos}
+            onToggleFileArea={onFileAreaItemDoubleClick}
           />
         </div>
       )}

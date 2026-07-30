@@ -132,12 +132,14 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.repositories': 'リポジトリ worktree',
   'workspace.branch-workspace.repository-named': 'リポジトリ {name} を含める',
   'workspace.branch-workspace.base-named': '{name} のベースブランチ',
+  'workspace.branch-workspace.repository-dependencies-toggle': '依存項目',
+  'workspace.branch-workspace.repository-dependencies-toggle-named': '{name} のリポジトリ依存項目を選択',
   'workspace.branch-workspace.repository-dependencies': 'リポジトリ依存項目',
   'workspace.branch-workspace.repository-dependencies-description':
     '現在の依存元から新しい worktree にコピーまたはリンクする未追跡項目を選択します。',
   'workspace.branch-workspace.repository-dependencies-loading': 'リポジトリ依存項目を読み込み中…',
   'workspace.branch-workspace.repository-dependencies-error':
-    'リポジトリ依存項目を読み込めませんでした。このリポジトリを選択解除して再選択してください。',
+    'リポジトリ依存項目を読み込めませんでした。このリポジトリの依存項目スイッチを切り替えて再試行してください。',
   'workspace.branch-workspace.repository-dependencies-empty': '現在の依存元に選択可能な未追跡項目はありません。',
   'worktree-bootstrap.source-primary': 'プライマリ worktree の依存項目を使用しています。',
   'worktree-bootstrap.source-branch': '{branch} worktree の依存項目を使用しています。',

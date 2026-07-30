@@ -5,7 +5,6 @@
 // App also renders it full-width on the desktop empty state (repoId null) so
 // the settings entry never disappears.
 
-import type { RefCallback } from 'react'
 import { GitBranch, PanelBottomClose, PanelBottomOpen, Settings } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -25,7 +24,6 @@ interface Props {
   repoId: string | null
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
-  workspaceActionsHostRef?: RefCallback<HTMLDivElement>
 }
 
 interface StatusBarRepoSummary {
@@ -33,7 +31,7 @@ interface StatusBarRepoSummary {
   isGitRepo: boolean
 }
 
-export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea, workspaceActionsHostRef }: Props) {
+export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea }: Props) {
   const t = useT()
   const shellActions = useShellOverlayActions()
   const summary = useStoreWithEqualityFn(
@@ -99,9 +97,6 @@ export function StatusBar({ repoId, fileAreaCollapsed, onToggleFileArea, workspa
           </Button>
         </Tip>
       )}
-      {workspaceActionsHostRef ? (
-        <div ref={workspaceActionsHostRef} className="contents" data-testid="statusbar-workspace-actions" />
-      ) : null}
       <div className="min-w-0 flex-1" aria-hidden="true" />
       {summary && (
         <div className="flex min-w-0 items-center gap-1.5 pr-1">

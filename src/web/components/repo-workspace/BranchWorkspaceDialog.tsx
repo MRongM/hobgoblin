@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '#/web/components/ui/dialog.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
+import { Switch } from '#/web/components/ui/switch.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
@@ -105,6 +106,7 @@ export function BranchWorkspaceDialog({
   const t = useT()
   const [branch, setBranch] = useState('')
   const [selectedRepositories, setSelectedRepositories] = useState<Record<string, boolean>>({})
+  const [repositoryDependenciesEnabled, setRepositoryDependenciesEnabled] = useState<Record<string, boolean>>({})
   const [baseBranches, setBaseBranches] = useState<Record<string, string>>({})
   const [repositoryBootstraps, setRepositoryBootstraps] = useState<Record<string, RepositoryBootstrapState>>({})
   const [repositoryBootstrapChoices, setRepositoryBootstrapChoices] = useState<
@@ -143,6 +145,7 @@ export function BranchWorkspaceDialog({
         ]),
       ),
     )
+    setRepositoryDependenciesEnabled({})
     setBaseBranches(
       Object.fromEntries(
         initial.repositories.map((repository) => [
@@ -201,6 +204,21 @@ export function BranchWorkspaceDialog({
     } finally {
       setAuxiliaryRefreshPending(false)
     }
+  }
+
+  const clearRepositoryBootstrap = (repositoryName: string) => {
+    bootstrapControllers.current[repositoryName]?.abort()
+    delete bootstrapControllers.current[repositoryName]
+    setRepositoryBootstraps((current) => {
+      const next = { ...current }
+      delete next[repositoryName]
+      return next
+    })
+    setRepositoryBootstrapChoices((current) => {
+      const next = { ...current }
+      delete next[repositoryName]
+      return next
+    })
   }
 
   const loadRepositoryBootstrap = async (
@@ -287,7 +305,7 @@ export function BranchWorkspaceDialog({
   const repositorySelection = (
     repository: BranchWorkspaceRepositoryOption,
   ): Extract<BranchWorkspacePlanRequest, { operation: 'create' }>['repositories'][number] => {
-    const state = repositoryBootstraps[repository.name]
+    const state = repositoryDependenciesEnabled[repository.name] ? repositoryBootstraps[repository.name] : undefined
     const selections =
       state?.status === 'ready' && state.preflight.kind === 'candidates'
         ? state.preflight.candidates.flatMap((candidate) => {
@@ -355,6 +373,7 @@ export function BranchWorkspaceDialog({
     (repository) =>
       selectedRepositories[repository.name] &&
       !fixedRepositories.has(repository.name) &&
+      repositoryDependenciesEnabled[repository.name] &&
       repositoryBootstraps[repository.name]?.status !== 'ready',
   )
   const operationProgress =
@@ -365,6 +384,20 @@ export function BranchWorkspaceDialog({
         })
       : null
   const progressStatusByStepId = new Map(operationProgress?.steps.map((item) => [item.step.id, item.status]))
+  const creationCompletedDespiteRemoteReadFailure =
+    mode === 'create' &&
+    !pending &&
+    result?.ok === false &&
+    (result.message === 'workspace.branch-workspace.remote-operation-failed' ||
+      result.message === 'workspace.branch-workspace.remote-invalid-response') &&
+    progressWorkspace?.state.kind === 'ready' &&
+    operationProgress !== null &&
+    operationProgress.totalCount > 0 &&
+    operationProgress.completedCount === operationProgress.totalCount
+
+  useEffect(() => {
+    if (open && creationCompletedDespiteRemoteReadFailure) onOpenChange(false)
+  }, [creationCompletedDespiteRemoteReadFailure, onOpenChange, open])
 
   return (
     <Dialog
@@ -411,7 +444,10 @@ export function BranchWorkspaceDialog({
                   const bootstrap = repositoryBootstraps[repository.name]
                   return (
                     <div key={repository.name} className="grid gap-2">
-                      <div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.8fr)] gap-3">
+                      <div
+                        data-branch-workspace-repository-row={repository.name}
+                        className="grid grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.55fr)_minmax(8rem,0.8fr)] gap-3"
+                      >
                         <label className={cn('flex items-center gap-2 text-xs', !repository.available && 'opacity-60')}>
                           <input
                             type="checkbox"
@@ -419,12 +455,18 @@ export function BranchWorkspaceDialog({
                             checked={selectedRepositories[repository.name] === true}
                             disabled={pending || fixed || !repository.available}
                             onChange={(event) => {
+                              const selected = event.target.checked
                               setSelectedRepositories((current) => ({
                                 ...current,
-                                [repository.name]: event.target.checked,
+                                [repository.name]: selected,
                               }))
-                              if (event.target.checked) void loadRepositoryBootstrap(repository)
-                              else bootstrapControllers.current[repository.name]?.abort()
+                              if (!selected) {
+                                setRepositoryDependenciesEnabled((current) => ({
+                                  ...current,
+                                  [repository.name]: false,
+                                }))
+                                clearRepositoryBootstrap(repository.name)
+                              }
                             }}
                           />
                           <span className="truncate font-medium">{repository.name}</span>
@@ -433,6 +475,31 @@ export function BranchWorkspaceDialog({
                               {t('workspace.branch-workspace.member-fixed')}
                             </span>
                           ) : null}
+                        </label>
+                        <label className="flex min-w-0 items-center justify-center gap-2 text-xs text-muted-foreground">
+                          <Switch
+                            checked={repositoryDependenciesEnabled[repository.name] === true}
+                            disabled={
+                              pending || fixed || !repository.available || !selectedRepositories[repository.name]
+                            }
+                            aria-label={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
+                              name: repository.name,
+                            })}
+                            title={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
+                              name: repository.name,
+                            })}
+                            onCheckedChange={(enabled) => {
+                              setRepositoryDependenciesEnabled((current) => ({
+                                ...current,
+                                [repository.name]: enabled,
+                              }))
+                              if (enabled) void loadRepositoryBootstrap(repository)
+                              else clearRepositoryBootstrap(repository.name)
+                            }}
+                          />
+                          <span className="truncate">
+                            {t('workspace.branch-workspace.repository-dependencies-toggle')}
+                          </span>
                         </label>
                         <select
                           aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
@@ -446,7 +513,9 @@ export function BranchWorkspaceDialog({
                               ...current,
                               [repository.name]: {},
                             }))
-                            void loadRepositoryBootstrap(repository, baseBranch)
+                            if (repositoryDependenciesEnabled[repository.name]) {
+                              void loadRepositoryBootstrap(repository, baseBranch)
+                            }
                           }}
                         >
                           {repository.branches.map((candidate) => (
@@ -456,7 +525,9 @@ export function BranchWorkspaceDialog({
                           ))}
                         </select>
                       </div>
-                      {selectedRepositories[repository.name] && !fixed ? (
+                      {selectedRepositories[repository.name] &&
+                      repositoryDependenciesEnabled[repository.name] &&
+                      !fixed ? (
                         <div className="pl-6">
                           {bootstrap?.status === 'loading' ? (
                             <p className="text-xs text-muted-foreground" role="status">
