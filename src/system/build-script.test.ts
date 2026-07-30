@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import electronBuilderConfig from '../../electron-builder.ts'
@@ -128,7 +130,7 @@ describe('desktop build scripts', () => {
     expect(buildScript).toContain("await timeStep('cleanup release'")
   })
 
-  test('manual release workflow builds macOS, Windows, and Android artifacts then publishes release assets', () => {
+  test('manual release workflow builds macOS, Windows, Android, and Linux artifacts then publishes release assets', () => {
     const workflowPath = path.join(repoRoot, '.github/workflows/release.yml')
 
     expect(existsSync(workflowPath)).toBe(true)
@@ -142,9 +144,10 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('build-macos:')
     expect(workflow).toContain('build-windows:')
     expect(workflow).toContain('build-android:')
+    expect(workflow).toContain('build-linux-source:')
     expect(workflow).toContain('publish:')
-    expect((workflow.match(/actions\/setup-node@v4/g) ?? []).length).toBe(3)
-    expect((workflow.match(/node-version: 24/g) ?? []).length).toBe(3)
+    expect((workflow.match(/actions\/setup-node@v4/g) ?? []).length).toBe(4)
+    expect((workflow.match(/node-version: 24/g) ?? []).length).toBe(4)
     expect(workflow).toContain('bun-version: 1.3.11')
     expect(workflow).toContain('bun install --frozen-lockfile')
     expect(workflow).toContain('bun run typecheck')
@@ -155,9 +158,12 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('java-version: 17')
     expect(workflow).toContain('./gradlew --no-daemon :app:assembleRelease')
     expect(workflow).toContain('android/app/build/outputs/apk/release/app-release-unsigned.apk')
+    expect(workflow).toContain('node scripts/build-linux-source-archive.ts --output-dir release')
+    expect(workflow).toContain('name: hobgoblin-linux-source')
+    expect(workflow).toContain('release/Hobgoblin-*-linux-source.tar.gz')
     expect(workflow).toContain('actions/upload-artifact@v4')
     expect(workflow).toContain('actions/download-artifact@v4')
-    expect(workflow).toContain('needs: [build-macos, build-windows, build-android]')
+    expect(workflow).toContain('needs: [build-macos, build-windows, build-android, build-linux-source]')
     expect(workflow).toContain('GITHUB_SHA')
     expect(workflow).toContain('gh release create "$TAG" --target "$GITHUB_SHA"')
     expect(workflow).toContain('gh release upload "$TAG"')
@@ -166,7 +172,39 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.dmg')
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.exe')
     expect(workflow).toContain('Hobgoblin-${VERSION}-android.apk')
+    expect(workflow).toContain('Hobgoblin-${VERSION}-linux-source.tar.gz')
     expect(workflow).toContain('Android: This APK is unsigned and must be signed before installation.')
+    expect(workflow).toContain('Linux: This source deployment archive requires Node.js 24+ and Bun.')
+  })
+
+  test('builds a deployment-only Linux source archive', () => {
+    const packageJson = JSON.parse(readText('package.json')) as { version: string }
+    const outputDir = mkdtempSync(path.join(tmpdir(), 'hobgoblin-linux-source-test-'))
+    const extractDir = path.join(outputDir, 'extract')
+    const rootName = `Hobgoblin-${packageJson.version}`
+    const archivePath = path.join(outputDir, `${rootName}-linux-source.tar.gz`)
+
+    try {
+      execFileSync(
+        process.execPath,
+        [path.join(repoRoot, 'scripts/build-linux-source-archive.ts'), '--output-dir', outputDir],
+        { cwd: repoRoot, stdio: 'pipe' },
+      )
+      mkdirSync(extractDir)
+      execFileSync('tar', ['-xzf', archivePath, '-C', extractDir])
+
+      expect(existsSync(path.join(extractDir, rootName, 'scripts/serve-systemd.sh'))).toBe(true)
+      expect(existsSync(path.join(extractDir, rootName, 'src/server/bootstrap.ts'))).toBe(true)
+      expect(existsSync(path.join(extractDir, rootName, 'src/system/git/helper.ts'))).toBe(true)
+      expect(existsSync(path.join(extractDir, rootName, 'src/web/index.html'))).toBe(true)
+      expect(statSync(path.join(extractDir, rootName, 'scripts/serve-systemd.sh')).mode & 0o111).not.toBe(0)
+      expect(existsSync(path.join(extractDir, rootName, 'src/web/App.test.tsx'))).toBe(false)
+      expect(existsSync(path.join(extractDir, rootName, 'src/main/main.ts'))).toBe(false)
+      expect(existsSync(path.join(extractDir, rootName, 'android/app/build.gradle.kts'))).toBe(false)
+      expect(existsSync(path.join(extractDir, rootName, 'docs'))).toBe(false)
+    } finally {
+      rmSync(outputDir, { recursive: true, force: true })
+    }
   })
 
   test('release artifact script validates platform-specific standard artifact names', () => {
