@@ -6,6 +6,21 @@ import org.junit.Test
 
 class AndroidIdentityContractTest {
     @Test
+    fun `release identity matches the application version`() {
+        val appBuild = File(androidProjectRoot(), "app/build.gradle.kts").readText()
+
+        assertTrue(appBuild.contains("""versionCode = 2"""))
+        assertTrue(appBuild.contains("""versionName = "2.2.0"""))
+    }
+
+    @Test
+    fun `release build requests native symbol tables`() {
+        val appBuild = File(androidProjectRoot(), "app/build.gradle.kts").readText()
+
+        assertTrue(appBuild.contains("""debugSymbolLevel = "SYMBOL_TABLE"""))
+    }
+
+    @Test
     fun `project identity consistently uses the Hobgoblin name`() {
         val projectRoot = androidProjectRoot()
         val settings = File(projectRoot, "settings.gradle.kts").readText()
