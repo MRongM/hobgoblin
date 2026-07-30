@@ -42,6 +42,7 @@ afterEach(() => {
   act(() => root.unmount())
   container.remove()
   document.querySelectorAll('[data-slot="dialog-portal"]').forEach((node) => node.remove())
+  vi.useRealTimers()
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -51,6 +52,15 @@ describe('BranchWorkspaceDialog', () => {
 
     expect(document.body.textContent).toContain('dialog.cancel')
     expect(document.body.textContent).not.toContain('common.cancel')
+  })
+
+  test('prefills a dated feature branch name when creating a branch workspace', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 6, 30, 12))
+
+    renderDialog({})
+
+    expect(inputValue('workspace.branch-workspace.branch')).toBe('feat/20260730')
   })
 
   test('shows live create progress and the completed step count after confirmation', () => {
