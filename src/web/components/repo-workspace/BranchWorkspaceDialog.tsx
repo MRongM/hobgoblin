@@ -84,6 +84,13 @@ interface BranchWorkspaceDialogProps {
   onCancel: () => Promise<unknown>
 }
 
+function defaultBranchWorkspaceName(now = new Date()): string {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `feat/${year}${month}${day}`
+}
+
 export function BranchWorkspaceDialog({
   open,
   mode,
@@ -134,7 +141,7 @@ export function BranchWorkspaceDialog({
   useEffect(() => {
     if (!open) return
     const initial = initialDialogState.current
-    setBranch(initial.workspace?.branch ?? '')
+    setBranch(mode === 'create' ? defaultBranchWorkspaceName() : (initial.workspace?.branch ?? ''))
     setSelectedRepositories(
       Object.fromEntries(
         initial.repositories.map((repository) => [
