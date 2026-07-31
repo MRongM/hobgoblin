@@ -82,6 +82,7 @@ export const en = {
   // ---- Multi-repository workspace ----------------------------------------
   'workspace.repositories': 'Workspace repositories',
   'workspace.overview': 'Overview',
+  'workspace.detect-repositories': 'Detect workspace repositories',
   'workspace.rescan': 'Rescan repositories',
   'workspace.scanning': 'Scanning repositories',
   'workspace.scan-failed': 'Repositories could not be scanned. Rescan to try again.',

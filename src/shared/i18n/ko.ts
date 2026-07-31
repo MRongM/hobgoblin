@@ -75,6 +75,7 @@ export const ko: Record<DictKey, string> = {
   // ---- Multi-repository workspace ---------------------------------------
   'workspace.repositories': '작업 영역 리포지토리',
   'workspace.overview': '개요',
+  'workspace.detect-repositories': '워크스페이스 저장소 검색',
   'workspace.rescan': '리포지토리 다시 스캔',
   'workspace.scanning': '리포지토리 스캔 중',
   'workspace.scan-failed': '리포지토리를 스캔하지 못했습니다. 다시 스캔해 주세요.',

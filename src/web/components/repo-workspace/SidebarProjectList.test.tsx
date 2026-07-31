@@ -17,6 +17,7 @@ import type {
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
@@ -62,6 +63,8 @@ const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
   getRepositoryWorktreeBootstrapPreflight: vi.fn(),
 }))
+
+const rescanWorkspace = vi.fn(async (_rootId: string) => {})
 
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
@@ -245,6 +248,9 @@ beforeEach(() => {
     currentBranch: 'main',
     remote: { hasRemotes: true },
   })
+  rescanWorkspace.mockReset()
+  rescanWorkspace.mockResolvedValue(undefined)
+  useReposStore.setState({ rescanWorkspace })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   dndState.lastDragEnd = null
   dndState.contextSensors = null
@@ -518,6 +524,50 @@ describe('SidebarProjectList', () => {
     expect(plainMenuLabels).not.toContain('action.create-worktree')
     expect(onActivate).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('offers workspace repository detection only for an ordinary plain project', async () => {
+    const { onActivate, onClose } = renderList()
+
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).not.toContain(
+      'workspace.detect-repositories',
+    )
+    const detect = (await openProjectMenu('/repo-b')).find((item) =>
+      item.textContent?.includes('workspace.detect-repositories'),
+    )
+
+    expect(detect).toBeDefined()
+    await act(async () => {
+      detect?.click()
+      await Promise.resolve()
+    })
+
+    expect(rescanWorkspace).toHaveBeenCalledWith('/repo-b')
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('hides workspace repository detection after a plain project is recognized as a workspace', async () => {
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        '/repo-b': {
+          rootId: '/repo-b',
+          repositoryIds: ['/repo-b/api'],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    }))
+    renderList()
+
+    expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain(
+      'workspace.detect-repositories',
+    )
   })
 
   test('offers destructive tmux cleanup from More without activating or closing the project', async () => {

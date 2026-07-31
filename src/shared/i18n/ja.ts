@@ -82,6 +82,7 @@ export const ja: Record<DictKey, string> = {
   // ---- Multi-repository workspace ---------------------------------------
   'workspace.repositories': 'ワークスペースのリポジトリ',
   'workspace.overview': '概要',
+  'workspace.detect-repositories': 'ワークスペースリポジトリを検出',
   'workspace.rescan': 'リポジトリを再スキャン',
   'workspace.scanning': 'リポジトリをスキャン中',
   'workspace.scan-failed': 'リポジトリをスキャンできませんでした。再スキャンしてください。',

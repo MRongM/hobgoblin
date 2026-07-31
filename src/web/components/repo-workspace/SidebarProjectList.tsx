@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Folder, FolderGit2, GitCompareArrows, Terminal, X } from 'lucide-react'
+import { Folder, FolderGit2, FolderSearch, GitCompareArrows, Terminal, X } from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -122,6 +122,8 @@ function SortableProjectRow({
   const projectExternalActions = useProjectExternalOpenActions(project.id)
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
   const repo = useReposStore((state) => state.repos[project.id])
+  const workspace = useReposStore((state) => state.workspaceProjects[project.id])
+  const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const creation = useRepositoryCreationActions(repo, { forceDisabled: project.unavailable })
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: project.id,
@@ -173,6 +175,13 @@ function SortableProjectRow({
     icon: <X aria-hidden="true" />,
     disabled: false,
     onSelect: () => onClose(project.id),
+  }
+  const detectWorkspaceRepositoriesAction: WorkspaceListItemAction = {
+    id: 'detectWorkspaceRepositories',
+    label: t('workspace.detect-repositories'),
+    icon: <FolderSearch aria-hidden="true" />,
+    disabled: project.unavailable,
+    onSelect: () => rescanWorkspace(project.id),
   }
 
   return (
@@ -231,7 +240,7 @@ function SortableProjectRow({
                 <WorkspaceListItemMenu
                   label={t('action.menu')}
                   groups={[
-                    project.isGitRepo ? creation.items : [],
+                    project.isGitRepo ? creation.items : workspace ? [] : [detectWorkspaceRepositoriesAction],
                     [tmuxTerminalAction, externalTerminalAction],
                     [closeAction],
                     ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),

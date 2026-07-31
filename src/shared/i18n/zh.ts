@@ -74,6 +74,7 @@ export const zh: Record<DictKey, string> = {
   // ---- 多仓库工作区 ------------------------------------------------------
   'workspace.repositories': '工作区仓库',
   'workspace.overview': '总览',
+  'workspace.detect-repositories': '识别工作区仓库',
   'workspace.rescan': '重新扫描仓库',
   'workspace.scanning': '正在扫描仓库',
   'workspace.scan-failed': '无法扫描仓库，请重新扫描。',
