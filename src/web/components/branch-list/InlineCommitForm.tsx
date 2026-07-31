@@ -85,6 +85,11 @@ export function InlineCommitForm({
     })
   }
 
+  function handleAutoCommitAndPushChange(checked: boolean) {
+    if (checked) onClearPendingGeneratedMessage()
+    setAutoCommitAndPush(checked)
+  }
+
   const submitDisabled = !message.trim() || isPending || generating !== null
 
   return (
@@ -111,7 +116,7 @@ export function InlineCommitForm({
                       disabled={isPending || generating !== null}
                       aria-label={t('action.commit-auto-commit-and-push')}
                       title={t('action.commit-auto-commit-and-push')}
-                      onCheckedChange={setAutoCommitAndPush}
+                      onCheckedChange={handleAutoCommitAndPushChange}
                     />
                     <span>{t('action.commit-auto-commit-and-push')}</span>
                   </label>
@@ -128,34 +133,38 @@ export function InlineCommitForm({
               </div>
             )}
           </div>
-          <textarea
-            id="inline-commit-message"
-            className="min-h-[64px] w-full resize-y rounded-[var(--goblin-control-radius,var(--radius-md))] border border-input-border bg-input-background px-3 py-2 text-sm text-input-foreground placeholder:text-input-placeholder focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder={t('action.commit-message-placeholder')}
-            value={message}
-            onChange={(e) => onMessageChange(e.target.value)}
-            disabled={isPending}
-          />
+          {!autoCommitAndPush && (
+            <textarea
+              id="inline-commit-message"
+              className="min-h-[64px] w-full resize-y rounded-[var(--goblin-control-radius,var(--radius-md))] border border-input-border bg-input-background px-3 py-2 text-sm text-input-foreground placeholder:text-input-placeholder focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder={t('action.commit-message-placeholder')}
+              value={message}
+              onChange={(e) => onMessageChange(e.target.value)}
+              disabled={isPending}
+            />
+          )}
         </Field>
         {error && <DialogError>{error}</DialogError>}
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
-            {t('dialog.cancel')}
-          </Button>
-          <Button type="submit" size="sm" disabled={submitDisabled}>
-            {pending === 'commit' && <Loader2 className="animate-spin" />}
-            {t('action.commit-confirm')}
-          </Button>
-          {onCommitAndPush && (
-            <Button type="button" size="sm" disabled={submitDisabled} onClick={() => void handleCommitAndPush()}>
-              {pending === 'commitAndPush' && <Loader2 className="animate-spin" />}
-              {t('action.commit-and-push-confirm')}
+        {!autoCommitAndPush && (
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
+              {t('dialog.cancel')}
             </Button>
-          )}
-        </div>
+            <Button type="submit" size="sm" disabled={submitDisabled}>
+              {pending === 'commit' && <Loader2 className="animate-spin" />}
+              {t('action.commit-confirm')}
+            </Button>
+            {onCommitAndPush && (
+              <Button type="button" size="sm" disabled={submitDisabled} onClick={() => void handleCommitAndPush()}>
+                {pending === 'commitAndPush' && <Loader2 className="animate-spin" />}
+                {t('action.commit-and-push-confirm')}
+              </Button>
+            )}
+          </div>
+        )}
       </form>
       <ConfirmDialog
-        open={pendingGeneratedMessage !== null}
+        open={!autoCommitAndPush && pendingGeneratedMessage !== null}
         title={t('action.commit-replace-message-title')}
         message={t('action.commit-replace-message-body')}
         confirmLabel={t('action.commit-replace-message-confirm')}

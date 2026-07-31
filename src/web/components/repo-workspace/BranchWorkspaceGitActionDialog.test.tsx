@@ -225,6 +225,189 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(claude?.parentElement).toBe(actions)
   })
 
+  test('places an off-by-default automation switch before providers and hides manual controls while enabled', async () => {
+    render({ plan: batchPlan })
+    await flush()
+
+    const toggle = document.querySelector<HTMLButtonElement>(
+      '[role="switch"][aria-label="action.commit-auto-commit-and-push"]',
+    )
+    const codex = document.querySelector<HTMLButtonElement>('[data-action="generate-all-codex"]')
+    expect(toggle?.getAttribute('aria-checked')).toBe('false')
+    expect((toggle?.compareDocumentPosition(codex!) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+
+    await act(async () => toggle?.click())
+
+    expect(document.querySelector('[data-repository="api"]')).toBeNull()
+    expect(document.querySelector('[data-repository="web"]')).toBeNull()
+    expect(document.querySelector('[data-action="batch-commit"]')).toBeNull()
+    expect(buttonWithExactText('dialog.cancel')).toBeNull()
+    expect(buttonWithExactText('Codex')).toBeNull()
+    expect(buttonWithExactText('Claude')).toBeNull()
+    expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain('api')
+    expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain('web')
+
+    await act(async () => toggle?.click())
+
+    expect(document.querySelector('[data-repository="api"]')).not.toBeNull()
+    expect(document.querySelector('[data-repository="web"]')).not.toBeNull()
+    expect(document.querySelector('[data-action="batch-commit"]')).not.toBeNull()
+    expect(buttonWithExactText('dialog.cancel')).not.toBeNull()
+  })
+
+  test('automatically batch commits and pushes the messages generated in the current run', async () => {
+    const onBatchCommit = vi.fn(async () => null)
+    const onBatchCommitAndPush = vi.fn(
+      async (): Promise<BranchWorkspaceGitActionResult> => ({
+        ok: true,
+        kind: 'push',
+        planToken: 'sha256:push',
+        branchWorkspaceId: 'ws-1',
+        members: [],
+      }),
+    )
+    const onOpenChange = vi.fn()
+    render({ plan: batchPlan, onBatchCommit, onBatchCommitAndPush, onOpenChange })
+    await flush()
+
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('[role="switch"][aria-label="action.commit-auto-commit-and-push"]')
+        ?.click()
+    })
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="generate-all-codex"]')?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await flush()
+
+    expect(onBatchCommit).not.toHaveBeenCalled()
+    expect(onBatchCommitAndPush).toHaveBeenCalledWith([
+      { repositoryName: 'api', message: 'feat: api' },
+      { repositoryName: 'web', message: 'feat: web' },
+    ])
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('does not start batch writes when any automatic generation fails', async () => {
+    mocks.generate.mockReset()
+    mocks.generate
+      .mockResolvedValueOnce({ ok: true, message: 'feat: api' })
+      .mockResolvedValueOnce({ ok: false, message: 'generation failed' })
+    const onBatchCommitAndPush = vi.fn(async () => null)
+    render({ plan: batchPlan, onBatchCommitAndPush })
+    await flush()
+
+    await act(async () => {
+      document
+        .querySelector<HTMLButtonElement>('[role="switch"][aria-label="action.commit-auto-commit-and-push"]')
+        ?.click()
+    })
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="generate-all-codex"]')?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await flush()
+
+    expect(onBatchCommitAndPush).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain(
+      'generation failed',
+    )
+  })
+
+  test('summarizes every failed batch commit member and hands the aggregate to AI', async () => {
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-commit',
+      planToken: batchPlan.token,
+      branchWorkspaceId: batchPlan.branchWorkspaceId,
+      message: 'workspace.branch-workspace.git-action.members-failed',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'commit',
+          message: 'api commit failed',
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        {
+          repositoryName: 'web',
+          phase: 'failed',
+          step: 'commit',
+          message: 'web hook rejected',
+          worktreePath: '/workspace/goblin-feature-a/web',
+        },
+      ],
+    }
+    const onBatchErrorAiHandoff = vi.fn(async () => true)
+    const onOpenChange = vi.fn()
+
+    render({ plan: batchPlan, result, error: result.message, onBatchErrorAiHandoff, onOpenChange })
+    await flush()
+
+    const summary = document.querySelector('[data-slot="branch-workspace-batch-error-summary"]')
+    expect(summary?.textContent).toContain('api')
+    expect(summary?.textContent).toContain('api commit failed')
+    expect(summary?.textContent).toContain('web')
+    expect(summary?.textContent).toContain('web hook rejected')
+    expect(summary?.textContent).toContain('workspace.branch-workspace.git-action.failure-step.commit')
+    expect(document.body.textContent).toContain('workspace.branch-workspace.git-action.member-failure-ai-handoff')
+
+    await act(async () => buttonWithExactText('action.merge-conflict-ai-codex')?.click())
+    await flush()
+
+    expect(onBatchErrorAiHandoff).toHaveBeenCalledWith({
+      provider: 'codex',
+      kind: 'batch-commit',
+      failures: [
+        {
+          repositoryName: 'api',
+          step: 'commit',
+          message: 'api commit failed',
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        {
+          repositoryName: 'web',
+          step: 'commit',
+          message: 'web hook rejected',
+          worktreePath: '/workspace/goblin-feature-a/web',
+        },
+      ],
+    })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test.each(['pull', 'push'] as const)('offers the same aggregate AI handoff for failed batch %s', async (kind) => {
+    const plan = syncPlan(kind)
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'workspace.branch-workspace.git-action.members-failed',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: kind,
+          message: `${kind} failed`,
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        { repositoryName: 'web', phase: 'succeeded' },
+      ],
+    }
+
+    render({ kind, plan, result, error: result.message })
+    await flush()
+
+    expect(document.querySelector('[data-slot="branch-workspace-batch-error-summary"]')?.textContent).toContain(
+      `${kind} failed`,
+    )
+    expect(document.querySelector('[data-slot="merge-conflict-ai-actions"]')).not.toBeNull()
+  })
+
   test('generates editable messages serially and submits all dirty repositories', async () => {
     const onBatchCommit = vi.fn(async () => null)
     render({ plan: batchPlan, onBatchCommit })
@@ -471,7 +654,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
   })
 
-  test('hands a retained merge-in conflict to AI and closes after a successful handoff', async () => {
+  test('hands all merge-in failures to AI and closes after a successful handoff', async () => {
     const plan = mergeInPlan()
     const conflictWorktree = {
       branch: 'feature/a',
@@ -490,14 +673,21 @@ describe('BranchWorkspaceGitActionPanel', () => {
           step: 'merge',
           message: 'conflict',
           reason: 'merge-conflict',
+          worktreePath: conflictWorktree.path,
           conflictWorktree,
         },
-        { repositoryName: 'web', phase: 'not-started' },
+        {
+          repositoryName: 'web',
+          phase: 'failed',
+          step: 'push',
+          message: 'remote rejected',
+          worktreePath: '/workspace/goblin-feature-a/web',
+        },
         { repositoryName: 'docs', phase: 'not-started' },
       ],
     }
     const onOpenChange = vi.fn()
-    const onMergeConflictAiHandoff = vi.fn(async () => true)
+    const onBatchErrorAiHandoff = vi.fn(async () => true)
 
     render({
       kind: 'batch-merge-in',
@@ -505,7 +695,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
       result,
       error: 'conflict',
       onOpenChange,
-      onMergeConflictAiHandoff,
+      onBatchErrorAiHandoff,
     })
     await flush()
 
@@ -519,46 +709,44 @@ describe('BranchWorkspaceGitActionPanel', () => {
     await act(async () => codex?.click())
     await flush()
 
-    expect(onMergeConflictAiHandoff).toHaveBeenCalledWith({
+    expect(onBatchErrorAiHandoff).toHaveBeenCalledWith({
       provider: 'codex',
-      repositoryName: 'api',
-      conflictWorktree,
+      kind: 'batch-merge-in',
+      failures: [
+        {
+          repositoryName: 'api',
+          step: 'merge',
+          message: 'conflict',
+          reason: 'merge-conflict',
+          worktreePath: conflictWorktree.path,
+          conflictWorktree,
+        },
+        {
+          repositoryName: 'web',
+          step: 'push',
+          message: 'remote rejected',
+          worktreePath: '/workspace/goblin-feature-a/web',
+        },
+      ],
     })
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  test.each([
-    ['ordinary merge failure', { step: 'merge' as const }],
-    ['cleaned temporary conflict', { step: 'merge' as const, reason: 'merge-conflict' as const }],
-    [
-      'non-merge failure',
-      {
-        step: 'pull' as const,
-        reason: 'merge-conflict' as const,
-        conflictWorktree: { branch: 'main', path: '/workspace/api' },
-      },
-    ],
-  ])('does not offer AI handoff for %s', async (_label, failureFields) => {
+  test('does not offer AI handoff when no member failed', async () => {
     const plan = mergeOutPlan()
     const result: BranchWorkspaceGitActionResult = {
-      ok: false,
+      ok: true,
       kind: 'batch-merge-out',
       planToken: plan.token,
       branchWorkspaceId: plan.branchWorkspaceId,
-      message: 'merge failed',
       members: [
-        {
-          repositoryName: 'api',
-          phase: 'failed',
-          message: 'merge failed',
-          ...failureFields,
-        },
-        { repositoryName: 'web', phase: 'not-started' },
-        { repositoryName: 'docs', phase: 'not-started' },
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'succeeded' },
+        { repositoryName: 'docs', phase: 'satisfied' },
       ],
     }
 
-    render({ kind: 'batch-merge-out', plan, result, error: 'merge failed' })
+    render({ kind: 'batch-merge-out', plan, result })
     await flush()
 
     expect(document.querySelector('[data-slot="merge-conflict-ai-actions"]')).toBeNull()
@@ -579,6 +767,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
           step: 'merge',
           message: 'conflict',
           reason: 'merge-conflict',
+          worktreePath: '/workspace/api',
           conflictWorktree: { branch: 'main', path: '/workspace/api' },
         },
         { repositoryName: 'web', phase: 'not-started' },
@@ -593,7 +782,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
       result,
       error: 'conflict',
       onOpenChange,
-      onMergeConflictAiHandoff: vi.fn(async () => false),
+      onBatchErrorAiHandoff: vi.fn(async () => false),
     })
     await flush()
 
@@ -661,14 +850,23 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         error={null}
         onOpenChange={() => {}}
         onBatchCommit={async () => null}
+        onBatchCommitAndPush={async () => null}
         onBatchMergeIn={async () => null}
         onBatchMergeOut={async () => null}
         onSync={async () => null}
         onCancel={async () => {}}
-        onMergeConflictAiHandoff={async () => false}
+        onBatchErrorAiHandoff={async () => false}
         {...overrides}
       />,
     ),
+  )
+}
+
+function buttonWithExactText(text: string): HTMLButtonElement | null {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (candidate) => candidate.textContent?.trim() === text,
+    ) ?? null
   )
 }
 

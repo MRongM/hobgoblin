@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   buildAiHandoffCommand,
-  buildBranchWorkspaceMergeConflictAiCommand,
+  buildBranchWorkspaceBatchErrorAiCommand,
   buildMergeConflictAiCommand,
   preferredAiHandoffProvider,
   prefillAiTerminalCommand,
@@ -54,16 +54,40 @@ describe('AI terminal handoff', () => {
     expect(buildAiHandoffCommand('codex', 'Inspect deps.')).not.toMatch(/[\r\n]/)
   })
 
-  test('builds worktree and branch-workspace merge conflict commands without executing them', () => {
+  test('builds a worktree merge conflict command without executing it', () => {
     expect(buildMergeConflictAiCommand('claude')).toContain('current Git merge conflicts in this working tree')
+  })
 
-    const command = buildBranchWorkspaceMergeConflictAiCommand('codex', 'api', {
-      branch: 'main',
-      path: '/workspace/api "quoted"',
-    })
-    expect(command).toContain('codex exec')
+  test('builds one reviewable branch-workspace command for every failed batch member', () => {
+    const command = buildBranchWorkspaceBatchErrorAiCommand('claude', 'batch-merge-in', [
+      {
+        repositoryName: 'api',
+        step: 'merge',
+        message: 'merge conflict in "config"',
+        worktreePath: '/workspace/goblin-feature-a/api',
+        reason: 'merge-conflict',
+        conflictWorktree: { branch: 'feature/a', path: '/workspace/goblin-feature-a/api' },
+      },
+      {
+        repositoryName: 'web',
+        step: 'push',
+        message: 'remote rejected',
+        worktreePath: '/workspace/goblin-feature-a/web',
+      },
+    ])
+
+    expect(command).toContain('claude --print')
+    expect(command).toContain('batch-merge-in')
     expect(command).toContain('api')
-    expect(command).toContain('/workspace/api \\"quoted\\"')
+    expect(command).toContain('web')
+    expect(command).toContain('merge')
+    expect(command).toContain('push')
+    expect(command).toContain('merge conflict in')
+    expect(command).toContain('config')
+    expect(command).toContain('/workspace/goblin-feature-a/api')
+    expect(command).toContain('/workspace/goblin-feature-a/web')
+    expect(command).toContain('git merge --continue')
+    expect(command).toContain('destructive Git commands')
     expect(command).not.toMatch(/[\r\n]/)
   })
 

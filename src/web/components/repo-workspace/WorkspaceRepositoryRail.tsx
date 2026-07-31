@@ -14,7 +14,7 @@ import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWor
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
 import {
   BranchWorkspaceGitActionPanel,
-  type BranchWorkspaceMergeConflictAiHandoffInput,
+  type BranchWorkspaceBatchErrorAiHandoffInput,
 } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
 import {
   BranchWorkspaceList,
@@ -52,10 +52,7 @@ import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-pr
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
-import {
-  buildBranchWorkspaceMergeConflictAiCommand,
-  prefillAiTerminalTargetCommand,
-} from '#/web/ai-terminal-handoff.ts'
+import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
 
 interface Props {
   workspaceRootId: string
@@ -355,8 +352,8 @@ export function WorkspaceRepositoryRail({
     activeContext.kind === 'branch-workspace' ? activeContext.memberRepositoryName : null
   const gitActionTarget = branchItems.find((item) => item.id === gitActionTargetId) ?? null
 
-  const handoffMergeConflictToBranchWorkspace = async (
-    input: BranchWorkspaceMergeConflictAiHandoffInput,
+  const handoffBatchErrorsToBranchWorkspace = async (
+    input: BranchWorkspaceBatchErrorAiHandoffInput,
   ): Promise<boolean> => {
     if (!gitActionTarget) return false
     const context = branchWorkspaceFolderContext(workspaceRootId, gitActionTarget)
@@ -366,7 +363,7 @@ export function WorkspaceRepositoryRail({
         activateBranchWorkspace(workspaceRootId, gitActionTarget.id)
         onOpenDetailArea?.()
       },
-      command: buildBranchWorkspaceMergeConflictAiCommand(input.provider, input.repositoryName, input.conflictWorktree),
+      command: buildBranchWorkspaceBatchErrorAiCommand(input.provider, input.kind, input.failures),
     })
   }
 
@@ -425,11 +422,12 @@ export function WorkspaceRepositoryRail({
                 }
               }}
               onBatchCommit={branchGitActions.executeBatchCommit}
+              onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
               onBatchMergeIn={branchGitActions.executeBatchMergeIn}
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
               onCancel={branchGitActions.cancel}
-              onMergeConflictAiHandoff={handoffMergeConflictToBranchWorkspace}
+              onBatchErrorAiHandoff={handoffBatchErrorsToBranchWorkspace}
             />
           ),
         }

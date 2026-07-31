@@ -113,6 +113,141 @@ describe('useBranchWorkspaceGitActions', () => {
       planToken: expectedPlan.token,
     })
   })
+
+  test('batch commits, requests a fresh push plan, then executes that push plan', async () => {
+    const pushPlan = syncPlan('push')
+    const calls: string[] = []
+    mocks.plan.mockImplementation(async (_rootId, request) => {
+      calls.push(`plan:${request.kind}`)
+      return { ok: true, plan: request.kind === 'batch-commit' ? plan : pushPlan }
+    })
+    mocks.execute.mockImplementation(async (_rootId, input) => {
+      calls.push(`execute:${input.kind}`)
+      return {
+        ok: true,
+        kind: input.kind,
+        planToken: input.planToken,
+        branchWorkspaceId: 'ws-1',
+        members: [],
+      }
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-commit', 'ws-1'))
+    await act(async () => state!.executeBatchCommitAndPush([]))
+
+    expect(calls).toEqual(['plan:batch-commit', 'execute:batch-commit', 'plan:push', 'execute:push'])
+    expect(state!.plan).toEqual(pushPlan)
+    expect(state!.result).toMatchObject({ ok: true, kind: 'push', planToken: pushPlan.token })
+  })
+
+  test('stops automatic batch flow when commit fails', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({
+      ok: false,
+      kind: 'batch-commit',
+      planToken: plan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+      message: 'commit failed',
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-commit', 'ws-1'))
+    mocks.plan.mockClear()
+    await act(async () => state!.executeBatchCommitAndPush([]))
+
+    expect(mocks.plan).not.toHaveBeenCalled()
+    expect(mocks.execute).toHaveBeenCalledTimes(1)
+    expect(state!.error).toBe('commit failed')
+  })
+
+  test('keeps a failed fresh push plan visible without executing push', async () => {
+    mocks.plan
+      .mockResolvedValueOnce({ ok: true, plan })
+      .mockResolvedValueOnce({ ok: false, message: 'push planning failed' })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind: 'batch-commit',
+      planToken: plan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-commit', 'ws-1'))
+    await act(async () => state!.executeBatchCommitAndPush([]))
+
+    expect(mocks.execute).toHaveBeenCalledTimes(1)
+    expect(state!.plan).toBeNull()
+    expect(state!.error).toBe('push planning failed')
+  })
+
+  test('stops after planning when the fresh push plan is not ready', async () => {
+    const pushPlan: BranchWorkspaceGitActionPlan = {
+      kind: 'push',
+      token: 'sha256:push-unready',
+      rootId: '/workspace',
+      branchWorkspaceId: 'ws-1',
+      ready: false,
+      members: [
+        {
+          repositoryName: 'api',
+          repoId: '/workspace/api',
+          targetBranch: 'feature/a',
+          targetWorktreePath: '/workspace/goblin-feature-a/api',
+          targetHead: 'target-head',
+          ready: false,
+          message: 'workspace.branch-workspace.git-action.remote-required',
+          fingerprint: 'sha256:api',
+        },
+      ],
+    }
+    mocks.plan.mockResolvedValueOnce({ ok: true, plan }).mockResolvedValueOnce({ ok: true, plan: pushPlan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind: 'batch-commit',
+      planToken: plan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-commit', 'ws-1'))
+    await act(async () => state!.executeBatchCommitAndPush([]))
+
+    expect(mocks.execute).toHaveBeenCalledTimes(1)
+    expect(state!.plan).toEqual(pushPlan)
+    expect(state!.error).toBe('workspace.branch-workspace.git-action.remote-required')
+  })
 })
 
 function Harness({ onReady }: { onReady: (value: ReturnType<typeof useBranchWorkspaceGitActions>) => void }) {

@@ -168,6 +168,36 @@ describe('InlineCommitForm', () => {
     expect(querySwitchByLabel('action.commit-auto-commit-and-push')).toBeNull()
   })
 
+  test('hides manual controls while automation is enabled and restores them when disabled', () => {
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        initialMessage="feat: manual message"
+        onCommit={vi.fn(async () => {})}
+        onCommitAndPush={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(document.querySelector('#inline-commit-message')).not.toBeNull()
+    expect(queryButtonByText('dialog.cancel')).not.toBeNull()
+    expect(queryButtonByText('action.commit-confirm')).not.toBeNull()
+    expect(queryButtonByText('action.commit-and-push-confirm')).not.toBeNull()
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+
+    expect(document.querySelector('#inline-commit-message')).toBeNull()
+    expect(queryButtonByText('dialog.cancel')).toBeNull()
+    expect(queryButtonByText('action.commit-confirm')).toBeNull()
+    expect(queryButtonByText('action.commit-and-push-confirm')).toBeNull()
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+
+    expect(textarea('#inline-commit-message').value).toBe('feat: manual message')
+    expect(queryButtonByText('dialog.cancel')).not.toBeNull()
+    expect(queryButtonByText('action.commit-confirm')).not.toBeNull()
+    expect(queryButtonByText('action.commit-and-push-confirm')).not.toBeNull()
+  })
+
   test('only generates a message while automation remains off', async () => {
     const onGenerate = vi.fn(async () => 'feat: generated message')
     const onCommitAndPush = vi.fn(async () => {})
@@ -212,7 +242,7 @@ describe('InlineCommitForm', () => {
     expect(onGenerate).toHaveBeenCalledWith('codex')
     expect(onCommit).not.toHaveBeenCalled()
     expect(onCommitAndPush).toHaveBeenCalledWith('feat: generated message')
-    expect(textarea('#inline-commit-message').value).toBe('feat: generated message')
+    expect(document.querySelector('#inline-commit-message')).toBeNull()
     expect(document.body.textContent).not.toContain('action.commit-replace-message-title')
     expect(onClose).toHaveBeenCalledTimes(1)
   })
@@ -262,9 +292,12 @@ describe('InlineCommitForm', () => {
     clickButtonByProvider('codex')
     await flush()
 
-    expect(textarea('#inline-commit-message').value).toBe('feat: generated message')
+    expect(document.querySelector('#inline-commit-message')).toBeNull()
     expect(document.body.textContent).toContain('commit failed')
     expect(onClose).not.toHaveBeenCalled()
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+    expect(textarea('#inline-commit-message').value).toBe('feat: generated message')
   })
 
   test('shows raw controlled provider errors', () => {

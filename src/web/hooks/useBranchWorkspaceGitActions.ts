@@ -28,9 +28,9 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     if (rootId) await queryClient.invalidateQueries({ queryKey: branchWorkspaceQueryKey(rootId), exact: true })
   }, [queryClient, rootId])
 
-  const requestPlan = useCallback(
+  const loadPlan = useCallback(
     async (kind: BranchWorkspaceGitActionKind, branchWorkspaceId: string) => {
-      if (!rootId) return false
+      if (!rootId) return null
       setPending(true)
       setError(null)
       setResult(null)
@@ -42,24 +42,30 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
       setPending(false)
       if (!response.ok) {
         setError(response.message)
-        return false
+        return null
       }
       setPlan(response.plan)
-      return true
+      return response.plan
     },
     [rootId],
   )
 
-  const execute = useCallback(
-    async (input: BranchWorkspaceGitActionExecuteInput) => {
-      if (!rootId || !plan) return null
+  const requestPlan = useCallback(
+    async (kind: BranchWorkspaceGitActionKind, branchWorkspaceId: string) =>
+      (await loadPlan(kind, branchWorkspaceId)) !== null,
+    [loadPlan],
+  )
+
+  const executePlan = useCallback(
+    async (actionPlan: BranchWorkspaceGitActionPlan, input: BranchWorkspaceGitActionExecuteInput) => {
+      if (!rootId) return null
       setPending(true)
       setError(null)
       const response = await executeBranchWorkspaceGitAction(rootId, input).catch(() => ({
         ok: false as const,
-        kind: plan.kind,
-        planToken: plan.token,
-        branchWorkspaceId: plan.branchWorkspaceId,
+        kind: actionPlan.kind,
+        planToken: actionPlan.token,
+        branchWorkspaceId: actionPlan.branchWorkspaceId,
         members: [],
         message: 'workspace.branch-workspace.git-action.execute-failed',
       }))
@@ -73,7 +79,15 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
       await invalidate().catch(() => undefined)
       return response
     },
-    [invalidate, plan, rootId],
+    [invalidate, rootId],
+  )
+
+  const execute = useCallback(
+    async (input: BranchWorkspaceGitActionExecuteInput) => {
+      if (!plan) return null
+      return await executePlan(plan, input)
+    },
+    [executePlan, plan],
   )
 
   const executeBatchCommit = useCallback(
@@ -82,6 +96,31 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
       return await execute({ kind: 'batch-commit', planToken: plan.token, messages })
     },
     [execute, plan],
+  )
+
+  const executeBatchCommitAndPush = useCallback(
+    async (messages: BranchWorkspaceCommitMessageInput[]) => {
+      if (!plan || plan.kind !== 'batch-commit') return null
+      const commitPlan = plan
+      const commitResult = await executePlan(commitPlan, {
+        kind: 'batch-commit',
+        planToken: commitPlan.token,
+        messages,
+      })
+      if (!commitResult?.ok) return commitResult
+
+      const pushPlan = await loadPlan('push', commitPlan.branchWorkspaceId)
+      if (!pushPlan || pushPlan.kind !== 'push') return null
+      if (!pushPlan.ready) {
+        setError(
+          pushPlan.members.find((member) => !member.ready)?.message ??
+            'workspace.branch-workspace.git-action.execute-failed',
+        )
+        return null
+      }
+      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token })
+    },
+    [executePlan, loadPlan, plan],
   )
 
   const executeBatchMergeIn = useCallback(
@@ -126,6 +165,7 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     error,
     requestPlan,
     executeBatchCommit,
+    executeBatchCommitAndPush,
     executeBatchMergeIn,
     executeBatchMergeOut,
     executeSync,

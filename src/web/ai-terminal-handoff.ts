@@ -1,5 +1,9 @@
 import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
-import type { GitConflictWorktree } from '#/shared/git-types.ts'
+import type {
+  BranchWorkspaceGitActionKind,
+  BranchWorkspaceGitActionStep,
+} from '#/shared/branch-workspace-git-actions.ts'
+import type { GitConflictWorktree, GitFailureReason } from '#/shared/git-types.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { readTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
@@ -19,6 +23,15 @@ export interface AiTerminalTargetHandoffInput {
   activate: () => void
 }
 
+export interface BranchWorkspaceBatchErrorAiFailure {
+  repositoryName: string
+  step: BranchWorkspaceGitActionStep
+  message: string
+  worktreePath: string
+  reason?: GitFailureReason
+  conflictWorktree?: GitConflictWorktree
+}
+
 export function preferredAiHandoffProvider(availability: CommitMessageProviderAvailability): CommitMessageProvider {
   if (availability.codex) return 'codex'
   if (availability.claude) return 'claude'
@@ -36,12 +49,25 @@ export function buildMergeConflictAiCommand(provider: CommitMessageProvider): st
   return buildAiHandoffCommand(provider, prompt)
 }
 
-export function buildBranchWorkspaceMergeConflictAiCommand(
+export function buildBranchWorkspaceBatchErrorAiCommand(
   provider: CommitMessageProvider,
-  repositoryName: string,
-  conflictWorktree: GitConflictWorktree,
+  kind: BranchWorkspaceGitActionKind,
+  failures: BranchWorkspaceBatchErrorAiFailure[],
 ): string {
-  const prompt = `Resolve the current Git merge conflicts for repository "${repositoryName}" at "${conflictWorktree.path}". The terminal working directory is the branch workspace root. Inspect conflicted files, make minimal edits, and do not run git add, git commit, or git merge --continue.`
+  const diagnostics = failures.map((failure) => ({
+    repository: failure.repositoryName,
+    step: failure.step,
+    message: failure.message,
+    worktreePath: failure.worktreePath,
+    ...(failure.reason ? { reason: failure.reason } : {}),
+    ...(failure.conflictWorktree ? { conflictWorktree: failure.conflictWorktree } : {}),
+  }))
+  const prompt =
+    `Investigate and resolve the failed members from branch workspace Git action "${kind}". ` +
+    `The terminal working directory is the branch workspace root. Failed members: ${JSON.stringify(diagnostics)}. ` +
+    'Inspect every listed repository and worktree, explain shared or member-specific causes, and make only minimal working-tree edits needed to resolve the failures. ' +
+    'A listed path may refer to an application temporary worktree that has already been cleaned, so inspect current Git state before using it. ' +
+    'Do not run git add, git commit, git push, git merge --continue, git reset, or other destructive Git commands.'
   return buildAiHandoffCommand(provider, prompt)
 }
 

@@ -189,12 +189,12 @@ A provider-specific CLI command placed into an internal terminal for review, wit
 _Avoid_: AI command, automatic AI action
 
 **Inline AI commit-and-push**:
-An explicit, per-open opt-in sequence in one worktree's inline commit form that generates a commit message with the selected AI provider, replaces the current draft with that generated message, commits the worktree changes, and then invokes the ordinary branch push action. It stops when generation or commit fails, retains existing protected-branch push approval, and never becomes a saved preference or background automation.
+An explicit, per-open opt-in sequence in one worktree's inline commit form that hides manual message and submit controls, generates a commit message with the selected AI provider, replaces the current draft with that generated message, commits the worktree changes, and then invokes the ordinary branch push action. It stops when generation or commit fails, retains existing protected-branch push approval, and never becomes a saved preference or background automation.
 _Avoid_: AI handoff, global automatic commit, branch workspace batch commit
 
-**Branch workspace merge-conflict AI handoff**:
-An AI handoff offered only when a branch workspace batch merge leaves a retained conflict site. It opens the branch workspace root terminal and identifies the failed repository and exact conflict worktree; a conflict cleaned with an application temporary worktree is not eligible.
-_Avoid_: Batch error AI, automatic conflict resolution, member-terminal handoff
+**Branch workspace batch-error AI handoff**:
+An AI handoff offered after a branch workspace batch Git action finishes with one or more repository-member failures. It opens the branch workspace root terminal and places one reviewed command that identifies every failed repository, failed step, diagnostic, member worktree, and any retained conflict worktree. It never executes the provider command automatically; cleaned temporary worktrees are reported as diagnostics rather than treated as retained conflict sites.
+_Avoid_: Automatic error resolution, per-member AI task, member-terminal handoff
 
 **Worktree bootstrap**:
 A user-selected process that copies or symlinks immediate untracked entries from a source worktree into a newly created worktree before normal development begins.
@@ -334,23 +334,27 @@ An explicit recovery action for an unreadable branch workspace registry. It remo
 _Avoid_: Delete branch workspace, worktree cleanup, repository cleanup
 
 **Branch workspace batch commit**:
-An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it creates exactly one commit per dirty member sequentially, stops at the first failure, and never rolls back completed commits.
+An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it attempts exactly one commit per dirty member sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed commits are never rolled back.
 _Avoid_: AI commit handoff, shared commit message, automatic commit
 
+**Branch workspace batch AI commit-and-push**:
+An explicit, per-open opt-in mode of branch workspace batch commit that hides manual message and submit controls, generates one repository-specific message for every dirty member with the selected AI provider, commits only after every generation succeeds, then obtains a fresh batch-push plan and pushes only after every commit succeeds. A failed stage prevents the next stage, while repository-member failures inside a Git stage are accumulated without blocking its remaining members. It preserves completed Git writes without rollback and never becomes a saved preference or background automation.
+_Avoid_: Atomic workspace transaction, shared commit message, persisted automatic commit
+
 **Branch workspace batch pull**:
-An application-coordinated action that fast-forward pulls every repository member's target branch from its configured upstream sequentially, stops at the first failure, and never rolls back completed pulls.
+An application-coordinated action that fast-forward pulls every repository member's target branch from its configured upstream sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed pulls are never rolled back.
 _Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
 
 **Branch workspace batch push**:
-An application-coordinated action that pushes every repository member's target branch to its resolved push target sequentially, stops at the first failure, and never rolls back completed pushes.
+An application-coordinated action that pushes every repository member's target branch to its resolved push target sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed pushes are never rolled back.
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
 **Branch workspace batch merge-in**:
-An application-coordinated action that integrates one explicitly selected local source branch per selected repository member into that member's checked-out target branch. The clean member worktree is the merge destination and conflict site; selected member pipelines retain manifest order, stop at the first failure, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates one explicitly selected local source branch per selected repository member into that member's checked-out target branch. The clean member worktree is the merge destination and conflict site; selected member pipelines retain manifest order, isolate a failed member while later members continue, return all member failures together, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-out, source worktree merge, atomic batch merge
 
 **Branch workspace batch merge-out**:
-An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local destination branch per member. A clean existing destination worktree is reused; an unchecked-out destination uses an application-owned temporary worktree that is always cleaned without deleting the branch, and selected member pipelines retain manifest order, stop at the first failure, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local destination branch per member. A clean existing destination worktree is reused; an unchecked-out destination uses an application-owned temporary worktree that is cleaned without deleting the branch before the next member is attempted. Selected member pipelines retain manifest order, isolate and aggregate member failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
 **Plain workspace**:

@@ -139,6 +139,7 @@ const branchGitActionState = vi.hoisted(() => ({
   error: null as string | null,
   requestPlan: vi.fn(async () => true),
   executeBatchCommit: vi.fn(async () => null),
+  executeBatchCommitAndPush: vi.fn(async () => null),
   executeBatchMergeIn: vi.fn(async () => null),
   executeBatchMergeOut: vi.fn(async () => null),
   executeSync: vi.fn(async () => null),
@@ -152,10 +153,18 @@ const branchGitPanelState = vi.hoisted(() => ({
     kind: BranchWorkspaceGitActionKind
     activeOperation: BranchWorkspaceSnapshot['activeOperation'] | null
     onOpenChange: (open: boolean) => void
-    onMergeConflictAiHandoff: (input: {
+    onBatchCommitAndPush: typeof branchGitActionState.executeBatchCommitAndPush
+    onBatchErrorAiHandoff: (input: {
       provider: 'codex' | 'claude'
-      repositoryName: string
-      conflictWorktree: { branch: string; path: string }
+      kind: BranchWorkspaceGitActionKind
+      failures: Array<{
+        repositoryName: string
+        step: 'commit' | 'prepare' | 'pull' | 'merge' | 'push' | 'cleanup'
+        message: string
+        worktreePath: string
+        reason?: 'merge-conflict'
+        conflictWorktree?: { branch: string; path: string }
+      }>
     }) => Promise<boolean>
   },
 }))
@@ -451,6 +460,7 @@ beforeEach(() => {
   branchGitActionState.requestPlan.mockReset()
   branchGitActionState.requestPlan.mockResolvedValue(true)
   branchGitActionState.executeBatchCommit.mockReset()
+  branchGitActionState.executeBatchCommitAndPush.mockReset()
   branchGitActionState.executeBatchMergeIn.mockReset()
   branchGitActionState.executeBatchMergeOut.mockReset()
   branchGitActionState.executeSync.mockReset()
@@ -1272,9 +1282,10 @@ describe('WorkspaceRepositoryRail', () => {
       'push',
     )
     expect(branchGitPanelState.props?.activeOperation).toBeNull()
+    expect(branchGitPanelState.props?.onBatchCommitAndPush).toBe(branchGitActionState.executeBatchCommitAndPush)
   })
 
-  test('hands a retained conflict to a new branch workspace root terminal', async () => {
+  test('hands aggregated batch errors to a new branch workspace root terminal', async () => {
     const onOpenDetailArea = vi.fn()
     renderRail({ currentRepoId: ROOT, onOpenDetailArea })
     const item = branchWorkspaceState.items[0]!
@@ -1284,14 +1295,29 @@ describe('WorkspaceRepositoryRail', () => {
       await Promise.resolve()
     })
 
-    const handoff = branchGitPanelState.props?.onMergeConflictAiHandoff
+    const handoff = branchGitPanelState.props?.onBatchErrorAiHandoff
     expect(handoff).toBeTypeOf('function')
     if (!handoff) return
     await expect(
       handoff({
         provider: 'codex',
-        repositoryName: 'api',
-        conflictWorktree: { branch: 'feature/auth', path: '/workspace/goblin-feature-auth/api' },
+        kind: 'batch-merge-in',
+        failures: [
+          {
+            repositoryName: 'api',
+            step: 'merge',
+            message: 'conflict',
+            worktreePath: '/workspace/goblin-feature-auth/api',
+            reason: 'merge-conflict',
+            conflictWorktree: { branch: 'feature/auth', path: '/workspace/goblin-feature-auth/api' },
+          },
+          {
+            repositoryName: 'web',
+            step: 'push',
+            message: 'remote rejected',
+            worktreePath: '/workspace/goblin-feature-auth/web',
+          },
+        ],
       }),
     ).resolves.toBe(true)
 
@@ -1304,11 +1330,12 @@ describe('WorkspaceRepositoryRail', () => {
       targetKind: 'branch-workspace',
       branchWorkspaceId: 'branch-1',
     })
-    expect(terminalCommandBridge.writeInput).toHaveBeenCalledWith(
-      `${ROOT}\0/workspace/goblin-feature-auth\0terminal-1`,
-      expect.stringContaining('/workspace/goblin-feature-auth/api'),
-    )
-    expect(vi.mocked(terminalCommandBridge.writeInput).mock.calls[0]![1]).not.toMatch(/[\r\n]$/)
+    const command = vi.mocked(terminalCommandBridge.writeInput).mock.calls[0]![1]
+    expect(command).toContain('batch-merge-in')
+    expect(command).toContain('/workspace/goblin-feature-auth/api')
+    expect(command).toContain('/workspace/goblin-feature-auth/web')
+    expect(command).toContain('remote rejected')
+    expect(command).not.toMatch(/[\r\n]$/)
   })
 
   test('reuses the selected open branch workspace root terminal for AI handoff', async () => {
@@ -1338,13 +1365,22 @@ describe('WorkspaceRepositoryRail', () => {
       branchWorkspaceListState.props?.onGitAction?.(item, 'batch-merge-out')
       await Promise.resolve()
     })
-    const handoff = branchGitPanelState.props?.onMergeConflictAiHandoff
+    const handoff = branchGitPanelState.props?.onBatchErrorAiHandoff
     expect(handoff).toBeTypeOf('function')
     if (!handoff) return
     await handoff({
       provider: 'claude',
-      repositoryName: 'api',
-      conflictWorktree: { branch: 'main', path: '/workspace/api' },
+      kind: 'batch-merge-out',
+      failures: [
+        {
+          repositoryName: 'api',
+          step: 'merge',
+          message: 'conflict',
+          worktreePath: '/workspace/api',
+          reason: 'merge-conflict',
+          conflictWorktree: { branch: 'main', path: '/workspace/api' },
+        },
+      ],
     })
 
     expect(terminalCommandBridge.createTerminal).not.toHaveBeenCalled()

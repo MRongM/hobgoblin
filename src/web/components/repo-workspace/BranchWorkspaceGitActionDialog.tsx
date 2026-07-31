@@ -11,7 +11,6 @@ import {
   Sparkles,
 } from 'lucide-react'
 import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
-import type { GitConflictWorktree } from '#/shared/git-types.ts'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
   BranchWorkspaceBatchMergeOutTargetInput,
@@ -37,11 +36,13 @@ import {
   DialogTitle,
 } from '#/web/components/ui/dialog.tsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/web/components/ui/select.tsx'
+import { Switch } from '#/web/components/ui/switch.tsx'
 import {
   projectBranchWorkspaceBatchMergeInProgress,
   projectBranchWorkspaceBatchMergeOutProgress,
 } from '#/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts'
 import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
+import type { BranchWorkspaceBatchErrorAiFailure } from '#/web/ai-terminal-handoff.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
@@ -55,6 +56,9 @@ interface BranchWorkspaceGitActionPanelProps {
   error: string | null
   onOpenChange: (open: boolean) => void
   onBatchCommit: (messages: BranchWorkspaceCommitMessageInput[]) => Promise<BranchWorkspaceGitActionResult | null>
+  onBatchCommitAndPush: (
+    messages: BranchWorkspaceCommitMessageInput[],
+  ) => Promise<BranchWorkspaceGitActionResult | null>
   onBatchMergeIn: (
     mode: BranchWorkspaceMergeMode,
     sources: BranchWorkspaceBatchMergeInSourceInput[],
@@ -65,13 +69,13 @@ interface BranchWorkspaceGitActionPanelProps {
   ) => Promise<BranchWorkspaceGitActionResult | null>
   onSync: (kind: 'pull' | 'push') => Promise<BranchWorkspaceGitActionResult | null>
   onCancel: () => Promise<unknown>
-  onMergeConflictAiHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
+  onBatchErrorAiHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
 }
 
-export interface BranchWorkspaceMergeConflictAiHandoffInput {
+export interface BranchWorkspaceBatchErrorAiHandoffInput {
   provider: CommitMessageProvider
-  repositoryName: string
-  conflictWorktree: GitConflictWorktree
+  kind: BranchWorkspaceGitActionKind
+  failures: BranchWorkspaceBatchErrorAiFailure[]
 }
 
 type GenerationState = 'idle' | 'generating' | 'ready' | 'failed'
@@ -86,11 +90,12 @@ export function BranchWorkspaceGitActionPanel({
   error,
   onOpenChange,
   onBatchCommit,
+  onBatchCommitAndPush,
   onBatchMergeIn,
   onBatchMergeOut,
   onSync,
   onCancel,
-  onMergeConflictAiHandoff,
+  onBatchErrorAiHandoff,
 }: BranchWorkspaceGitActionPanelProps) {
   const t = useT()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -98,6 +103,7 @@ export function BranchWorkspaceGitActionPanel({
   const [generationErrors, setGenerationErrors] = useState<Record<string, string>>({})
   const [providers, setProviders] = useState<CommitMessageProviderAvailability>({ codex: false, claude: false })
   const [generatingProvider, setGeneratingProvider] = useState<CommitMessageProvider | null>(null)
+  const [autoCommitAndPush, setAutoCommitAndPush] = useState(false)
   const [selectedMergeRepositories, setSelectedMergeRepositories] = useState<string[]>([])
   const [mergeSources, setMergeSources] = useState<Record<string, string>>({})
   const [mergeDestinations, setMergeDestinations] = useState<Record<string, string>>({})
@@ -110,6 +116,7 @@ export function BranchWorkspaceGitActionPanel({
     setGeneration({})
     setGenerationErrors({})
     setGeneratingProvider(null)
+    setAutoCommitAndPush(false)
     setSelectedMergeRepositories(
       plan?.kind === 'batch-merge-in'
         ? plan.members
@@ -143,6 +150,20 @@ export function BranchWorkspaceGitActionPanel({
   const runAndClose = async (action: () => Promise<BranchWorkspaceGitActionResult | null>) => {
     const response = await action()
     if (response?.ok) onOpenChange(false)
+  }
+  const generateAllMessages = async (batchPlan: BranchWorkspaceBatchCommitPlan, provider: CommitMessageProvider) => {
+    const messages = await generateAll(
+      batchPlan,
+      provider,
+      setGeneratingProvider,
+      generationController,
+      setDrafts,
+      setGeneration,
+      setGenerationErrors,
+      autoCommitAndPush,
+    )
+    if (!autoCommitAndPush || !messages) return
+    await runAndClose(() => onBatchCommitAndPush(messages))
   }
 
   if (!open) return null
@@ -180,7 +201,7 @@ export function BranchWorkspaceGitActionPanel({
         }
         onExecute={executeMerge}
         onClose={close}
-        onMergeConflictAiHandoff={onMergeConflictAiHandoff}
+        onBatchErrorAiHandoff={onBatchErrorAiHandoff}
       />
     )
   }
@@ -215,7 +236,7 @@ export function BranchWorkspaceGitActionPanel({
         }
         onExecute={executeMerge}
         onClose={close}
-        onMergeConflictAiHandoff={onMergeConflictAiHandoff}
+        onBatchErrorAiHandoff={onBatchErrorAiHandoff}
       />
     )
   }
@@ -246,21 +267,13 @@ export function BranchWorkspaceGitActionPanel({
           generation={generation}
           generationErrors={generationErrors}
           generatingProvider={generatingProvider}
+          autoCommitAndPush={autoCommitAndPush}
           disabled={pending}
+          onAutoCommitAndPushChange={setAutoCommitAndPush}
           onDraftChange={(repositoryName, message) =>
             setDrafts((current) => ({ ...current, [repositoryName]: message }))
           }
-          onGenerateAll={(provider) =>
-            void generateAll(
-              plan,
-              provider,
-              setGeneratingProvider,
-              generationController,
-              setDrafts,
-              setGeneration,
-              setGenerationErrors,
-            )
-          }
+          onGenerateAll={(provider) => void generateAllMessages(plan, provider)}
           onGenerateOne={(repositoryName, provider) =>
             void generateOne(
               plan,
@@ -279,56 +292,64 @@ export function BranchWorkspaceGitActionPanel({
       ) : null}
 
       {error ? <DialogError>{t(error)}</DialogError> : null}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button type="button" variant="outline" onClick={close}>
-          {t('dialog.cancel')}
-        </Button>
-        {plan?.kind === 'batch-commit' ? (
-          <Button
-            type="button"
-            data-action="batch-commit"
-            disabled={pending || generatingProvider !== null || !hasAllMessages(plan, drafts)}
-            onClick={() =>
-              void runAndClose(() =>
-                onBatchCommit(
-                  plan.members
-                    .filter((member) => member.dirty)
-                    .map((member) => ({
-                      repositoryName: member.repositoryName,
-                      message: drafts[member.repositoryName]!.trim(),
-                    })),
-                ),
-              )
-            }
-          >
-            <SendHorizontal className="size-4" aria-hidden="true" />
-            {t(
-              result && !result.ok
-                ? 'workspace.branch-workspace.retry'
-                : 'workspace.branch-workspace.git-action.batch-commit',
-            )}
+      <BranchWorkspaceBatchErrorAiActions
+        plan={plan}
+        result={result}
+        onHandoff={onBatchErrorAiHandoff}
+        onHandoffComplete={close}
+      />
+      {!(plan?.kind === 'batch-commit' && autoCommitAndPush) ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" onClick={close}>
+            {t('dialog.cancel')}
           </Button>
-        ) : null}
-        {plan?.kind === 'pull' || plan?.kind === 'push' ? (
-          <Button
-            type="button"
-            data-action={plan.kind}
-            disabled={pending || !plan.ready}
-            onClick={() => void runAndClose(() => onSync(plan.kind))}
-          >
-            {plan.kind === 'pull' ? (
-              <ArrowDown className="size-4" aria-hidden="true" />
-            ) : (
-              <ArrowUp className="size-4" aria-hidden="true" />
-            )}
-            {t(
-              result && !result.ok
-                ? 'workspace.branch-workspace.retry'
-                : `workspace.branch-workspace.git-action.${plan.kind}`,
-            )}
-          </Button>
-        ) : null}
-      </div>
+          {plan?.kind === 'batch-commit' ? (
+            <Button
+              type="button"
+              data-action="batch-commit"
+              disabled={pending || generatingProvider !== null || !hasAllMessages(plan, drafts)}
+              onClick={() =>
+                void runAndClose(() =>
+                  onBatchCommit(
+                    plan.members
+                      .filter((member) => member.dirty)
+                      .map((member) => ({
+                        repositoryName: member.repositoryName,
+                        message: drafts[member.repositoryName]!.trim(),
+                      })),
+                  ),
+                )
+              }
+            >
+              <SendHorizontal className="size-4" aria-hidden="true" />
+              {t(
+                result && !result.ok
+                  ? 'workspace.branch-workspace.retry'
+                  : 'workspace.branch-workspace.git-action.batch-commit',
+              )}
+            </Button>
+          ) : null}
+          {plan?.kind === 'pull' || plan?.kind === 'push' ? (
+            <Button
+              type="button"
+              data-action={plan.kind}
+              disabled={pending || !plan.ready}
+              onClick={() => void runAndClose(() => onSync(plan.kind))}
+            >
+              {plan.kind === 'pull' ? (
+                <ArrowDown className="size-4" aria-hidden="true" />
+              ) : (
+                <ArrowUp className="size-4" aria-hidden="true" />
+              )}
+              {t(
+                result && !result.ok
+                  ? 'workspace.branch-workspace.retry'
+                  : `workspace.branch-workspace.git-action.${plan.kind}`,
+              )}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -341,7 +362,9 @@ function BatchCommitContent({
   generation,
   generationErrors,
   generatingProvider,
+  autoCommitAndPush,
   disabled,
+  onAutoCommitAndPushChange,
   onDraftChange,
   onGenerateAll,
   onGenerateOne,
@@ -353,7 +376,9 @@ function BatchCommitContent({
   generation: Record<string, GenerationState>
   generationErrors: Record<string, string>
   generatingProvider: CommitMessageProvider | null
+  autoCommitAndPush: boolean
   disabled: boolean
+  onAutoCommitAndPushChange: (checked: boolean) => void
   onDraftChange: (repositoryName: string, message: string) => void
   onGenerateAll: (provider: CommitMessageProvider) => void
   onGenerateOne: (repositoryName: string, provider: CommitMessageProvider) => void
@@ -366,6 +391,18 @@ function BatchCommitContent({
           {t('workspace.branch-workspace.git-action.generate-description')}
         </span>
         <div data-testid="branch-workspace-generate-all-actions" className="ml-auto flex shrink-0 items-center gap-2">
+          {providers.codex || providers.claude ? (
+            <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <Switch
+                checked={autoCommitAndPush}
+                disabled={disabled || generatingProvider !== null}
+                aria-label={t('action.commit-auto-commit-and-push')}
+                title={t('action.commit-auto-commit-and-push')}
+                onCheckedChange={onAutoCommitAndPushChange}
+              />
+              <span>{t('action.commit-auto-commit-and-push')}</span>
+            </label>
+          ) : null}
           {(['codex', 'claude'] as const).map((provider) => (
             <Button
               key={provider}
@@ -415,17 +452,19 @@ function BatchCommitContent({
               </div>
               {member.dirty ? (
                 <>
-                  <textarea
-                    data-repository={member.repositoryName}
-                    value={drafts[member.repositoryName] ?? ''}
-                    rows={3}
-                    disabled={disabled || locked}
-                    aria-label={t('workspace.branch-workspace.git-action.commit-message', {
-                      repository: member.repositoryName,
-                    })}
-                    className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50"
-                    onChange={(event) => onDraftChange(member.repositoryName, event.target.value)}
-                  />
+                  {!autoCommitAndPush ? (
+                    <textarea
+                      data-repository={member.repositoryName}
+                      value={drafts[member.repositoryName] ?? ''}
+                      rows={3}
+                      disabled={disabled || locked}
+                      aria-label={t('workspace.branch-workspace.git-action.commit-message', {
+                        repository: member.repositoryName,
+                      })}
+                      className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50"
+                      onChange={(event) => onDraftChange(member.repositoryName, event.target.value)}
+                    />
+                  ) : null}
                   <div className="flex items-center gap-2">
                     <span className={cn('text-[10px] text-muted-foreground', state === 'failed' && 'text-danger')}>
                       {state === 'generating'
@@ -434,27 +473,29 @@ function BatchCommitContent({
                           ? t(generationErrors[member.repositoryName])
                           : null}
                     </span>
-                    <div className="ml-auto flex gap-1">
-                      {(['codex', 'claude'] as const).map((provider) => (
-                        <Button
-                          key={provider}
-                          type="button"
-                          size="sm"
-                          className="h-5 px-1.5"
-                          variant="ghost"
-                          disabled={
-                            disabled ||
-                            locked ||
-                            !providers[provider] ||
-                            generatingProvider !== null ||
-                            state === 'generating'
-                          }
-                          onClick={() => onGenerateOne(member.repositoryName, provider)}
-                        >
-                          {provider === 'codex' ? 'Codex' : 'Claude'}
-                        </Button>
-                      ))}
-                    </div>
+                    {!autoCommitAndPush ? (
+                      <div className="ml-auto flex gap-1">
+                        {(['codex', 'claude'] as const).map((provider) => (
+                          <Button
+                            key={provider}
+                            type="button"
+                            size="sm"
+                            className="h-5 px-1.5"
+                            variant="ghost"
+                            disabled={
+                              disabled ||
+                              locked ||
+                              !providers[provider] ||
+                              generatingProvider !== null ||
+                              state === 'generating'
+                            }
+                            onClick={() => onGenerateOne(member.repositoryName, provider)}
+                          >
+                            {provider === 'codex' ? 'Codex' : 'Claude'}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </>
               ) : null}
@@ -479,7 +520,7 @@ function BranchWorkspaceBatchMergeInDialog({
   onSourceChange,
   onExecute,
   onClose,
-  onMergeConflictAiHandoff,
+  onBatchErrorAiHandoff,
 }: {
   plan: Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge-in' }> | null
   result: BranchWorkspaceGitActionResult | null
@@ -493,7 +534,7 @@ function BranchWorkspaceBatchMergeInDialog({
   onSourceChange: (repositoryName: string, sourceBranch: string) => void
   onExecute: (mode: BranchWorkspaceMergeMode) => Promise<void>
   onClose: () => void
-  onMergeConflictAiHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
+  onBatchErrorAiHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
 }) {
   const t = useT()
   const locked = pending || startedMode !== null
@@ -691,9 +732,10 @@ function BranchWorkspaceBatchMergeInDialog({
         )}
 
         {error ? <DialogError>{t(error)}</DialogError> : null}
-        <BranchWorkspaceMergeConflictAiActions
+        <BranchWorkspaceBatchErrorAiActions
+          plan={plan}
           result={result}
-          onHandoff={onMergeConflictAiHandoff}
+          onHandoff={onBatchErrorAiHandoff}
           onHandoffComplete={onClose}
         />
         <DialogFooter>
@@ -751,7 +793,7 @@ function BranchWorkspaceBatchMergeOutDialog({
   onDestinationChange,
   onExecute,
   onClose,
-  onMergeConflictAiHandoff,
+  onBatchErrorAiHandoff,
 }: {
   plan: Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-merge-out' }> | null
   result: BranchWorkspaceGitActionResult | null
@@ -765,7 +807,7 @@ function BranchWorkspaceBatchMergeOutDialog({
   onDestinationChange: (repositoryName: string, destinationBranch: string) => void
   onExecute: (mode: BranchWorkspaceMergeMode) => Promise<void>
   onClose: () => void
-  onMergeConflictAiHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
+  onBatchErrorAiHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
 }) {
   const t = useT()
   const locked = pending || startedMode !== null
@@ -973,9 +1015,10 @@ function BranchWorkspaceBatchMergeOutDialog({
         )}
 
         {error ? <DialogError>{t(error)}</DialogError> : null}
-        <BranchWorkspaceMergeConflictAiActions
+        <BranchWorkspaceBatchErrorAiActions
+          plan={plan}
           result={result}
-          onHandoff={onMergeConflictAiHandoff}
+          onHandoff={onBatchErrorAiHandoff}
           onHandoffComplete={onClose}
         />
         <DialogFooter>
@@ -1020,36 +1063,72 @@ function BranchWorkspaceBatchMergeOutDialog({
   )
 }
 
-function BranchWorkspaceMergeConflictAiActions({
+function BranchWorkspaceBatchErrorAiActions({
+  plan,
   result,
   onHandoff,
   onHandoffComplete,
 }: {
+  plan: BranchWorkspaceGitActionPlan | null
   result: BranchWorkspaceGitActionResult | null
-  onHandoff: (input: BranchWorkspaceMergeConflictAiHandoffInput) => Promise<boolean>
+  onHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
   onHandoffComplete: () => void
 }) {
-  const failedMember = result?.members.find(
-    (member) =>
-      member.phase === 'failed' &&
-      member.step === 'merge' &&
-      member.reason === 'merge-conflict' &&
-      member.conflictWorktree !== undefined,
-  )
-  const conflictWorktree = failedMember?.conflictWorktree
-  if (!failedMember || !conflictWorktree) return null
+  const t = useT()
+  if (!plan || !result || result.ok) return null
+  const failures = result.members.flatMap<BranchWorkspaceBatchErrorAiFailure>((member) => {
+    if (member.phase !== 'failed' || !member.step || !member.message) return []
+    const worktreePath =
+      member.worktreePath ??
+      plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)?.targetWorktreePath
+    if (!worktreePath) return []
+    return [
+      {
+        repositoryName: member.repositoryName,
+        step: member.step,
+        message: member.message,
+        worktreePath,
+        ...(member.reason ? { reason: member.reason } : {}),
+        ...(member.conflictWorktree ? { conflictWorktree: member.conflictWorktree } : {}),
+      },
+    ]
+  })
+  if (failures.length === 0) return null
 
   return (
-    <MergeConflictAiActions
-      onHandoff={(provider) =>
-        onHandoff({
-          provider,
-          repositoryName: failedMember.repositoryName,
-          conflictWorktree,
-        })
-      }
-      onHandoffComplete={onHandoffComplete}
-    />
+    <div className="grid gap-2">
+      <div
+        data-slot="branch-workspace-batch-error-summary"
+        className="overflow-hidden rounded-md border border-danger-border bg-danger-surface/40"
+      >
+        <div className="border-b border-danger-border/60 px-3 py-2 text-xs font-medium text-danger">
+          {t('workspace.branch-workspace.git-action.member-failure-summary', { count: failures.length })}
+        </div>
+        {failures.map((failure) => (
+          <div
+            key={failure.repositoryName}
+            data-error-repository={failure.repositoryName}
+            className="grid gap-1 border-b border-danger-border/40 px-3 py-2 text-xs last:border-b-0"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-medium">{failure.repositoryName}</span>
+              <span className="ml-auto text-[10px] text-danger">
+                {t(`workspace.branch-workspace.git-action.failure-step.${failure.step}`)}
+              </span>
+            </div>
+            <p className="break-words text-[11px] text-muted-foreground">{t(failure.message)}</p>
+            <code className="truncate text-[10px] text-muted-foreground" title={failure.worktreePath}>
+              {failure.worktreePath}
+            </code>
+          </div>
+        ))}
+      </div>
+      <MergeConflictAiActions
+        title={t('workspace.branch-workspace.git-action.member-failure-ai-handoff')}
+        onHandoff={(provider) => onHandoff({ provider, kind: result.kind, failures })}
+        onHandoffComplete={onHandoffComplete}
+      />
+    </div>
   )
 }
 
@@ -1113,19 +1192,32 @@ async function generateAll(
   setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>,
   setGeneration: React.Dispatch<React.SetStateAction<Record<string, GenerationState>>>,
   setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-) {
+  replaceExisting = false,
+): Promise<BranchWorkspaceCommitMessageInput[] | null> {
   controllerRef.current?.abort()
   const controller = new AbortController()
   controllerRef.current = controller
   setGeneratingProvider(provider)
-  for (const member of plan.members) {
-    if (!member.dirty || controller.signal.aborted) continue
-    await generateMember(member, provider, controller.signal, setDrafts, setGeneration, setErrors)
+  const dirtyMembers = plan.members.filter((member) => member.dirty)
+  const messages: BranchWorkspaceCommitMessageInput[] = []
+  for (const member of dirtyMembers) {
+    if (controller.signal.aborted) break
+    const message = await generateMember(
+      member,
+      provider,
+      controller.signal,
+      setDrafts,
+      setGeneration,
+      setErrors,
+      replaceExisting,
+    )
+    if (message) messages.push({ repositoryName: member.repositoryName, message })
   }
   if (controllerRef.current === controller) {
     controllerRef.current = null
     setGeneratingProvider(null)
   }
+  return messages.length === dirtyMembers.length && messages.length > 0 ? messages : null
 }
 
 async function generateOne(
@@ -1158,30 +1250,42 @@ async function generateMember(
   setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>,
   setGeneration: React.Dispatch<React.SetStateAction<Record<string, GenerationState>>>,
   setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-) {
+  replaceExisting = false,
+): Promise<string | null> {
   setGeneration((current) => ({ ...current, [member.repositoryName]: 'generating' }))
   setErrors((current) => ({ ...current, [member.repositoryName]: '' }))
   try {
     const response = await generateRepositoryCommitMessage(member.repoId, member.targetWorktreePath, provider, signal)
-    if (signal.aborted) return
+    if (signal.aborted) return null
     if (!response.ok) {
       setGeneration((current) => ({ ...current, [member.repositoryName]: 'failed' }))
       setErrors((current) => ({ ...current, [member.repositoryName]: response.message }))
-      return
+      return null
+    }
+    const message = response.message.trim()
+    if (!message) {
+      setGeneration((current) => ({ ...current, [member.repositoryName]: 'failed' }))
+      setErrors((current) => ({
+        ...current,
+        [member.repositoryName]: 'workspace.branch-workspace.git-action.generation-failed',
+      }))
+      return null
     }
     setDrafts((current) =>
-      current[member.repositoryName]?.trim()
+      !replaceExisting && current[member.repositoryName]?.trim()
         ? current
-        : { ...current, [member.repositoryName]: response.message.trim() },
+        : { ...current, [member.repositoryName]: message },
     )
     setGeneration((current) => ({ ...current, [member.repositoryName]: 'ready' }))
+    return message
   } catch {
-    if (signal.aborted) return
+    if (signal.aborted) return null
     setGeneration((current) => ({ ...current, [member.repositoryName]: 'failed' }))
     setErrors((current) => ({
       ...current,
       [member.repositoryName]: 'workspace.branch-workspace.git-action.generation-failed',
     }))
+    return null
   }
 }
 

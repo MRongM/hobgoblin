@@ -29,7 +29,7 @@ The recommended flow is:
 4. Keep AI CLI and terminal sessions attached to that root or member context while developing and testing.
 5. Commit, pull, push, merge in, or merge out across selected members when the work is ready.
 
-Cross-repository actions run in configured order, stop at the first failure, retain completed results, and never pretend to be an atomic transaction with automatic rollback.
+Cross-repository actions run in configured order, continue past isolated member failures, aggregate errors at the end, retain completed results, and never pretend to be an atomic transaction with automatic rollback.
 
 ## Origins
 
