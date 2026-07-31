@@ -8,12 +8,14 @@
 // 3. Add the new id to TerminalPref in shared/rpc.ts
 // 4. Add i18n keys for the settings picker
 
+import path from 'node:path'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { pathStyle } from '#/shared/path-semantics.ts'
 import type { ResolvedTerminalApp, TerminalAppAvailability, TerminalPref } from '#/shared/rpc.ts'
 import { isGhosttyInstalled, openInGhostty, openRemoteInGhostty } from '#/system/ghostty.ts'
 import { isAppleTerminalInstalled, openInAppleTerminal, openRemoteInAppleTerminal } from '#/system/apple-terminal.ts'
 import type { ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
-import type { TmuxSessionDescriptor } from '#/system/tmux-session.ts'
+import { normalizeTmuxSessionDescriptor, type TmuxSessionDescriptor } from '#/system/tmux-session.ts'
 import { isWindowsTerminalAvailable, openInWindowsTerminal } from '#/system/windows-terminal.ts'
 
 export type ExternalLocalTerminalTarget = TmuxSessionDescriptor
@@ -42,6 +44,7 @@ const backends: Record<ResolvedTerminalApp, TerminalBackend> = {
 
 /** Auto-detection priority — first installed backend wins. */
 const AUTO_PRIORITY: ResolvedTerminalApp[] = ['ghostty', 'terminal']
+const pendingTerminalOpens = new Map<string, Promise<ExecResult>>()
 
 function isDarwin(): boolean {
   return process.platform === 'darwin'
@@ -104,9 +107,19 @@ export async function openInPreferredTerminal(
   options: TerminalOpenOptions = {},
 ): Promise<{ ok: boolean; message: string }> {
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
-  return resolved
-    ? backends[resolved].open(target, options)
-    : Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
+  if (!resolved) return { ok: false, message: 'error.terminal-not-installed' }
+  const keyTarget = normalizeTerminalOpenKeyTarget(target)
+  return await runTerminalOpenSingleFlight(
+    [
+      'local',
+      resolved,
+      keyTarget.projectRoot,
+      keyTarget.workingDirectory,
+      keyTarget.terminalNumber,
+      options.useTmux === true,
+    ],
+    () => backends[resolved].open(target, options),
+  )
 }
 
 export function openRemoteInTerminalBackend(
@@ -126,5 +139,52 @@ export async function openRemoteInPreferredTerminal(
   options: TerminalOpenOptions = {},
 ): Promise<ExecResult> {
   const resolved = resolveTerminalApp(pref, await getTerminalAppAvailability())
-  return await openRemoteInTerminalBackend(resolved ? backends[resolved] : null, target, options)
+  if (!resolved) return { ok: false, message: 'error.terminal-not-installed' }
+  const keyTarget = normalizeTerminalOpenKeyTarget(target)
+  return await runTerminalOpenSingleFlight(
+    [
+      'remote',
+      resolved,
+      target.alias,
+      keyTarget.projectRoot,
+      keyTarget.workingDirectory,
+      keyTarget.terminalNumber,
+      options.useTmux === true,
+    ],
+    () => openRemoteInTerminalBackend(backends[resolved], target, options),
+  )
+}
+
+function runTerminalOpenSingleFlight(
+  keyParts: readonly (string | number | boolean)[],
+  open: () => Promise<ExecResult>,
+): Promise<ExecResult> {
+  const key = JSON.stringify(keyParts)
+  const existing = pendingTerminalOpens.get(key)
+  if (existing) return existing
+
+  const pending = Promise.resolve().then(open)
+  pendingTerminalOpens.set(key, pending)
+  const clear = () => {
+    if (pendingTerminalOpens.get(key) === pending) pendingTerminalOpens.delete(key)
+  }
+  void pending.then(clear, clear)
+  return pending
+}
+
+function normalizeTerminalOpenKeyTarget(target: TmuxSessionDescriptor): TmuxSessionDescriptor {
+  const normalized = normalizeTmuxSessionDescriptor(target)
+  if (normalized) return normalized
+  return {
+    projectRoot: normalizeWindowsTerminalOpenKeyPath(target.projectRoot),
+    workingDirectory: normalizeWindowsTerminalOpenKeyPath(target.workingDirectory),
+    terminalNumber: target.terminalNumber,
+  }
+}
+
+function normalizeWindowsTerminalOpenKeyPath(value: string): string {
+  const style = pathStyle(value)
+  return style === 'windowsDriveAbsolute' || style === 'windowsUncAbsolute'
+    ? path.win32.normalize(value).toLowerCase()
+    : value
 }
