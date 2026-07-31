@@ -25,7 +25,7 @@ import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/store
 import type { ExecResult } from '#/web/types.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
-import { activeProjectId, projectActivationTarget } from '#/web/stores/repos/workspace-projects.ts'
+import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import {
   isRemoteRepoId,
   localRepoSessionEntry,
@@ -391,6 +391,7 @@ export function createRuntimeRepoLifecycleActions(
         }
         const order = s.order.filter((entry) => entry !== projectId)
         const currentProjectId = activeProjectId(s)
+        const activeProjectClosed = currentProjectId === projectId
         const nextProjectId = nextActiveRepoIdAfterWorkspaceClose(s.order, currentProjectId, projectId)
         const workspaceProjects = { ...s.workspaceProjects }
         const workspaceActiveContextByRoot = { ...s.workspaceActiveContextByRoot }
@@ -400,14 +401,14 @@ export function createRuntimeRepoLifecycleActions(
         delete workspaceActiveContextByRoot[projectId]
         delete workspaceRepositoryListExpandedByRoot[projectId]
         delete workspaceRepositoryListHeightByRoot[projectId]
-        const nextState = {
-          ...s,
-          repos,
-          order,
-          workspaceProjects,
-          workspaceActiveContextByRoot,
-        }
-        const activeId = nextProjectId ? projectActivationTarget(nextState, nextProjectId) : null
+        const activeId = activeProjectClosed ? nextProjectId : s.activeId
+        const nextWorkspaceActiveContextByRoot =
+          activeProjectClosed && nextProjectId && workspaceProjects[nextProjectId]
+            ? {
+                ...workspaceActiveContextByRoot,
+                [nextProjectId]: { kind: 'overview' as const },
+              }
+            : workspaceActiveContextByRoot
         return {
           repos,
           branchSearchQueries,
@@ -416,7 +417,7 @@ export function createRuntimeRepoLifecycleActions(
           activeId,
           activeProjectId: nextProjectId,
           workspaceProjects,
-          workspaceActiveContextByRoot,
+          workspaceActiveContextByRoot: nextWorkspaceActiveContextByRoot,
           workspaceRepositoryListExpandedByRoot,
           workspaceRepositoryListHeightByRoot,
         }
@@ -623,22 +624,15 @@ function applyWorkspaceDiscoveryResult(
       error: null,
     }
     const activeBelongsToWorkspace = state.activeProjectId === rootId
-    if (activeBelongsToWorkspace && !repositoryIds.includes(state.activeId!)) {
-      const nextRepositoryId = repositoryIds.find((repositoryId) => {
-        return repos[repositoryId]?.availability.phase === 'available'
-      })
-      const activeId = nextRepositoryId ?? rootId
+    if (activeBelongsToWorkspace && state.activeId !== rootId && !repositoryIds.includes(state.activeId!)) {
       return {
         repos,
         order,
-        activeId,
+        activeId: rootId,
         workspaceProjects,
         workspaceActiveContextByRoot: {
           ...state.workspaceActiveContextByRoot,
-          [rootId]:
-            activeId === rootId
-              ? { kind: 'overview' as const }
-              : { kind: 'repository' as const, repositoryId: activeId },
+          [rootId]: { kind: 'overview' as const },
         },
       }
     }

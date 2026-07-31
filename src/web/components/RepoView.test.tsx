@@ -131,11 +131,13 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspacePane.tsx', () => ({
     memberTarget,
     fallbackNotice,
     onOpenFileArea,
+    onCollapseFileArea,
   }: {
     workspace: { branch: string; path: string }
     memberTarget?: { repositoryId: string } | null
     fallbackNotice?: { repositoryName: string; reason: string } | null
     onOpenFileArea?: () => void
+    onCollapseFileArea?: () => void
   }) => (
     <div
       data-testid="branch-workspace-pane"
@@ -149,6 +151,11 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspacePane.tsx', () => ({
           open member file area
         </button>
       ) : null}
+      {onCollapseFileArea ? (
+        <button type="button" data-testid="collapse-branch-workspace-file-area" onClick={onCollapseFileArea}>
+          collapse branch workspace file area
+        </button>
+      ) : null}
     </div>
   ),
 }))
@@ -160,6 +167,7 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
     plainWorkspaceTerminalPanel,
     fileAreaCollapsed,
     compactSurface,
+    onCollapseFileArea,
     onToggleFileArea,
     onShowCompactDetail,
     onShowCompactFiles,
@@ -172,6 +180,7 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
     plainWorkspaceTerminalPanel?: ReactNode
     fileAreaCollapsed?: boolean
     compactSurface?: 'scope' | 'files'
+    onCollapseFileArea?: () => void
     onToggleFileArea?: () => void
     onShowCompactDetail?: () => void
     onShowCompactFiles?: () => void
@@ -190,6 +199,11 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
       {onToggleFileArea && (
         <button type="button" data-testid="toggle-file-area" onClick={onToggleFileArea}>
           toggle files
+        </button>
+      )}
+      {onCollapseFileArea && (
+        <button type="button" data-testid="collapse-file-area" onClick={onCollapseFileArea}>
+          collapse files
         </button>
       )}
       {onShowCompactDetail && (
@@ -865,6 +879,24 @@ describe('RepoView', () => {
     expect(
       container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
     ).toBe('false')
+
+    act(() => {
+      useReposStore.setState({
+        workspaceActiveContextByRoot: {
+          [REPO_ID]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+        },
+      })
+    })
+    act(() =>
+      container?.querySelector<HTMLButtonElement>('[data-testid="collapse-branch-workspace-file-area"]')?.click(),
+    )
+    act(() => {
+      useReposStore.setState({ workspaceActiveContextByRoot: { [REPO_ID]: { kind: 'overview' } } })
+    })
+
+    expect(
+      container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-file-area-collapsed'),
+    ).toBe('true')
   })
 
   test('keeps file-area collapse available without mounting branch detail for desktop non-git workspaces', () => {
@@ -1123,6 +1155,19 @@ describe('RepoView', () => {
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('[data-testid="toggle-file-area"]')?.click()
     })
+
+    expect(explorer()?.getAttribute('data-file-area-collapsed')).toBe('true')
+  })
+
+  test('collapses the File area through an idempotent workspace navigation intent', () => {
+    seedRepoWithSelectedWorktree()
+    setCompactUi(false)
+    renderRepoView()
+
+    const explorer = () => container?.querySelector('[data-testid="repo-explorer-pane"]')
+    expect(explorer()?.getAttribute('data-file-area-collapsed')).toBe('false')
+
+    act(() => container?.querySelector<HTMLButtonElement>('[data-testid="collapse-file-area"]')?.click())
 
     expect(explorer()?.getAttribute('data-file-area-collapsed')).toBe('true')
   })

@@ -1086,7 +1086,8 @@ describe('WorkspaceRepositoryRail', () => {
   })
 
   test('shows the branch workspace recovery header while repositories are hidden from a member repository', () => {
-    renderRail({ currentRepoId: API })
+    const onCollapseFileArea = vi.fn()
+    renderRail({ currentRepoId: API, onCollapseFileArea })
 
     expect(container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')).toBeNull()
     act(() =>
@@ -1100,6 +1101,11 @@ describe('WorkspaceRepositoryRail', () => {
     const branchWorkspaceSection = container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')
     expect(container?.querySelector('section[aria-label="workspace.repositories"]')).toBeNull()
     expect(branchWorkspaceSection).not.toBeNull()
+    expect(onCollapseFileArea).toHaveBeenCalledTimes(1)
+    expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+
+    onCollapseFileArea.mockClear()
+    activateWorkspaceOverview.mockClear()
 
     act(() =>
       branchWorkspaceSection?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.show"]')?.click(),
@@ -1107,6 +1113,8 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(container?.querySelector('section[aria-label="workspace.repositories"]')).not.toBeNull()
     expect(container?.querySelector('section[aria-label="workspace.branch-workspace.list"]')).toBeNull()
+    expect(onCollapseFileArea).not.toHaveBeenCalled()
+    expect(activateWorkspaceOverview).not.toHaveBeenCalled()
   })
 
   test('derives exact member dirtiness and opens the member inside its branch workspace', () => {
@@ -1818,6 +1826,7 @@ function renderRail({
   terminalStateByPath = {},
   currentRepoId = API,
   onOpenFileArea,
+  onCollapseFileArea,
   onToggleFileArea,
   onOpenDetailArea,
 }: {
@@ -1827,6 +1836,7 @@ function renderRail({
   terminalStateByPath?: Record<string, { count: number; outputActive?: boolean; hasBell?: boolean }>
   currentRepoId?: string
   onOpenFileArea?: () => void
+  onCollapseFileArea?: () => void
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
 } = {}) {
@@ -1867,6 +1877,7 @@ function renderRail({
           workspaceRootId={ROOT}
           currentRepoId={currentRepoId}
           onOpenFileArea={onOpenFileArea}
+          onCollapseFileArea={onCollapseFileArea}
           onToggleFileArea={onToggleFileArea}
           onOpenDetailArea={onOpenDetailArea}
         />

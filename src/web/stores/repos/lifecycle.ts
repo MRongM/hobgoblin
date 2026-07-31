@@ -38,10 +38,13 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
       // Probe in parallel; entries that are no longer git repos (folder
       // moved/deleted, external drive not mounted) are restored as unavailable
       // tabs so the user's workspace shape stays intact.
+      const defaultWorkspaceActiveContextByRoot = Object.fromEntries(
+        Object.keys(workspaceActiveContextByRoot).map((rootId) => [rootId, { kind: 'overview' as const }]),
+      )
       const rankById = new Map<string, number>()
       let managedActiveId: string | null = null
       set({
-        workspaceActiveContextByRoot: { ...workspaceActiveContextByRoot },
+        workspaceActiveContextByRoot: defaultWorkspaceActiveContextByRoot,
         workspaceRepositoryListExpandedByRoot: { ...workspaceRepositoryListExpandedByRoot },
         workspaceRepositoryListHeightByRoot: { ...workspaceRepositoryListHeightByRoot },
       })
@@ -108,17 +111,34 @@ function createRestorableWorkspaceLifecycleActions(set: ReposSet, get: ReposGet)
       )
 
       set((s) => {
-        const activeId = activeRepoIdAfterWorkspaceHydration(s.activeId, s.repos, s.order, activeRepo, managedActiveId)
-        const activeProjectId = restoredActiveProjectId(
+        const restoredProjectId = restoredActiveProjectId(
           activeProject,
           activeRepo,
           s.order,
           workspaceActiveContextByRoot,
         )
+        const hydratedActiveId = activeRepoIdAfterWorkspaceHydration(
+          s.activeId,
+          s.repos,
+          s.order,
+          activeRepo,
+          managedActiveId,
+        )
+        const hydrationOwnsSelection = s.activeId === null || s.activeId === managedActiveId
+        const activeId = hydrationOwnsSelection ? (restoredProjectId ?? hydratedActiveId) : hydratedActiveId
+        const activeProjectId = hydrationOwnsSelection ? restoredProjectId : (s.activeProjectId ?? activeId)
+        const normalizedWorkspaceActiveContextByRoot =
+          hydrationOwnsSelection && activeProjectId && s.workspaceProjects[activeProjectId]
+            ? {
+                ...s.workspaceActiveContextByRoot,
+                [activeProjectId]: { kind: 'overview' as const },
+              }
+            : s.workspaceActiveContextByRoot
         if (s.activeId === null || s.activeId === managedActiveId) managedActiveId = activeId
         return {
           activeId,
           activeProjectId,
+          workspaceActiveContextByRoot: normalizedWorkspaceActiveContextByRoot,
           sessionReady: true,
         }
       })

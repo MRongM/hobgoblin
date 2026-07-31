@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
   activeProjectId,
-  projectActivationTarget,
   projectRepositoryIds,
   workspaceActiveContext,
   workspaceRepositoryListExpanded,
@@ -60,18 +59,10 @@ describe('workspace project selectors', () => {
     expect(activeProjectId(state)).toBe(SOLO)
   })
 
-  test('restores the saved repository when activating a workspace project', () => {
-    const state = createState(SOLO, { kind: 'repository', repositoryId: WEB })
+  test('returns every configured repository id for a workspace project', () => {
+    const state = createState(SOLO)
 
-    expect(projectActivationTarget(state, ROOT)).toBe(WEB)
     expect(projectRepositoryIds(state, ROOT)).toEqual([API, WEB])
-  })
-
-  test('uses Overview when the saved repository is stale or explicitly Overview', () => {
-    expect(
-      projectActivationTarget(createState(SOLO, { kind: 'repository', repositoryId: '/workspace/removed' }), ROOT),
-    ).toBe(ROOT)
-    expect(projectActivationTarget(createState(SOLO, { kind: 'overview' }), ROOT)).toBe(ROOT)
   })
 
   test('restores a query-confirmed branch workspace and rejects a deleting one', () => {
@@ -81,7 +72,6 @@ describe('workspace project selectors', () => {
       kind: 'branch-workspace',
       branchWorkspaceId: 'branch-1',
     })
-    expect(projectActivationTarget(state, ROOT, [ready])).toBe(ROOT)
     expect(workspaceActiveContext(state, ROOT, [branchWorkspace('delete-incomplete')])).toEqual({ kind: 'overview' })
   })
 
@@ -94,7 +84,6 @@ describe('workspace project selectors', () => {
     const state = createState(SOLO, context)
 
     expect(workspaceActiveContext(state, ROOT, [branchWorkspace('ready')])).toEqual(context)
-    expect(projectActivationTarget(state, ROOT, [branchWorkspace('ready')])).toBe(ROOT)
   })
 
   test('defaults repository lists to shown and preserves explicit per-root visibility', () => {

@@ -65,6 +65,7 @@ export function RepoView({ repoId }: Props) {
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const toggleFileArea = useCallback(() => setFileAreaCollapsed((collapsed) => !collapsed), [])
   const openFileArea = useCallback(() => setFileAreaCollapsed(false), [])
+  const collapseFileArea = useCallback(() => setFileAreaCollapsed(true), [])
   const maximizeDesktopTerminal = useCallback(() => {
     setDetailTab(repoId, 'terminal')
     setDesktopTerminalFocusMode(true)
@@ -123,6 +124,7 @@ export function RepoView({ repoId }: Props) {
         memberRepositoryName={view.branchWorkspaceMemberRepositoryName}
         layout={layout}
         onOpenFileArea={openFileArea}
+        onCollapseFileArea={collapseFileArea}
       />
     )
   }
@@ -138,6 +140,7 @@ export function RepoView({ repoId }: Props) {
               showActions={false}
               compactSurface={compactSurface}
               onOpenFileArea={openFileArea}
+              onCollapseFileArea={collapseFileArea}
               onShowCompactDetail={showCompactDetail}
               onShowCompactFiles={showCompactFiles}
             />
@@ -166,6 +169,7 @@ export function RepoView({ repoId }: Props) {
             fileAreaCollapsed={fileAreaCollapsed}
             onToggleFileArea={toggleFileArea}
             onOpenFileArea={openFileArea}
+            onCollapseFileArea={collapseFileArea}
             terminalFocusMode={desktopTerminalFocusMode}
             onMaximizeTerminal={maximizeDesktopTerminal}
             onExitTerminalFocus={() => setDesktopTerminalFocusMode(false)}
@@ -200,6 +204,7 @@ export function RepoView({ repoId }: Props) {
               fileAreaCollapsed={fileAreaCollapsed}
               onToggleFileArea={toggleFileArea}
               onOpenFileArea={openFileArea}
+              onCollapseFileArea={collapseFileArea}
               onShowCompactDetail={compactDetailAvailable ? showCompactDetail : undefined}
               onShowCompactFiles={showCompactFiles}
               onBranchSelected={showCompactDetail}
@@ -252,6 +257,7 @@ export function RepoView({ repoId }: Props) {
             fileAreaCollapsed={fileAreaCollapsed}
             onToggleFileArea={toggleFileArea}
             onOpenFileArea={openFileArea}
+            onCollapseFileArea={collapseFileArea}
             onMaximizeTerminal={maximizeDesktopTerminal}
           />
         </RepoWorkspacePane>
@@ -269,12 +275,14 @@ function ActiveBranchWorkspaceView({
   memberRepositoryName,
   layout,
   onOpenFileArea,
+  onCollapseFileArea,
 }: {
   rootId: string
   branchWorkspaceId: string
   memberRepositoryName: string | null
   layout: RepoWorkspaceLayout
   onOpenFileArea: () => void
+  onCollapseFileArea: () => void
 }) {
   const query = useBranchWorkspaceQuery(rootId)
   const activateWorkspaceOverview = useReposStore((state) => state.activateWorkspaceOverview)
@@ -337,6 +345,7 @@ function ActiveBranchWorkspaceView({
       onDismissFallbackNotice={() => setFallbackNotice(null)}
       layout={layout}
       onOpenFileArea={onOpenFileArea}
+      onCollapseFileArea={onCollapseFileArea}
     />
   )
 }

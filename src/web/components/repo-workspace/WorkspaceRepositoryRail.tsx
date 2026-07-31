@@ -62,6 +62,7 @@ interface Props {
   currentRepoId: string
   fill?: boolean
   onOpenFileArea?: () => void
+  onCollapseFileArea?: () => void
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
 }
@@ -71,6 +72,7 @@ export function WorkspaceRepositoryRail({
   currentRepoId,
   fill = false,
   onOpenFileArea,
+  onCollapseFileArea,
   onToggleFileArea,
   onOpenDetailArea,
 }: Props) {
@@ -97,6 +99,13 @@ export function WorkspaceRepositoryRail({
   const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const configureWorkspace = useReposStore((state) => state.configureWorkspace)
+  const handleRepositoryListToggle = useCallback(() => {
+    if (repositoryListVisible) {
+      onCollapseFileArea?.()
+      activateWorkspaceOverview(workspaceRootId)
+    }
+    toggleRepositoryList(workspaceRootId)
+  }, [activateWorkspaceOverview, onCollapseFileArea, repositoryListVisible, toggleRepositoryList, workspaceRootId])
   const branchQuery = useBranchWorkspaceQuery(workspaceRootId)
   const branchItems = branchQuery.data?.ok ? branchQuery.data.items : []
   const auxiliaryCandidates = branchQuery.data?.ok ? branchQuery.data.auxiliaryCandidates : []
@@ -555,7 +564,7 @@ export function WorkspaceRepositoryRail({
       size="icon-sm"
       aria-label={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
       title={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
-      onClick={() => toggleRepositoryList(workspaceRootId)}
+      onClick={handleRepositoryListToggle}
     >
       {repositoryListVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
     </Button>

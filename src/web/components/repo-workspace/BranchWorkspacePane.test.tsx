@@ -54,11 +54,13 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
   WorkspaceRepositoryRail: ({
     workspaceRootId,
     onOpenFileArea,
+    onCollapseFileArea,
     onToggleFileArea,
     onOpenDetailArea,
   }: {
     workspaceRootId: string
     onOpenFileArea?: () => void
+    onCollapseFileArea?: () => void
     onToggleFileArea?: () => void
     onOpenDetailArea?: () => void
   }) => (
@@ -67,6 +69,11 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
       {onOpenFileArea ? (
         <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
           member files
+        </button>
+      ) : null}
+      {onCollapseFileArea ? (
+        <button type="button" data-testid="rail-collapse-files" onClick={onCollapseFileArea}>
+          collapse files
         </button>
       ) : null}
       {onToggleFileArea ? (
@@ -454,6 +461,28 @@ describe('BranchWorkspacePane', () => {
 
     expect(splitPane?.getAttribute('data-after-collapsed')).toBe('false')
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('false')
+  })
+
+  test('collapses both the local and parent File areas from workspace navigation', () => {
+    const onCollapseFileArea = vi.fn()
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={workspace()}
+          layout="left-right"
+          onCollapseFileArea={onCollapseFileArea}
+        />,
+      ),
+    )
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-collapse-files"]')?.click())
+
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+    expect(onCollapseFileArea).toHaveBeenCalledTimes(1)
   })
 
   test('toggles the desktop file area when a branch workspace item is double-clicked', () => {

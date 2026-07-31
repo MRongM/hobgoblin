@@ -37,17 +37,6 @@ export function activeWorkspaceRootId(
   return projectId && state.workspaceProjects[projectId] ? projectId : null
 }
 
-export function projectActivationTarget(
-  state: Pick<WorkspaceProjectLookupState, 'repos' | 'workspaceProjects' | 'workspaceActiveContextByRoot'>,
-  projectId: string,
-  branchWorkspaces: readonly BranchWorkspaceSnapshot[] = [],
-): string {
-  const workspace = state.workspaceProjects[projectId]
-  if (!workspace) return projectId
-  const context = workspaceActiveContext(state, projectId, branchWorkspaces)
-  return context.kind === 'repository' ? context.repositoryId : projectId
-}
-
 export function workspaceActiveContext(
   state: Pick<WorkspaceProjectLookupState, 'repos' | 'workspaceProjects' | 'workspaceActiveContextByRoot'>,
   rootId: string,
