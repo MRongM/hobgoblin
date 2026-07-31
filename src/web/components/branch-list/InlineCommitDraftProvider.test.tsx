@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from 'react'
+import { act, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { CommitMessageGenerationResult } from '#/shared/commit-message-ai.ts'
@@ -51,6 +51,16 @@ afterEach(() => {
 })
 
 describe('InlineCommitDraftProvider', () => {
+  test('returns the generated message to the caller', async () => {
+    renderProvider(<DraftHarness readerVisible />)
+    await flush()
+    click('[data-action="open"]')
+    click('[data-action="generate-result"]')
+    await flush()
+
+    expect(text('[data-slot="generation-result"]')).toBe('feat: generated message')
+  })
+
   test('keeps generation alive while the draft reader is unmounted', async () => {
     const pending = deferred<CommitMessageGenerationResult>()
     const signals: AbortSignal[] = []
@@ -166,15 +176,12 @@ function DraftHarness({
 
 function DraftControls({ repoId, worktreePath }: { repoId: string; worktreePath: string }) {
   const actions = useInlineCommitDraftActions()
+  const [generationResult, setGenerationResult] = useState('')
   const suffix = `${repoId}:${worktreePath}`
   return (
     <div>
       <button type="button" data-action="open" onClick={() => actions.openDraft(repoId, worktreePath)} />
-      <button
-        type="button"
-        data-action={`open:${suffix}`}
-        onClick={() => actions.openDraft(repoId, worktreePath)}
-      />
+      <button type="button" data-action={`open:${suffix}`} onClick={() => actions.openDraft(repoId, worktreePath)} />
       <button
         type="button"
         data-action="manual"
@@ -190,6 +197,16 @@ function DraftControls({ repoId, worktreePath }: { repoId: string; worktreePath:
         data-action="generate"
         onClick={() => void actions.generateMessage({ repoId, worktreePath, provider: 'codex' })}
       />
+      <button
+        type="button"
+        data-action="generate-result"
+        onClick={() =>
+          void actions
+            .generateMessage({ repoId, worktreePath, provider: 'codex' })
+            .then((message) => setGenerationResult(message ?? ''))
+        }
+      />
+      <div data-slot="generation-result">{generationResult}</div>
       <button type="button" data-action="clear" onClick={() => actions.clearDraft(repoId, worktreePath)} />
       <button
         type="button"

@@ -837,6 +837,7 @@ export const zh: Record<DictKey, string> = {
   'action.commit-message-placeholder': '描述你的更改',
   'action.commit-confirm': '提交',
   'action.commit-and-push-confirm': '提交并推送',
+  'action.commit-auto-commit-and-push': '生成后提交并推送',
   'action.commit-generate-codex': 'Codex',
   'action.commit-generate-claude': 'Claude',
   'action.commit-generate-loading': '生成中…',

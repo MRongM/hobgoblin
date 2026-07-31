@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Loader2, Sparkles } from 'lucide-react'
 import type { CommitMessageProvider } from '#/shared/commit-message-ai.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import { Field, FieldLabel } from '#/web/components/ui/field.tsx'
+import { Switch } from '#/web/components/ui/switch.tsx'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
@@ -15,7 +17,7 @@ interface InlineCommitFormProps {
   pendingGeneratedMessage: string | null
   onMessageChange: (message: string) => void
   onErrorChange: (message: string | null) => void
-  onGenerate: (provider: CommitMessageProvider) => Promise<void>
+  onGenerate: (provider: CommitMessageProvider) => Promise<string | null>
   onApplyPendingGeneratedMessage: () => void
   onClearPendingGeneratedMessage: () => void
   onClose: () => void
@@ -39,20 +41,23 @@ export function InlineCommitForm({
   onCommitAndPush,
 }: InlineCommitFormProps) {
   const t = useT()
+  const [autoCommitAndPush, setAutoCommitAndPush] = useState(false)
   const { pending, isPending, run } = useAsyncPending<'commit' | 'commitAndPush'>()
+
+  async function submitAndClose(trimmed: string, submit: (message: string) => Promise<void>) {
+    onErrorChange(null)
+    try {
+      await submit(trimmed)
+      onClose()
+    } catch (err) {
+      onErrorChange(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   async function handleSubmit(action: 'commit' | 'commitAndPush', submit: (message: string) => Promise<void>) {
     const trimmed = message.trim()
     if (!trimmed) return
-    onErrorChange(null)
-    await run(action, async () => {
-      try {
-        await submit(trimmed)
-        onClose()
-      } catch (err) {
-        onErrorChange(err instanceof Error ? err.message : String(err))
-      }
-    })
+    await run(action, () => submitAndClose(trimmed, submit))
   }
 
   async function handleConfirm() {
@@ -62,6 +67,22 @@ export function InlineCommitForm({
   async function handleCommitAndPush() {
     if (!onCommitAndPush) return
     await handleSubmit('commitAndPush', onCommitAndPush)
+  }
+
+  async function handleGenerate(provider: CommitMessageProvider) {
+    if (!autoCommitAndPush || !onCommitAndPush) {
+      await onGenerate(provider)
+      return
+    }
+
+    await run('commitAndPush', async () => {
+      const generatedMessage = await onGenerate(provider)
+      const trimmed = generatedMessage?.trim()
+      if (!trimmed) return
+      onClearPendingGeneratedMessage()
+      onMessageChange(trimmed)
+      await submitAndClose(trimmed, onCommitAndPush)
+    })
   }
 
   const submitDisabled = !message.trim() || isPending || generating !== null
@@ -83,13 +104,25 @@ export function InlineCommitForm({
             <FieldLabel htmlFor="inline-commit-message">{t('action.commit-message-label')}</FieldLabel>
             {availableProviders.length > 0 && (
               <div className="flex shrink-0 items-center gap-1">
+                {onCommitAndPush && (
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <Switch
+                      checked={autoCommitAndPush}
+                      disabled={isPending || generating !== null}
+                      aria-label={t('action.commit-auto-commit-and-push')}
+                      title={t('action.commit-auto-commit-and-push')}
+                      onCheckedChange={setAutoCommitAndPush}
+                    />
+                    <span>{t('action.commit-auto-commit-and-push')}</span>
+                  </label>
+                )}
                 {availableProviders.map((provider) => (
                   <CommitGenerateButton
                     key={provider}
                     provider={provider}
                     generating={generating}
                     disabled={isPending}
-                    onGenerate={onGenerate}
+                    onGenerate={handleGenerate}
                   />
                 ))}
               </div>

@@ -883,6 +883,7 @@ export const ja: Record<DictKey, string> = {
   'action.commit-message-placeholder': '変更内容を説明してください',
   'action.commit-confirm': 'コミット',
   'action.commit-and-push-confirm': 'コミットしてプッシュ',
+  'action.commit-auto-commit-and-push': '生成後にコミットしてプッシュ',
   'action.commit-generate-codex': 'Codex',
   'action.commit-generate-claude': 'Claude',
   'action.commit-generate-loading': '生成中…',

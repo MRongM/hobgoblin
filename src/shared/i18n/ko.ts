@@ -868,6 +868,7 @@ export const ko: Record<DictKey, string> = {
   'action.commit-message-placeholder': '변경사항을 설명하세요',
   'action.commit-confirm': '커밋',
   'action.commit-and-push-confirm': '커밋하고 푸시',
+  'action.commit-auto-commit-and-push': '생성 후 커밋하고 푸시',
   'action.commit-generate-codex': 'Codex',
   'action.commit-generate-claude': 'Claude',
   'action.commit-generate-loading': '생성 중…',

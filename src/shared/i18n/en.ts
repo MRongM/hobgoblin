@@ -881,6 +881,7 @@ export const en = {
   'action.commit-message-placeholder': 'Describe your changes',
   'action.commit-confirm': 'Commit',
   'action.commit-and-push-confirm': 'Commit and push',
+  'action.commit-auto-commit-and-push': 'Commit and push after generating',
   'action.commit-generate-codex': 'Codex',
   'action.commit-generate-claude': 'Claude',
   'action.commit-generate-loading': 'Generating…',

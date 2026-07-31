@@ -1,13 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   COMMIT_MESSAGE_PROVIDERS,
   type CommitMessageProvider,
@@ -39,7 +30,7 @@ export interface InlineCommitDraftActions {
   clearDraft: (repoId: string, worktreePath: string) => void
   setMessage: (repoId: string, worktreePath: string, message: string) => void
   setError: (repoId: string, worktreePath: string, error: string | null) => void
-  generateMessage: (input: GenerateInlineCommitMessageInput) => Promise<void>
+  generateMessage: (input: GenerateInlineCommitMessageInput) => Promise<string | null>
   applyPendingGeneratedMessage: (repoId: string, worktreePath: string) => void
   clearPendingGeneratedMessage: (repoId: string, worktreePath: string) => void
 }
@@ -163,10 +154,10 @@ export function InlineCommitDraftProvider({ children }: { children: ReactNode })
 
   const generateMessage = useCallback(
     async ({ repoId, worktreePath, provider }: GenerateInlineCommitMessageInput) => {
-      if (!repoId || !worktreePath) return
+      if (!repoId || !worktreePath) return null
       const key = inlineCommitDraftKey(repoId, worktreePath)
       const draft = draftsRef.current[key]
-      if (!draft || draft.generating) return
+      if (!draft || draft.generating) return null
 
       const controller = new AbortController()
       generationControllersRef.current.set(key, controller)
@@ -179,24 +170,26 @@ export function InlineCommitDraftProvider({ children }: { children: ReactNode })
 
       try {
         const result = await generateRepositoryCommitMessage(repoId, worktreePath, provider, controller.signal)
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted) return null
         if (!result.ok) {
           const nextError = formatCommitMessageGenerationError(t, result.message)
           if (nextError) setError(repoId, worktreePath, nextError)
-          return
+          return null
         }
         const latestDraft = draftsRef.current[key]
-        if (!latestDraft) return
+        if (!latestDraft) return null
         updateDraft(repoId, worktreePath, (current) =>
           current.message.trim()
             ? { ...current, pendingGeneratedMessage: result.message }
             : { ...current, message: result.message },
         )
+        return result.message
       } catch (err) {
         if (!controller.signal.aborted) {
           const nextError = formatCommitMessageGenerationError(t, err instanceof Error ? err.message : String(err))
           if (nextError) setError(repoId, worktreePath, nextError)
         }
+        return null
       } finally {
         if (generationControllersRef.current.get(key) === controller) {
           generationControllersRef.current.delete(key)

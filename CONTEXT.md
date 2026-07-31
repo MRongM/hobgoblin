@@ -188,6 +188,10 @@ _Avoid_: Settings screen, full-page settings
 A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted directory context. The handoff selects an existing open terminal for that directory or creates one when no open terminal exists before filling the command text.
 _Avoid_: AI command, automatic AI action
 
+**Inline AI commit-and-push**:
+An explicit, per-open opt-in sequence in one worktree's inline commit form that generates a commit message with the selected AI provider, replaces the current draft with that generated message, commits the worktree changes, and then invokes the ordinary branch push action. It stops when generation or commit fails, retains existing protected-branch push approval, and never becomes a saved preference or background automation.
+_Avoid_: AI handoff, global automatic commit, branch workspace batch commit
+
 **Branch workspace merge-conflict AI handoff**:
 An AI handoff offered only when a branch workspace batch merge leaves a retained conflict site. It opens the branch workspace root terminal and identifies the failed repository and exact conflict worktree; a conflict cleaned with an application temporary worktree is not eligible.
 _Avoid_: Batch error AI, automatic conflict resolution, member-terminal handoff

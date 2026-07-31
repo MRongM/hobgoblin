@@ -75,6 +75,13 @@ describe('i18n dictionaries', () => {
     expect(zh['action.merge-in-and-push-confirm']).toBe('拉取、合并入并推送')
   })
 
+  test('localizes inline AI commit and push automation in every dictionary', () => {
+    expect(en['action.commit-auto-commit-and-push']).toBe('Commit and push after generating')
+    expect(zh['action.commit-auto-commit-and-push']).toBe('生成后提交并推送')
+    expect(ja['action.commit-auto-commit-and-push']).toBe('生成後にコミットしてプッシュ')
+    expect(ko['action.commit-auto-commit-and-push']).toBe('생성 후 커밋하고 푸시')
+  })
+
   test('uses direction-specific repository merge copy in every locale', () => {
     const keys = [
       'action.merge-in',
