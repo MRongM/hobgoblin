@@ -20,6 +20,7 @@ export interface WorkspaceItemOpenAction {
 
 interface WorkspaceItemContextMenuProps {
   editor: WorkspaceItemOpenAction
+  remote?: WorkspaceItemOpenAction
   externalTerminal: WorkspaceItemOpenAction
   internalTerminal: WorkspaceItemOpenAction
   tmuxTerminal: WorkspaceItemOpenAction
@@ -31,6 +32,7 @@ interface WorkspaceItemContextMenuProps {
 
 export function WorkspaceItemContextMenu({
   editor,
+  remote,
   externalTerminal,
   internalTerminal,
   tmuxTerminal,
@@ -48,6 +50,7 @@ export function WorkspaceItemContextMenu({
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent>
           <OpenActionItem action={editor}>{t('worktrees.open-in-editor-label')}</OpenActionItem>
+          {remote ? <OpenActionItem action={remote}>{t('action.remote')}</OpenActionItem> : null}
           <OpenActionItem action={externalTerminal}>{t('terminal.external')}</OpenActionItem>
           <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
           <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem>

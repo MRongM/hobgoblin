@@ -4,11 +4,7 @@ import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchActionDialogs, type RemoveConfirm } from '#/web/components/BranchActionDialogs.tsx'
 import type { ExecResult } from '#/web/types.ts'
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
-import {
-  getRepositoryPatch,
-  openRepositoryEditor,
-  openRepositoryTerminal,
-} from '#/web/repo-client.ts'
+import { getRepositoryPatch, openRepositoryEditor, openRepositoryTerminal } from '#/web/repo-client.ts'
 import { openRemoteRepositoryEditor, openRemoteRepositoryTerminal } from '#/web/remote-client.ts'
 import {
   branchActionBusyItemId,
@@ -181,7 +177,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
   }
 
   function openRemote() {
-    return runUiAction('remote', () => openBranchExternalTarget(repo.id, branch))
+    return runUiAction('remote', () => openBranchExternalTarget(repo.id))
   }
 
   function requestDeleteBranch() {

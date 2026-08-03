@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Folder, FolderGit2, FolderSearch, GitCompareArrows, Terminal, X } from 'lucide-react'
+import { ExternalLink, Folder, FolderGit2, FolderSearch, GitCompareArrows, Terminal, X } from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -161,6 +161,15 @@ function SortableProjectRow({
     visible: projectExternalActions.visible,
     onSelect: projectExternalActions.externalTerminal.onSelect,
   }
+  const remoteAction: WorkspaceListItemAction = {
+    id: 'remote',
+    label: t('action.remote'),
+    icon: <ExternalLink aria-hidden="true" />,
+    disabled: projectExternalActions.remote.disabled,
+    busy: projectExternalActions.remote.busy,
+    visible: project.isGitRepo,
+    onSelect: projectExternalActions.remote.onSelect,
+  }
   const tmuxTerminalAction: WorkspaceListItemAction = {
     id: 'terminalTmux',
     label: t('terminal.new-with-tmux'),
@@ -191,6 +200,11 @@ function SortableProjectRow({
           ...projectExternalActions.editor,
           icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
         }}
+        remote={
+          project.isGitRepo
+            ? { ...projectExternalActions.remote, icon: <ExternalLink aria-hidden="true" /> }
+            : undefined
+        }
         externalTerminal={{
           ...projectExternalActions.externalTerminal,
           icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
@@ -241,7 +255,7 @@ function SortableProjectRow({
                   label={t('action.menu')}
                   groups={[
                     project.isGitRepo ? creation.items : workspace ? [] : [detectWorkspaceRepositoriesAction],
-                    [tmuxTerminalAction, externalTerminalAction],
+                    [remoteAction, tmuxTerminalAction, externalTerminalAction],
                     [closeAction],
                     ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),
                   ]}

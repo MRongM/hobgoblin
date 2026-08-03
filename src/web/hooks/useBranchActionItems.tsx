@@ -74,17 +74,7 @@ export function visibleBranchActionItems({
   )
 }
 
-export function branchBrowserRemoteProvider(
-  repo: BranchActionRepo,
-  branch: RepoBranchState,
-): BrowserRemoteProvider | undefined {
-  const providers = repo.remote.remoteProviders
-  if (branch.tracking && providers) {
-    const remoteName = Object.keys(providers)
-      .filter((remote) => branch.tracking === remote || branch.tracking!.startsWith(`${remote}/`))
-      .sort((a, b) => b.length - a.length)[0]
-    if (remoteName) return providers[remoteName]
-  }
+export function repositoryBrowserRemoteProvider(repo: BranchActionRepo): BrowserRemoteProvider | undefined {
   return repo.remote.browserRemoteProvider
 }
 
@@ -132,7 +122,7 @@ export function useBranchActionItems(
     if (phase === 'queued' && queuedKey) return t(queuedKey)
     return t(loadingKey)
   }
-  const remoteIcon = browserRemoteIcon(branchBrowserRemoteProvider(repo, branch))
+  const remoteIcon = browserRemoteIcon(repositoryBrowserRemoteProvider(repo))
   const isRemoteRepo = !!repo.remote.target
   const showExternalTerminalAction = capabilities.canOpenTerminal && (isRemoteRepo || terminalAvailable)
   const terminalIconPref = isRemoteRepo ? 'auto' : (resolvedTerminalApp ?? terminalApp)

@@ -23,6 +23,21 @@ beforeEach(() => {
 })
 
 describe('getBrowserRemoteUrl', () => {
+  test('returns the repository HTTPS URL from the configured remote when no branch is provided', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return [
+          'origin\tgit@code.example.test:acme/project.git (fetch)',
+          'origin\tgit@code.example.test:acme/project.git (push)',
+        ].join('\n')
+      }
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+
+    await expect(getBrowserRemoteUrl('/tmp/repo')).resolves.toBe('https://code.example.test/acme/project')
+    expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['remote', '-v'], { signal: undefined })
+  })
+
   test('returns a branch external target URL when a branch is provided', async () => {
     gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
       if (args[0] === 'remote' && args[1] === '-v') {
@@ -102,7 +117,9 @@ describe('resolvePushTargetForRemotes', () => {
   const fork = remote('fork')
 
   test('prefers an existing upstream remote and branch', () => {
-    expect(resolvePushTargetForRemotes([origin, fork], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test')).toEqual({
+    expect(
+      resolvePushTargetForRemotes([origin, fork], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test'),
+    ).toEqual({
       remote: 'fork',
       branch: 'topic/feature-test',
       setUpstream: false,
@@ -140,7 +157,9 @@ describe('resolvePushTargetForRemotes', () => {
   })
 
   test('falls back when the configured upstream remote no longer exists', () => {
-    expect(resolvePushTargetForRemotes([origin], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test')).toEqual({
+    expect(
+      resolvePushTargetForRemotes([origin], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test'),
+    ).toEqual({
       remote: 'origin',
       branch: 'feature/test',
       setUpstream: true,

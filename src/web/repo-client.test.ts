@@ -169,7 +169,7 @@ describe('repo-client', () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     window.open = vi.fn(() => null)
     const bridgeModule = await import('#/web/renderer-bridge.ts')
-    const openExternalUrl = vi.fn(async () => ({ ok: true, message: 'https://github.com/acme/repo/tree/feature/test' }))
+    const openExternalUrl = vi.fn(async () => ({ ok: true, message: 'https://github.com/acme/repo' }))
     bridgeModule.setRendererBridgeForTests(
       testBridge({
         getBootstrap: () => ({
@@ -187,14 +187,14 @@ describe('repo-client', () => {
     )
     const fetchMock = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ ok: true, message: 'https://github.com/acme/repo/tree/feature/test' }),
+      json: async () => ({ ok: true, message: 'https://github.com/acme/repo' }),
     }))
     vi.stubGlobal('fetch', fetchMock)
 
     const { openRepositoryRemote } = await import('#/web/repo-client.ts')
-    await expect(openRepositoryRemote('/tmp/repo', 'feature/test')).resolves.toEqual({ ok: true, message: '' })
+    await expect(openRepositoryRemote('/tmp/repo')).resolves.toEqual({ ok: true, message: '' })
     expect(openExternalUrl).toHaveBeenCalledWith({
-      url: 'https://github.com/acme/repo/tree/feature/test',
+      url: 'https://github.com/acme/repo',
       allowHttp: true,
     })
     expect(window.open).not.toHaveBeenCalled()
@@ -203,7 +203,7 @@ describe('repo-client', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
-        body: JSON.stringify({ cwd: '/tmp/repo', branch: 'feature/test' }),
+        body: JSON.stringify({ cwd: '/tmp/repo' }),
       }),
     )
   })

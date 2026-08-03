@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     editorAvailable: true,
   },
   openRepositoryEditor: vi.fn(),
+  openRepositoryRemote: vi.fn(),
   openRepositoryTerminal: vi.fn(),
   openRemoteRepositoryEditor: vi.fn(),
   openRemoteRepositoryTerminal: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('#/web/runtime-settings-external-apps.ts', () => ({
 
 vi.mock('#/web/repo-client.ts', () => ({
   openRepositoryEditor: mocks.openRepositoryEditor,
+  openRepositoryRemote: mocks.openRepositoryRemote,
   openRepositoryTerminal: mocks.openRepositoryTerminal,
 }))
 
@@ -114,12 +116,14 @@ describe('useProjectExternalOpenActions', () => {
     mocks.externalApps.terminalAvailable = true
     mocks.externalApps.editorAvailable = true
     mocks.openRepositoryEditor.mockReset()
+    mocks.openRepositoryRemote.mockReset()
     mocks.openRepositoryTerminal.mockReset()
     mocks.openRemoteRepositoryEditor.mockReset()
     mocks.openRemoteRepositoryTerminal.mockReset()
     mocks.setLastResult.mockReset()
     for (const opener of [
       mocks.openRepositoryEditor,
+      mocks.openRepositoryRemote,
       mocks.openRepositoryTerminal,
       mocks.openRemoteRepositoryEditor,
       mocks.openRemoteRepositoryTerminal,
@@ -201,6 +205,55 @@ describe('useProjectExternalOpenActions', () => {
     expect(mocks.openRepositoryEditor).toHaveBeenCalledWith('/worktrees/demo')
     expect(mocks.openRemoteRepositoryEditor).not.toHaveBeenCalled()
     expect(mocks.setLastResult).not.toHaveBeenCalled()
+  })
+
+  test('opens a Git project remote without requiring a selected worktree', async () => {
+    const repo = createRepo('/repo', (draft) => {
+      draft.data.branches = [createRepoBranch('feature/demo', { lastCommitHash: 'def' })]
+      draft.ui.selectedBranch = 'feature/demo'
+      draft.remote.hasBrowserRemote = true
+      draft.remote.browserRemoteProvider = 'github'
+    })
+    seedProject(repo)
+    const actions = await renderActions(repo.id)
+
+    expect(actions().remote).toMatchObject({ disabled: false, busy: false })
+    await act(async () => await actions().remote.onSelect())
+
+    expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(repo.id)
+    expect(mocks.setLastResult).not.toHaveBeenCalled()
+  })
+
+  test('disables the remote action for Plain workspaces and repositories without a browser remote', async () => {
+    const plainWorkspace = createRepo('/workspace', (draft) => {
+      draft.isGitRepo = false
+      draft.remote.hasBrowserRemote = true
+    })
+    seedProject(plainWorkspace)
+    const plainActions = await renderActions(plainWorkspace.id)
+    expect(plainActions().remote.disabled).toBe(true)
+
+    const repository = selectedGitRepo('/repo', '/repo')
+    seedProject(repository)
+    const repositoryActions = await renderActions(repository.id)
+    expect(repositoryActions().remote.disabled).toBe(true)
+  })
+
+  test('reports a failed repository remote open through the existing repo result flow', async () => {
+    const repo = selectedGitRepo('/repo', '/repo', (draft) => {
+      draft.remote.hasBrowserRemote = true
+    })
+    mocks.openRepositoryRemote.mockResolvedValue({ ok: false, message: 'error.no-remote-url' })
+    seedProject(repo)
+    const actions = await renderActions(repo.id)
+
+    await act(async () => await actions().remote.onSelect())
+
+    expect(mocks.setLastResult).toHaveBeenCalledWith(
+      repo.id,
+      { ok: false, message: 'error.no-remote-url' },
+      repo.instanceToken,
+    )
   })
 
   test('opens a local Plain workspace root in the configured external terminal', async () => {
@@ -305,8 +358,10 @@ describe('useProjectExternalOpenActions', () => {
     )
   })
 
-  test('keeps a pending open single-flight and disables both actions until it settles', async () => {
-    const repo = selectedGitRepo('/repo', '/repo')
+  test('keeps a pending open single-flight and disables every project open action until it settles', async () => {
+    const repo = selectedGitRepo('/repo', '/repo', (draft) => {
+      draft.remote.hasBrowserRemote = true
+    })
     let resolveOpen: ((result: { ok: true; message: string }) => void) | undefined
     mocks.openRepositoryEditor.mockReturnValue(
       new Promise((resolve) => {
@@ -326,12 +381,14 @@ describe('useProjectExternalOpenActions', () => {
     expect(mocks.openRepositoryEditor).toHaveBeenCalledTimes(1)
     expect(actions().editor).toMatchObject({ busy: true, disabled: true })
     expect(actions().externalTerminal.disabled).toBe(true)
+    expect(actions().remote.disabled).toBe(true)
 
     await act(async () => {
       resolveOpen?.({ ok: true, message: '' })
       await firstOpen
     })
     expect(actions().editor).toMatchObject({ busy: false, disabled: false })
+    expect(actions().remote.disabled).toBe(false)
   })
 
   async function renderActions(projectId: string): Promise<() => ProjectExternalOpenActions> {

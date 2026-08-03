@@ -42,6 +42,9 @@ const projectExternalActionState = vi.hoisted(() => ({
   editorBusy: false,
   terminalDisabled: false,
   terminalBusy: false,
+  remoteOnSelect: vi.fn(),
+  remoteDisabled: false,
+  remoteBusy: false,
   internalTerminalOnSelect: vi.fn(),
   internalTerminalDisabled: false,
   internalTerminalBusy: false,
@@ -135,6 +138,11 @@ vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
         busy: projectExternalActionState.terminalBusy,
         iconPref: 'ghostty',
         onSelect: () => projectExternalActionState.terminalOnSelect(projectId),
+      },
+      remote: {
+        disabled: projectExternalActionState.remoteDisabled,
+        busy: projectExternalActionState.remoteBusy,
+        onSelect: () => projectExternalActionState.remoteOnSelect(projectId),
       },
     }
   },
@@ -265,6 +273,9 @@ beforeEach(() => {
   projectExternalActionState.editorBusy = false
   projectExternalActionState.terminalDisabled = false
   projectExternalActionState.terminalBusy = false
+  projectExternalActionState.remoteOnSelect.mockReset()
+  projectExternalActionState.remoteDisabled = false
+  projectExternalActionState.remoteBusy = false
   projectExternalActionState.internalTerminalOnSelect.mockReset()
   projectExternalActionState.internalTerminalDisabled = false
   projectExternalActionState.internalTerminalBusy = false
@@ -470,6 +481,7 @@ describe('SidebarProjectList', () => {
     expect(items.map((item) => item.textContent?.trim())).toEqual([
       'action.pull-remote-branch',
       'action.create-worktree',
+      'action.remote',
       'terminal.new-with-tmux',
       'terminal.external',
       'Close Repo A',
@@ -524,6 +536,26 @@ describe('SidebarProjectList', () => {
     expect(plainMenuLabels).not.toContain('action.create-worktree')
     expect(onActivate).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('offers the repository remote from Git project More and context menus only', async () => {
+    const { onActivate } = renderList()
+
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).toContain('action.remote')
+    expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain('action.remote')
+
+    const remoteMenuItem = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('action.remote'),
+    )
+    await act(async () => {
+      remoteMenuItem?.click()
+      await Promise.resolve()
+    })
+    await clickContextMenuItem(projectRow('/repo-a'), 'action.remote')
+
+    expect(projectExternalActionState.remoteOnSelect).toHaveBeenNthCalledWith(1, '/repo-a')
+    expect(projectExternalActionState.remoteOnSelect).toHaveBeenNthCalledWith(2, '/repo-a')
+    expect(onActivate).not.toHaveBeenCalled()
   })
 
   test('offers workspace repository detection only for an ordinary plain project', async () => {
@@ -687,6 +719,7 @@ describe('SidebarProjectList', () => {
 
     expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
       'worktrees.open-in-editor-label',
+      'action.remote',
       'terminal.external',
       'terminal.internal',
       'terminal.new-with-tmux',
