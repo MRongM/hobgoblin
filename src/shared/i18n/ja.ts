@@ -1033,6 +1033,7 @@ export const ja: Record<DictKey, string> = {
   'action.create-worktree-path-label': 'ワークツリーのパス (任意)',
   'action.create-worktree-path-disabled-hint': 'ブランチまたは参照を選ぶとパスが自動入力されます。',
   'action.create-worktree-base-current': '現在',
+  'action.create-worktree-bootstrap-toggle': '依存項目',
   'action.create-worktree-bootstrap-candidates-label': '未追跡の内容を取り込む',
   'action.create-worktree-bootstrap-candidates-description':
     'このワークツリーに取り込む内容を選択します。この選択は今回のみ適用されます。',

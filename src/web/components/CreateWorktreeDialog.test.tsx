@@ -384,11 +384,83 @@ describe('CreateWorktreeDialog', () => {
     )
   })
 
+  test('keeps worktree dependencies hidden until explicitly enabled', () => {
+    const onBootstrapEnabledChange = vi.fn()
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        bootstrapEnabled={false}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+          error: false,
+        }}
+        onBootstrapEnabledChange={onBootstrapEnabledChange}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(button('[aria-label="action.create-worktree-bootstrap-toggle"]').getAttribute('data-state')).toBe(
+      'unchecked',
+    )
+    expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
+
+    click('[aria-label="action.create-worktree-bootstrap-toggle"]')
+
+    expect(onBootstrapEnabledChange).toHaveBeenCalledWith(true)
+  })
+
+  test('does not submit stale dependency choices after dependencies are disabled', () => {
+    const onCreate = vi.fn(async () => {})
+    const worktreeBootstrap = {
+      loading: false,
+      preflight: {
+        kind: 'candidates' as const,
+        candidates: [{ path: '.env', kind: 'file' as const }],
+      },
+      error: false,
+    }
+    const dialog = (bootstrapEnabled: boolean) => (
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        bootstrapEnabled={bootstrapEnabled}
+        worktreeBootstrap={worktreeBootstrap}
+        onBootstrapEnabledChange={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />
+    )
+    render(dialog(true))
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    act(() => root!.render(dialog(false)))
+    expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
+      },
+      selections: [],
+    })
+  })
+
   test('disables submit while worktree bootstrap preflight is loading', () => {
     render(
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: true,
           preflight: null,
@@ -409,6 +481,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: {
@@ -455,6 +528,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: {
@@ -506,6 +580,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open={open}
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={worktreeBootstrap}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
@@ -553,6 +628,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
@@ -582,6 +658,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
@@ -619,6 +696,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: { kind: 'candidates', candidates: [] },

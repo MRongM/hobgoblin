@@ -980,6 +980,7 @@ export const zh: Record<DictKey, string> = {
   'action.create-worktree-path-label': '工作树路径（选填）',
   'action.create-worktree-path-disabled-hint': '选择分支或引用后自动填充路径。',
   'action.create-worktree-base-current': '当前',
+  'action.create-worktree-bootstrap-toggle': '依赖',
   'action.create-worktree-bootstrap-candidates-label': '带入未跟踪内容',
   'action.create-worktree-bootstrap-candidates-description': '选择要带入此工作树的内容。这些选择仅生效一次。',
   'action.create-worktree-bootstrap-candidate-skip': '跳过',

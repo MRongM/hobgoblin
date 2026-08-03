@@ -247,6 +247,13 @@ const projects: ProjectSummary[] = [
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   resetReposStore()
@@ -260,6 +267,10 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   useReposStore.setState({ rescanWorkspace })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
   dndState.lastDragEnd = null
   dndState.contextSensors = null
   dndState.sortableItems = null
@@ -302,6 +313,10 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
   resetReposStore()
 })

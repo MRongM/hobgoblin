@@ -1029,6 +1029,7 @@ export const en = {
   'action.create-worktree-path-label': 'Worktree path (optional)',
   'action.create-worktree-path-disabled-hint': 'Choose a branch or ref to auto-fill the path.',
   'action.create-worktree-base-current': 'current',
+  'action.create-worktree-bootstrap-toggle': 'Dependencies',
   'action.create-worktree-bootstrap-candidates-label': 'Bring untracked content',
   'action.create-worktree-bootstrap-candidates-description':
     'Choose what to bring into this worktree. These choices apply only once.',

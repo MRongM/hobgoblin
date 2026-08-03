@@ -1016,6 +1016,7 @@ export const ko: Record<DictKey, string> = {
   'action.create-worktree-path-label': '워크트리 경로 (선택)',
   'action.create-worktree-path-disabled-hint': '브랜치나 참조를 선택하면 경로가 자동 채워집니다.',
   'action.create-worktree-base-current': '현재',
+  'action.create-worktree-bootstrap-toggle': '의존 항목',
   'action.create-worktree-bootstrap-candidates-label': '추적되지 않은 콘텐츠 가져오기',
   'action.create-worktree-bootstrap-candidates-description':
     '이 작업 트리로 가져올 내용을 선택하세요. 이 선택은 한 번만 적용됩니다.',

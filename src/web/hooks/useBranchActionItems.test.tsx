@@ -1084,6 +1084,8 @@ describe('useBranchActionItems', () => {
     await act(async () => {
       await createWorktree.onSelect()
     })
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
     })
@@ -1120,6 +1122,63 @@ describe('useBranchActionItems', () => {
     )
   })
 
+  test('aborts dependency loading and submits skip when dependencies are disabled', async () => {
+    let preflightSignal: AbortSignal | undefined
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockImplementationOnce(
+      (_repoId: string, signal: AbortSignal) => {
+        preflightSignal = signal
+        return new Promise<never>(() => {})
+      },
+    )
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => createWorktree.onSelect())
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
+    await waitForAssertion(() => {
+      expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(1)
+    })
+    expect(preflightSignal?.aborted).toBe(false)
+
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
+    await waitForAssertion(() => expect(preflightSignal?.aborted).toBe(true))
+    setInputValue('#cwt-branch', 'feature/new')
+    clickButton('button[type="submit"]')
+
+    expect(submitBranchAction).toHaveBeenCalledWith(
+      '/tmp/repo',
+      {
+        kind: 'createWorktree',
+        input: {
+          worktreePath: '/tmp/repo-feature-new',
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
+        },
+        worktreeBootstrap: { kind: 'skip' },
+      },
+      { token: repo.instanceToken, refreshOnError: false },
+    )
+  })
+
   test('falls back from an empty branch source to the primary worktree', async () => {
     repoClientMocks.getRepositoryWorktreeBootstrapPreflight
       .mockResolvedValueOnce({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
@@ -1146,6 +1205,7 @@ describe('useBranchActionItems', () => {
     if (!createWorktree) throw new Error('missing create-worktree action')
 
     await act(async () => createWorktree.onSelect())
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
     })
@@ -1189,6 +1249,7 @@ describe('useBranchActionItems', () => {
     if (!createWorktree) throw new Error('missing create-worktree action')
 
     await act(async () => createWorktree.onSelect())
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item=".env.base"]')).not.toBeNull()
     })
