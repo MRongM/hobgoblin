@@ -4,11 +4,13 @@ import {
   ArrowUp,
   ClipboardCopy,
   ExternalLink,
+  FolderPlus,
   FolderTree,
   GitBranch,
   GitCompareArrows,
   GitMerge,
   RadioTower,
+  RefreshCw,
   RotateCcw,
   SendHorizontal,
   Tag,
@@ -281,6 +283,7 @@ function BranchWorkspaceMemberRowFrame({
 
   return (
     <WorkspaceItemContextMenu
+      actions={actionProjection.contextMenu.actions}
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
@@ -316,6 +319,8 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>): BranchActionIte
     mainItems: [
       disabledAction('pull', 'action.pull', <ArrowDown aria-hidden="true" />),
       disabledAction('push', 'action.push', <ArrowUp aria-hidden="true" />),
+      disabledAction('createWorktree', 'action.create-worktree', <FolderPlus aria-hidden="true" />),
+      disabledAction('sync', 'action.refresh', <RefreshCw aria-hidden="true" />),
       disabledAction('createBranch', 'action.create-branch', <GitBranch aria-hidden="true" />),
       disabledAction('pullRemoteBranch', 'action.pull-remote-branch', <RadioTower aria-hidden="true" />),
       disabledAction('merge', 'action.merge-in', <GitMerge aria-hidden="true" />),
@@ -345,6 +350,8 @@ function createDisabledAction(
     | 'remote'
     | 'pull'
     | 'push'
+    | 'createWorktree'
+    | 'sync'
     | 'createBranch'
     | 'pullRemoteBranch'
     | 'merge'

@@ -42,7 +42,8 @@ function manifest(
       {
         repositoryName,
         targetBranch: branch,
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: true,
         branchOrigin: 'created',
         worktreePath: pathApi.join(workspacePath, repositoryName),
         progress: 'complete',
@@ -94,6 +95,48 @@ describe('branch workspace source', () => {
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
       kind: 'ready',
       manifests: [current],
+    })
+  })
+
+  test('migrates legacy repository base branches without enabling synchronization', async () => {
+    const { dataFile, root } = await createFixture()
+    const item = manifest(root, 'feature/legacy-base')
+    const canonicalMember = item.repositories[0]!
+    const legacyMember = {
+      repositoryName: canonicalMember.repositoryName,
+      targetBranch: canonicalMember.targetBranch,
+      baseBranch: 'main',
+      branchOrigin: canonicalMember.branchOrigin,
+      worktreePath: canonicalMember.worktreePath,
+      progress: canonicalMember.progress,
+    }
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(
+      dataFile,
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          {
+            rootId: path.resolve(root),
+            branchWorkspaces: [{ ...item, repositories: [legacyMember] }],
+          },
+        ],
+      }),
+    )
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [
+        {
+          ...item,
+          repositories: [
+            {
+              ...canonicalMember,
+              syncBeforeCreate: false,
+            },
+          ],
+        },
+      ],
     })
   })
 

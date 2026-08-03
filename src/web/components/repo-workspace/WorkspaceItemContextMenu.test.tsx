@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import {
   TerminalSessionContext,
   TerminalSessionReadContext,
@@ -45,7 +46,19 @@ describe('WorkspaceItemContextMenu', () => {
     const internalTerminal = vi.fn()
     const tmuxTerminal = vi.fn()
     const restoreTmuxTerminals = vi.fn()
-    renderMenu({ editor, externalTerminal, internalTerminal, tmuxTerminal, restoreTmuxTerminals })
+    const createWorktree = vi.fn()
+    const sync = vi.fn()
+    renderMenu({
+      editor,
+      externalTerminal,
+      internalTerminal,
+      tmuxTerminal,
+      restoreTmuxTerminals,
+      actions: [
+        contextAction('createWorktree', 'action.create-worktree', createWorktree),
+        contextAction('sync', 'action.refresh', sync),
+      ],
+    })
 
     expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
       'worktrees.open-in-editor-label',
@@ -53,6 +66,8 @@ describe('WorkspaceItemContextMenu', () => {
       'terminal.internal',
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
+      'action.create-worktree',
+      'action.refresh',
       'terminal.close-all',
     ])
 
@@ -61,22 +76,36 @@ describe('WorkspaceItemContextMenu', () => {
     await clickContextMenuItem('terminal.internal')
     await clickContextMenuItem('terminal.new-with-tmux')
     await clickContextMenuItem('terminal.restore-directory-tmux')
+    await clickContextMenuItem('action.create-worktree')
+    await clickContextMenuItem('action.refresh')
 
     expect(editor).toHaveBeenCalledTimes(1)
     expect(externalTerminal).toHaveBeenCalledTimes(1)
     expect(internalTerminal).toHaveBeenCalledTimes(1)
     expect(tmuxTerminal).toHaveBeenCalledTimes(1)
     expect(restoreTmuxTerminals).toHaveBeenCalledTimes(1)
+    expect(createWorktree).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledTimes(1)
   })
 
   test('keeps unavailable and busy open actions visible but disabled', async () => {
-    renderMenu({ editorDisabled: true, externalTerminalBusy: true, internalTerminalDisabled: true })
+    renderMenu({
+      editorDisabled: true,
+      externalTerminalBusy: true,
+      internalTerminalDisabled: true,
+      actions: [
+        contextAction('createWorktree', 'action.create-worktree', vi.fn(), { disabled: true }),
+        contextAction('sync', 'action.refresh', vi.fn(), { busy: true }),
+      ],
+    })
 
     const items = await openContextMenu()
 
     expect(itemByText(items, 'worktrees.open-in-editor-label').hasAttribute('data-disabled')).toBe(true)
     expect(itemByText(items, 'terminal.external').hasAttribute('data-disabled')).toBe(true)
     expect(itemByText(items, 'terminal.internal').hasAttribute('data-disabled')).toBe(true)
+    expect(itemByText(items, 'action.create-worktree').hasAttribute('data-disabled')).toBe(true)
+    expect(itemByText(items, 'action.refresh').hasAttribute('data-disabled')).toBe(true)
     expect(itemByText(items, 'terminal.close-all').hasAttribute('data-disabled')).toBe(true)
   })
 
@@ -134,6 +163,7 @@ function renderMenu(
     worktreeTerminalKeys?: string[]
     snapshots?: ReadonlyMap<string, WorktreeTerminalSnapshot>
     closeTerminal?: ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
+    actions?: WorkspaceListItemAction[]
   } = {},
 ): void {
   const closeTerminal =
@@ -169,6 +199,7 @@ function renderMenu(
               icon: <span data-testid="restore-tmux-terminals-icon" />,
               onSelect: fixture.restoreTmuxTerminals ?? vi.fn(),
             }}
+            actions={fixture.actions}
             worktreeTerminalKeys={fixture.worktreeTerminalKeys ?? []}
           >
             <button type="button">item trigger</button>
@@ -177,6 +208,23 @@ function renderMenu(
       </TerminalSessionContext.Provider>,
     )
   })
+}
+
+function contextAction(
+  id: string,
+  label: string,
+  onSelect: () => void,
+  state: Partial<Pick<WorkspaceListItemAction, 'disabled' | 'busy'>> = {},
+): WorkspaceListItemAction {
+  return {
+    id,
+    label,
+    icon: <span data-testid={`${id}-icon`} />,
+    disabled: state.disabled ?? false,
+    busy: state.busy,
+    visible: true,
+    onSelect,
+  }
 }
 
 async function openContextMenu(): Promise<HTMLElement[]> {

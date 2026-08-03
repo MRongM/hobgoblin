@@ -66,7 +66,18 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.internalTerminal?.id).toBe('terminal')
     expect(ids(projection.menuGroups)).toEqual([
       ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
-      ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'checkoutTo', 'merge', 'commit', 'copyPatch'],
+      [
+        'pull',
+        'push',
+        'createWorktree',
+        'sync',
+        'createBranch',
+        'pullRemoteBranch',
+        'checkoutTo',
+        'merge',
+        'commit',
+        'copyPatch',
+      ],
       ['createTag'],
       ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'resetHard'],
     ])
@@ -75,6 +86,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.contextMenu.internalTerminal.disabled).toBe(false)
     expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
     expect(projection.contextMenu.restoreTmuxTerminals.disabled).toBe(false)
+    expect(projection.contextMenu.actions?.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
   })
 
   test('keeps tmux creation and detached recovery as distinct actions', () => {
@@ -128,10 +140,11 @@ describe('projectWorktreeListItemActions', () => {
 
     expect(ids(projection.menuGroups)).toEqual([
       ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
-      ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
+      ['pull', 'push', 'createWorktree', 'sync', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
       ['closeAllTerminals', 'resetHard'],
     ])
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
   })
 
@@ -147,5 +160,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.disabled).toBe(true)
     expect(projection.internalTerminal?.disabled).toBe(true)
     expect(projection.contextMenu.externalTerminal.disabled).toBe(true)
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
+    expect(projection.contextMenu.actions.every((item) => item.disabled)).toBe(true)
   })
 })

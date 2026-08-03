@@ -15,10 +15,15 @@ function planned(): BranchWorkspacePlan {
       repositoryName: 'api',
       repoId: '/workspace/api',
       targetBranch: 'feature/auth',
-      baseBranch: 'main',
+      creationBase: { kind: 'localBranch' as const, branch: 'main' },
+      syncBeforeCreate: true,
       branchOrigin: 'created' as const,
       worktreePath: `${workspacePath}/api`,
-      mode: { kind: 'newBranch' as const, newBranch: 'feature/auth', baseRef: 'main' },
+      mode: {
+        kind: 'newBranch' as const,
+        newBranch: 'feature/auth',
+        creationBase: { kind: 'localBranch' as const, branch: 'main' },
+      },
       worktreeBootstrap: { kind: 'skip' as const },
       confirmationRequired: false,
       satisfied: false,
@@ -27,7 +32,8 @@ function planned(): BranchWorkspacePlan {
       repositoryName: 'web',
       repoId: '/workspace/web',
       targetBranch: 'feature/auth',
-      baseBranch: 'develop',
+      creationBase: { kind: 'localBranch' as const, branch: 'feature/auth' },
+      syncBeforeCreate: true,
       branchOrigin: 'pre-existing' as const,
       worktreePath: `${workspacePath}/web`,
       mode: { kind: 'existingBranch' as const, branch: 'feature/auth' },
@@ -53,7 +59,8 @@ function planned(): BranchWorkspacePlan {
       repositories: repositories.map((member) => ({
         repositoryName: member.repositoryName,
         targetBranch: member.targetBranch,
-        baseBranch: member.baseBranch,
+        creationBase: { ...member.creationBase },
+        syncBeforeCreate: member.syncBeforeCreate,
         branchOrigin: member.branchOrigin,
         worktreePath: member.worktreePath,
         progress: 'pending' as const,
@@ -242,6 +249,13 @@ describe('branch workspace write service', () => {
     expect(events[0]).toBe('persist')
     expect(events.indexOf('persist')).toBeLessThan(events.indexOf('mkdir'))
     expect(createWorktree.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
+    expect(createWorktree).toHaveBeenNthCalledWith(
+      1,
+      '/workspace/api',
+      expect.objectContaining({ syncBeforeCreate: true }),
+      { kind: 'skip' },
+      expect.any(AbortSignal),
+    )
     expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['complete', 'complete'])
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(publishInvalidation).toHaveBeenCalledWith(ROOT)
@@ -290,6 +304,7 @@ describe('branch workspace write service', () => {
       '/workspace/web',
       '/workspace/web',
     ])
+    expect(createWorktree.mock.calls[2]?.[1]).toMatchObject({ syncBeforeCreate: true })
   })
 
   test('continues creation with a transient warning when dependency bootstrap fails after Git creation', async () => {
@@ -889,7 +904,8 @@ function removePlanned(): BranchWorkspacePlan {
       repositories: repositories.map((repository) => ({
         repositoryName: repository.repositoryName,
         targetBranch: repository.targetBranch,
-        baseBranch: repository.baseBranch,
+        creationBase: { ...repository.creationBase },
+        syncBeforeCreate: repository.syncBeforeCreate,
         branchOrigin: repository.branchOrigin,
         worktreePath: repository.worktreePath,
         progress: 'pending',
@@ -970,7 +986,8 @@ function reducePlanned(selectedNames: string[] = ['api']): BranchWorkspacePlan {
       repositories: allRepositories.map((repository) => ({
         repositoryName: repository.repositoryName,
         targetBranch: repository.targetBranch,
-        baseBranch: repository.baseBranch,
+        creationBase: { ...repository.creationBase },
+        syncBeforeCreate: repository.syncBeforeCreate,
         branchOrigin: repository.branchOrigin,
         worktreePath: repository.worktreePath,
         progress: selected.has(repository.repositoryName) ? ('pending' as const) : ('complete' as const),

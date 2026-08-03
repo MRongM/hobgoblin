@@ -74,7 +74,12 @@ import {
 } from '#/shared/worktree-bootstrap-summary.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
-import { isRemoteTrackingRef, parseRemoteTrackingRefs, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import {
+  isRemoteTrackingRef,
+  isSafeRemoteName,
+  parseRemoteTrackingRefs,
+  type CreateWorktreeInput,
+} from '#/shared/worktree-create.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 
@@ -645,6 +650,21 @@ export async function fetchRemoteRepository(
   return remoteExecResult(result)
 }
 
+export async function fetchRemoteRepositoryByName(
+  target: RemoteRepoTarget,
+  remote: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  if (!isSafeRemoteName(remote)) return { ok: false, message: 'error.invalid-arguments' }
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitFetchRemote', path: target.remotePath, remote }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+  })
+  return remoteExecResult(result)
+}
+
 export async function checkoutRemoteBranch(
   target: RemoteRepoTarget,
   branch: string,
@@ -834,7 +854,11 @@ export async function createRemoteWorktree(
     {
       type: 'gitWorktreeAdd',
       path: target.remotePath,
-      input: { worktreePath: input.worktreePath, mode: input.mode },
+      input: {
+        worktreePath: input.worktreePath,
+        mode: input.mode,
+        syncBeforeCreate: input.syncBeforeCreate,
+      },
     },
     target,
     { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },

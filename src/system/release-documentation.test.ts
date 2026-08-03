@@ -31,18 +31,18 @@ describe('release documentation', () => {
     expect(page).toContain('Hobgoblin-&lt;version&gt;-linux-source.tar.gz')
   })
 
-  test('v2.2.1 English release notes enumerate every published asset', () => {
-    const relativePath = 'docs/releases/v2.2.1.md'
+  test('v2.2.2 English release notes enumerate every published asset', () => {
+    const relativePath = 'docs/releases/v2.2.2.md'
     expect(existsSync(path.join(repoRoot, relativePath))).toBe(true)
     if (!existsSync(path.join(repoRoot, relativePath))) return
 
     const notes = readText(relativePath)
     for (const asset of [
-      'Hobgoblin-2.2.1-arm64.dmg',
-      'Hobgoblin-2.2.1-x64.dmg',
-      'Hobgoblin-2.2.1-x64.exe',
-      'Hobgoblin-2.2.1-android.apk',
-      'Hobgoblin-2.2.1-linux-source.tar.gz',
+      'Hobgoblin-2.2.2-arm64.dmg',
+      'Hobgoblin-2.2.2-x64.dmg',
+      'Hobgoblin-2.2.2-x64.exe',
+      'Hobgoblin-2.2.2-android.apk',
+      'Hobgoblin-2.2.2-linux-source.tar.gz',
     ]) {
       expect(notes).toContain(asset)
     }

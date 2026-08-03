@@ -54,11 +54,13 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
   WorkspaceRepositoryRail: ({
     workspaceRootId,
     onOpenFileArea,
+    onCollapseFileArea,
     onToggleFileArea,
     onOpenDetailArea,
   }: {
     workspaceRootId: string
     onOpenFileArea?: () => void
+    onCollapseFileArea?: () => void
     onToggleFileArea?: () => void
     onOpenDetailArea?: () => void
   }) => (
@@ -67,6 +69,11 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
       {onOpenFileArea ? (
         <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
           member files
+        </button>
+      ) : null}
+      {onCollapseFileArea ? (
+        <button type="button" data-testid="rail-collapse-files" onClick={onCollapseFileArea}>
+          collapse files
         </button>
       ) : null}
       {onToggleFileArea ? (
@@ -456,6 +463,28 @@ describe('BranchWorkspacePane', () => {
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('false')
   })
 
+  test('collapses both the local and parent File areas from workspace navigation', () => {
+    const onCollapseFileArea = vi.fn()
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={workspace()}
+          layout="left-right"
+          onCollapseFileArea={onCollapseFileArea}
+        />,
+      ),
+    )
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-collapse-files"]')?.click())
+
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+    expect(onCollapseFileArea).toHaveBeenCalledTimes(1)
+  })
+
   test('toggles the desktop file area when a branch workspace item is double-clicked', () => {
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
 
@@ -562,7 +591,8 @@ function repositoryMember(): BranchWorkspaceSnapshot['repositories'][number] {
   return {
     repositoryName: 'api',
     targetBranch: 'feature/auth',
-    baseBranch: 'main',
+    creationBase: { kind: 'localBranch', branch: 'main' },
+    syncBeforeCreate: false,
     branchOrigin: 'created',
     worktreePath: '/workspace/goblin-feature-auth/api',
     progress: 'complete',

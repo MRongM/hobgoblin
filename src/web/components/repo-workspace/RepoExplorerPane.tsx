@@ -35,6 +35,7 @@ interface RepoExplorerPaneProps {
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
   onOpenFileArea?: () => void
+  onCollapseFileArea?: () => void
   compactSurface?: Exclude<CompactWorkspaceSurface, 'detail'>
   onShowCompactDetail?: () => void
   onShowCompactFiles?: () => void
@@ -53,6 +54,7 @@ export function RepoExplorerPane({
   fileAreaCollapsed = false,
   onToggleFileArea,
   onOpenFileArea,
+  onCollapseFileArea,
   compactSurface,
   onShowCompactDetail,
   onShowCompactFiles,
@@ -126,6 +128,7 @@ export function RepoExplorerPane({
           fileAreaCollapsed={desktopFileAreaCollapsed}
           onToggleFileArea={compact ? undefined : onToggleFileArea}
           onOpenFileArea={onOpenFileArea}
+          onCollapseFileArea={onCollapseFileArea}
           compactSurface={compactSurface}
           onShowCompactDetail={compact ? onShowCompactDetail : undefined}
           onShowCompactFiles={compact ? onShowCompactFiles : undefined}
@@ -192,6 +195,7 @@ export function RepoExplorerPane({
                 workspaceRootId={workspaceRootId}
                 currentRepoId={repoId}
                 onOpenFileArea={onOpenFileArea}
+                onCollapseFileArea={onCollapseFileArea}
                 onToggleFileArea={handleWorktreeDoubleClick}
               />
             )}

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { getBrowserRemoteUrl, resolveFetchRemoteForRemotes, resolvePushTargetForRemotes } from '#/system/git/remote.ts'
+import {
+  fetchRemote,
+  getBrowserRemoteUrl,
+  resolveFetchRemoteForRemotes,
+  resolvePushTargetForRemotes,
+} from '#/system/git/remote.ts'
 import type { GitRemoteInfo } from '#/shared/git-types.ts'
 
 const gitMock = vi.hoisted(() => vi.fn())
@@ -23,6 +28,21 @@ beforeEach(() => {
 })
 
 describe('getBrowserRemoteUrl', () => {
+  test('returns the repository HTTPS URL from the configured remote when no branch is provided', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return [
+          'origin\tgit@code.example.test:acme/project.git (fetch)',
+          'origin\tgit@code.example.test:acme/project.git (push)',
+        ].join('\n')
+      }
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+
+    await expect(getBrowserRemoteUrl('/tmp/repo')).resolves.toBe('https://code.example.test/acme/project')
+    expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['remote', '-v'], { signal: undefined })
+  })
+
   test('returns a branch external target URL when a branch is provided', async () => {
     gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
       if (args[0] === 'remote' && args[1] === '-v') {
@@ -42,6 +62,49 @@ describe('getBrowserRemoteUrl', () => {
 })
 
 describe('local network git options', () => {
+  test('fetchRemote prunes the exact requested remote with configured network options', async () => {
+    const signal = new AbortController().signal
+
+    await expect(
+      fetchRemote('/repo', 'upstream', signal, {
+        timeoutMs: 120_000,
+        proxyUrl: 'socks5://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      expect.objectContaining({
+        timeoutMs: 120_000,
+        signal,
+        env: expect.objectContaining({ ALL_PROXY: 'socks5://127.0.0.1:7890' }),
+      }),
+      'fetch',
+      '--prune',
+      '--',
+      'upstream',
+    )
+  })
+
+  test.each(['bad remote', '-upstream', 'upstream/main'])('fetchRemote rejects invalid remote %s', async (remote) => {
+    await expect(fetchRemote('/repo', remote)).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+
+  test('fetchRemote preserves pre-aborted cancellation', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(fetchRemote('/repo', 'upstream', controller.signal)).resolves.toEqual({
+      ok: false,
+      message: 'cancelled',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+
   test('pullBranch uses configured network options for a concrete worktree path', async () => {
     const { pullBranch } = await import('#/system/git/remote.ts')
     const signal = new AbortController().signal
@@ -102,7 +165,9 @@ describe('resolvePushTargetForRemotes', () => {
   const fork = remote('fork')
 
   test('prefers an existing upstream remote and branch', () => {
-    expect(resolvePushTargetForRemotes([origin, fork], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test')).toEqual({
+    expect(
+      resolvePushTargetForRemotes([origin, fork], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test'),
+    ).toEqual({
       remote: 'fork',
       branch: 'topic/feature-test',
       setUpstream: false,
@@ -140,7 +205,9 @@ describe('resolvePushTargetForRemotes', () => {
   })
 
   test('falls back when the configured upstream remote no longer exists', () => {
-    expect(resolvePushTargetForRemotes([origin], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test')).toEqual({
+    expect(
+      resolvePushTargetForRemotes([origin], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test'),
+    ).toEqual({
       remote: 'origin',
       branch: 'feature/test',
       setUpstream: true,

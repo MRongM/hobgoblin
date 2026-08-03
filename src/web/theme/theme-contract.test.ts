@@ -11,6 +11,7 @@ const PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR = `:is(
   .project-navigation-tone *,
   .project-file-area-tone *
 )`
+const MENU_NATIVE_SCROLLBAR_SELECTOR = ":is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])"
 
 const CONTRACT_TOKENS = [
   '--color-app-region:',
@@ -154,6 +155,32 @@ describe('web theme contract', () => {
     expect(thumbHover).toContain('border-width: 1px;')
     expect(thumbActive).toContain('border-width: 1px;')
     expect(contract).not.toContain('.project-file-tree-scroll::-webkit-scrollbar')
+  })
+
+  test('themes native scrollbars inside dropdown and context menus', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedMenuSelector = MENU_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
+    const firefoxRule = cssRule(normalizedContract, normalizedMenuSelector)
+    const scrollbar = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar`)
+    const track = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-track`)
+    const corner = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-corner`)
+    const thumb = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-thumb`)
+    const thumbHover = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-thumb:hover`)
+    const thumbActive = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-thumb:active`)
+
+    expect(firefoxRule).toContain('scrollbar-color: var(--color-scrollbar-thumb) transparent;')
+    expect(firefoxRule).toContain('scrollbar-width: thin;')
+    expect(scrollbar).toContain('width: 10px;')
+    expect(scrollbar).toContain('height: 10px;')
+    expect(track).toContain('background-color: transparent;')
+    expect(corner).toContain('background-color: transparent;')
+    expect(thumb).toContain('border: 3px solid transparent;')
+    expect(thumb).toContain('border-radius: 999px;')
+    expect(thumb).toContain('background-color: var(--color-scrollbar-thumb);')
+    expect(thumb).toContain('background-clip: content-box;')
+    expect(thumbHover).toContain('background-color: var(--color-scrollbar-thumb-hover);')
+    expect(thumbActive).toContain('background-color: var(--color-scrollbar-thumb-active);')
   })
 
   test('defines classic terminal tokens for every color theme preset', () => {

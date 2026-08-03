@@ -103,7 +103,7 @@ describe('branch workspace batch merge progress', () => {
     ])
   })
 
-  test('uses the final result to retain a failed step and pending later members', () => {
+  test('uses the final result to retain a failed step and a later successful member', () => {
     const plan = mergeOutPlan()
     const result: BranchWorkspaceGitActionResult = {
       ok: false,
@@ -113,7 +113,7 @@ describe('branch workspace batch merge progress', () => {
       message: 'merge failed',
       members: [
         { repositoryName: 'api', phase: 'failed', step: 'merge', message: 'merge failed' },
-        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'web', phase: 'succeeded' },
         { repositoryName: 'docs', phase: 'not-started' },
       ],
     }
@@ -128,6 +128,7 @@ describe('branch workspace batch merge progress', () => {
       result,
     )
 
+    expect(progress.completedCount).toBe(1)
     expect(memberStates(progress)).toEqual([
       [
         'api',
@@ -142,12 +143,12 @@ describe('branch workspace batch merge progress', () => {
       ],
       [
         'web',
-        'pending',
+        'complete',
         [
-          ['prepare', 'pending'],
-          ['pull', 'pending'],
-          ['merge', 'pending'],
-          ['push', 'pending'],
+          ['prepare', 'complete'],
+          ['pull', 'complete'],
+          ['merge', 'complete'],
+          ['push', 'complete'],
         ],
       ],
       ['docs', 'unselected', []],
@@ -213,7 +214,7 @@ describe('branch workspace batch merge progress', () => {
     ])
   })
 
-  test('retains a failed merge-in step and leaves later members pending', () => {
+  test('retains a failed merge-in step and a later successful member', () => {
     const plan = mergeInPlan()
     const result: BranchWorkspaceGitActionResult = {
       ok: false,
@@ -222,7 +223,7 @@ describe('branch workspace batch merge progress', () => {
       branchWorkspaceId: plan.branchWorkspaceId,
       members: [
         { repositoryName: 'api', phase: 'failed', step: 'merge', message: 'conflict' },
-        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'web', phase: 'succeeded' },
         { repositoryName: 'docs', phase: 'not-started' },
       ],
     }
@@ -237,6 +238,7 @@ describe('branch workspace batch merge progress', () => {
       result,
     )
 
+    expect(progress.completedCount).toBe(1)
     expect(memberStates(progress)).toEqual([
       [
         'api',
@@ -249,11 +251,11 @@ describe('branch workspace batch merge progress', () => {
       ],
       [
         'web',
-        'pending',
+        'complete',
         [
-          ['pull', 'pending'],
-          ['merge', 'pending'],
-          ['push', 'pending'],
+          ['pull', 'complete'],
+          ['merge', 'complete'],
+          ['push', 'complete'],
         ],
       ],
       ['docs', 'unselected', []],

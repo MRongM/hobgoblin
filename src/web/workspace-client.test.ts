@@ -104,7 +104,13 @@ describe('workspace client', () => {
     const request = {
       operation: 'create' as const,
       branch: 'feature/auth',
-      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch' as const, branch: 'main' },
+          syncBeforeCreate: false,
+        },
+      ],
       auxiliaryEntries: [{ name: 'README.md', mode: 'copy' as const }],
     }
 

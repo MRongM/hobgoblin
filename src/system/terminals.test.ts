@@ -82,6 +82,33 @@ describe('openInPreferredTerminal', () => {
     expect(openInAppleTerminal).not.toHaveBeenCalled()
   })
 
+  test('coalesces concurrent duplicate opens for the same normalized local target', async () => {
+    vi.mocked(isGhosttyInstalled).mockReturnValue(true)
+    vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
+    let resolveOpen: ((result: { ok: true; message: string }) => void) | undefined
+    vi.mocked(openInGhostty).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = resolve
+        }),
+    )
+
+    const first = openInPreferredTerminal(localTarget, 'auto')
+    const duplicate = openInPreferredTerminal(
+      { ...localTarget, projectRoot: '/repo/', workingDirectory: '/repo/.' },
+      'auto',
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(openInGhostty).toHaveBeenCalledTimes(1)
+
+    resolveOpen?.({ ok: true, message: localTarget.workingDirectory })
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([
+      { ok: true, message: localTarget.workingDirectory },
+      { ok: true, message: localTarget.workingDirectory },
+    ])
+  })
+
   test('falls back to Terminal.app in auto mode when detection reports available', async () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
@@ -144,6 +171,33 @@ describe('openInPreferredTerminal', () => {
 
     expect(openInWindowsTerminal).toHaveBeenCalledWith('C:\\repo')
     expect(openInAppleTerminal).not.toHaveBeenCalled()
+  })
+
+  test('coalesces concurrent duplicate Windows opens for the same normalized directory', async () => {
+    setPlatform('win32')
+    vi.mocked(isWindowsTerminalAvailable).mockReturnValue(true)
+    let resolveOpen: ((result: { ok: true; message: string }) => void) | undefined
+    vi.mocked(openInWindowsTerminal).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOpen = resolve
+        }),
+    )
+
+    const first = openInPreferredTerminal(windowsTarget, 'terminal')
+    const duplicate = openInPreferredTerminal(
+      { ...windowsTarget, projectRoot: 'c:\\repo\\.', workingDirectory: 'c:\\repo\\.' },
+      'terminal',
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(openInWindowsTerminal).toHaveBeenCalledTimes(1)
+
+    resolveOpen?.({ ok: true, message: windowsTarget.workingDirectory })
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([
+      { ok: true, message: windowsTarget.workingDirectory },
+      { ok: true, message: windowsTarget.workingDirectory },
+    ])
   })
 
   test('reports terminal-not-installed on win32 when no Windows terminal is available', async () => {

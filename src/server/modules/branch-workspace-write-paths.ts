@@ -28,7 +28,6 @@ import type {
   BranchWorkspaceExecutionWarning,
   BranchWorkspaceManifest,
   BranchWorkspacePlan,
-  BranchWorkspacePlanRequest,
   BranchWorkspacePlanResult,
   BranchWorkspaceReorderResult,
 } from '#/shared/branch-workspaces.ts'
@@ -38,7 +37,7 @@ import { parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 
 interface PendingBranchWorkspacePlan {
   plan: BranchWorkspacePlan
-  request: BranchWorkspacePlanRequest
+  request: unknown
   persisted: boolean
   directoryReady: boolean
   terminalsClosed: boolean
@@ -64,7 +63,7 @@ export interface BranchWorkspaceWriteDependencies {
 }
 
 export interface BranchWorkspaceWriteService {
-  plan(rootId: string, request: BranchWorkspacePlanRequest): Promise<BranchWorkspacePlanResult>
+  plan(rootId: string, request: unknown): Promise<BranchWorkspacePlanResult>
   execute(rootId: string, input: BranchWorkspaceExecuteInput): Promise<BranchWorkspaceExecuteResult>
   abort(rootId: string): boolean
   reorder(rootId: string, orderedIds: string[]): Promise<BranchWorkspaceReorderResult>
@@ -197,7 +196,10 @@ export function createBranchWorkspaceWriteService(
           await updateManifests(rootId, (manifests) => {
             const nextManifest: BranchWorkspaceManifest = {
               ...plan.manifest,
-              repositories: plan.manifest.repositories.map((member) => ({ ...member })),
+              repositories: plan.manifest.repositories.map((member) => ({
+                ...member,
+                creationBase: { ...member.creationBase },
+              })),
               auxiliaryEntries: plan.manifest.auxiliaryEntries.map((entry) => ({ ...entry })),
               operation: { kind: plan.operation },
             }
@@ -462,7 +464,11 @@ export function createBranchWorkspaceWriteService(
           try {
             result = await createWorktree(
               repository.repoId,
-              { worktreePath: repository.worktreePath, mode: repository.mode },
+              {
+                worktreePath: repository.worktreePath,
+                mode: repository.mode,
+                syncBeforeCreate: repository.syncBeforeCreate,
+              },
               repository.worktreeBootstrap,
               controller.signal,
             )
@@ -538,13 +544,7 @@ export function createBranchWorkspaceWriteService(
               entryName: entry.name,
               message,
             })
-            await persistAuxiliaryProgress(
-              persistExecution,
-              rootId,
-              plan.branchWorkspaceId,
-              entry.name,
-              'complete',
-            )
+            await persistAuxiliaryProgress(persistExecution, rootId, plan.branchWorkspaceId, entry.name, 'complete')
           }
         }
 

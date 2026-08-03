@@ -4,7 +4,7 @@ import { markRepoOperationTargets, nextRepoOperationId, repoOperation } from '#/
 import { repoBranchActionReason } from '#/web/stores/repos/branch-actions.ts'
 import { replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { getBranchActionCapabilities } from '#/web/hooks/useBranchActions.tsx'
-import { branchBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.tsx'
+import { repositoryBrowserRemoteProvider } from '#/web/hooks/useBranchActionItems.tsx'
 import {
   createBranchSnapshot,
   createRepoBranch,
@@ -77,8 +77,9 @@ function createNewBranchWorktreeAction(
       mode: {
         kind: 'newBranch',
         newBranch: options.newBranch ?? 'feature/new',
-        baseRef: options.baseRef ?? 'feature/a',
+        creationBase: { kind: 'localBranch', branch: options.baseRef ?? 'feature/a' },
       },
+      syncBeforeCreate: false,
     },
     worktreeBootstrap: { kind: 'skip' },
   }
@@ -224,7 +225,7 @@ describe('branch action capabilities', () => {
     })
   })
 
-  test('resolves browser remote providers from tracking remotes', () => {
+  test('uses the repository browser provider for repository remote actions', () => {
     const branch = createRepoBranch('feature/provider', { tracking: 'gitlab-upstream/feature/provider' })
     seedRepoState({
       id: REPO_ID,
@@ -239,43 +240,7 @@ describe('branch action capabilities', () => {
       },
     })
 
-    expect(branchBrowserRemoteProvider(useReposStore.getState().repos[REPO_ID]!, branch)).toBe('gitlab')
-  })
-
-  test('falls back to the repo browser provider when tracking remote is missing', () => {
-    const branch = createRepoBranch('feature/missing-provider', { tracking: 'deleted/feature/missing-provider' })
-    seedRepoState({
-      id: REPO_ID,
-      branches: [branch],
-      remote: {
-        remotes: ['origin'],
-        hasRemotes: true,
-        hasBrowserRemote: true,
-        browserRemoteProvider: 'github',
-        remoteProviders: { origin: 'github' },
-        hasGitHubRemote: true,
-      },
-    })
-
-    expect(branchBrowserRemoteProvider(useReposStore.getState().repos[REPO_ID]!, branch)).toBe('github')
-  })
-
-  test('uses the longest provider remote match for slash-containing tracking names', () => {
-    const branch = createRepoBranch('feature/longest-provider', { tracking: 'origin/gitlab/feature/longest-provider' })
-    seedRepoState({
-      id: REPO_ID,
-      branches: [branch],
-      remote: {
-        remotes: ['origin', 'origin/gitlab'],
-        hasRemotes: true,
-        hasBrowserRemote: true,
-        browserRemoteProvider: 'github',
-        remoteProviders: { origin: 'github', 'origin/gitlab': 'gitlab' },
-        hasGitHubRemote: true,
-      },
-    })
-
-    expect(branchBrowserRemoteProvider(useReposStore.getState().repos[REPO_ID]!, branch)).toBe('gitlab')
+    expect(repositoryBrowserRemoteProvider(useReposStore.getState().repos[REPO_ID]!)).toBe('github')
   })
 })
 

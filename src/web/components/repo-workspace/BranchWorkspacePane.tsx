@@ -32,6 +32,7 @@ interface BranchWorkspacePaneProps {
   onDismissFallbackNotice?: () => void
   layout: RepoWorkspaceLayout
   onOpenFileArea?: () => void
+  onCollapseFileArea?: () => void
 }
 
 export function BranchWorkspacePane({
@@ -42,6 +43,7 @@ export function BranchWorkspacePane({
   onDismissFallbackNotice,
   layout,
   onOpenFileArea,
+  onCollapseFileArea,
 }: BranchWorkspacePaneProps) {
   const t = useT()
   const compact = useIsCompactUi()
@@ -111,6 +113,10 @@ export function BranchWorkspacePane({
     setFileAreaCollapsed(false)
     onOpenFileArea?.()
   }
+  const collapseFileArea = useCallback(() => {
+    setFileAreaCollapsed(true)
+    onCollapseFileArea?.()
+  }, [onCollapseFileArea])
   const toggleFileAreaFromWorkspaceItem = () => {
     if (compact) {
       showCompactSurface('files')
@@ -207,6 +213,7 @@ export function BranchWorkspacePane({
                 currentRepoId={rootId}
                 fill
                 onOpenFileArea={openFileArea}
+                onCollapseFileArea={collapseFileArea}
                 onToggleFileArea={toggleFileAreaFromWorkspaceItem}
               />
             </div>
@@ -267,6 +274,7 @@ export function BranchWorkspacePane({
             currentRepoId={rootId}
             fill
             onOpenFileArea={() => showCompactSurface('files')}
+            onCollapseFileArea={collapseFileArea}
             onToggleFileArea={toggleFileAreaFromWorkspaceItem}
             onOpenDetailArea={() => showCompactSurface('detail')}
           />

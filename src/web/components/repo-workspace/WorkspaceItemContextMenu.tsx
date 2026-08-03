@@ -10,6 +10,12 @@ import {
 } from '#/web/components/ui/context-menu.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+
+type WorkspaceItemContextAction = Pick<
+  WorkspaceListItemAction,
+  'id' | 'label' | 'icon' | 'disabled' | 'busy' | 'destructive' | 'onSelect'
+>
 
 export interface WorkspaceItemOpenAction {
   disabled: boolean
@@ -20,10 +26,12 @@ export interface WorkspaceItemOpenAction {
 
 interface WorkspaceItemContextMenuProps {
   editor: WorkspaceItemOpenAction
+  remote?: WorkspaceItemOpenAction
   externalTerminal: WorkspaceItemOpenAction
   internalTerminal: WorkspaceItemOpenAction
   tmuxTerminal: WorkspaceItemOpenAction
   restoreTmuxTerminals?: WorkspaceItemOpenAction
+  actions?: readonly WorkspaceItemContextAction[]
   worktreeTerminalKeys: readonly string[]
   additionalActions?: readonly BranchWorkspaceItemAction[]
   children: ReactElement
@@ -31,10 +39,12 @@ interface WorkspaceItemContextMenuProps {
 
 export function WorkspaceItemContextMenu({
   editor,
+  remote,
   externalTerminal,
   internalTerminal,
   tmuxTerminal,
   restoreTmuxTerminals,
+  actions = [],
   worktreeTerminalKeys,
   additionalActions = [],
   children,
@@ -48,12 +58,25 @@ export function WorkspaceItemContextMenu({
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent>
           <OpenActionItem action={editor}>{t('worktrees.open-in-editor-label')}</OpenActionItem>
+          {remote ? <OpenActionItem action={remote}>{t('action.remote')}</OpenActionItem> : null}
           <OpenActionItem action={externalTerminal}>{t('terminal.external')}</OpenActionItem>
           <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
           <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem>
           {restoreTmuxTerminals ? (
             <OpenActionItem action={restoreTmuxTerminals}>{t('terminal.restore-directory-tmux')}</OpenActionItem>
           ) : null}
+          {actions.length > 0 ? <ContextMenuSeparator /> : null}
+          {actions.map((action) => (
+            <ContextMenuItem
+              key={action.id}
+              variant={action.destructive ? 'destructive' : 'default'}
+              disabled={action.disabled || action.busy}
+              onSelect={() => void action.onSelect()}
+            >
+              {action.icon}
+              {action.label}
+            </ContextMenuItem>
+          ))}
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" disabled={closeScope.disabled} onSelect={closeScope.requestClose}>
             <X aria-hidden="true" />

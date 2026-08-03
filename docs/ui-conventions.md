@@ -13,13 +13,14 @@ Use this doc for UI language and presentation rules.
 
 ## Branch workspace scope navigation
 
+- Activating a top-level multi-repository workspace starts at its workspace overview rather than restoring a repository or branch-workspace member. Hiding the workspace repository list also returns to that overview and collapses the desktop file area; showing the list does not reopen files or restore the prior member context.
 - On desktop, double-clicking an ordinary worktree main item toggles the file area. Opening the file area selects the Files tab; double-clicking again closes it.
 - Treat a branch workspace and its member worktrees as one parent scope. Selecting a member must keep the branch workspace active.
 - Give parent selection, member expansion, drag reordering, and the More menu separate interaction targets. The Chevron explicitly changes expansion without selection; double-clicking the parent item selects its root context through the normal click sequence and toggles the desktop file area without changing member expansion.
 - Show exactly one selected row. When a member is selected, use a subtle parent scope marker instead of a second selected state.
 - Place actions that affect every member or change membership in the branch workspace item's More menu, keep them grouped together, and label their parent-scope impact explicitly. Adding or removing members opens a branch workspace dialog; do not put removal on an individual member row.
 - Reuse the ordinary repository worktree explorer and detail surfaces for a selected member worktree.
-- Reuse the ordinary worktree action model for member worktree items, but omit drag, checkout, worktree creation or refresh, and individual worktree or branch removal. Keep unavailable member actions visible and disabled.
+- Reuse the ordinary worktree action model for member worktree items. Keep repository-scoped worktree creation and refresh available, but omit drag, checkout, and individual worktree or branch removal. Keep unavailable member actions visible and disabled.
 - In Chinese UI copy, use “子工作区” and “成员工作树”; avoid “子仓库”. In English copy, use “branch workspace” and “member worktree”.
 
 ## Responsive workspace presentation

@@ -20,6 +20,8 @@ const actionState = vi.hoisted(() => ({
   tmuxTerminal: vi.fn(),
   restoreTmuxTerminals: vi.fn(),
   remote: vi.fn(),
+  createWorktree: vi.fn(),
+  sync: vi.fn(),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -63,8 +65,8 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
       branchAction('checkout'),
       branchAction('pull', undefined, true),
       branchAction('push'),
-      branchAction('createWorktree'),
-      branchAction('sync'),
+      branchAction('createWorktree', actionState.createWorktree),
+      branchAction('sync', actionState.sync),
       branchAction('createBranch'),
       branchAction('pullRemoteBranch'),
       branchAction('checkoutTo'),
@@ -214,6 +216,8 @@ describe('BranchWorkspaceMemberRow', () => {
       'remote',
       'pull',
       'push',
+      'createWorktree',
+      'sync',
       'createBranch',
       'pullRemoteBranch',
       'merge',
@@ -286,6 +290,8 @@ describe('BranchWorkspaceMemberRow', () => {
       'remote',
       'pull',
       'push',
+      'createWorktree',
+      'sync',
       'createBranch',
       'pullRemoteBranch',
       'merge',
@@ -297,6 +303,34 @@ describe('BranchWorkspaceMemberRow', () => {
       'resetHard',
     ])
     expect(menuItems.every((entry) => entry.hasAttribute('data-disabled'))).toBe(true)
+  })
+
+  test('keeps worktree creation and refresh visible but disabled in an unavailable member context menu', async () => {
+    render(
+      <BranchWorkspaceMemberRow
+        item={workspace()}
+        member={repositoryMember()}
+        selected={false}
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: null,
+          navigable: false,
+          reason: 'workspace.branch-workspace.member-branch-missing',
+        }}
+        onOpenRepositoryMember={vi.fn()}
+        onOpenInternalTerminal={vi.fn()}
+      />,
+    )
+
+    const itemRow = container.querySelector<HTMLElement>('[data-workspace-list-item]')
+    if (!itemRow) throw new Error('missing unavailable member row')
+    const contextItems = await openContextMenu(itemRow)
+    const createWorktree = contextItems.find((entry) => entry.textContent?.includes('action.create-worktree'))
+    const sync = contextItems.find((entry) => entry.textContent?.includes('action.refresh'))
+
+    expect(createWorktree?.hasAttribute('data-disabled')).toBe(true)
+    expect(sync?.hasAttribute('data-disabled')).toBe(true)
   })
 
   test('keeps a drifted registered worktree actionable with a weak repair hint', async () => {
@@ -371,6 +405,8 @@ describe('BranchWorkspaceMemberRow', () => {
       'terminal.internal',
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
+      'createWorktree',
+      'sync',
       'terminal.close-all',
       'tmux.cleanup.action',
     ])
@@ -395,6 +431,11 @@ describe('BranchWorkspaceMemberRow', () => {
       await Promise.resolve()
     })
     expect(actionState.restoreTmuxTerminals).toHaveBeenCalledTimes(1)
+
+    await clickContextMenuItem(itemRow, 'createWorktree')
+    await clickContextMenuItem(itemRow, 'sync')
+    expect(actionState.createWorktree).toHaveBeenCalledTimes(1)
+    expect(actionState.sync).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -426,6 +467,15 @@ async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
     await Promise.resolve()
   })
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(row: HTMLElement, label: string): Promise<void> {
+  const item = (await openContextMenu(row)).find((candidate) => candidate.textContent?.includes(label))
+  if (!item) throw new Error(`missing context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
 }
 
 function terminalReadContext(): TerminalSessionReadContextValue {
@@ -483,7 +533,8 @@ function repositoryMember(): BranchWorkspaceRepositorySnapshot {
   return {
     repositoryName: 'api',
     targetBranch: 'feature/auth',
-    baseBranch: 'main',
+    creationBase: { kind: 'localBranch', branch: 'main' },
+    syncBeforeCreate: false,
     branchOrigin: 'created',
     worktreePath: '/workspace/goblin-feature-auth/api',
     progress: 'complete',

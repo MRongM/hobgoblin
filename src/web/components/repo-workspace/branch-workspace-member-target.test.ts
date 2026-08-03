@@ -11,7 +11,8 @@ function member(overrides: Partial<BranchWorkspaceRepositorySnapshot> = {}): Bra
   return {
     repositoryName: 'api',
     targetBranch: 'feature/auth',
-    baseBranch: 'main',
+    creationBase: { kind: 'localBranch', branch: 'main' },
+    syncBeforeCreate: false,
     branchOrigin: 'created',
     worktreePath,
     progress: 'complete',
@@ -73,9 +74,10 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
   })
 
   test('rejects a member whose observed worktree is not ready', () => {
-    expect(
-      resolve(member({ ready: false }), { repo: repository({ path: '/workspace/other/api' }) }),
-    ).toEqual({ ok: false, reason: 'workspace.branch-workspace.member-not-ready' })
+    expect(resolve(member({ ready: false }), { repo: repository({ path: '/workspace/other/api' }) })).toEqual({
+      ok: false,
+      reason: 'workspace.branch-workspace.member-not-ready',
+    })
   })
 
   test('distinguishes a missing target branch from a mismatched worktree path', () => {

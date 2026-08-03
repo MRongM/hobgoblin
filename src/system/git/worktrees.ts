@@ -3,7 +3,7 @@ import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { mapWithConcurrency } from '#/system/git/concurrency.ts'
 import { recordBranchCreatedFrom } from '#/system/git/branches.ts'
 import type { ExecResult, WorktreeInfo } from '#/shared/git-types.ts'
-import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 
 const WORKTREE_STATUS_CONCURRENCY = 16
 
@@ -74,10 +74,7 @@ export async function removeWorktree(
   )
 }
 
-export async function pruneWorktrees(
-  cwd: string,
-  options: { signal?: AbortSignal } = {},
-): Promise<ExecResult> {
+export async function pruneWorktrees(cwd: string, options: { signal?: AbortSignal } = {}): Promise<ExecResult> {
   return gitResultWithOptions(
     cwd,
     { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal: options.signal },
@@ -101,7 +98,7 @@ export async function createWorktree(
     ...createWorktreeArgs(input),
   )
   if (created.ok && input.mode.kind === 'newBranch') {
-    await recordBranchCreatedFrom(cwd, input.mode.newBranch, input.mode.baseRef, signal)
+    await recordBranchCreatedFrom(cwd, input.mode.newBranch, worktreeCreationBaseRef(input.mode.creationBase), signal)
   }
   if (created.ok && input.mode.kind === 'trackRemoteBranch') {
     await recordBranchCreatedFrom(cwd, input.mode.localBranch, input.mode.remoteRef, signal)
@@ -112,7 +109,7 @@ export async function createWorktree(
 function createWorktreeArgs(input: CreateWorktreeInput): string[] {
   switch (input.mode.kind) {
     case 'newBranch':
-      return ['-b', input.mode.newBranch, '--', input.worktreePath, input.mode.baseRef]
+      return ['-b', input.mode.newBranch, '--', input.worktreePath, worktreeCreationBaseRef(input.mode.creationBase)]
     case 'existingBranch':
       return ['--', input.worktreePath, input.mode.branch]
     case 'trackRemoteBranch':

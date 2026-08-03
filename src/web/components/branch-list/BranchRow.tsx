@@ -70,7 +70,7 @@ export function BranchRow({
     disabled: repo.operations.branchAction.phase !== 'idle',
   })
   const actionProjection = projectWorktreeListItemActions(actions, {
-    policy: 'ordinary-worktree',
+    policy: branchWorkspaceMember ? 'branch-workspace-member' : 'ordinary-worktree',
     hasWorktree: !!worktreePath,
   })
   const setItemRef = useCallback(
@@ -134,16 +134,12 @@ export function BranchRow({
       }
       expandedContent={
         <>
-          {showActions ? (
-            <>
-              {actions.inlinePanel ? (
-                <div onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-                  {actions.inlinePanel}
-                </div>
-              ) : null}
-              {actions.dialogs}
-            </>
+          {showActions && actions.inlinePanel ? (
+            <div onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+              {actions.inlinePanel}
+            </div>
           ) : null}
+          {showActions || worktreePath ? actions.dialogs : null}
           {tmuxCleanup.dialog}
         </>
       }
@@ -166,6 +162,7 @@ export function BranchRow({
       internalTerminal={actionProjection.contextMenu.internalTerminal}
       tmuxTerminal={actionProjection.contextMenu.tmuxTerminal}
       restoreTmuxTerminals={actionProjection.contextMenu.restoreTmuxTerminals}
+      actions={actionProjection.contextMenu.actions}
       worktreeTerminalKeys={terminalWorktreeKeys}
       additionalActions={tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []}
     >

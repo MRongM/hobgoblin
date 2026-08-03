@@ -942,6 +942,82 @@ describe('useBranchActionItems', () => {
     expect(push).toHaveBeenCalledTimes(1)
   })
 
+  test('auto commit and push generates, commits, then triggers the existing push action', async () => {
+    const calls: string[] = []
+    const push = vi.fn(() => {
+      calls.push('push')
+    })
+    mocks.useBranchActions.mockReturnValue({
+      blocked: false,
+      busyAction: null,
+      capabilities: {
+        isCurrent: false,
+        checkedOutInAnotherWorktree: true,
+        canRemoveWorktree: false,
+        isRegularBranch: false,
+        canCopyPatch: false,
+        canPull: false,
+        canPush: true,
+        canOpenRemote: false,
+        canOpenTerminal: true,
+        canOpenEditor: true,
+      },
+      actions: {
+        copyPatch: vi.fn(),
+        checkout: vi.fn(),
+        pull: vi.fn(),
+        push,
+        openExternalTerminal,
+        openEditor: vi.fn(),
+        openRemote: vi.fn(),
+        requestDeleteBranch: vi.fn(),
+        requestRemoveWorktree: vi.fn(),
+      },
+      dialogs: null,
+    })
+    repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: true, claude: false })
+    repoClientMocks.generateRepositoryCommitMessage.mockImplementation(async () => {
+      calls.push('generate')
+      return { ok: true, message: 'feat: generated message' }
+    })
+    repoClientMocks.commitRepositoryChanges.mockImplementation(async () => {
+      calls.push('commit')
+      return { ok: true, message: '[feature/commit abc1234] feat: generated message' }
+    })
+    const branch = createRepoBranch('feature/commit', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      remote: { hasRemotes: true },
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [{ path: 'README.md', x: ' ', y: 'M' }] }],
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const commit = groups.mainItems.find((item) => item.id === 'commit')
+    if (!commit) throw new Error('missing commit action')
+
+    await act(async () => {
+      await commit.onSelect()
+    })
+    clickButton('[role="switch"][aria-label="action.commit-auto-commit-and-push"]')
+    clickButton('[data-provider="codex"]')
+    await waitForAssertion(() => expect(push).toHaveBeenCalledTimes(1))
+
+    expect(repoClientMocks.generateRepositoryCommitMessage).toHaveBeenCalledWith(
+      '/tmp/repo',
+      '/tmp/repo-feature',
+      'codex',
+      expect.any(AbortSignal),
+    )
+    expect(repoClientMocks.commitRepositoryChanges).toHaveBeenCalledWith(
+      '/tmp/repo',
+      '/tmp/repo-feature',
+      'feat: generated message',
+    )
+    expect(calls).toEqual(['generate', 'commit', 'push'])
+  })
+
   test('opens create-worktree with the selected branch as the default base', async () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
@@ -971,7 +1047,12 @@ describe('useBranchActionItems', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/repo-feature-new',
-          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: { kind: 'skip' },
       },
@@ -1003,6 +1084,8 @@ describe('useBranchActionItems', () => {
     await act(async () => {
       await createWorktree.onSelect()
     })
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
     })
@@ -1022,13 +1105,75 @@ describe('useBranchActionItems', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/repo-feature-new',
-          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: {
           kind: 'materialize',
           selections: [{ path: '.env', mode: 'copy' }],
           sourceWorktreePath: '/tmp/repo-base',
         },
+      },
+      { token: repo.instanceToken, refreshOnError: false },
+    )
+  })
+
+  test('aborts dependency loading and submits skip when dependencies are disabled', async () => {
+    let preflightSignal: AbortSignal | undefined
+    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockImplementationOnce(
+      (_repoId: string, signal: AbortSignal) => {
+        preflightSignal = signal
+        return new Promise<never>(() => {})
+      },
+    )
+    const submitBranchAction = vi.fn()
+    useReposStore.setState({ submitBranchAction })
+    const current = createRepoBranch('main', { isCurrent: true })
+    const branch = createRepoBranch('feature/base', { worktree: { path: '/tmp/repo-base' } })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [current, branch],
+      currentBranch: 'main',
+      selectedBranch: branch.name,
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const createWorktree = groups.mainItems.find((item) => item.id === 'createWorktree')
+    if (!createWorktree) throw new Error('missing create-worktree action')
+
+    await act(async () => createWorktree.onSelect())
+    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
+    await waitForAssertion(() => {
+      expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(1)
+    })
+    expect(preflightSignal?.aborted).toBe(false)
+
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
+    await waitForAssertion(() => expect(preflightSignal?.aborted).toBe(true))
+    setInputValue('#cwt-branch', 'feature/new')
+    clickButton('button[type="submit"]')
+
+    expect(submitBranchAction).toHaveBeenCalledWith(
+      '/tmp/repo',
+      {
+        kind: 'createWorktree',
+        input: {
+          worktreePath: '/tmp/repo-feature-new',
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
+        },
+        worktreeBootstrap: { kind: 'skip' },
       },
       { token: repo.instanceToken, refreshOnError: false },
     )
@@ -1060,6 +1205,7 @@ describe('useBranchActionItems', () => {
     if (!createWorktree) throw new Error('missing create-worktree action')
 
     await act(async () => createWorktree.onSelect())
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
     })
@@ -1103,6 +1249,7 @@ describe('useBranchActionItems', () => {
     if (!createWorktree) throw new Error('missing create-worktree action')
 
     await act(async () => createWorktree.onSelect())
+    clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
       expect(document.querySelector('[data-materialization-item=".env.base"]')).not.toBeNull()
     })
@@ -1127,7 +1274,12 @@ describe('useBranchActionItems', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/repo-feature-new',
-          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: {
           kind: 'materialize',

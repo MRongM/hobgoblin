@@ -486,7 +486,11 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
-    const input = { worktreePath, mode: body?.mode } as Parameters<typeof createRepositoryWorktree>[1]
+    const input = {
+      worktreePath,
+      mode: body?.mode,
+      syncBeforeCreate: body?.syncBeforeCreate ?? false,
+    } as Parameters<typeof createRepositoryWorktree>[1]
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
     const worktreeBootstrap = normalizeRouteWorktreeBootstrapDecision(body?.worktreeBootstrap)
     if (!worktreeBootstrap) return c.json({ ok: false, message: 'error.invalid-arguments' })

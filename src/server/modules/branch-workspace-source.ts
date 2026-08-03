@@ -12,6 +12,7 @@ import {
   type BranchWorkspaceRepositoryMember,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { normalizeWorktreeCreationBase } from '#/shared/worktree-create.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 const registryFileName = 'branch-workspaces.json'
@@ -331,14 +332,19 @@ function normalizeRepositoryMember(
 ): BranchWorkspaceRepositoryMember {
   const member = asRecord(value)
   const repositoryName = exactText(member?.repositoryName)
-  const baseBranch = exactText(member?.baseBranch)
+  const hasCreationBase = member ? 'creationBase' in member : false
+  const creationBase = hasCreationBase
+    ? normalizeWorktreeCreationBase(member?.creationBase)
+    : normalizeWorktreeCreationBase({ kind: 'localBranch', branch: exactText(member?.baseBranch) })
+  const syncBeforeCreate = member?.syncBeforeCreate ?? false
   const worktreePath = exactText(member?.worktreePath)
   if (
     !member ||
     !repositoryName ||
     !isWorkspaceRepositoryName(repositoryName) ||
     member.targetBranch !== branch ||
-    !baseBranch ||
+    !creationBase ||
+    typeof syncBeforeCreate !== 'boolean' ||
     (member.branchOrigin !== 'created' && member.branchOrigin !== 'pre-existing') ||
     !isProgress(member.progress) ||
     worktreePath !== pathApi.join(workspacePath, repositoryName)
@@ -351,7 +357,8 @@ function normalizeRepositoryMember(
   return {
     repositoryName,
     targetBranch: branch,
-    baseBranch,
+    creationBase,
+    syncBeforeCreate,
     branchOrigin: member.branchOrigin,
     worktreePath,
     progress: member.progress,
@@ -438,7 +445,10 @@ async function enqueueWrite(dataFile: string, write: () => Promise<void>): Promi
 function cloneManifests(manifests: BranchWorkspaceManifest[]): BranchWorkspaceManifest[] {
   return manifests.map((manifest) => ({
     ...manifest,
-    repositories: manifest.repositories.map((member) => ({ ...member })),
+    repositories: manifest.repositories.map((member) => ({
+      ...member,
+      creationBase: { ...member.creationBase },
+    })),
     auxiliaryEntries: manifest.auxiliaryEntries.map((entry) => ({ ...entry })),
     ...(manifest.operation ? { operation: { ...manifest.operation } } : {}),
   }))

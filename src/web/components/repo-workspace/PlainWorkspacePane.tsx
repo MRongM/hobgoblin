@@ -20,6 +20,7 @@ interface PlainWorkspacePaneProps {
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
   onOpenFileArea?: () => void
+  onCollapseFileArea?: () => void
   compactSurface?: Exclude<CompactWorkspaceSurface, 'detail'>
   onShowCompactDetail?: () => void
   onShowCompactFiles?: () => void
@@ -37,6 +38,7 @@ export function PlainWorkspacePane({
   fileAreaCollapsed = false,
   onToggleFileArea,
   onOpenFileArea,
+  onCollapseFileArea,
   compactSurface,
   onShowCompactDetail,
   onShowCompactFiles,
@@ -76,6 +78,7 @@ export function PlainWorkspacePane({
               currentRepoId={repoId}
               fill
               onOpenFileArea={onOpenFileArea}
+              onCollapseFileArea={onCollapseFileArea}
               onToggleFileArea={onFileAreaItemDoubleClick}
             />
           ) : (
@@ -119,6 +122,7 @@ export function PlainWorkspacePane({
                     currentRepoId={repoId}
                     fill
                     onOpenFileArea={onOpenFileArea}
+                    onCollapseFileArea={onCollapseFileArea}
                     onToggleFileArea={onFileAreaItemDoubleClick}
                   />
                 </div>

@@ -14,7 +14,7 @@ import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWor
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
 import {
   BranchWorkspaceGitActionPanel,
-  type BranchWorkspaceMergeConflictAiHandoffInput,
+  type BranchWorkspaceBatchErrorAiHandoffInput,
 } from '#/web/components/repo-workspace/BranchWorkspaceGitActionDialog.tsx'
 import {
   BranchWorkspaceList,
@@ -52,16 +52,14 @@ import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-pr
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
-import {
-  buildBranchWorkspaceMergeConflictAiCommand,
-  prefillAiTerminalTargetCommand,
-} from '#/web/ai-terminal-handoff.ts'
+import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
 
 interface Props {
   workspaceRootId: string
   currentRepoId: string
   fill?: boolean
   onOpenFileArea?: () => void
+  onCollapseFileArea?: () => void
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
 }
@@ -71,6 +69,7 @@ export function WorkspaceRepositoryRail({
   currentRepoId,
   fill = false,
   onOpenFileArea,
+  onCollapseFileArea,
   onToggleFileArea,
   onOpenDetailArea,
 }: Props) {
@@ -97,6 +96,13 @@ export function WorkspaceRepositoryRail({
   const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const configureWorkspace = useReposStore((state) => state.configureWorkspace)
+  const handleRepositoryListToggle = useCallback(() => {
+    if (repositoryListVisible) {
+      onCollapseFileArea?.()
+      activateWorkspaceOverview(workspaceRootId)
+    }
+    toggleRepositoryList(workspaceRootId)
+  }, [activateWorkspaceOverview, onCollapseFileArea, repositoryListVisible, toggleRepositoryList, workspaceRootId])
   const branchQuery = useBranchWorkspaceQuery(workspaceRootId)
   const branchItems = branchQuery.data?.ok ? branchQuery.data.items : []
   const auxiliaryCandidates = branchQuery.data?.ok ? branchQuery.data.auxiliaryCandidates : []
@@ -201,6 +207,15 @@ export function WorkspaceRepositoryRail({
             available: repo.availability.phase === 'available',
             branches: repo.data.branches.map((branch) => branch.name),
             defaultBranch,
+            branchDetails: Object.fromEntries(
+              repo.data.branches.map((branch) => [
+                branch.name,
+                {
+                  ...(branch.tracking ? { tracking: branch.tracking } : {}),
+                  ...(branch.trackingGone ? { trackingGone: true } : {}),
+                },
+              ]),
+            ),
             primaryWorktreePath: Object.values(repo.data.worktreesByPath).find((worktree) => worktree.isMain)?.path,
             sourceWorktreeByBranch: Object.fromEntries(
               repo.data.branches.flatMap((branch) =>
@@ -346,8 +361,8 @@ export function WorkspaceRepositoryRail({
     activeContext.kind === 'branch-workspace' ? activeContext.memberRepositoryName : null
   const gitActionTarget = branchItems.find((item) => item.id === gitActionTargetId) ?? null
 
-  const handoffMergeConflictToBranchWorkspace = async (
-    input: BranchWorkspaceMergeConflictAiHandoffInput,
+  const handoffBatchErrorsToBranchWorkspace = async (
+    input: BranchWorkspaceBatchErrorAiHandoffInput,
   ): Promise<boolean> => {
     if (!gitActionTarget) return false
     const context = branchWorkspaceFolderContext(workspaceRootId, gitActionTarget)
@@ -357,7 +372,7 @@ export function WorkspaceRepositoryRail({
         activateBranchWorkspace(workspaceRootId, gitActionTarget.id)
         onOpenDetailArea?.()
       },
-      command: buildBranchWorkspaceMergeConflictAiCommand(input.provider, input.repositoryName, input.conflictWorktree),
+      command: buildBranchWorkspaceBatchErrorAiCommand(input.provider, input.kind, input.failures),
     })
   }
 
@@ -416,11 +431,12 @@ export function WorkspaceRepositoryRail({
                 }
               }}
               onBatchCommit={branchGitActions.executeBatchCommit}
+              onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
               onBatchMergeIn={branchGitActions.executeBatchMergeIn}
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
               onCancel={branchGitActions.cancel}
-              onMergeConflictAiHandoff={handoffMergeConflictToBranchWorkspace}
+              onBatchErrorAiHandoff={handoffBatchErrorsToBranchWorkspace}
             />
           ),
         }
@@ -555,7 +571,7 @@ export function WorkspaceRepositoryRail({
       size="icon-sm"
       aria-label={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
       title={t(repositoryListVisible ? 'workspace.repositories.hide' : 'workspace.repositories.show')}
-      onClick={() => toggleRepositoryList(workspaceRootId)}
+      onClick={handleRepositoryListToggle}
     >
       {repositoryListVisible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
     </Button>

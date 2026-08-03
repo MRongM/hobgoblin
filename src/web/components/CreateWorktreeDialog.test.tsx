@@ -85,7 +85,12 @@ describe('CreateWorktreeDialog', () => {
     expect(onCreate).toHaveBeenCalledWith({
       input: {
         worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
       },
       selections: [],
     })
@@ -113,7 +118,12 @@ describe('CreateWorktreeDialog', () => {
     expect(onCreate).toHaveBeenCalledWith({
       input: {
         worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'feature/base' },
+        },
+        syncBeforeCreate: false,
       },
       selections: [],
     })
@@ -156,7 +166,12 @@ describe('CreateWorktreeDialog', () => {
     expect(onCreate).toHaveBeenCalledWith({
       input: {
         worktreePath: '~/trees/repo-feature-new',
-        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
       },
       selections: [],
     })
@@ -176,10 +191,49 @@ describe('CreateWorktreeDialog', () => {
       input: {
         worktreePath: '/tmp/goblin-repo-main',
         mode: { kind: 'existingBranch', branch: 'main' },
+        syncBeforeCreate: false,
       },
       selections: [],
     })
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  test('defaults existing-branch synchronization on when the branch has a usable upstream', () => {
+    const repo = createRepo()
+    repo.data.branches[0]!.tracking = 'origin/main'
+    const onCreate = vi.fn(async () => {})
+
+    render(<CreateWorktreeDialog open repo={repo} onClose={vi.fn()} onCreate={onCreate} />)
+
+    clickButtonByText('action.create-worktree-mode-existing')
+    expect(input('#cwt-sync-before-create').checked).toBe(true)
+    expect(input('#cwt-sync-before-create').disabled).toBe(false)
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-main',
+        mode: { kind: 'existingBranch', branch: 'main' },
+        syncBeforeCreate: true,
+      },
+      selections: [],
+    })
+  })
+
+  test('turns existing-branch synchronization off when the selected branch has no usable upstream', () => {
+    const repo = createRepo()
+    repo.data.branches[0]!.tracking = 'origin/main'
+    repo.data.branches[1]!.tracking = 'origin/feature/base'
+    repo.data.branches[1]!.trackingGone = true
+    render(<CreateWorktreeDialog open repo={repo} onClose={vi.fn()} onCreate={vi.fn(async () => {})} />)
+
+    clickButtonByText('action.create-worktree-mode-existing')
+    openSelect('#cwt-existing-branch')
+    clickOptionByText('feature/base')
+
+    expect(input('#cwt-sync-before-create').checked).toBe(false)
+    expect(input('#cwt-sync-before-create').disabled).toBe(true)
+    expect(document.body.textContent).toContain('action.create-worktree-sync-no-upstream')
   })
 
   test('creates a tracking worktree from the first remote branch', async () => {
@@ -215,6 +269,7 @@ describe('CreateWorktreeDialog', () => {
       input: {
         worktreePath: '/tmp/goblin-repo-feature-remote',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/remote', localBranch: 'feature/remote' },
+        syncBeforeCreate: false,
       },
       selections: [],
     })
@@ -257,6 +312,7 @@ describe('CreateWorktreeDialog', () => {
       input: {
         worktreePath: '/tmp/goblin-repo-bugfix-login-flow',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/bugfix/login-flow', localBranch: 'bugfix/login-flow' },
+        syncBeforeCreate: false,
       },
       selections: [],
     })
@@ -328,11 +384,83 @@ describe('CreateWorktreeDialog', () => {
     )
   })
 
+  test('keeps worktree dependencies hidden until explicitly enabled', () => {
+    const onBootstrapEnabledChange = vi.fn()
+    render(
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        bootstrapEnabled={false}
+        worktreeBootstrap={{
+          loading: false,
+          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
+          error: false,
+        }}
+        onBootstrapEnabledChange={onBootstrapEnabledChange}
+        onClose={vi.fn()}
+        onCreate={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(button('[aria-label="action.create-worktree-bootstrap-toggle"]').getAttribute('data-state')).toBe(
+      'unchecked',
+    )
+    expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
+
+    click('[aria-label="action.create-worktree-bootstrap-toggle"]')
+
+    expect(onBootstrapEnabledChange).toHaveBeenCalledWith(true)
+  })
+
+  test('does not submit stale dependency choices after dependencies are disabled', () => {
+    const onCreate = vi.fn(async () => {})
+    const worktreeBootstrap = {
+      loading: false,
+      preflight: {
+        kind: 'candidates' as const,
+        candidates: [{ path: '.env', kind: 'file' as const }],
+      },
+      error: false,
+    }
+    const dialog = (bootstrapEnabled: boolean) => (
+      <CreateWorktreeDialog
+        open
+        repo={createRepo()}
+        bootstrapEnabled={bootstrapEnabled}
+        worktreeBootstrap={worktreeBootstrap}
+        onBootstrapEnabledChange={vi.fn()}
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />
+    )
+    render(dialog(true))
+
+    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    act(() => root!.render(dialog(false)))
+    expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
+    setInputValue('#cwt-branch', 'feature/new')
+    click('button[type="submit"]')
+
+    expect(onCreate).toHaveBeenCalledWith({
+      input: {
+        worktreePath: '/tmp/goblin-repo-feature-new',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
+      },
+      selections: [],
+    })
+  })
+
   test('disables submit while worktree bootstrap preflight is loading', () => {
     render(
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: true,
           preflight: null,
@@ -353,6 +481,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: {
@@ -379,7 +508,12 @@ describe('CreateWorktreeDialog', () => {
     expect(onCreate).toHaveBeenCalledWith({
       input: {
         worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
       },
       selections: [
         { path: 'node_modules', mode: 'symlink' },
@@ -394,6 +528,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: {
@@ -418,7 +553,12 @@ describe('CreateWorktreeDialog', () => {
     expect(onCreate).toHaveBeenCalledWith({
       input: {
         worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
       },
       selections: [
         { path: 'node_modules', mode: 'symlink' },
@@ -440,6 +580,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open={open}
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={worktreeBootstrap}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
@@ -487,6 +628,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
@@ -516,6 +658,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
@@ -536,7 +679,12 @@ describe('CreateWorktreeDialog', () => {
     expect(onCreate).toHaveBeenCalledWith({
       input: {
         worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/new',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
       },
       selections: [{ path: '.env', mode: 'copy' }],
       sourceWorktreePath: '/tmp/repo-base',
@@ -548,6 +696,7 @@ describe('CreateWorktreeDialog', () => {
       <CreateWorktreeDialog
         open
         repo={createRepo()}
+        bootstrapEnabled
         worktreeBootstrap={{
           loading: false,
           preflight: { kind: 'candidates', candidates: [] },

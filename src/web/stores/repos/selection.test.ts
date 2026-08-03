@@ -553,18 +553,16 @@ describe('multi-repository workspace selection', () => {
     })
   }
 
-  test('selects a child repository and remembers it for top-level project activation', () => {
+  test('activates a workspace project at Overview instead of restoring its saved repository', () => {
     seedWorkspaceSelection()
 
     useReposStore.getState().activateWorkspaceRepository(rootId, childId)
     useReposStore.getState().setActive(soloId)
     useReposStore.getState().activateProject(rootId)
 
-    expect(useReposStore.getState().activeId).toBe(childId)
-    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({
-      kind: 'repository',
-      repositoryId: childId,
-    })
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().activeProjectId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({ kind: 'overview' })
   })
 
   test('distinguishes a standalone project from the same repository selected inside a workspace', () => {
@@ -672,7 +670,8 @@ describe('multi-repository workspace selection', () => {
     expect(useReposStore.getState().activeId).toBe(soloId)
 
     useReposStore.getState().cycleActive(-1)
-    expect(useReposStore.getState().activeId).toBe(childId)
+    expect(useReposStore.getState().activeId).toBe(rootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[rootId]).toEqual({ kind: 'overview' })
   })
 })
 

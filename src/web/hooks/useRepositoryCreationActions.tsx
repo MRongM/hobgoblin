@@ -190,6 +190,7 @@ function CreateWorktreeDialogConnected({
   onCreate: (request: CreateWorktreeRequest, worktreeBootstrap: WorktreeBootstrapDecision) => void | Promise<void>
 }) {
   const repo = useReposStore((state) => state.repos[repoId])
+  const [bootstrapEnabled, setBootstrapEnabled] = useState(false)
   const [bootstrapPreflight, setBootstrapPreflight] = useState<WorktreeBootstrapPreflight | null>(null)
   const [bootstrapPreflightError, setBootstrapPreflightError] = useState(false)
   const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
@@ -239,10 +240,19 @@ function CreateWorktreeDialogConnected({
 
   useEffect(() => {
     if (!open) {
+      setBootstrapEnabled(false)
       setBootstrapPreflight(null)
       setBootstrapPreflightError(false)
       setBootstrapPreflightLoading(false)
       setSourceContextBranch(undefined)
+      setRequestedSource(undefined)
+      setActiveSource(undefined)
+      return
+    }
+    if (!bootstrapEnabled) {
+      setBootstrapPreflight(null)
+      setBootstrapPreflightError(false)
+      setBootstrapPreflightLoading(false)
       setRequestedSource(undefined)
       setActiveSource(undefined)
       return
@@ -280,7 +290,7 @@ function CreateWorktreeDialogConnected({
         if (!controller.signal.aborted) setBootstrapPreflightLoading(false)
       })
     return () => controller.abort()
-  }, [open, repoId, requestedSource, sourceOptions, sources.initial, sources.primary])
+  }, [bootstrapEnabled, open, repoId, requestedSource, sourceOptions, sources.initial, sources.primary])
 
   if (!repo) return null
 
@@ -303,6 +313,7 @@ function CreateWorktreeDialogConnected({
       open={open}
       repo={repo}
       defaultBranch={defaultBranch}
+      bootstrapEnabled={bootstrapEnabled}
       worktreeBootstrap={{
         loading: bootstrapPreflightLoading,
         preflight: bootstrapPreflight,
@@ -310,6 +321,7 @@ function CreateWorktreeDialogConnected({
         source: activeSource,
         sourceOptions,
       }}
+      onBootstrapEnabledChange={setBootstrapEnabled}
       onBootstrapContextBranchChange={handleBootstrapContextBranchChange}
       onBootstrapSourceChange={setRequestedSource}
       onClose={onClose}

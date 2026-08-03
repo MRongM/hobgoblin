@@ -29,7 +29,7 @@ describe('repo session hydration', () => {
     expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [REPO_A]: 224 })
   })
 
-  test('restores configured remote workspace children before restoring an active child repository', async () => {
+  test('restores configured remote workspace children before activating the workspace Overview', async () => {
     const rootTarget = normalizeRemoteTarget({
       alias: 'example',
       host: 'example.com',
@@ -60,15 +60,16 @@ describe('repo session hydration', () => {
     })
 
     expect(useReposStore.getState().order).toEqual([rootTarget.id])
-    expect(useReposStore.getState().activeId).toBe(child.id)
+    expect(useReposStore.getState().activeId).toBe(rootTarget.id)
+    expect(useReposStore.getState().activeProjectId).toBe(rootTarget.id)
     expect(useReposStore.getState().repos[child.id]?.remote.target).toEqual({ ...rootTarget, ...child })
     expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
-      [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+      [rootTarget.id]: { kind: 'overview' },
     })
     expect(calls.recent).toEqual([])
   })
 
-  test('rediscovers workspace children before restoring an active child repository', async () => {
+  test('rediscovers workspace children before activating the workspace Overview', async () => {
     const root = '/tmp/gbl-workspace'
     const child = `${root}/api`
     const calls = installGoblin({
@@ -93,9 +94,10 @@ describe('repo session hydration', () => {
     })
 
     expect(useReposStore.getState().order).toEqual([root])
-    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().activeProjectId).toBe(root)
     expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
-      [root]: { kind: 'repository', repositoryId: child },
+      [root]: { kind: 'overview' },
     })
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
     expect(calls.recent).toEqual([])
@@ -135,8 +137,9 @@ describe('repo session hydration', () => {
       )
 
     expect(useReposStore.getState().order).toEqual([root, child])
-    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().activeId).toBe(activeProject)
     expect(useReposStore.getState().activeProjectId).toBe(activeProject)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[root]).toEqual({ kind: 'overview' })
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
   })
 

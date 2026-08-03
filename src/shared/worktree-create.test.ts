@@ -7,7 +7,29 @@ import {
 } from '#/shared/worktree-create.ts'
 
 describe('worktree create helpers', () => {
-  test('accepts a new branch create request', () => {
+  test('accepts a new branch create request from a remote branch', () => {
+    expect(
+      normalizeCreateWorktreeInput({
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'origin/main' },
+        },
+        syncBeforeCreate: true,
+      }),
+    ).toEqual({
+      worktreePath: '/tmp/repo-feature',
+      mode: {
+        kind: 'newBranch',
+        newBranch: 'feature/a',
+        creationBase: { kind: 'remoteBranch', remoteRef: 'origin/main' },
+      },
+      syncBeforeCreate: true,
+    })
+  })
+
+  test('normalizes legacy local base refs without enabling synchronization', () => {
     expect(
       normalizeCreateWorktreeInput({
         worktreePath: '/tmp/repo-feature',
@@ -15,7 +37,12 @@ describe('worktree create helpers', () => {
       }),
     ).toEqual({
       worktreePath: '/tmp/repo-feature',
-      mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+      mode: {
+        kind: 'newBranch',
+        newBranch: 'feature/a',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+      },
+      syncBeforeCreate: false,
     })
   })
 
@@ -25,18 +52,28 @@ describe('worktree create helpers', () => {
         worktreePath: '/tmp/repo-existing',
         mode: { kind: 'existingBranch', branch: 'feature/existing' },
       }),
-    ).toMatchObject({ mode: { kind: 'existingBranch', branch: 'feature/existing' } })
+    ).toEqual({
+      worktreePath: '/tmp/repo-existing',
+      mode: { kind: 'existingBranch', branch: 'feature/existing' },
+      syncBeforeCreate: false,
+    })
 
     expect(
       normalizeCreateWorktreeInput({
         worktreePath: '/tmp/repo-detached',
         mode: { kind: 'detached', ref: 'origin/feature/a' },
       }),
-    ).toMatchObject({ mode: { kind: 'detached', ref: 'origin/feature/a' } })
+    ).toEqual({
+      worktreePath: '/tmp/repo-detached',
+      mode: { kind: 'detached', ref: 'origin/feature/a' },
+      syncBeforeCreate: false,
+    })
   })
 
   test('rejects malformed requests', () => {
-    expect(normalizeCreateWorktreeInput({ worktreePath: '', mode: { kind: 'existingBranch', branch: 'main' } })).toBeNull()
+    expect(
+      normalizeCreateWorktreeInput({ worktreePath: '', mode: { kind: 'existingBranch', branch: 'main' } }),
+    ).toBeNull()
     expect(
       normalizeCreateWorktreeInput({
         worktreePath: 'relative/path',
@@ -50,6 +87,31 @@ describe('worktree create helpers', () => {
       }),
     ).toBeNull()
     expect(normalizeCreateWorktreeInput({ worktreePath: '/tmp/repo', mode: { kind: 'unknown' } })).toBeNull()
+    expect(
+      normalizeCreateWorktreeInput({
+        worktreePath: '/tmp/repo',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'origin/HEAD' },
+        },
+        syncBeforeCreate: true,
+      }),
+    ).toBeNull()
+    expect(
+      normalizeCreateWorktreeInput({
+        worktreePath: '/tmp/repo',
+        mode: { kind: 'existingBranch', branch: 'main' },
+        syncBeforeCreate: 'yes',
+      }),
+    ).toBeNull()
+    expect(
+      normalizeCreateWorktreeInput({
+        worktreePath: '/tmp/repo',
+        mode: { kind: 'detached', ref: 'main' },
+        syncBeforeCreate: true,
+      }),
+    ).toBeNull()
   })
 
   test('parses and filters remote-tracking refs', () => {

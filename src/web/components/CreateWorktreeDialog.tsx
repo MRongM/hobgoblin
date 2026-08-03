@@ -16,6 +16,7 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { FormDialog } from '#/web/components/ui/form-dialog.tsx'
 import { Field, FieldDescription, FieldError, FieldLabel } from '#/web/components/ui/field.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
+import { Switch } from '#/web/components/ui/switch.tsx'
 import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.tsx'
 import { useRemotePathSuggestions } from '#/web/hooks/useRemotePathSuggestions.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
@@ -32,7 +33,11 @@ import { defaultWorktreePath, formatWorktreePath, tildify, untildify } from '#/w
 import { cn } from '#/web/lib/cn.ts'
 import { validateBranchName } from '#/shared/refnames.ts'
 import { isResolvableRemotePathInput } from '#/shared/remote-repo.ts'
-import { deriveLocalBranchFromRemoteRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import {
+  deriveLocalBranchFromRemoteRef,
+  isRemoteTrackingRef,
+  type CreateWorktreeInput,
+} from '#/shared/worktree-create.ts'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
 import type { WorktreeBootstrapPreflight, WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
 import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
@@ -56,7 +61,9 @@ interface Props {
   open: boolean
   repo: RepoState
   defaultBranch?: string
+  bootstrapEnabled?: boolean
   worktreeBootstrap?: WorktreeBootstrapPromptState
+  onBootstrapEnabledChange?: (enabled: boolean) => void
   onBootstrapContextBranchChange?: (branch: string) => void
   onBootstrapSourceChange?: (source: RepositoryDependencySource) => void
   onClose: () => void
@@ -75,7 +82,9 @@ export function CreateWorktreeDialog({
   open,
   repo,
   defaultBranch,
+  bootstrapEnabled = false,
   worktreeBootstrap,
+  onBootstrapEnabledChange,
   onBootstrapContextBranchChange,
   onBootstrapSourceChange,
   onClose,
@@ -88,6 +97,7 @@ export function CreateWorktreeDialog({
   const [base, setBase] = useState<string>('')
   const [branch, setBranch] = useState('')
   const [existingBranch, setExistingBranch] = useState('')
+  const [syncBeforeCreate, setSyncBeforeCreate] = useState(false)
   const [remoteRef, setRemoteRef] = useState('')
   const [localBranch, setLocalBranch] = useState('')
   const [detachedRef, setDetachedRef] = useState('')
@@ -115,6 +125,7 @@ export function CreateWorktreeDialog({
     setBase(initialBase)
     setBranch(defaultNewBranchName(initialBase))
     setExistingBranch(initialBase)
+    setSyncBeforeCreate(canSynchronizeBranch(repo, initialBase))
     setRemoteRef('')
     setLocalBranch('')
     setDetachedRef('')
@@ -214,12 +225,14 @@ export function CreateWorktreeDialog({
       : ''
 
   const branchActionBusy = repo.operations.branchAction.phase !== 'idle'
-  const bootstrapBusy = worktreeBootstrap?.loading === true
+  const bootstrapBusy = bootstrapEnabled && worktreeBootstrap?.loading === true
   const validPath = remoteTarget ? isResolvableRemotePathInput(effectivePath) : effectivePath.length > 0
   const input = buildInput()
   const canSubmit = !!input && validPath && !branchActionBusy && !bootstrapBusy
   const bootstrapCandidates =
-    worktreeBootstrap?.preflight?.kind === 'candidates' ? worktreeBootstrap.preflight.candidates : []
+    bootstrapEnabled && worktreeBootstrap?.preflight?.kind === 'candidates'
+      ? worktreeBootstrap.preflight.candidates
+      : []
   const bootstrapSelections = bootstrapCandidates.flatMap((candidate): WorktreeBootstrapSelection[] => {
     const choice = bootstrapChoices[candidate.path] ?? 'skip'
     return choice === 'skip' ? [] : [{ path: candidate.path, mode: choice }]
@@ -244,22 +257,39 @@ export function CreateWorktreeDialog({
     switch (mode) {
       case 'newBranch':
         return branchTrimmed && !branchError && baseExists
-          ? { worktreePath: effectivePath, mode: { kind: 'newBranch', newBranch: branchTrimmed, baseRef: base } }
+          ? {
+              worktreePath: effectivePath,
+              mode: {
+                kind: 'newBranch',
+                newBranch: branchTrimmed,
+                creationBase: { kind: 'localBranch', branch: base },
+              },
+              syncBeforeCreate: false,
+            }
           : null
       case 'existingBranch':
         return existingBranch && existingBranchExists
-          ? { worktreePath: effectivePath, mode: { kind: 'existingBranch', branch: existingBranch } }
+          ? {
+              worktreePath: effectivePath,
+              mode: { kind: 'existingBranch', branch: existingBranch },
+              syncBeforeCreate: syncBeforeCreate && canSynchronizeBranch(repo, existingBranch),
+            }
           : null
       case 'trackRemoteBranch':
         return activeRemoteRef && trackLocalBranch && !localBranchError
           ? {
               worktreePath: effectivePath,
               mode: { kind: 'trackRemoteBranch', remoteRef: activeRemoteRef, localBranch: trackLocalBranch },
+              syncBeforeCreate: false,
             }
           : null
       case 'detached':
         return detachedRefTrimmed && !detachedRefError
-          ? { worktreePath: effectivePath, mode: { kind: 'detached', ref: detachedRefTrimmed } }
+          ? {
+              worktreePath: effectivePath,
+              mode: { kind: 'detached', ref: detachedRefTrimmed },
+              syncBeforeCreate: false,
+            }
           : null
     }
     const exhaustive: never = mode
@@ -384,30 +414,53 @@ export function CreateWorktreeDialog({
         )}
 
         {mode === 'existingBranch' && (
-          <Field className="mt-2" data-invalid={existingBranchError ? true : undefined}>
-            <FieldLabel htmlFor="cwt-existing-branch">{t('action.create-worktree-existing-label')}</FieldLabel>
-            <Select value={existingBranch} onValueChange={setExistingBranch}>
-              <SelectTrigger
-                id="cwt-existing-branch"
-                size="sm"
-                className="w-full"
-                aria-invalid={!!existingBranchError}
-                aria-describedby={existingBranchError ? 'cwt-existing-branch-error' : undefined}
+          <>
+            <Field className="mt-2" data-invalid={existingBranchError ? true : undefined}>
+              <FieldLabel htmlFor="cwt-existing-branch">{t('action.create-worktree-existing-label')}</FieldLabel>
+              <Select
+                value={existingBranch}
+                onValueChange={(next) => {
+                  setExistingBranch(next)
+                  setSyncBeforeCreate(canSynchronizeBranch(repo, next))
+                }}
               >
-                <SelectValue placeholder={t('action.create-worktree-existing-placeholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {repo.data.branches.map((b) => (
-                  <SelectItem key={b.name} value={b.name} textValue={b.name}>
-                    <span className="truncate">{b.name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldError id="cwt-existing-branch-error" reserveHeight aria-live="polite" aria-atomic="true">
-              {existingBranchError}
-            </FieldError>
-          </Field>
+                <SelectTrigger
+                  id="cwt-existing-branch"
+                  size="sm"
+                  className="w-full"
+                  aria-invalid={!!existingBranchError}
+                  aria-describedby={existingBranchError ? 'cwt-existing-branch-error' : undefined}
+                >
+                  <SelectValue placeholder={t('action.create-worktree-existing-placeholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {repo.data.branches.map((b) => (
+                    <SelectItem key={b.name} value={b.name} textValue={b.name}>
+                      <span className="truncate">{b.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError id="cwt-existing-branch-error" reserveHeight aria-live="polite" aria-atomic="true">
+                {existingBranchError}
+              </FieldError>
+            </Field>
+            <Field>
+              <label htmlFor="cwt-sync-before-create" className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  id="cwt-sync-before-create"
+                  type="checkbox"
+                  checked={syncBeforeCreate && canSynchronizeBranch(repo, existingBranch)}
+                  disabled={!canSynchronizeBranch(repo, existingBranch)}
+                  onChange={(event) => setSyncBeforeCreate(event.target.checked)}
+                />
+                {t('action.create-worktree-sync-before-create')}
+              </label>
+              <FieldDescription reserveHeight>
+                {canSynchronizeBranch(repo, existingBranch) ? '' : t('action.create-worktree-sync-no-upstream')}
+              </FieldDescription>
+            </Field>
+          </>
         )}
 
         {mode === 'trackRemoteBranch' && (
@@ -523,7 +576,22 @@ export function CreateWorktreeDialog({
             {!pathName ? t('action.create-worktree-path-disabled-hint') : effectivePath ? displayEffectivePath : ''}
           </FieldDescription>
         </Field>
-        {worktreeBootstrap?.source ? (
+        <Field className="mt-2">
+          <label className="flex items-center gap-2 text-xs font-medium">
+            <Switch
+              checked={bootstrapEnabled}
+              disabled={branchActionBusy}
+              aria-label={t('action.create-worktree-bootstrap-toggle')}
+              title={t('action.create-worktree-bootstrap-toggle')}
+              onCheckedChange={(enabled) => {
+                if (!enabled) setBootstrapChoices({})
+                onBootstrapEnabledChange?.(enabled)
+              }}
+            />
+            <span>{t('action.create-worktree-bootstrap-toggle')}</span>
+          </label>
+        </Field>
+        {bootstrapEnabled && worktreeBootstrap?.source ? (
           <WorktreeBootstrapSourcePicker
             source={worktreeBootstrap.source}
             options={worktreeBootstrap.sourceOptions ?? []}
@@ -543,7 +611,7 @@ export function CreateWorktreeDialog({
             }}
           />
         )}
-        {worktreeBootstrap?.error && (
+        {bootstrapEnabled && worktreeBootstrap?.error && (
           <p role="status" aria-live="polite" className="text-xs leading-4 text-muted-foreground">
             {t('action.create-worktree-bootstrap-preflight-error')}
           </p>
@@ -597,4 +665,9 @@ function defaultRemoteWorktreePath(repoPath: string, name: string): string {
   const baseName = normalized.split('/').filter(Boolean).at(-1) ?? 'worktree'
   const parent = normalized.slice(0, Math.max(0, normalized.lastIndexOf('/'))) || '/'
   return `${parent === '/' ? '' : parent}/${baseName}-${slug}`
+}
+
+function canSynchronizeBranch(repo: RepoState, branch: string): boolean {
+  const details = repo.data.branches.find((candidate) => candidate.name === branch)
+  return !!details?.tracking && !details.trackingGone && isRemoteTrackingRef(details.tracking)
 }

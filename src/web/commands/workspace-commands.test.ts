@@ -487,7 +487,8 @@ function branchWorkspace(rootId: string, worktreePath: string): BranchWorkspaceS
       {
         repositoryName: 'api',
         targetBranch: 'feature/auth',
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created' as const,
         worktreePath,
         progress: 'complete' as const,

@@ -30,6 +30,10 @@ function snapshot(...branches: ReturnType<typeof branch>[]): RepoSnapshot {
   return { current: 'main', branches }
 }
 
+function trackedBranch(name: string, tracking: string, worktreePath?: string): BranchSnapshotInfo {
+  return { ...branch(name, worktreePath), tracking }
+}
+
 function missing(candidatePath: string): BranchWorkspacePathInspection {
   return {
     path: candidatePath,
@@ -47,6 +51,7 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
     ),
     readManifests: vi.fn(async (): Promise<BranchWorkspaceManifestSourceSnapshot> => ({ kind: 'missing' })),
     getSnapshot: vi.fn(async (repoId: string) => snapshots[repoId] ?? null),
+    getRemoteBranches: vi.fn(async (_repoId: string) => [] as string[]),
     getBootstrapPreflight: vi.fn(
       async (): Promise<WorktreeBootstrapPreflightResult> => ({
         ok: true,
@@ -83,7 +88,8 @@ function existingManifest(): BranchWorkspaceManifest {
       {
         repositoryName: 'api',
         targetBranch: BRANCH,
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created',
         worktreePath: path.join(workspacePath, 'api'),
         progress: 'complete',
@@ -123,6 +129,155 @@ function repairDependencies(current: BranchWorkspaceManifest) {
 }
 
 describe('branch workspace create planner', () => {
+  test('plans synchronized local and remote creation bases', async () => {
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(trackedBranch('main', 'origin/main')),
+      [path.join(ROOT, 'web')]: snapshot(branch('main')),
+    })
+    deps.getRemoteBranches.mockImplementation(async (repoId: string) =>
+      repoId.endsWith('/web') ? ['upstream/release'] : [],
+    )
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: true,
+          },
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+            syncBeforeCreate: true,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: true,
+            mode: {
+              kind: 'newBranch',
+              newBranch: BRANCH,
+              creationBase: { kind: 'localBranch', branch: 'main' },
+            },
+          },
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+            syncBeforeCreate: true,
+            mode: {
+              kind: 'newBranch',
+              newBranch: BRANCH,
+              creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+            },
+          },
+        ],
+      },
+    })
+  })
+
+  test('uses a pre-existing target branch and its upstream instead of the submitted creation base', async () => {
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch('main'), trackedBranch(BRANCH, `origin/${BRANCH}`)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.getRemoteBranches.mockResolvedValue(['upstream/release'])
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+            syncBeforeCreate: true,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: BRANCH },
+            syncBeforeCreate: true,
+            mode: { kind: 'existingBranch', branch: BRANCH },
+            branchOrigin: 'pre-existing',
+          },
+        ],
+      },
+    })
+  })
+
+  test('rejects requested synchronization without a usable local upstream', async () => {
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        {
+          operation: 'create',
+          branch: BRANCH,
+          repositories: [
+            {
+              repositoryName: 'api',
+              creationBase: { kind: 'localBranch', branch: 'main' },
+              syncBeforeCreate: true,
+            },
+          ],
+          auxiliaryEntries: [],
+        },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.worktree-sync-unavailable' })
+  })
+
+  test('rejects an unknown remote creation base', async () => {
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.getRemoteBranches.mockResolvedValue(['origin/main'])
+
+    await expect(
+      buildBranchWorkspacePlan(
+        ROOT,
+        {
+          operation: 'create',
+          branch: BRANCH,
+          repositories: [
+            {
+              repositoryName: 'api',
+              creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+              syncBeforeCreate: true,
+            },
+          ],
+          auxiliaryEntries: [],
+        },
+        deps,
+      ),
+    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.base-unavailable' })
+  })
+
   test('plans configured-order repositories with different bases and branch provenance', async () => {
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main')),
@@ -152,12 +307,20 @@ describe('branch workspace create planner', () => {
         repositories: [
           {
             repositoryName: 'api',
-            mode: { kind: 'newBranch', newBranch: BRANCH, baseRef: 'main' },
+            mode: {
+              kind: 'newBranch',
+              newBranch: BRANCH,
+              creationBase: { kind: 'localBranch', branch: 'main' },
+            },
             branchOrigin: 'created',
           },
           {
             repositoryName: 'web',
-            mode: { kind: 'newBranch', newBranch: BRANCH, baseRef: 'develop' },
+            mode: {
+              kind: 'newBranch',
+              newBranch: BRANCH,
+              creationBase: { kind: 'localBranch', branch: 'develop' },
+            },
             branchOrigin: 'created',
           },
         ],
@@ -310,7 +473,7 @@ describe('branch workspace create planner', () => {
     const current = existingManifest()
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
-      [path.join(ROOT, 'web')]: snapshot(branch('develop')),
+      [path.join(ROOT, 'web')]: snapshot(trackedBranch('develop', 'origin/develop')),
     })
     deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
     deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
@@ -324,7 +487,13 @@ describe('branch workspace create planner', () => {
       {
         operation: 'create',
         branch: BRANCH,
-        repositories: [{ repositoryName: 'web', baseBranch: 'develop' }],
+        repositories: [
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'localBranch', branch: 'develop' },
+            syncBeforeCreate: true,
+          },
+        ],
         auxiliaryEntries: [],
       },
       deps,
@@ -334,7 +503,7 @@ describe('branch workspace create planner', () => {
       plan: {
         operation: 'extend',
         branchWorkspaceId: current.id,
-        repositories: [{ repositoryName: 'web' }],
+        repositories: [{ repositoryName: 'web', syncBeforeCreate: true }],
       },
     })
 
@@ -1583,7 +1752,8 @@ function manifestForRemoval(): BranchWorkspaceManifest {
       {
         repositoryName: 'web',
         targetBranch: BRANCH,
-        baseBranch: 'develop',
+        creationBase: { kind: 'localBranch', branch: 'develop' },
+        syncBeforeCreate: false,
         branchOrigin: 'pre-existing',
         worktreePath: path.join(current.path, 'web'),
         progress: 'complete',
@@ -1602,7 +1772,8 @@ function manifestForReduction(): BranchWorkspaceManifest {
       {
         repositoryName: 'worker',
         targetBranch: BRANCH,
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created',
         worktreePath: path.join(current.path, 'worker'),
         progress: 'complete',

@@ -20,10 +20,11 @@ export interface WorktreeListItemActionProjection {
     internalTerminal: WorkspaceItemOpenAction
     tmuxTerminal: WorkspaceItemOpenAction
     restoreTmuxTerminals: WorkspaceItemOpenAction
+    actions: WorkspaceListItemAction[]
   }
 }
 
-const ordinaryMainExclusions = new Set(['checkout', 'createWorktree', 'sync'])
+const ordinaryMainExclusions = new Set(['checkout'])
 const memberMainExclusions = new Set([...ordinaryMainExclusions, 'checkoutTo'])
 const ordinaryDestructiveExclusions = new Set(['deleteBranch'])
 const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, 'removeWorktree', 'cleanupWorktree'])
@@ -44,6 +45,11 @@ export function projectWorktreeListItemActions(
   const destructiveItems = hasWorktree
     ? groups.destructiveItems.filter((item) => !destructiveExclusions.has(item.id))
     : groups.destructiveItems
+  const contextActions = hasWorktree
+    ? groups.mainItems
+        .filter((item) => item.id === 'createWorktree' || item.id === 'sync')
+        .map((item) => branchListItemAction(item, forceDisabled))
+    : []
 
   return {
     editor: editorItem ? branchListItemAction(editorItem, forceDisabled) : undefined,
@@ -72,14 +78,12 @@ export function projectWorktreeListItemActions(
         groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals'),
         forceDisabled,
       ),
+      actions: contextActions,
     },
   }
 }
 
-export function branchListItemAction(
-  item: BranchActionItem,
-  forceDisabled = false,
-): WorkspaceListItemAction {
+export function branchListItemAction(item: BranchActionItem, forceDisabled = false): WorkspaceListItemAction {
   return {
     id: item.id,
     label: item.label,

@@ -17,6 +17,7 @@ import type {
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
@@ -41,6 +42,9 @@ const projectExternalActionState = vi.hoisted(() => ({
   editorBusy: false,
   terminalDisabled: false,
   terminalBusy: false,
+  remoteOnSelect: vi.fn(),
+  remoteDisabled: false,
+  remoteBusy: false,
   internalTerminalOnSelect: vi.fn(),
   internalTerminalDisabled: false,
   internalTerminalBusy: false,
@@ -62,6 +66,8 @@ const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
   getRepositoryWorktreeBootstrapPreflight: vi.fn(),
 }))
+
+const rescanWorkspace = vi.fn(async (_rootId: string) => {})
 
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
@@ -132,6 +138,11 @@ vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
         busy: projectExternalActionState.terminalBusy,
         iconPref: 'ghostty',
         onSelect: () => projectExternalActionState.terminalOnSelect(projectId),
+      },
+      remote: {
+        disabled: projectExternalActionState.remoteDisabled,
+        busy: projectExternalActionState.remoteBusy,
+        onSelect: () => projectExternalActionState.remoteOnSelect(projectId),
       },
     }
   },
@@ -236,6 +247,13 @@ const projects: ProjectSummary[] = [
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   resetReposStore()
@@ -245,7 +263,14 @@ beforeEach(() => {
     currentBranch: 'main',
     remote: { hasRemotes: true },
   })
+  rescanWorkspace.mockReset()
+  rescanWorkspace.mockResolvedValue(undefined)
+  useReposStore.setState({ rescanWorkspace })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
   dndState.lastDragEnd = null
   dndState.contextSensors = null
   dndState.sortableItems = null
@@ -259,6 +284,9 @@ beforeEach(() => {
   projectExternalActionState.editorBusy = false
   projectExternalActionState.terminalDisabled = false
   projectExternalActionState.terminalBusy = false
+  projectExternalActionState.remoteOnSelect.mockReset()
+  projectExternalActionState.remoteDisabled = false
+  projectExternalActionState.remoteBusy = false
   projectExternalActionState.internalTerminalOnSelect.mockReset()
   projectExternalActionState.internalTerminalDisabled = false
   projectExternalActionState.internalTerminalBusy = false
@@ -285,6 +313,10 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
   resetReposStore()
 })
@@ -464,6 +496,7 @@ describe('SidebarProjectList', () => {
     expect(items.map((item) => item.textContent?.trim())).toEqual([
       'action.pull-remote-branch',
       'action.create-worktree',
+      'action.remote',
       'terminal.new-with-tmux',
       'terminal.external',
       'Close Repo A',
@@ -518,6 +551,70 @@ describe('SidebarProjectList', () => {
     expect(plainMenuLabels).not.toContain('action.create-worktree')
     expect(onActivate).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('offers the repository remote from Git project More and context menus only', async () => {
+    const { onActivate } = renderList()
+
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).toContain('action.remote')
+    expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain('action.remote')
+
+    const remoteMenuItem = (await openProjectMenu('/repo-a')).find((item) =>
+      item.textContent?.includes('action.remote'),
+    )
+    await act(async () => {
+      remoteMenuItem?.click()
+      await Promise.resolve()
+    })
+    await clickContextMenuItem(projectRow('/repo-a'), 'action.remote')
+
+    expect(projectExternalActionState.remoteOnSelect).toHaveBeenNthCalledWith(1, '/repo-a')
+    expect(projectExternalActionState.remoteOnSelect).toHaveBeenNthCalledWith(2, '/repo-a')
+    expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('offers workspace repository detection only for an ordinary plain project', async () => {
+    const { onActivate, onClose } = renderList()
+
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).not.toContain(
+      'workspace.detect-repositories',
+    )
+    const detect = (await openProjectMenu('/repo-b')).find((item) =>
+      item.textContent?.includes('workspace.detect-repositories'),
+    )
+
+    expect(detect).toBeDefined()
+    await act(async () => {
+      detect?.click()
+      await Promise.resolve()
+    })
+
+    expect(rescanWorkspace).toHaveBeenCalledWith('/repo-b')
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('hides workspace repository detection after a plain project is recognized as a workspace', async () => {
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        '/repo-b': {
+          rootId: '/repo-b',
+          repositoryIds: ['/repo-b/api'],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    }))
+    renderList()
+
+    expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain(
+      'workspace.detect-repositories',
+    )
   })
 
   test('offers destructive tmux cleanup from More without activating or closing the project', async () => {
@@ -637,6 +734,7 @@ describe('SidebarProjectList', () => {
 
     expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
       'worktrees.open-in-editor-label',
+      'action.remote',
       'terminal.external',
       'terminal.internal',
       'terminal.new-with-tmux',

@@ -166,13 +166,11 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
 
     activateProject(id: string) {
       const state = get()
-      const workspace = state.workspaceProjects[id]
-      if (!workspace) {
+      if (!state.workspaceProjects[id]) {
         get().setActive(id)
         return
       }
-      const context = workspaceActiveContext(state, id, branchWorkspaceSnapshots(id))
-      activateWorkspaceContext(set, state, id, context)
+      activateWorkspaceContext(set, state, id, { kind: 'overview' })
     },
 
     activateWorkspaceOverview(rootId: string) {

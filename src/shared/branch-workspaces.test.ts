@@ -14,8 +14,16 @@ describe('branch workspace contracts', () => {
         operation: 'create',
         branch: ' feature/auth ',
         repositories: [
-          { repositoryName: 'web', baseBranch: ' main ' },
-          { repositoryName: 'api', baseBranch: 'release' },
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'localBranch', branch: ' main ' },
+            syncBeforeCreate: true,
+          },
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+            syncBeforeCreate: true,
+          },
         ],
         auxiliaryEntries: [
           { name: 'README.md', mode: 'symlink' },
@@ -28,13 +36,46 @@ describe('branch workspace contracts', () => {
         operation: 'create',
         branch: 'feature/auth',
         repositories: [
-          { repositoryName: 'web', baseBranch: 'main' },
-          { repositoryName: 'api', baseBranch: 'release' },
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: true,
+          },
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+            syncBeforeCreate: true,
+          },
         ],
         auxiliaryEntries: [
           { name: 'README.md', mode: 'symlink' },
           { name: 'docs', mode: 'copy' },
         ],
+      },
+    })
+  })
+
+  test('normalizes legacy base branches without enabling synchronization', () => {
+    expect(
+      normalizeBranchWorkspacePlanRequest({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        auxiliaryEntries: [],
+      }),
+    ).toEqual({
+      ok: true,
+      request: {
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
       },
     })
   })
@@ -47,7 +88,8 @@ describe('branch workspace contracts', () => {
         repositories: [
           {
             repositoryName: 'api',
-            baseBranch: 'main',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: true,
             worktreeBootstrap: {
               kind: 'materialize',
               sourceWorktreePath: '/untrusted/client/path',
@@ -65,7 +107,8 @@ describe('branch workspace contracts', () => {
         repositories: [
           {
             repositoryName: 'api',
-            baseBranch: 'main',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: true,
             worktreeBootstrap: {
               kind: 'materialize',
               candidateScope: 'all-untracked',
@@ -186,6 +229,36 @@ describe('branch workspace contracts', () => {
             repositoryName: 'api',
             baseBranch: 'main',
             worktreeBootstrap: { kind: 'run', configHash: 'sha256:client', configTrusted: false },
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+    ],
+    [
+      'invalid remote creation base',
+      {
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'remoteBranch', remoteRef: 'origin/HEAD' },
+            syncBeforeCreate: true,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+    ],
+    [
+      'invalid synchronization intent',
+      {
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: 'yes',
           },
         ],
         auxiliaryEntries: [],

@@ -23,6 +23,8 @@ const TARGET = normalizeRemoteTarget({
   port: 22,
   remotePath: '/srv/repo',
 })!
+const MACOS_MISSING_TMUX_SERVER_MESSAGE =
+  'error connecting to /private/tmp/tmux-501/default (No such file or directory)'
 
 const tempDirs: string[] = []
 
@@ -81,6 +83,7 @@ describe('remote command scripts', () => {
     expect(hostList.script).toContain('tmux_default_socket="$tmux_socket_dir/default"')
     expect(hostList.script).toContain('tmux -S "$tmux_default_socket" -u list-sessions')
     expect(hostList.script).toContain('legacy-default')
+    expect(hostList.script).toContain('"error connecting to "*"(No such file or directory)"')
     expect(hostKill.script).toContain('tmux_uid=$(id -u)')
     expect(hostKill.script).toContain('tmux_socket="$tmux_socket_dir/hobgoblin-project-v1-44159cd9e973adba7b472e6f"')
     expect(hostKill.script).toContain(
@@ -131,6 +134,24 @@ describe('remote command scripts', () => {
     const environment = { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` }
 
     const absent = await execa('sh', ['-c', invocation.script], { env: environment, reject: false })
+    const macosAbsent = await execa('sh', ['-c', invocation.script], {
+      env: {
+        ...environment,
+        FAKE_PROJECT_MESSAGE: MACOS_MISSING_TMUX_SERVER_MESSAGE,
+        FAKE_LEGACY_MESSAGE: MACOS_MISSING_TMUX_SERVER_MESSAGE,
+      },
+      reject: false,
+    })
+    const macosSuffixedFailure = `${MACOS_MISSING_TMUX_SERVER_MESSAGE}: permission denied`
+    const suffixed = await execa('sh', ['-c', invocation.script], {
+      env: { ...environment, FAKE_PROJECT_MESSAGE: macosSuffixedFailure },
+      reject: false,
+    })
+    const macosMultilineFailure = `${MACOS_MISSING_TMUX_SERVER_MESSAGE}\npermission denied`
+    const multiline = await execa('sh', ['-c', invocation.script], {
+      env: { ...environment, FAKE_PROJECT_MESSAGE: macosMultilineFailure },
+      reject: false,
+    })
     const failed = await execa('sh', ['-c', invocation.script], {
       env: { ...environment, FAKE_PROJECT_MESSAGE: 'permission denied', FAKE_PROJECT_STATUS: '2' },
       reject: false,
@@ -139,6 +160,13 @@ describe('remote command scripts', () => {
     expect(absent.exitCode).toBe(0)
     expect(absent.stdout).toBe('')
     expect(absent.stderr).toBe('')
+    expect(macosAbsent.exitCode).toBe(0)
+    expect(macosAbsent.stdout).toBe('')
+    expect(macosAbsent.stderr).toBe('')
+    expect(suffixed.exitCode).toBe(1)
+    expect(suffixed.stderr).toBe(macosSuffixedFailure)
+    expect(multiline.exitCode).toBe(1)
+    expect(multiline.stderr).toBe(macosMultilineFailure)
     expect(failed.exitCode).toBe(2)
     expect(failed.stderr).toBe('permission denied')
   })
@@ -781,7 +809,11 @@ describe('remote command scripts', () => {
     const existing = buildRemoteCommandInvocation(TARGET, {
       type: 'gitWorktreeAdd',
       path: '/srv/repo',
-      input: { worktreePath: '/srv/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      input: {
+        worktreePath: '/srv/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
     }).script
     expect(existing).toContain("worktree add -- '/srv/repo-feature' 'feature/a'")
     expect(existing).not.toContain('hobgoblin-created-from')
@@ -792,6 +824,7 @@ describe('remote command scripts', () => {
       input: {
         worktreePath: '/srv/repo-feature',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/a', localBranch: 'feature/a' },
+        syncBeforeCreate: false,
       },
     }).script
     expect(tracked).toContain("worktree add -b 'feature/a' --track -- '/srv/repo-feature' 'origin/feature/a'")
@@ -802,16 +835,25 @@ describe('remote command scripts', () => {
       path: '/srv/repo',
       input: {
         worktreePath: '/srv/repo-feature',
-        mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'origin/main' },
+        },
+        syncBeforeCreate: false,
       },
     }).script
-    expect(created).toContain("worktree add -b 'feature/a' -- '/srv/repo-feature' 'main'")
-    expect(created).toContain("config --local 'branch.feature/a.hobgoblin-created-from' 'main'")
+    expect(created).toContain("worktree add -b 'feature/a' -- '/srv/repo-feature' 'origin/main'")
+    expect(created).toContain("config --local 'branch.feature/a.hobgoblin-created-from' 'origin/main'")
 
     const detached = buildRemoteCommandInvocation(TARGET, {
       type: 'gitWorktreeAdd',
       path: '/srv/repo',
-      input: { worktreePath: '/srv/repo-detached', mode: { kind: 'detached', ref: 'origin/feature/a' } },
+      input: {
+        worktreePath: '/srv/repo-detached',
+        mode: { kind: 'detached', ref: 'origin/feature/a' },
+        syncBeforeCreate: false,
+      },
     }).script
     expect(detached).toContain("worktree add --detach -- '/srv/repo-detached' 'origin/feature/a'")
     expect(detached).not.toContain('hobgoblin-created-from')

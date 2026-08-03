@@ -73,7 +73,7 @@ describe('useBranchActions', () => {
     root = null
   })
 
-  test('opens the branch remote URL', async () => {
+  test('opens the repository remote URL from a branch action', async () => {
     const branch = createRepoBranch('feature/no-pr')
     const repo = seedRepoState({
       id: REPO_ID,
@@ -99,7 +99,7 @@ describe('useBranchActions', () => {
       await actions?.openRemote?.()
     })
 
-    expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID, 'feature/no-pr')
+    expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID)
   })
 
   test('resets and submits explicit force removal independently from branch force', async () => {
@@ -368,14 +368,12 @@ describe('openBranchExternalTarget', () => {
     mocks.openRepositoryRemote.mockReset()
   })
 
-  test('opens the branch remote target', async () => {
+  test('opens the repository remote target', async () => {
     mocks.openRepositoryRemote.mockResolvedValue({ ok: true, message: '' })
 
-    await openBranchExternalTarget(REPO_ID, {
-      name: 'feature/no-pr',
-    })
+    await openBranchExternalTarget(REPO_ID)
 
-    expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID, 'feature/no-pr')
+    expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID)
   })
 })
 

@@ -3,7 +3,11 @@ import type {
   BranchWorkspaceGitActionKind,
   BranchWorkspaceGitActionStep,
 } from '#/shared/branch-workspace-git-actions.ts'
-import type { CreateWorktreeMode } from '#/shared/worktree-create.ts'
+import {
+  normalizeWorktreeCreationBase,
+  type CreateWorktreeMode,
+  type WorktreeCreationBase,
+} from '#/shared/worktree-create.ts'
 import {
   normalizeWorktreeBootstrapSourcePath,
   normalizeWorktreeBootstrapSelections,
@@ -50,7 +54,8 @@ export interface BranchWorkspaceAuxiliaryCandidate {
 export interface BranchWorkspaceRepositoryMember {
   repositoryName: string
   targetBranch: string
-  baseBranch: string
+  creationBase: WorktreeCreationBase
+  syncBeforeCreate: boolean
   branchOrigin: BranchWorkspaceBranchOrigin
   worktreePath: string
   progress: BranchWorkspaceProgress
@@ -149,7 +154,8 @@ export interface BranchWorkspaceSnapshot {
 
 export interface BranchWorkspaceRepositorySelection {
   repositoryName: string
-  baseBranch: string
+  creationBase: WorktreeCreationBase
+  syncBeforeCreate: boolean
   worktreeBootstrap?: WorktreeBootstrapDecision
 }
 
@@ -221,7 +227,8 @@ export interface BranchWorkspaceRepositoryPlan {
   repoId: string
   targetBranch: string
   checkedOutBranch?: string
-  baseBranch: string
+  creationBase: WorktreeCreationBase
+  syncBeforeCreate: boolean
   branchOrigin: BranchWorkspaceBranchOrigin
   worktreePath: string
   mode: CreateWorktreeMode
@@ -374,7 +381,11 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
   for (const value of request.repositories) {
     const repository = asRecord(value)
     const repositoryName = normalizedText(repository?.repositoryName)
-    const baseBranch = normalizedText(repository?.baseBranch)
+    const hasCreationBase = repository ? 'creationBase' in repository : false
+    const creationBase = hasCreationBase
+      ? normalizeWorktreeCreationBase(repository?.creationBase)
+      : normalizeWorktreeCreationBase({ kind: 'localBranch', branch: repository?.baseBranch })
+    const syncBeforeCreate = repository?.syncBeforeCreate ?? false
     const hasWorktreeBootstrap = repository ? 'worktreeBootstrap' in repository : false
     const worktreeBootstrap = hasWorktreeBootstrap
       ? normalizeRepositoryWorktreeBootstrap(repository?.worktreeBootstrap)
@@ -382,7 +393,8 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
     if (
       !repositoryName ||
       !isWorkspaceRepositoryName(repositoryName) ||
-      !baseBranch ||
+      !creationBase ||
+      typeof syncBeforeCreate !== 'boolean' ||
       (hasWorktreeBootstrap && !worktreeBootstrap) ||
       repositoryNames.has(repositoryName)
     ) {
@@ -391,7 +403,8 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
     repositoryNames.add(repositoryName)
     repositories.push({
       repositoryName,
-      baseBranch,
+      creationBase,
+      syncBeforeCreate,
       ...(worktreeBootstrap ? { worktreeBootstrap } : {}),
     })
   }

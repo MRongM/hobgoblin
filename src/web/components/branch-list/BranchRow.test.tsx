@@ -20,6 +20,8 @@ const branchActionState = vi.hoisted(() => ({
   internalTerminalOnSelect: vi.fn(),
   tmuxTerminalOnSelect: vi.fn(),
   restoreTmuxTerminalsOnSelect: vi.fn(),
+  createWorktreeOnSelect: vi.fn(),
+  syncOnSelect: vi.fn(),
   pullDisabled: false,
 }))
 
@@ -102,7 +104,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         icon: <span />,
         disabled: false,
         visible: true,
-        onSelect: vi.fn(),
+        onSelect: branchActionState.createWorktreeOnSelect,
       },
       {
         id: 'sync',
@@ -110,7 +112,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         icon: <span />,
         disabled: false,
         visible: true,
-        onSelect: vi.fn(),
+        onSelect: branchActionState.syncOnSelect,
       },
     ],
     externalItems: [
@@ -192,7 +194,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         onSelect: vi.fn(),
       },
     ],
-    dialogs: null,
+    dialogs: <div data-testid="branch-action-dialogs" />,
     inlinePanel: <div data-testid="inline-commit-form">inline commit</div>,
   }),
 }))
@@ -222,6 +224,8 @@ beforeEach(() => {
   branchActionState.internalTerminalOnSelect.mockReset()
   branchActionState.tmuxTerminalOnSelect.mockReset()
   branchActionState.restoreTmuxTerminalsOnSelect.mockReset()
+  branchActionState.createWorktreeOnSelect.mockReset()
+  branchActionState.syncOnSelect.mockReset()
   branchActionState.pullDisabled = false
 })
 
@@ -762,6 +766,8 @@ describe('BranchRow', () => {
       'terminal.internal',
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
+      'action.create-worktree',
+      'action.refresh',
       'terminal.close-all',
       'tmux.cleanup.action',
     ])
@@ -771,12 +777,36 @@ describe('BranchRow', () => {
     await clickContextMenuItem(row, 'terminal.internal')
     await clickContextMenuItem(row, 'terminal.new-with-tmux')
     await clickContextMenuItem(row, 'terminal.restore-directory-tmux')
+    await clickContextMenuItem(row, 'action.create-worktree')
+    await clickContextMenuItem(row, 'action.refresh')
 
     expect(branchActionState.editorOnSelect).toHaveBeenCalledTimes(1)
     expect(branchActionState.externalTerminalOnSelect).toHaveBeenCalledTimes(1)
     expect(branchActionState.internalTerminalOnSelect).toHaveBeenCalledTimes(1)
     expect(branchActionState.tmuxTerminalOnSelect).toHaveBeenCalledTimes(1)
     expect(branchActionState.restoreTmuxTerminalsOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.createWorktreeOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.syncOnSelect).toHaveBeenCalledTimes(1)
+  })
+
+  test('keeps branch action dialogs mounted when only the worktree context menu is shown', () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+
+    expect(document.body.querySelector('[data-testid="branch-action-dialogs"]')).not.toBeNull()
   })
 
   test('does not attach the item context menu to a branch without a worktree', async () => {
@@ -1044,7 +1074,7 @@ describe('BranchRow', () => {
     expect(terminalBtn!.compareDocumentPosition(dropdown!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  test('keeps the worktree menu stable while excluding create, refresh, and delete branch', async () => {
+  test('adds create and refresh to the worktree menu while excluding delete branch', async () => {
     branchActionState.pullDisabled = true
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
@@ -1070,12 +1100,12 @@ describe('BranchRow', () => {
       'open-external-terminal',
       'action.pull',
       'action.push',
+      'action.create-worktree',
+      'action.refresh',
       'action.create-tag',
       'action.remove-worktree',
       'tmux.cleanup.action',
     ])
-    expect(labels).not.toContain('action.create-worktree')
-    expect(labels).not.toContain('action.refresh')
     expect(labels).not.toContain('action.delete-branch')
     expect(items.find((item) => item.textContent?.includes('action.pull'))?.hasAttribute('data-disabled')).toBe(true)
     expect(
@@ -1084,6 +1114,41 @@ describe('BranchRow', () => {
     expect(items.find((item) => item.textContent?.includes('tmux.cleanup.action'))?.getAttribute('data-variant')).toBe(
       'destructive',
     )
+  })
+
+  test('adds worktree creation and refresh to branch workspace member menus', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          branchWorkspaceMember
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const menuLabels = (await openRowMenu()).map((item) => item.textContent?.trim())
+    expect(menuLabels).toContain('action.create-worktree')
+    expect(menuLabels).toContain('action.refresh')
+
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing member worktree row')
+    const contextLabels = (await openContextMenu(row)).map((item) => item.textContent?.trim())
+    expect(contextLabels).toContain('action.create-worktree')
+    expect(contextLabels).toContain('action.refresh')
+
+    await clickContextMenuItem(row, 'action.create-worktree')
+    await clickContextMenuItem(row, 'action.refresh')
+
+    expect(branchActionState.createWorktreeOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.syncOnSelect).toHaveBeenCalledTimes(1)
   })
 
   test('clicking the branch row selects its branch', () => {

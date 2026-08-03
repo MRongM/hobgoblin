@@ -368,7 +368,8 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().repos[api]).toBeDefined()
     expect(useReposStore.getState().repos[api]?.workspaceRootId).toBeUndefined()
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).not.toContain(api)
-    expect(useReposStore.getState().activeId).toBe(web)
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[root]).toEqual({ kind: 'overview' })
   })
 
   test('keeps Overview usable when workspace discovery fails', async () => {
@@ -788,6 +789,87 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().repos[child]?.workspaceRootId).toBe(root)
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
     expect(mocks.stopPortForwardSessionsForRepo).not.toHaveBeenCalledWith(child)
+  })
+
+  test('closing a project activates the next workspace at Overview', () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    const solo = '/tmp/gbl-solo'
+    useReposStore.setState({
+      repos: {
+        [root]: replaceRepo(emptyRepo(root, 'workspace'), (repo) => {
+          repo.isGitRepo = false
+        }),
+        [child]: replaceRepo(emptyRepo(child, 'api'), (repo) => {
+          repo.workspaceRootId = root
+        }),
+        [solo]: emptyRepo(solo, 'solo'),
+      },
+      order: [root, solo],
+      activeId: solo,
+      activeProjectId: solo,
+      workspaceProjects: {
+        [root]: {
+          rootId: root,
+          repositoryIds: [child],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+    })
+
+    useReposStore.getState().closeRepo(solo)
+
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().activeProjectId).toBe(root)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[root]).toEqual({ kind: 'overview' })
+  })
+
+  test('closing an inactive project preserves the active workspace member context', () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    const solo = '/tmp/gbl-solo'
+    useReposStore.setState({
+      repos: {
+        [root]: replaceRepo(emptyRepo(root, 'workspace'), (repo) => {
+          repo.isGitRepo = false
+        }),
+        [child]: replaceRepo(emptyRepo(child, 'api'), (repo) => {
+          repo.workspaceRootId = root
+        }),
+        [solo]: emptyRepo(solo, 'solo'),
+      },
+      order: [root, solo],
+      activeId: child,
+      activeProjectId: root,
+      workspaceProjects: {
+        [root]: {
+          rootId: root,
+          repositoryIds: [child],
+          candidates: [],
+          configured: false,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: { [root]: { kind: 'repository', repositoryId: child } },
+    })
+
+    useReposStore.getState().closeRepo(solo)
+
+    expect(useReposStore.getState().activeId).toBe(child)
+    expect(useReposStore.getState().activeProjectId).toBe(root)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[root]).toEqual({
+      kind: 'repository',
+      repositoryId: child,
+    })
   })
 
   test('closing a workspace keeps member repositories that remain open as standalone projects', () => {

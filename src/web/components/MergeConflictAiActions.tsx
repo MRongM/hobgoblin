@@ -7,9 +7,10 @@ import { useT } from '#/web/stores/i18n.ts'
 interface MergeConflictAiActionsProps {
   onHandoff: (provider: CommitMessageProvider) => Promise<boolean>
   onHandoffComplete: () => void
+  title?: string
 }
 
-export function MergeConflictAiActions({ onHandoff, onHandoffComplete }: MergeConflictAiActionsProps) {
+export function MergeConflictAiActions({ onHandoff, onHandoffComplete, title }: MergeConflictAiActionsProps) {
   const t = useT()
   const mergeConflictAi = useMergeConflictAiActions({ onHandoff })
   if (mergeConflictAi.actions.length === 0) return null
@@ -19,7 +20,9 @@ export function MergeConflictAiActions({ onHandoff, onHandoffComplete }: MergeCo
       data-slot="merge-conflict-ai-actions"
       className="min-w-0 max-w-full rounded-[var(--goblin-brand-radius-md,var(--radius-md))] border border-app-region-border bg-app-region p-2"
     >
-      <div className="mb-2 text-xs font-medium text-muted-foreground">{t('action.merge-conflict-ai-title')}</div>
+      <div className="mb-2 text-xs font-medium text-muted-foreground">
+        {title ?? t('action.merge-conflict-ai-title')}
+      </div>
       <div className="flex flex-wrap gap-2">
         {mergeConflictAi.actions.map((action) => (
           <Button

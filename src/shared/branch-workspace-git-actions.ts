@@ -160,6 +160,7 @@ export interface BranchWorkspaceGitActionMemberResult {
   phase: BranchWorkspaceGitActionMemberPhase
   step?: BranchWorkspaceGitActionStep
   message?: string
+  worktreePath?: string
   reason?: GitFailureReason
   conflictWorktree?: GitConflictWorktree
 }

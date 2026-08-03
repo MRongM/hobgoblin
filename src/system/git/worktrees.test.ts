@@ -36,11 +36,9 @@ describe('worktree git operations', () => {
 
     await getWorktrees('/tmp/repo', { includeStatus: false, signal })
 
-    expect(gitMock).toHaveBeenCalledWith(
-      '/tmp/repo',
-      ['worktree', 'list', '--porcelain', '--expire', 'now'],
-      { signal },
-    )
+    expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['worktree', 'list', '--porcelain', '--expire', 'now'], {
+      signal,
+    })
   })
 
   test.each([
@@ -48,7 +46,12 @@ describe('worktree git operations', () => {
       'newBranch',
       {
         worktreePath: '/tmp/repo-feature',
-        mode: { kind: 'newBranch' as const, newBranch: 'feature/branch', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch' as const,
+          newBranch: 'feature/branch',
+          creationBase: { kind: 'localBranch' as const, branch: 'main' },
+        },
+        syncBeforeCreate: false,
       },
       ['worktree', 'add', '-b', 'feature/branch', '--', '/tmp/repo-feature', 'main'],
     ],
@@ -57,6 +60,7 @@ describe('worktree git operations', () => {
       {
         worktreePath: '/tmp/repo-feature',
         mode: { kind: 'existingBranch' as const, branch: 'feature/branch' },
+        syncBeforeCreate: false,
       },
       ['worktree', 'add', '--', '/tmp/repo-feature', 'feature/branch'],
     ],
@@ -65,6 +69,7 @@ describe('worktree git operations', () => {
       {
         worktreePath: '/tmp/repo-feature',
         mode: { kind: 'trackRemoteBranch' as const, remoteRef: 'origin/feature/branch', localBranch: 'feature/branch' },
+        syncBeforeCreate: false,
       },
       ['worktree', 'add', '-b', 'feature/branch', '--track', '--', '/tmp/repo-feature', 'origin/feature/branch'],
     ],
@@ -73,6 +78,7 @@ describe('worktree git operations', () => {
       {
         worktreePath: '/tmp/repo-detached',
         mode: { kind: 'detached' as const, ref: 'origin/feature/branch' },
+        syncBeforeCreate: false,
       },
       ['worktree', 'add', '--detach', '--', '/tmp/repo-detached', 'origin/feature/branch'],
     ],
@@ -97,10 +103,15 @@ describe('worktree git operations', () => {
       'new branch',
       {
         worktreePath: '/tmp/repo-feature',
-        mode: { kind: 'newBranch' as const, newBranch: 'feature/branch', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch' as const,
+          newBranch: 'feature/branch',
+          creationBase: { kind: 'remoteBranch' as const, remoteRef: 'origin/main' },
+        },
+        syncBeforeCreate: false,
       },
       'feature/branch',
-      'main',
+      'origin/main',
     ],
     [
       'remote-tracking branch',
@@ -111,6 +122,7 @@ describe('worktree git operations', () => {
           remoteRef: 'origin/feature/branch',
           localBranch: 'feature/branch',
         },
+        syncBeforeCreate: false,
       },
       'feature/branch',
       'origin/feature/branch',
@@ -132,10 +144,12 @@ describe('worktree git operations', () => {
     {
       worktreePath: '/tmp/repo-feature',
       mode: { kind: 'existingBranch' as const, branch: 'feature/branch' },
+      syncBeforeCreate: false,
     },
     {
       worktreePath: '/tmp/repo-detached',
       mode: { kind: 'detached' as const, ref: 'origin/feature/branch' },
+      syncBeforeCreate: false,
     },
   ])('does not record a source when worktree creation does not create a branch', async (input) => {
     gitResultWithOptionsMock.mockResolvedValueOnce({ ok: true, message: 'created' })

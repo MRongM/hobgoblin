@@ -29,6 +29,7 @@ import {
   moveRemoteFileTreeEntries,
   pullRemoteBranch,
   fetchRemoteRepository,
+  fetchRemoteRepositoryByName,
   pushRemoteBranch,
   readRemoteFileBase64,
   readRemoteFileTreeBinaryFile,
@@ -960,7 +961,12 @@ describe('remote git helpers', () => {
 
     const result = await createRemoteWorktree(TARGET, {
       worktreePath: 'relative/path',
-      mode: { kind: 'newBranch', newBranch: 'feature/test', baseRef: 'main' },
+      mode: {
+        kind: 'newBranch',
+        newBranch: 'feature/test',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+      },
+      syncBeforeCreate: false,
       run: run as any,
     })
 
@@ -1569,6 +1575,46 @@ describe('remote git helpers', () => {
       timeoutMs: 180_000,
     })
     expect(run).not.toHaveBeenCalledWith({ type: 'gitFetchAll', path: '/srv/repo' }, TARGET, expect.anything())
+  })
+
+  test('fetchRemoteRepositoryByName fetches the exact requested remote', async () => {
+    const run = vi.fn(async (command: { type: string; remote?: string }) =>
+      command.type === 'gitFetchRemote' ? okRemoteResult(`fetched ${command.remote}`) : okRemoteResult(''),
+    )
+    const signal = new AbortController().signal
+
+    await expect(fetchRemoteRepositoryByName(TARGET, 'upstream', { signal, run: run as any })).resolves.toEqual({
+      ok: true,
+      message: 'fetched upstream',
+    })
+    expect(run).toHaveBeenCalledWith({ type: 'gitFetchRemote', path: '/srv/repo', remote: 'upstream' }, TARGET, {
+      signal,
+      timeoutMs: 180_000,
+    })
+  })
+
+  test.each(['bad remote', '-upstream', 'upstream/main'])(
+    'fetchRemoteRepositoryByName rejects invalid remote %s',
+    async (remote) => {
+      const run = vi.fn()
+
+      await expect(fetchRemoteRepositoryByName(TARGET, remote, { run: run as any })).resolves.toEqual({
+        ok: false,
+        message: 'error.invalid-arguments',
+      })
+      expect(run).not.toHaveBeenCalled()
+    },
+  )
+
+  test('fetchRemoteRepositoryByName preserves pre-aborted cancellation', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const run = vi.fn()
+
+    await expect(
+      fetchRemoteRepositoryByName(TARGET, 'upstream', { signal: controller.signal, run: run as any }),
+    ).resolves.toEqual({ ok: false, message: 'cancelled' })
+    expect(run).not.toHaveBeenCalled()
   })
 })
 

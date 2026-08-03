@@ -67,9 +67,20 @@ vi.mock('#/web/ai-terminal-handoff.ts', () => aiTerminalHandoffMocks)
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const originalResizeObserver = globalThis.ResizeObserver
+
+class MockResizeObserver implements ResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
 
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: MockResizeObserver,
+  })
   vi.clearAllMocks()
   mocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
   mocks.generateRepositoryCommitMessage.mockResolvedValue({ ok: true, message: 'feat: generated message' })
@@ -105,6 +116,10 @@ afterEach(() => {
   root = null
   container = null
   document.body.innerHTML = ''
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    value: originalResizeObserver,
+  })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -117,7 +132,7 @@ describe('InlineCommitForm', () => {
   })
 
   test('requests generation from the selected provider', async () => {
-    const onGenerate = vi.fn(async () => {})
+    const onGenerate = vi.fn(async () => null)
 
     render(
       <InlineCommitFormHarness
@@ -131,6 +146,158 @@ describe('InlineCommitForm', () => {
     await flush()
 
     expect(onGenerate).toHaveBeenCalledWith('codex')
+  })
+
+  test('shows an off-by-default auto commit and push switch before the provider buttons', () => {
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        onCommit={vi.fn(async () => {})}
+        onCommitAndPush={vi.fn(async () => {})}
+      />,
+    )
+
+    const toggle = switchByLabel('action.commit-auto-commit-and-push')
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    expect(toggle.compareDocumentPosition(buttonByProvider('codex')) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  test('does not show the auto commit and push switch without push capability', () => {
+    render(<InlineCommitFormHarness availableProviders={['codex']} onCommit={vi.fn(async () => {})} />)
+
+    expect(querySwitchByLabel('action.commit-auto-commit-and-push')).toBeNull()
+  })
+
+  test('hides manual controls while automation is enabled and restores them when disabled', () => {
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        initialMessage="feat: manual message"
+        onCommit={vi.fn(async () => {})}
+        onCommitAndPush={vi.fn(async () => {})}
+      />,
+    )
+
+    expect(document.querySelector('#inline-commit-message')).not.toBeNull()
+    expect(queryButtonByText('dialog.cancel')).not.toBeNull()
+    expect(queryButtonByText('action.commit-confirm')).not.toBeNull()
+    expect(queryButtonByText('action.commit-and-push-confirm')).not.toBeNull()
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+
+    expect(document.querySelector('#inline-commit-message')).toBeNull()
+    expect(queryButtonByText('dialog.cancel')).toBeNull()
+    expect(queryButtonByText('action.commit-confirm')).toBeNull()
+    expect(queryButtonByText('action.commit-and-push-confirm')).toBeNull()
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+
+    expect(textarea('#inline-commit-message').value).toBe('feat: manual message')
+    expect(queryButtonByText('dialog.cancel')).not.toBeNull()
+    expect(queryButtonByText('action.commit-confirm')).not.toBeNull()
+    expect(queryButtonByText('action.commit-and-push-confirm')).not.toBeNull()
+  })
+
+  test('only generates a message while automation remains off', async () => {
+    const onGenerate = vi.fn(async () => 'feat: generated message')
+    const onCommitAndPush = vi.fn(async () => {})
+
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        onGenerate={onGenerate}
+        onCommit={vi.fn(async () => {})}
+        onCommitAndPush={onCommitAndPush}
+      />,
+    )
+
+    clickButtonByProvider('codex')
+    await flush()
+
+    expect(onGenerate).toHaveBeenCalledWith('codex')
+    expect(onCommitAndPush).not.toHaveBeenCalled()
+  })
+
+  test('commits and pushes the generated message when automation is enabled', async () => {
+    const onGenerate = vi.fn(async () => 'feat: generated message')
+    const onCommit = vi.fn(async () => {})
+    const onCommitAndPush = vi.fn(async () => {})
+    const onClose = vi.fn()
+
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        initialMessage="manual message"
+        onGenerate={onGenerate}
+        onClose={onClose}
+        onCommit={onCommit}
+        onCommitAndPush={onCommitAndPush}
+      />,
+    )
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+    clickButtonByProvider('codex')
+    await flush()
+
+    expect(onGenerate).toHaveBeenCalledWith('codex')
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(onCommitAndPush).toHaveBeenCalledWith('feat: generated message')
+    expect(document.querySelector('#inline-commit-message')).toBeNull()
+    expect(document.body.textContent).not.toContain('action.commit-replace-message-title')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  test('stops automation when message generation fails', async () => {
+    const onGenerate = vi.fn(async () => null)
+    const onCommit = vi.fn(async () => {})
+    const onCommitAndPush = vi.fn(async () => {})
+    const onClose = vi.fn()
+
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        onGenerate={onGenerate}
+        onClose={onClose}
+        onCommit={onCommit}
+        onCommitAndPush={onCommitAndPush}
+      />,
+    )
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+    clickButtonByProvider('codex')
+    await flush()
+
+    expect(onCommit).not.toHaveBeenCalled()
+    expect(onCommitAndPush).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('keeps the generated message and error visible when automatic submission fails', async () => {
+    const onCommitAndPush = vi.fn(async () => {
+      throw new Error('commit failed')
+    })
+    const onClose = vi.fn()
+
+    render(
+      <InlineCommitFormHarness
+        availableProviders={['codex']}
+        onGenerate={vi.fn(async () => 'feat: generated message')}
+        onClose={onClose}
+        onCommit={vi.fn(async () => {})}
+        onCommitAndPush={onCommitAndPush}
+      />,
+    )
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+    clickButtonByProvider('codex')
+    await flush()
+
+    expect(document.querySelector('#inline-commit-message')).toBeNull()
+    expect(document.body.textContent).toContain('commit failed')
+    expect(onClose).not.toHaveBeenCalled()
+
+    clickSwitchByLabel('action.commit-auto-commit-and-push')
+    expect(textarea('#inline-commit-message').value).toBe('feat: generated message')
   })
 
   test('shows raw controlled provider errors', () => {
@@ -754,7 +921,7 @@ function InlineCommitFormHarness({
   onClose = vi.fn(),
   onCommit,
   onCommitAndPush,
-  onGenerate = vi.fn(async () => {}),
+  onGenerate = vi.fn(async () => null),
 }: {
   availableProviders?: Array<'codex' | 'claude'>
   initialMessage?: string
@@ -763,7 +930,7 @@ function InlineCommitFormHarness({
   onClose?: () => void
   onCommit: (message: string) => Promise<void>
   onCommitAndPush?: (message: string) => Promise<void>
-  onGenerate?: (provider: 'codex' | 'claude') => Promise<void>
+  onGenerate?: (provider: 'codex' | 'claude') => Promise<string | null>
 }) {
   const [message, setMessage] = useState(initialMessage)
   const [error, setError] = useState<string | null>(initialError)
@@ -856,6 +1023,24 @@ function buttonByProvider(provider: 'codex' | 'claude'): HTMLButtonElement {
   const element = queryButtonByProvider(provider)
   if (!element) throw new Error(`Missing provider button: ${provider}`)
   return element
+}
+
+function querySwitchByLabel(label: string): HTMLButtonElement | null {
+  const element = document.body.querySelector(`[role="switch"][aria-label="${label}"]`)
+  return element instanceof HTMLButtonElement ? element : null
+}
+
+function switchByLabel(label: string): HTMLButtonElement {
+  const element = querySwitchByLabel(label)
+  if (!element) throw new Error(`Missing switch label: ${label}`)
+  return element
+}
+
+function clickSwitchByLabel(label: string) {
+  const element = switchByLabel(label)
+  act(() => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
 }
 
 function setInputValue(selector: string, value: string) {

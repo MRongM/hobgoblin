@@ -308,7 +308,13 @@ describe('workspace routes', () => {
     expect(mocks.planBranchWorkspace).toHaveBeenCalledWith('/workspace', {
       operation: 'create',
       branch: 'feature/auth',
-      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
+        },
+      ],
       auxiliaryEntries: [{ name: 'README.md', mode: 'copy' }],
     })
     expect(mocks.executeBranchWorkspace).toHaveBeenCalledWith('/workspace', {

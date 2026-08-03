@@ -74,6 +74,7 @@ describe('repo web transport helpers', () => {
         {
           worktreePath: '/tmp/repo-feature',
           mode: { kind: 'existingBranch', branch: 'feature/a' },
+          syncBeforeCreate: false,
         },
         { kind: 'skip' },
       ),
@@ -83,6 +84,7 @@ describe('repo web transport helpers', () => {
       cwd: '/tmp/repo',
       worktreePath: '/tmp/repo-feature',
       mode: { kind: 'existingBranch', branch: 'feature/a' },
+      syncBeforeCreate: false,
       worktreeBootstrap: { kind: 'skip' },
     })
   })
@@ -96,7 +98,11 @@ describe('repo web transport helpers', () => {
     const { createRepositoryWorktree } = await import('#/web/repo-client.ts')
     await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
     )
 
@@ -125,7 +131,11 @@ describe('repo web transport helpers', () => {
 
     await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       decision,
     )
 

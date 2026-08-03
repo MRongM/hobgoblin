@@ -98,6 +98,7 @@ export async function executeRepositoryBranchMergeOut(
         {
           worktreePath: destinationWorktreePath,
           mode: { kind: 'existingBranch', branch: input.destinationBranch },
+          syncBeforeCreate: false,
         },
         { kind: 'skip' },
         signal,
@@ -135,13 +136,7 @@ export async function executeRepositoryBranchMergeOut(
 
     if (input.mode === 'pull-merge-push') {
       const pull = dependencies.pull ?? pullRepositoryBranch
-      const pullResult = await pull(
-        input.repoId,
-        input.destinationBranch,
-        destinationWorktreePath,
-        signal,
-        sourceToken,
-      )
+      const pullResult = await pull(input.repoId, input.destinationBranch, destinationWorktreePath, signal, sourceToken)
       if (!pullResult.ok) return await finish(pullResult)
 
       const refreshed = await buildPlan(
@@ -159,13 +154,7 @@ export async function executeRepositoryBranchMergeOut(
     }
 
     const merge = dependencies.merge ?? mergeRepositoryBranch
-    const mergeResult = await merge(
-      input.repoId,
-      destinationWorktreePath,
-      input.sourceBranch,
-      signal,
-      sourceToken,
-    )
+    const mergeResult = await merge(input.repoId, destinationWorktreePath, input.sourceBranch, signal, sourceToken)
     if (!mergeResult.ok) {
       if (mergeResult.reason === 'merge-conflict' && !selectedDestination.requiresTemporaryWorktree) {
         return {

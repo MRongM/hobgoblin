@@ -13,7 +13,7 @@ import { BRANCH_CREATED_FROM_CONFIG_PATTERN, branchCreatedFromConfigKey } from '
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
-import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type {
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapTargetEntry,
@@ -552,7 +552,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
           createScript,
           command.path,
           command.input.mode.newBranch,
-          command.input.mode.baseRef,
+          worktreeCreationBaseRef(command.input.mode.creationBase),
         )
       }
       if (command.input.mode.kind === 'trackRemoteBranch') {
@@ -588,11 +588,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
   return exhaustive
 }
 
-function tmuxListSessionsScript(projectRoot: string): string {
-  const serverName = buildTmuxServerName(projectRoot)
-  if (!serverName) throw new TypeError('error.invalid-arguments')
+function tmuxListFunctionScript(): string[] {
   return [
-    'command -v tmux >/dev/null 2>&1 || exit 127',
     'run_tmux_list() {',
     '  tmux_output=$("$@" 2>&1)',
     '  tmux_status=$?',
@@ -601,11 +598,21 @@ function tmuxListSessionsScript(projectRoot: string): string {
     '    return 0',
     '  fi',
     '  case "$tmux_output" in',
-    '    *"no server running"*|*"failed to connect to server"*|*"no sessions"*) return 0 ;;',
+    '    *"\n"*) ;;',
+    '    "no server running"|"no server running on "*|"failed to connect to server"|"failed to connect to server: No such file or directory"|"failed to connect to server: Connection refused"|"no sessions"|"error connecting to "*"(No such file or directory)") return 0 ;;',
     '  esac',
     '  printf \'%s\\n\' "$tmux_output" >&2',
     '  return "$tmux_status"',
     '}',
+  ]
+}
+
+function tmuxListSessionsScript(projectRoot: string): string {
+  const serverName = buildTmuxServerName(projectRoot)
+  if (!serverName) throw new TypeError('error.invalid-arguments')
+  return [
+    'command -v tmux >/dev/null 2>&1 || exit 127',
+    ...tmuxListFunctionScript(),
     `run_tmux_list tmux -L ${shellQuote(serverName)} -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\t${serverName}`)} || exit $?`,
     `run_tmux_list tmux -u list-sessions -F ${shellQuote(`${TMUX_SESSION_LIST_FORMAT}\tlegacy-default`)} || exit $?`,
   ].join('\n')
@@ -617,19 +624,7 @@ function tmuxListHostSessionsScript(): string {
     'command -v tmux >/dev/null 2>&1 || exit 127',
     'LC_ALL=C',
     'export LC_ALL',
-    'run_tmux_list() {',
-    '  tmux_output=$("$@" 2>&1)',
-    '  tmux_status=$?',
-    '  if [ "$tmux_status" -eq 0 ]; then',
-    '    [ -z "$tmux_output" ] || printf \'%s\\n\' "$tmux_output"',
-    '    return 0',
-    '  fi',
-    '  case "$tmux_output" in',
-    '    *"no server running"*|*"failed to connect to server"*|*"no sessions"*) return 0 ;;',
-    '  esac',
-    '  printf \'%s\\n\' "$tmux_output" >&2',
-    '  return "$tmux_status"',
-    '}',
+    ...tmuxListFunctionScript(),
     ...tmuxSocketDirectoryScript(),
     'if [ -d "$tmux_socket_dir" ]; then',
     '  for tmux_socket in "$tmux_socket_dir"/hobgoblin-project-v1-*; do',
@@ -1506,7 +1501,7 @@ function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
         shellQuote(input.mode.newBranch),
         '--',
         shellQuote(input.worktreePath),
-        shellQuote(input.mode.baseRef),
+        shellQuote(worktreeCreationBaseRef(input.mode.creationBase)),
       ].join(' ')
     case 'existingBranch':
       return ['--', shellQuote(input.worktreePath), shellQuote(input.mode.branch)].join(' ')

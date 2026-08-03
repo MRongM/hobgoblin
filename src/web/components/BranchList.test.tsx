@@ -294,7 +294,8 @@ function successfulBranchWorkspaceRead(
           {
             repositoryName: 'member-repo',
             targetBranch: 'feature/member',
-            baseBranch: 'main',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
             branchOrigin: 'created',
             worktreePath: MEMBER_WORKTREE_PATH,
             progress,
