@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
 }))
 const PROJECT_ROOT = '/srv/projects/example'
 const PROJECT_SERVER_NAME = 'hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0'
+const MACOS_MISSING_TMUX_SERVER_MESSAGE =
+  'error connecting to /private/tmp/tmux-501/default (No such file or directory)'
 
 vi.mock('execa', () => ({
   execa: mocks.execa,
@@ -299,6 +301,54 @@ describe('local tmux commands', () => {
     })
   })
 
+  test('keeps project sessions when the macOS default tmux socket is absent', async () => {
+    const run = vi
+      .fn<TmuxProcessRunner>()
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: '/srv/repo\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        stdout: '',
+        stderr: MACOS_MISSING_TMUX_SERVER_MESSAGE,
+        message: MACOS_MISSING_TMUX_SERVER_MESSAGE,
+      })
+
+    await expect(listLocalTmuxSessions({ projectRoot: PROJECT_ROOT, run })).resolves.toEqual({
+      ok: true,
+      sessions: [
+        {
+          sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+          initialPath: '/srv/repo',
+          terminalNumber: 1,
+          attachedClients: 0,
+          serverName: PROJECT_SERVER_NAME,
+        },
+      ],
+    })
+  })
+
+  test('does not mask additional failures that include the macOS missing-socket message', async () => {
+    for (const diagnostic of [
+      `${MACOS_MISSING_TMUX_SERVER_MESSAGE}: permission denied`,
+      `${MACOS_MISSING_TMUX_SERVER_MESSAGE}\npermission denied`,
+    ]) {
+      const run = vi.fn<TmuxProcessRunner>(async () => ({
+        ok: false,
+        stdout: '',
+        stderr: diagnostic,
+        message: diagnostic,
+      }))
+
+      await expect(listLocalTmuxSessions({ projectRoot: PROJECT_ROOT, run })).resolves.toEqual({
+        ok: false,
+        message: diagnostic,
+      })
+    }
+  })
+
   test('preserves unavailable and malformed-output failures', async () => {
     const unavailable = vi.fn<TmuxProcessRunner>(async () => ({
       ok: false,
@@ -348,6 +398,9 @@ describe('local tmux commands', () => {
   test('recognizes tmux responses that mean an exact session is already missing', () => {
     expect(isTmuxSessionMissingMessage("can't find session: hobgoblin-v1-example")).toBe(true)
     expect(isTmuxSessionMissingMessage('no server running on /tmp/tmux-501/default')).toBe(true)
+    expect(isTmuxSessionMissingMessage(MACOS_MISSING_TMUX_SERVER_MESSAGE)).toBe(true)
+    expect(isTmuxSessionMissingMessage(`${MACOS_MISSING_TMUX_SERVER_MESSAGE}: permission denied`)).toBe(false)
+    expect(isTmuxSessionMissingMessage(`${MACOS_MISSING_TMUX_SERVER_MESSAGE}\npermission denied`)).toBe(false)
     expect(isTmuxSessionMissingMessage('permission denied')).toBe(false)
   })
 })
@@ -367,7 +420,7 @@ describe('local host tmux inventory', () => {
       return {
         exitCode: 1,
         stdout: '',
-        stderr: 'no server running on the default socket',
+        stderr: MACOS_MISSING_TMUX_SERVER_MESSAGE,
       }
     })
     const { listLocalHostTmuxSessions: listHost } = await import('#/system/tmux-cleanup.ts')

@@ -10,6 +10,12 @@ import {
 } from '#/web/components/ui/context-menu.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+
+type WorkspaceItemContextAction = Pick<
+  WorkspaceListItemAction,
+  'id' | 'label' | 'icon' | 'disabled' | 'busy' | 'destructive' | 'onSelect'
+>
 
 export interface WorkspaceItemOpenAction {
   disabled: boolean
@@ -25,6 +31,7 @@ interface WorkspaceItemContextMenuProps {
   internalTerminal: WorkspaceItemOpenAction
   tmuxTerminal: WorkspaceItemOpenAction
   restoreTmuxTerminals?: WorkspaceItemOpenAction
+  actions?: readonly WorkspaceItemContextAction[]
   worktreeTerminalKeys: readonly string[]
   additionalActions?: readonly BranchWorkspaceItemAction[]
   children: ReactElement
@@ -37,6 +44,7 @@ export function WorkspaceItemContextMenu({
   internalTerminal,
   tmuxTerminal,
   restoreTmuxTerminals,
+  actions = [],
   worktreeTerminalKeys,
   additionalActions = [],
   children,
@@ -57,6 +65,18 @@ export function WorkspaceItemContextMenu({
           {restoreTmuxTerminals ? (
             <OpenActionItem action={restoreTmuxTerminals}>{t('terminal.restore-directory-tmux')}</OpenActionItem>
           ) : null}
+          {actions.length > 0 ? <ContextMenuSeparator /> : null}
+          {actions.map((action) => (
+            <ContextMenuItem
+              key={action.id}
+              variant={action.destructive ? 'destructive' : 'default'}
+              disabled={action.disabled || action.busy}
+              onSelect={() => void action.onSelect()}
+            >
+              {action.icon}
+              {action.label}
+            </ContextMenuItem>
+          ))}
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" disabled={closeScope.disabled} onSelect={closeScope.requestClose}>
             <X aria-hidden="true" />

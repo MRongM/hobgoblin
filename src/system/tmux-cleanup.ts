@@ -13,9 +13,9 @@ import {
 
 const TMUX_COMMAND_TIMEOUT_MS = 15_000
 const TMUX_COMMAND = 'tmux'
-const NO_TMUX_SERVER_RE = /(?:no server running|failed to connect to server|no sessions)/iu
-const MISSING_TMUX_SESSION_RE =
-  /(?:no server running|failed to connect to server|no sessions|can't find session|session not found)/iu
+const NO_TMUX_SERVER_RE =
+  /^(?:no server running(?: on [^\r\n]+)?|failed to connect to server(?:: (?:No such file or directory|Connection refused))?|no sessions|error connecting to [^\r\n]+ \(No such file or directory\))$/iu
+const MISSING_TMUX_SESSION_RE = /(?:can't find session|session not found)/iu
 let localTmuxExecutable = TMUX_COMMAND
 
 export const TMUX_SESSION_LIST_FORMAT = `#{${TMUX_INIT_PATH_OPTION}}\t#{${TMUX_TERMINAL_NUMBER_OPTION}}\t#{session_attached}\t#{session_name}`
@@ -246,7 +246,7 @@ export function tmuxHostListResultFromProcessResult(
   fixedServerOrigin?: string,
 ): TmuxHostListResult {
   if (!result.ok) {
-    return NO_TMUX_SERVER_RE.test(`${result.stderr}\n${result.message}`)
+    return isMissingTmuxServerProcessResult(result)
       ? { ok: true, sessions: [] }
       : { ok: false, message: result.message }
   }
@@ -274,7 +274,7 @@ export function tmuxListResultFromProcessResult(
   projectRoot?: string,
 ): TmuxListResult {
   if (!result.ok) {
-    return NO_TMUX_SERVER_RE.test(`${result.stderr}\n${result.message}`)
+    return isMissingTmuxServerProcessResult(result)
       ? { ok: true, sessions: [] }
       : { ok: false, message: result.message }
   }
@@ -314,7 +314,12 @@ export async function killLocalHostTmuxSessionByName(
 }
 
 export function isTmuxSessionMissingMessage(message: string): boolean {
-  return MISSING_TMUX_SESSION_RE.test(message)
+  return NO_TMUX_SERVER_RE.test(message) || MISSING_TMUX_SESSION_RE.test(message)
+}
+
+function isMissingTmuxServerProcessResult(result: Extract<TmuxProcessResult, { ok: false }>): boolean {
+  const diagnostics = [result.stderr, result.message].filter((diagnostic) => diagnostic.length > 0)
+  return diagnostics.length > 0 && diagnostics.every((diagnostic) => NO_TMUX_SERVER_RE.test(diagnostic))
 }
 
 async function runLocalTmuxCommand(args: string[], signal?: AbortSignal): Promise<TmuxProcessResult> {

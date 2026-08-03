@@ -23,6 +23,8 @@ const TARGET = normalizeRemoteTarget({
   port: 22,
   remotePath: '/srv/repo',
 })!
+const MACOS_MISSING_TMUX_SERVER_MESSAGE =
+  'error connecting to /private/tmp/tmux-501/default (No such file or directory)'
 
 const tempDirs: string[] = []
 
@@ -81,6 +83,7 @@ describe('remote command scripts', () => {
     expect(hostList.script).toContain('tmux_default_socket="$tmux_socket_dir/default"')
     expect(hostList.script).toContain('tmux -S "$tmux_default_socket" -u list-sessions')
     expect(hostList.script).toContain('legacy-default')
+    expect(hostList.script).toContain('"error connecting to "*"(No such file or directory)"')
     expect(hostKill.script).toContain('tmux_uid=$(id -u)')
     expect(hostKill.script).toContain('tmux_socket="$tmux_socket_dir/hobgoblin-project-v1-44159cd9e973adba7b472e6f"')
     expect(hostKill.script).toContain(
@@ -131,6 +134,24 @@ describe('remote command scripts', () => {
     const environment = { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` }
 
     const absent = await execa('sh', ['-c', invocation.script], { env: environment, reject: false })
+    const macosAbsent = await execa('sh', ['-c', invocation.script], {
+      env: {
+        ...environment,
+        FAKE_PROJECT_MESSAGE: MACOS_MISSING_TMUX_SERVER_MESSAGE,
+        FAKE_LEGACY_MESSAGE: MACOS_MISSING_TMUX_SERVER_MESSAGE,
+      },
+      reject: false,
+    })
+    const macosSuffixedFailure = `${MACOS_MISSING_TMUX_SERVER_MESSAGE}: permission denied`
+    const suffixed = await execa('sh', ['-c', invocation.script], {
+      env: { ...environment, FAKE_PROJECT_MESSAGE: macosSuffixedFailure },
+      reject: false,
+    })
+    const macosMultilineFailure = `${MACOS_MISSING_TMUX_SERVER_MESSAGE}\npermission denied`
+    const multiline = await execa('sh', ['-c', invocation.script], {
+      env: { ...environment, FAKE_PROJECT_MESSAGE: macosMultilineFailure },
+      reject: false,
+    })
     const failed = await execa('sh', ['-c', invocation.script], {
       env: { ...environment, FAKE_PROJECT_MESSAGE: 'permission denied', FAKE_PROJECT_STATUS: '2' },
       reject: false,
@@ -139,6 +160,13 @@ describe('remote command scripts', () => {
     expect(absent.exitCode).toBe(0)
     expect(absent.stdout).toBe('')
     expect(absent.stderr).toBe('')
+    expect(macosAbsent.exitCode).toBe(0)
+    expect(macosAbsent.stdout).toBe('')
+    expect(macosAbsent.stderr).toBe('')
+    expect(suffixed.exitCode).toBe(1)
+    expect(suffixed.stderr).toBe(macosSuffixedFailure)
+    expect(multiline.exitCode).toBe(1)
+    expect(multiline.stderr).toBe(macosMultilineFailure)
     expect(failed.exitCode).toBe(2)
     expect(failed.stderr).toBe('permission denied')
   })

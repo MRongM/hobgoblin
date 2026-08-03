@@ -217,7 +217,7 @@ The branch whose explorer and detail surfaces the user is currently viewing. Cha
 _Avoid_: Active branch, current branch
 
 **Branch creation source**:
-The exact local or remote branch ref selected when Hobgoblin creates a local branch. It is immutable creation provenance recorded beside that local branch, may be unknown for branches created outside Hobgoblin or before provenance recording existed, and is distinct from current commit ancestry, upstream tracking, the repository default branch, and a branch workspace base branch.
+The exact local or remote branch ref selected when Hobgoblin creates a local branch. It is immutable creation provenance recorded beside that local branch, may be unknown for branches created outside Hobgoblin or before provenance recording existed, and is distinct from current commit ancestry, upstream tracking, the repository default branch, and a branch workspace creation base.
 _Avoid_: Baseline, inferred parent branch, merge destination
 
 **File area**:
@@ -285,16 +285,20 @@ A branch-specific, indivisible working context owned by one configured workspace
 _Avoid_: Project, workspace repository, generic subworkspace
 
 **Workspace worktree**:
-A set of same-named linked worktrees belonging to one branch workspace. The configured repository list is the candidate pool; each branch workspace chooses its own members, every member remains an independent Git operation boundary, and newly created target branches may use different base branches per repository. Member provenance distinguishes target branches created for the branch workspace from branches that already existed. A same-named worktree already checked out elsewhere remains repository-only and is never moved or claimed automatically.
+A set of same-named linked worktrees belonging to one branch workspace. The configured repository list is the candidate pool; each branch workspace chooses its own members, every member remains an independent Git operation boundary, and newly created target branches may use different creation bases per repository. Member provenance distinguishes target branches created for the branch workspace from branches that already existed. A same-named worktree already checked out elsewhere remains repository-only and is never moved or claimed automatically.
 _Avoid_: Shared worktree, combined worktree
 
 **Branch workspace member worktree**:
 The linked worktree contributed by one repository member to a branch workspace while remaining that repository's independent Git operation boundary.
 _Avoid_: Subrepository, child repository worktree, nested workspace
 
-**Branch workspace base branch**:
-The repository-specific local branch used as the creation base when a branch workspace member's target branch must be created. When it is already checked out, it may also guide worktree bootstrap source selection, with the primary worktree as fallback. It records creation and materialization intent only; it is not a batch merge-in source, batch merge-out destination, upstream, or inferred provenance.
-_Avoid_: Merge destination, source branch, upstream, current branch
+**Branch workspace creation base**:
+The repository-specific local or remote branch ref used when a branch workspace member's target branch must be created. A checked-out local base may also guide worktree bootstrap source selection, with the repository primary worktree available as an explicit alternative; the base is not a batch merge source, merge destination, or upstream.
+_Avoid_: Base branch, merge destination, source branch, upstream, current branch
+
+**Worktree creation source sync**:
+An explicit per-create choice that refreshes the selected local branch from its usable remote upstream, or fetches the selected remote branch, before any dependent branch or worktree is created. It defaults on when remote synchronization is available, and a failed sync prevents the corresponding worktree creation rather than falling back to stale local state.
+_Avoid_: Background fetch, post-create pull, automatic fallback
 
 **Workspace overview**:
 The parent-level workspace view that lists its branch workspaces in the same contextual list position used for repository worktrees, while retaining the workspace root's file and terminal context. Selecting it does not select a branch workspace.
