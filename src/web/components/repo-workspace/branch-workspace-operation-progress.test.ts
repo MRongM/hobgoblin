@@ -213,7 +213,8 @@ function member(name: string, progress: BranchWorkspaceProgress): BranchWorkspac
   return {
     repositoryName: name,
     targetBranch: 'feature/example',
-    baseBranch: 'main',
+    creationBase: { kind: 'localBranch', branch: 'main' },
+    syncBeforeCreate: false,
     branchOrigin: 'created',
     worktreePath: `/workspace/hobgoblin-feature/${name}`,
     progress,

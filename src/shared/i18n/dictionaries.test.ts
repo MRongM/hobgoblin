@@ -224,6 +224,34 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.reduce-retains-branches']).toContain('保留')
   })
 
+  test('includes worktree creation source and synchronization copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.repositories-select-all',
+      'workspace.branch-workspace.creation-base-local',
+      'workspace.branch-workspace.creation-base-remote',
+      'workspace.branch-workspace.sync-before-create',
+      'workspace.branch-workspace.sync-before-create-named',
+      'workspace.branch-workspace.sync-no-upstream',
+      'workspace.branch-workspace.existing-target-used',
+      'workspace.branch-workspace.remote-branches-loading',
+      'workspace.branch-workspace.remote-branches-error',
+      'workspace.branch-workspace.preview-source-local',
+      'workspace.branch-workspace.preview-source-remote',
+      'workspace.branch-workspace.preview-source-existing-target',
+      'workspace.branch-workspace.preview-sync-enabled',
+      'workspace.branch-workspace.preview-sync-disabled',
+      'action.create-worktree-sync-before-create',
+      'action.create-worktree-sync-no-upstream',
+      'error.worktree-sync-unavailable',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.sync-before-create']).toBe('创建前同步')
+    expect(zh['workspace.branch-workspace.creation-base-remote']).toContain('远程分支')
+  })
+
   test('uses the agreed branch workspace terminology in Chinese product copy', () => {
     for (const [key, value] of Object.entries(zh)) {
       expect(value, key).not.toContain('子仓库')

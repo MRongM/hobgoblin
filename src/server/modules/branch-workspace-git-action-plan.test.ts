@@ -20,7 +20,8 @@ function manifest(): BranchWorkspaceManifest {
     repositories: ['api', 'web'].map((repositoryName) => ({
       repositoryName,
       targetBranch: 'feature/a',
-      baseBranch: 'main',
+      creationBase: { kind: 'localBranch' as const, branch: 'main' },
+      syncBeforeCreate: false,
       branchOrigin: 'created' as const,
       worktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
       progress: 'complete' as const,
@@ -130,11 +131,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
   test('skips snapshot worktree status because member status is read separately', async () => {
     const deps = dependencies()
 
-    await buildBranchWorkspaceGitActionPlan(
-      ROOT,
-      { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID },
-      deps,
-    )
+    await buildBranchWorkspaceGitActionPlan(ROOT, { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID }, deps)
 
     expect(deps.getSnapshot).toHaveBeenNthCalledWith(1, '/workspace/api', undefined, {
       includeWorktreeStatus: false,

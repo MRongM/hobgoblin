@@ -2,7 +2,7 @@
 
 ## Goal
 
-Expose the existing repository-scoped `New worktree` and `Sync` actions from both interaction menus of an ordinary repository worktree row:
+Expose the existing repository-scoped `New worktree` and `Sync` actions from both interaction menus of ordinary and branch workspace member worktree rows:
 
 - The row-end More menu.
 - The row right-click context menu.
@@ -11,15 +11,14 @@ Expose the existing repository-scoped `New worktree` and `Sync` actions from bot
 
 In scope:
 
-- Add `action.create-worktree` and `action.refresh` to an ordinary worktree row's More menu.
-- Add the same two actions to the ordinary worktree row's right-click context menu.
+- Add `action.create-worktree` and `action.refresh` to ordinary and branch workspace member worktree More menus.
+- Add the same two actions to both worktree row representations' right-click context menus.
 - Reuse the existing connected worktree dialog, branch-action write path, bootstrap preflight, repository sync pipeline, busy state, disabled state, and error reporting.
 - Keep the action order `New worktree`, then `Sync`, matching the existing `mainItems` projection.
 - Keep both actions available from the context menu even when inline row actions are hidden.
 
 Out of scope:
 
-- Branch workspace member worktrees. Their action policy continues to omit worktree creation and refresh as required by `docs/ui-conventions.md`.
 - Branch rows without a linked worktree.
 - Detached worktree rows.
 - New server routes, Git commands, state, realtime paths, translations, or dialog behavior.
@@ -29,9 +28,9 @@ Out of scope:
 
 ### 1. Extend the existing worktree action projection (recommended)
 
-Change `projectWorktreeListItemActions` so its ordinary-worktree policy includes the two existing main actions in the More menu and projects the same actions into a focused context-menu group. `BranchRow` only wires that projection into `WorkspaceItemContextMenu`.
+Change `projectWorktreeListItemActions` so both worktree policies include the two existing main actions in the More menu and project the same actions into a focused context-menu group. `BranchRow` already wires that projection into `WorkspaceItemContextMenu`; `BranchWorkspaceMemberRow` wires the same group while preserving its member-only lifecycle exclusions.
 
-This keeps capability, busy, label, icon, and callback behavior owned by `useBranchActionItems`, preserves one action source, and makes the ordinary/member distinction directly testable.
+This keeps capability, busy, label, icon, and callback behavior owned by `useBranchActionItems`, preserves one action source, and keeps member-only lifecycle restrictions directly testable.
 
 ### 2. Recreate both actions inside `BranchRow`
 
@@ -43,7 +42,7 @@ The context menu could consume every projected menu group. This would expose unr
 
 ## Interaction Design
 
-The ordinary worktree More menu retains its existing four groups. Its repository-action group now contains the existing actions in their source order, including `New worktree` and `Sync` after pull/push.
+The ordinary and member worktree More menus retain their existing groups. Their repository-action group contains the existing actions in source order, including `New worktree` and `Sync` after pull/push. Member rows continue to omit checkout and independent removal actions.
 
 The right-click menu keeps the existing editor and terminal group first. A new worktree-action group follows it:
 
@@ -64,10 +63,12 @@ Both entries use their existing disabled and busy states. The context menu disab
 `projectWorktreeListItemActions` performs presentation policy only:
 
 - Ordinary worktree: include `createWorktree` and `sync` in both requested menu surfaces.
-- Branch workspace member: continue excluding both actions.
+- Branch workspace member: include the same two repository-scoped actions while continuing to exclude checkout, checkout-to, individual worktree cleanup/removal, and branch deletion.
 - Non-worktree branch: preserve its existing projection.
 
-`BranchRow` selects the member policy when its existing `branchWorkspaceMember` marker is true, so repository-list representations of a member worktree retain the same lifecycle restrictions as dedicated member rows.
+`BranchRow` selects the member policy when its existing `branchWorkspaceMember` marker is true, so repository-list representations of a member worktree expose the new entries without losing member lifecycle restrictions.
+
+`BranchWorkspaceMemberRow` passes the projected context actions to `WorkspaceItemContextMenu` and retains the existing branch-action dialog host. When a member target cannot be resolved, its placeholder action groups expose both entries disabled rather than creating a second callback or mutation path.
 
 `WorkspaceItemContextMenu` gains a small optional list of already-localized context actions. It only renders that group; it does not own repository logic or translate action semantics.
 
@@ -86,10 +87,10 @@ No new state is introduced. Repository data remains runtime-coherent and server-
 
 Use TDD at the renderer projection and component boundaries:
 
-- First change the projection test so an ordinary worktree More menu and context group require both actions while a branch workspace member still omits them.
+- First change the projection test so both ordinary and member worktree More menus and context groups require both actions while member lifecycle exclusions remain unchanged.
 - Run that focused test and observe the expected failure caused by the current exclusions.
 - Implement the minimal projection change and make the test pass.
-- Add failing context-menu and `BranchRow` tests for order, disabled/busy behavior, and callback dispatch.
+- Add failing context-menu, `BranchRow`, and `BranchWorkspaceMemberRow` tests for order, unavailable state, and callback dispatch.
 - Wire the context action group and make the focused component tests pass.
 - Run `bun run typecheck`, `bun run test`, and `bun run check:architecture`.
 
@@ -99,9 +100,9 @@ The feature uses existing terms and does not alter the domain model:
 
 - A `Repository` remains the single Git operation boundary.
 - An ordinary worktree action may dispatch a repository-wide synchronization.
-- A branch workspace member worktree remains governed by its parent lifecycle and does not gain worktree creation or refresh actions.
+- A branch workspace member worktree remains governed by its parent lifecycle while exposing repository-scoped worktree creation and refresh actions that do not change branch workspace membership.
 
-No `CONTEXT.md` glossary change is needed. No ADR is justified because this is a reversible UI entry-point change with no new architectural boundary.
+The `Branch workspace member summary` glossary entry is updated inline to distinguish these repository-scoped actions from prohibited member lifecycle actions. No ADR is justified because this is a reversible UI entry-point change with no new architectural boundary.
 
 ## Engineering Principles
 

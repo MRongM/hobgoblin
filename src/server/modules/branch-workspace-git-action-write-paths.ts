@@ -812,7 +812,11 @@ async function prepareBatchMergeDestination(
   const created = await attemptMemberOperation(() =>
     operations.createWorktree(
       member.repoId,
-      { worktreePath, mode: { kind: 'existingBranch', branch: member.destination.branch } },
+      {
+        worktreePath,
+        mode: { kind: 'existingBranch', branch: member.destination.branch },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
       signal,
       undefined,

@@ -46,8 +46,10 @@ import path from 'node:path'
 import PQueue from 'p-queue'
 import {
   isAbsoluteWorktreePath,
+  isRemoteTrackingRef,
   normalizeCreateWorktreeInput,
   type CreateWorktreeInput,
+  type CreateWorktreeMode,
 } from '#/shared/worktree-create.ts'
 import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 
@@ -351,12 +353,57 @@ export async function createRepositoryWorktree(
   if (!normalized) return { ok: false, message: 'error.invalid-arguments' }
   return await runCreateWorktreeServiceOperation(cwd, async () => {
     const result = await runWithRepoBackend(cwd, async (backend) => {
-      return await backend.createWorktree(normalized, signal, { worktreeBootstrap })
+      if (!normalized.syncBeforeCreate) {
+        return await backend.createWorktree(normalized, signal, { worktreeBootstrap })
+      }
+      const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+      return await runServerCancellable(cwd, 'user', async (networkSignal) => {
+        return await withMergedAbortSignal([signal, networkSignal], async (mergedSignal) => {
+          const synchronized = await synchronizeWorktreeCreationSource(
+            backend,
+            normalized.mode,
+            mergedSignal,
+            networkOptions,
+          )
+          if (!synchronized.ok) return synchronized
+          const created = await backend.createWorktree(normalized, mergedSignal, { worktreeBootstrap })
+          return created.ok ? created : { ...created, repoChanged: true }
+        })
+      })
     })
     return result.ok || result.repoChanged
       ? publishSnapshotInvalidationAfterGitAttempt(cwd, result, sourceToken, options)
       : result
   })
+}
+
+async function synchronizeWorktreeCreationSource(
+  backend: Awaited<ReturnType<typeof resolveRepoBackend>>,
+  mode: CreateWorktreeMode,
+  signal?: AbortSignal,
+  networkOptions?: Awaited<ReturnType<typeof getGitNetworkOptions>>,
+): Promise<ExecResult> {
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (mode.kind === 'newBranch' && mode.creationBase.kind === 'remoteBranch') {
+    const slash = mode.creationBase.remoteRef.indexOf('/')
+    return await backend.fetchRemote(mode.creationBase.remoteRef.slice(0, slash), signal, networkOptions)
+  }
+
+  const branch =
+    mode.kind === 'existingBranch'
+      ? mode.branch
+      : mode.kind === 'newBranch' && mode.creationBase.kind === 'localBranch'
+        ? mode.creationBase.branch
+        : null
+  if (!branch) return { ok: false, message: 'error.invalid-arguments' }
+
+  const snapshot = await backend.getSnapshot(signal, { includeWorktreeStatus: false, includeRemote: false })
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  const source = snapshot?.branches.find((candidate) => candidate.name === branch)
+  if (!source?.tracking || source.trackingGone || !isRemoteTrackingRef(source.tracking)) {
+    return { ok: false, message: 'error.worktree-sync-unavailable' }
+  }
+  return await backend.pull(branch, source.worktree?.path, signal, networkOptions)
 }
 
 async function runCreateWorktreeServiceOperation<T>(repoId: string, task: () => Promise<T>): Promise<T> {

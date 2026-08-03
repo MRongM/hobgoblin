@@ -122,7 +122,13 @@ describe('useBranchWorkspaceActions', () => {
       state!.requestPlan({
         operation: 'create',
         branch: 'feature/auth',
-        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
         auxiliaryEntries: [],
       }),
     )
@@ -160,7 +166,13 @@ describe('useBranchWorkspaceActions', () => {
       state!.requestPlan({
         operation: 'create',
         branch: 'feature/auth',
-        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
         auxiliaryEntries: [],
       }),
     )
@@ -193,7 +205,13 @@ describe('useBranchWorkspaceActions', () => {
     const request = {
       operation: 'create' as const,
       branch: 'feature/auth',
-      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch' as const, branch: 'main' },
+          syncBeforeCreate: false,
+        },
+      ],
       auxiliaryEntries: [],
     }
 

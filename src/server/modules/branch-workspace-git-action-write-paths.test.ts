@@ -1163,7 +1163,11 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     expect(temporaryPath).toContain('/workspace/.hobgoblin-batch-merge-api-')
     expect(createWorktree).toHaveBeenCalledWith(
       '/workspace/api',
-      { worktreePath: temporaryPath, mode: { kind: 'existingBranch', branch: 'staging' } },
+      {
+        worktreePath: temporaryPath,
+        mode: { kind: 'existingBranch', branch: 'staging' },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
       expect.any(AbortSignal),
       undefined,

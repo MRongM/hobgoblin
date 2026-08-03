@@ -19,7 +19,14 @@ import {
   getCommitDetail as getLocalCommitDetail,
   getCommitHistory as getLocalCommitHistory,
 } from '#/system/git/history.ts'
-import { fetchAll, getBrowserRemoteUrl, getRemoteInfo, pullBranch, pushBranch } from '#/system/git/remote.ts'
+import {
+  fetchAll,
+  fetchRemote as fetchLocalRemote,
+  getBrowserRemoteUrl,
+  getRemoteInfo,
+  pullBranch,
+  pushBranch,
+} from '#/system/git/remote.ts'
 import {
   createLocalTag as createLocalGitTag,
   deleteLocalTag as deleteLocalGitTag,
@@ -64,6 +71,7 @@ import {
   pushLocalTag as pushRemoteLocalTag,
   discardRemoteChangesForPaths,
   fetchRemoteRepository,
+  fetchRemoteRepositoryByName,
   getRemoteBrowserUrl,
   getRemoteCommitDetail,
   getRemoteHistory,
@@ -124,6 +132,7 @@ export interface RepoBackend {
   getRemoteTags(signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<string[]>
   getLocalTags(signal?: AbortSignal): Promise<string[]>
   fetch(signal: AbortSignal, networkOptions?: GitNetworkOptions): Promise<{ ok: boolean; message: string }>
+  fetchRemote(remote: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   checkout(branch: string, signal?: AbortSignal): Promise<ExecResult>
   checkoutWorktree(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
   pull(
@@ -377,6 +386,12 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!available.ok) return available
       return await fetchAll(repoId, signal, networkOptions)
     },
+    async fetchRemote(remote, signal, networkOptions) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      const available = await probeGitRepository(repoId)
+      if (!available.ok) return available
+      return await fetchLocalRemote(repoId, remote, signal, networkOptions)
+    },
     async checkout(branch, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await checkoutBranch(repoId, branch, signal)
@@ -600,6 +615,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async fetch(signal) {
       return await fetchRemoteRepository(target, { signal })
+    },
+    async fetchRemote(remote, signal) {
+      return await fetchRemoteRepositoryByName(target, remote, { signal })
     },
     async checkout(branch, signal) {
       return await checkoutRemoteBranch(target, branch, undefined, { signal })

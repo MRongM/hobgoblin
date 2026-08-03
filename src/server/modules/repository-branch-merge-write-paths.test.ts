@@ -11,9 +11,7 @@ const SOURCE_PATH = '/workspace/feature'
 const DESTINATION_PATH = '/workspace/main'
 const TOKEN = 'sha256:plan'
 
-function destination(
-  fields: Partial<RepositoryBranchMergeDestinationPlan> = {},
-): RepositoryBranchMergeDestinationPlan {
+function destination(fields: Partial<RepositoryBranchMergeDestinationPlan> = {}): RepositoryBranchMergeDestinationPlan {
   return {
     branch: 'main',
     head: 'main-head',
@@ -25,7 +23,9 @@ function destination(
   }
 }
 
-function plan(fields: Partial<RepositoryBranchMergeOutPlan> & { destination?: RepositoryBranchMergeDestinationPlan } = {}) {
+function plan(
+  fields: Partial<RepositoryBranchMergeOutPlan> & { destination?: RepositoryBranchMergeDestinationPlan } = {},
+) {
   const { destination: selectedDestination, ...rest } = fields
   return {
     token: TOKEN,
@@ -54,15 +54,17 @@ function success(message = 'ok') {
   return { ok: true, message }
 }
 
-function dependencies(options: {
-  plans?: RepositoryBranchMergeOutPlan[]
-  destinationPlan?: RepositoryBranchMergeDestinationPlan
-  pullResult?: { ok: boolean; message: string }
-  mergeResult?: { ok: boolean; message: string; reason?: 'merge-conflict' }
-  pushResult?: { ok: boolean; message: string }
-  createResult?: { ok: boolean; message: string; repoChanged?: boolean }
-  cleanupResult?: { ok: boolean; message: string }
-} = {}) {
+function dependencies(
+  options: {
+    plans?: RepositoryBranchMergeOutPlan[]
+    destinationPlan?: RepositoryBranchMergeDestinationPlan
+    pullResult?: { ok: boolean; message: string }
+    mergeResult?: { ok: boolean; message: string; reason?: 'merge-conflict' }
+    pushResult?: { ok: boolean; message: string }
+    createResult?: { ok: boolean; message: string; repoChanged?: boolean }
+    cleanupResult?: { ok: boolean; message: string }
+  } = {},
+) {
   const calls: string[] = []
   const plans = options.plans ?? [plan({ destination: options.destinationPlan })]
   let planIndex = 0
@@ -118,10 +120,7 @@ describe('repository branch merge-out writes', () => {
   test.each([
     ['expired token', { plans: [plan()], rawInput: { ...input(), planToken: 'sha256:old' } }],
     ['dirty source', { plans: [plan({ ready: false, message: 'error.merge-out-source-dirty' })], rawInput: input() }],
-    [
-      'deleted destination',
-      { plans: [plan({ destinations: [] })], rawInput: input() },
-    ],
+    ['deleted destination', { plans: [plan({ destinations: [] })], rawInput: input() }],
     [
       'dirty destination',
       {
@@ -236,7 +235,11 @@ describe('repository branch merge-out writes', () => {
 
     expect(deps.createWorktree).toHaveBeenCalledWith(
       REPO_ID,
-      { worktreePath: expectedPath, mode: { kind: 'existingBranch', branch: 'main' } },
+      {
+        worktreePath: expectedPath,
+        mode: { kind: 'existingBranch', branch: 'main' },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
       undefined,
       undefined,

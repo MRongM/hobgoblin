@@ -79,7 +79,8 @@ const branchWorkspaceState = vi.hoisted(() => ({
         {
           repositoryName: 'api',
           targetBranch: 'feature/auth',
-          baseBranch: 'main',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
           branchOrigin: 'created' as const,
           worktreePath: '/workspace/goblin-feature-auth/api',
           progress: 'complete' as const,
@@ -88,7 +89,8 @@ const branchWorkspaceState = vi.hoisted(() => ({
         {
           repositoryName: 'web',
           targetBranch: 'feature/auth',
-          baseBranch: 'main',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
           branchOrigin: 'created' as const,
           worktreePath: '/workspace/goblin-feature-auth/web',
           progress: 'complete' as const,

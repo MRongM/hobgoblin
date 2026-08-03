@@ -8,10 +8,12 @@ import type { BranchWorkspacePlan, BranchWorkspaceSnapshot } from '#/shared/bran
 
 const mocks = vi.hoisted(() => ({
   getRepositoryWorktreeBootstrapPreflight: vi.fn(),
+  getRepositoryRemoteBranches: vi.fn(),
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
   getRepositoryWorktreeBootstrapPreflight: mocks.getRepositoryWorktreeBootstrapPreflight,
+  getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -36,6 +38,7 @@ beforeEach(() => {
     ok: true,
     preflight: { kind: 'candidates', candidates: [] },
   })
+  mocks.getRepositoryRemoteBranches.mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -72,7 +75,8 @@ describe('BranchWorkspaceDialog', () => {
         {
           repositoryName: 'web',
           targetBranch: 'feature/auth',
-          baseBranch: 'trunk',
+          creationBase: { kind: 'localBranch', branch: 'trunk' },
+          syncBeforeCreate: false,
           branchOrigin: 'created',
           worktreePath: '/workspace/goblin-feature-auth/web',
           progress: 'pending',
@@ -299,8 +303,189 @@ describe('BranchWorkspaceDialog', () => {
     expect(onPreview).toHaveBeenCalledWith({
       operation: 'create',
       branch: 'feature/auth',
-      repositories: [{ repositoryName: 'api', baseBranch: 'develop' }],
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'develop' },
+          syncBeforeCreate: false,
+        },
+      ],
       auxiliaryEntries: [{ name: 'docs', mode: 'copy' }],
+    })
+  })
+
+  test('selects eligible repositories through a real tri-state header checkbox', async () => {
+    renderDialog({
+      repositories: [
+        { id: '/workspace/api', name: 'api', available: true, branches: ['main'], defaultBranch: 'main' },
+        { id: '/workspace/web', name: 'web', available: true, branches: ['trunk'], defaultBranch: 'trunk' },
+        { id: '/workspace/offline', name: 'offline', available: false, branches: ['main'], defaultBranch: 'main' },
+      ],
+    })
+
+    const selectAll = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.repositories-select-all"]',
+    )
+    const api = repositoryCheckbox('api')
+    const web = repositoryCheckbox('web')
+    const offline = repositoryCheckbox('offline')
+    expect(selectAll?.checked).toBe(false)
+    expect(selectAll?.indeterminate).toBe(false)
+    expect(api.checked).toBe(false)
+    expect(web.checked).toBe(false)
+    expect(offline.disabled).toBe(true)
+
+    act(() => api.click())
+    expect(selectAll?.checked).toBe(false)
+    expect(selectAll?.indeterminate).toBe(true)
+
+    act(() => selectAll?.click())
+    await flushAsyncWork()
+    expect(selectAll?.checked).toBe(true)
+    expect(selectAll?.indeterminate).toBe(false)
+    expect(api.checked).toBe(true)
+    expect(web.checked).toBe(true)
+    expect(offline.checked).toBe(false)
+
+    act(() => selectAll?.click())
+    expect(api.checked).toBe(false)
+    expect(web.checked).toBe(false)
+  })
+
+  test('loads grouped remote creation bases and submits the selected exact remote', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'upstream/release'])
+    const onPreview = vi.fn(async () => true)
+    renderDialog({
+      repositories: [
+        {
+          id: '/workspace/api',
+          name: 'api',
+          available: true,
+          branches: ['main'],
+          defaultBranch: 'main',
+          branchDetails: { main: { tracking: 'origin/main' } },
+        },
+      ],
+      onPreview,
+    })
+    setInput('workspace.branch-workspace.branch', 'feature/new')
+    act(() => repositoryCheckbox('api').click())
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('[aria-label="workspace.branch-workspace.base-named"] optgroup:nth-of-type(2)'),
+      ).not.toBeNull(),
+    )
+
+    const base = document.querySelector<HTMLSelectElement>('[aria-label="workspace.branch-workspace.base-named"]')
+    expect(Array.from(base?.querySelectorAll('optgroup') ?? []).map((group) => group.label)).toEqual([
+      'workspace.branch-workspace.creation-base-local',
+      'workspace.branch-workspace.creation-base-remote',
+    ])
+    const sync = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.sync-before-create-named"]',
+    )
+    expect(sync?.checked).toBe(true)
+    expect(sync?.disabled).toBe(false)
+
+    changeSelect('workspace.branch-workspace.base-named', 'remote:upstream/release')
+    await clickAction('preview')
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'create',
+      branch: 'feature/new',
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+          syncBeforeCreate: true,
+        },
+      ],
+      auxiliaryEntries: [],
+    })
+  })
+
+  test('keeps local creation bases usable and retries a failed remote-branch read', async () => {
+    mocks.getRepositoryRemoteBranches.mockRejectedValueOnce(new Error('offline'))
+    renderDialog({
+      repositories: [{ id: '/workspace/api', name: 'api', available: true, branches: ['main'], defaultBranch: 'main' }],
+    })
+    act(() => repositoryCheckbox('api').click())
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        'workspace.branch-workspace.remote-branches-error',
+      ),
+    )
+    expect(selectValue('workspace.branch-workspace.base-named')).toBe('main')
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main'])
+    clickSelector('[role="alert"] button')
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector(
+          '[aria-label="workspace.branch-workspace.base-named"] option[value="remote:origin/main"]',
+        ),
+      ).not.toBeNull(),
+    )
+  })
+
+  test('keeps synchronization off and disabled without a usable upstream', () => {
+    renderDialog({
+      repositories: [{ id: '/workspace/api', name: 'api', available: true, branches: ['main'], defaultBranch: 'main' }],
+    })
+    act(() => repositoryCheckbox('api').click())
+
+    const sync = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.sync-before-create-named"]',
+    )
+    expect(sync?.checked).toBe(false)
+    expect(sync?.disabled).toBe(true)
+    expect(document.body.textContent).toContain('workspace.branch-workspace.sync-no-upstream')
+  })
+
+  test('uses and synchronizes an existing common target branch instead of the selected base', async () => {
+    const onPreview = vi.fn(async () => true)
+    renderDialog({
+      repositories: [
+        {
+          id: '/workspace/api',
+          name: 'api',
+          available: true,
+          branches: ['main', 'feature/auth'],
+          defaultBranch: 'main',
+          branchDetails: {
+            main: { tracking: 'origin/main' },
+            'feature/auth': { tracking: 'origin/feature/auth' },
+          },
+        },
+      ],
+      onPreview,
+    })
+    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    act(() => repositoryCheckbox('api').click())
+    await flushAsyncWork()
+
+    const base = document.querySelector<HTMLSelectElement>('[aria-label="workspace.branch-workspace.base-named"]')
+    const sync = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.sync-before-create-named"]',
+    )
+    expect(base?.value).toBe('feature/auth')
+    expect(base?.disabled).toBe(true)
+    expect(sync?.checked).toBe(true)
+    expect(document.body.textContent).toContain('workspace.branch-workspace.existing-target-used')
+
+    await clickAction('preview')
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'feature/auth' },
+          syncBeforeCreate: true,
+        },
+      ],
+      auxiliaryEntries: [],
     })
   })
 
@@ -365,7 +550,13 @@ describe('BranchWorkspaceDialog', () => {
     expect(onPreview).toHaveBeenCalledWith({
       operation: 'create',
       branch: 'feature/auth',
-      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
+        },
+      ],
       auxiliaryEntries: [],
     })
   })
@@ -449,7 +640,8 @@ describe('BranchWorkspaceDialog', () => {
       repositories: [
         {
           repositoryName: 'api',
-          baseBranch: 'main',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
             candidateScope: 'all-untracked',
@@ -525,7 +717,8 @@ describe('BranchWorkspaceDialog', () => {
       repositories: [
         {
           repositoryName: 'api',
-          baseBranch: 'develop',
+          creationBase: { kind: 'localBranch', branch: 'develop' },
+          syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
             candidateScope: 'all-untracked',
@@ -535,6 +728,44 @@ describe('BranchWorkspaceDialog', () => {
       ],
       auxiliaryEntries: [],
     })
+  })
+
+  test('offers the primary worktree even when the selected base immediately has dependency candidates', async () => {
+    mocks.getRepositoryWorktreeBootstrapPreflight
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: {
+          kind: 'candidates',
+          candidates: [{ path: 'node_modules', kind: 'directory' }],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        preflight: {
+          kind: 'candidates',
+          candidates: [{ path: '.env', kind: 'file' }],
+        },
+      })
+    renderDialog({ repositories: [repositoryWithDependencySources()] })
+    act(() => repositoryCheckbox('api').click())
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await vi.waitFor(() => expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull())
+
+    const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
+    expect(document.body.textContent).toContain('worktree-bootstrap.source-branch')
+    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('primary')
+    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+    changeSelect('worktree-bootstrap.source-select', 'primary')
+    await vi.waitFor(() => expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull())
+
+    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+      '/workspace/api',
+      expect.any(AbortSignal),
+      'all-untracked',
+      undefined,
+    )
+    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
+    expect(choiceState('.env', 'skip')).toBe('on')
   })
 
   test('loads a non-base dependency source, clears old choices, and submits its exact path', async () => {
@@ -566,7 +797,8 @@ describe('BranchWorkspaceDialog', () => {
 
     clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
     const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
-    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).not.toContain('branch:develop')
+    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
+    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('branch:develop')
     expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('branch:feature/source')
 
     changeSelect('worktree-bootstrap.source-select', 'branch:feature/source')
@@ -589,7 +821,8 @@ describe('BranchWorkspaceDialog', () => {
       repositories: [
         {
           repositoryName: 'api',
-          baseBranch: 'develop',
+          creationBase: { kind: 'localBranch', branch: 'develop' },
+          syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
             candidateScope: 'all-untracked',
@@ -640,7 +873,8 @@ describe('BranchWorkspaceDialog', () => {
       repositories: [
         {
           repositoryName: 'api',
-          baseBranch: 'main',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
             candidateScope: 'all-untracked',
@@ -736,7 +970,13 @@ describe('BranchWorkspaceDialog', () => {
     expect(onPreview).toHaveBeenCalledWith({
       operation: 'create',
       branch: 'feature/auth',
-      repositories: [{ repositoryName: 'api', baseBranch: 'develop' }],
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'develop' },
+          syncBeforeCreate: false,
+        },
+      ],
       auxiliaryEntries: [{ name: 'docs', mode: 'copy' }],
     })
   })
@@ -879,6 +1119,37 @@ describe('BranchWorkspaceDialog', () => {
     expect(repository?.className).not.toContain('text-danger')
   })
 
+  test('shows the effective creation source and synchronization intent in the preview', () => {
+    const plan = approvalPlan()
+    plan.repositories = [
+      {
+        repositoryName: 'api',
+        repoId: '/workspace/api',
+        targetBranch: 'feature/auth',
+        creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/main' },
+        syncBeforeCreate: true,
+        branchOrigin: 'created',
+        worktreePath: '/workspace/goblin-feature-auth/api',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/auth',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/main' },
+        },
+        worktreeBootstrap: { kind: 'skip' },
+        confirmationRequired: false,
+        satisfied: false,
+        action: 'create-worktree',
+      },
+    ]
+    plan.steps = [{ id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' }]
+
+    renderDialog({ plan })
+
+    const repository = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="create-worktree"]')
+    expect(repository?.textContent).toContain('workspace.branch-workspace.preview-source-remote')
+    expect(repository?.textContent).toContain('workspace.branch-workspace.preview-sync-enabled')
+  })
+
   test('highlights only the removed branch workspace directory in red', () => {
     renderDialog({
       mode: 'remove',
@@ -973,8 +1244,16 @@ describe('BranchWorkspaceDialog', () => {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
-        { repositoryName: 'api', baseBranch: 'main' },
-        { repositoryName: 'web', baseBranch: 'trunk' },
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
+        },
+        {
+          repositoryName: 'web',
+          creationBase: { kind: 'localBranch', branch: 'trunk' },
+          syncBeforeCreate: false,
+        },
       ],
       auxiliaryEntries: [],
     })
@@ -1123,6 +1402,14 @@ function click(label: string) {
   act(() => document.querySelector<HTMLElement>(`[aria-label="${label}"]`)?.click())
 }
 
+function repositoryCheckbox(repositoryName: string): HTMLInputElement {
+  const checkbox = document.querySelector<HTMLInputElement>(
+    `[data-branch-workspace-repository-row="${repositoryName}"] input[type="checkbox"]`,
+  )
+  if (!checkbox) throw new Error(`Missing repository checkbox: ${repositoryName}`)
+  return checkbox
+}
+
 function clickSelector(selector: string) {
   const element = document.querySelector<HTMLElement>(selector)
   if (!element) throw new Error(`Missing element: ${selector}`)
@@ -1192,7 +1479,8 @@ function existingWorkspace(): BranchWorkspaceSnapshot {
       {
         repositoryName: 'api',
         targetBranch: 'feature/auth',
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created',
         worktreePath: '/workspace/goblin-feature-auth/api',
         progress: 'complete',
@@ -1212,7 +1500,8 @@ function workspaceWithTwoMembers(): BranchWorkspaceSnapshot {
       {
         repositoryName: 'web',
         targetBranch: 'feature/auth',
-        baseBranch: 'trunk',
+        creationBase: { kind: 'localBranch', branch: 'trunk' },
+        syncBeforeCreate: false,
         branchOrigin: 'pre-existing',
         worktreePath: '/workspace/goblin-feature-auth/web',
         progress: 'complete',
@@ -1291,7 +1580,8 @@ function reductionPlan(): BranchWorkspacePlan {
         repositoryName: 'api',
         repoId: '/workspace/api',
         targetBranch: 'feature/auth',
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created',
         worktreePath: '/workspace/goblin-feature-auth/api',
         mode: { kind: 'existingBranch', branch: 'feature/auth' },

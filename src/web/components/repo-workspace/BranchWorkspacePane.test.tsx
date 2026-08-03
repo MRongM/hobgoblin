@@ -591,7 +591,8 @@ function repositoryMember(): BranchWorkspaceSnapshot['repositories'][number] {
   return {
     repositoryName: 'api',
     targetBranch: 'feature/auth',
-    baseBranch: 'main',
+    creationBase: { kind: 'localBranch', branch: 'main' },
+    syncBeforeCreate: false,
     branchOrigin: 'created',
     worktreePath: '/workspace/goblin-feature-auth/api',
     progress: 'complete',

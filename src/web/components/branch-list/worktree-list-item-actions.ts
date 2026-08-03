@@ -25,7 +25,7 @@ export interface WorktreeListItemActionProjection {
 }
 
 const ordinaryMainExclusions = new Set(['checkout'])
-const memberMainExclusions = new Set([...ordinaryMainExclusions, 'createWorktree', 'sync', 'checkoutTo'])
+const memberMainExclusions = new Set([...ordinaryMainExclusions, 'checkoutTo'])
 const ordinaryDestructiveExclusions = new Set(['deleteBranch'])
 const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, 'removeWorktree', 'cleanupWorktree'])
 
@@ -45,12 +45,11 @@ export function projectWorktreeListItemActions(
   const destructiveItems = hasWorktree
     ? groups.destructiveItems.filter((item) => !destructiveExclusions.has(item.id))
     : groups.destructiveItems
-  const contextActions =
-    policy === 'ordinary-worktree' && hasWorktree
-      ? groups.mainItems
-          .filter((item) => item.id === 'createWorktree' || item.id === 'sync')
-          .map((item) => branchListItemAction(item, forceDisabled))
-      : []
+  const contextActions = hasWorktree
+    ? groups.mainItems
+        .filter((item) => item.id === 'createWorktree' || item.id === 'sync')
+        .map((item) => branchListItemAction(item, forceDisabled))
+    : []
 
   return {
     editor: editorItem ? branchListItemAction(editorItem, forceDisabled) : undefined,

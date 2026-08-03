@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { getBrowserRemoteUrl, resolveFetchRemoteForRemotes, resolvePushTargetForRemotes } from '#/system/git/remote.ts'
+import {
+  fetchRemote,
+  getBrowserRemoteUrl,
+  resolveFetchRemoteForRemotes,
+  resolvePushTargetForRemotes,
+} from '#/system/git/remote.ts'
 import type { GitRemoteInfo } from '#/shared/git-types.ts'
 
 const gitMock = vi.hoisted(() => vi.fn())
@@ -57,6 +62,49 @@ describe('getBrowserRemoteUrl', () => {
 })
 
 describe('local network git options', () => {
+  test('fetchRemote prunes the exact requested remote with configured network options', async () => {
+    const signal = new AbortController().signal
+
+    await expect(
+      fetchRemote('/repo', 'upstream', signal, {
+        timeoutMs: 120_000,
+        proxyUrl: 'socks5://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      expect.objectContaining({
+        timeoutMs: 120_000,
+        signal,
+        env: expect.objectContaining({ ALL_PROXY: 'socks5://127.0.0.1:7890' }),
+      }),
+      'fetch',
+      '--prune',
+      '--',
+      'upstream',
+    )
+  })
+
+  test.each(['bad remote', '-upstream', 'upstream/main'])('fetchRemote rejects invalid remote %s', async (remote) => {
+    await expect(fetchRemote('/repo', remote)).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+
+  test('fetchRemote preserves pre-aborted cancellation', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(fetchRemote('/repo', 'upstream', controller.signal)).resolves.toEqual({
+      ok: false,
+      message: 'cancelled',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+
   test('pullBranch uses configured network options for a concrete worktree path', async () => {
     const { pullBranch } = await import('#/system/git/remote.ts')
     const signal = new AbortController().signal

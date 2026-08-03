@@ -809,7 +809,11 @@ describe('remote command scripts', () => {
     const existing = buildRemoteCommandInvocation(TARGET, {
       type: 'gitWorktreeAdd',
       path: '/srv/repo',
-      input: { worktreePath: '/srv/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      input: {
+        worktreePath: '/srv/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
     }).script
     expect(existing).toContain("worktree add -- '/srv/repo-feature' 'feature/a'")
     expect(existing).not.toContain('hobgoblin-created-from')
@@ -820,6 +824,7 @@ describe('remote command scripts', () => {
       input: {
         worktreePath: '/srv/repo-feature',
         mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature/a', localBranch: 'feature/a' },
+        syncBeforeCreate: false,
       },
     }).script
     expect(tracked).toContain("worktree add -b 'feature/a' --track -- '/srv/repo-feature' 'origin/feature/a'")
@@ -830,16 +835,25 @@ describe('remote command scripts', () => {
       path: '/srv/repo',
       input: {
         worktreePath: '/srv/repo-feature',
-        mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'origin/main' },
+        },
+        syncBeforeCreate: false,
       },
     }).script
-    expect(created).toContain("worktree add -b 'feature/a' -- '/srv/repo-feature' 'main'")
-    expect(created).toContain("config --local 'branch.feature/a.hobgoblin-created-from' 'main'")
+    expect(created).toContain("worktree add -b 'feature/a' -- '/srv/repo-feature' 'origin/main'")
+    expect(created).toContain("config --local 'branch.feature/a.hobgoblin-created-from' 'origin/main'")
 
     const detached = buildRemoteCommandInvocation(TARGET, {
       type: 'gitWorktreeAdd',
       path: '/srv/repo',
-      input: { worktreePath: '/srv/repo-detached', mode: { kind: 'detached', ref: 'origin/feature/a' } },
+      input: {
+        worktreePath: '/srv/repo-detached',
+        mode: { kind: 'detached', ref: 'origin/feature/a' },
+        syncBeforeCreate: false,
+      },
     }).script
     expect(detached).toContain("worktree add --detach -- '/srv/repo-detached' 'origin/feature/a'")
     expect(detached).not.toContain('hobgoblin-created-from')

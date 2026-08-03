@@ -171,12 +171,14 @@
 }
 
 @supports not selector(::-webkit-scrollbar) {
+  :is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content']),
   :is(.project-navigation-tone, .project-file-area-tone) {
     scrollbar-color: var(--color-scrollbar-thumb) transparent;
     scrollbar-width: thin;
   }
 }
 
+:is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])::-webkit-scrollbar,
 :is(
   .project-navigation-tone,
   .project-file-area-tone,
@@ -187,6 +189,8 @@
   height: 10px;
 }
 
+:is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])::-webkit-scrollbar-track,
+:is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])::-webkit-scrollbar-corner,
 :is(
   .project-navigation-tone,
   .project-file-area-tone,
@@ -202,6 +206,7 @@
   background-color: transparent;
 }
 
+:is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])::-webkit-scrollbar-thumb,
 :is(
   .project-navigation-tone,
   .project-file-area-tone,
@@ -214,6 +219,7 @@
   background-clip: content-box;
 }
 
+:is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])::-webkit-scrollbar-thumb:hover,
 :is(
     .project-navigation-tone,
     .project-file-area-tone,
@@ -223,6 +229,7 @@
   background-color: var(--color-scrollbar-thumb-hover);
 }
 
+:is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])::-webkit-scrollbar-thumb:active,
 :is(
     .project-navigation-tone,
     .project-file-area-tone,

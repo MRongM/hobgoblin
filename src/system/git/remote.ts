@@ -9,6 +9,7 @@ import type { BrowserRemoteProvider, ExecResult, GitRemoteInfo, RepoRemoteInfo }
 import { getCurrentBranch } from '#/system/git/branches.ts'
 import { isGitHubHost, isGitLabHost, parseGitRemoteUrl, remoteUrlToHttps } from '#/system/git/remote-url.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
+import { isSafeRemoteName } from '#/shared/worktree-create.ts'
 
 export interface UpstreamParts {
   remote: string
@@ -247,6 +248,24 @@ export async function fetchAll(
   if (remotes?.length === 0) return { ok: true, message: '' }
   const remote = resolveFetchRemoteForRemotes(remotes ?? [], upstream)
   if (!remote) return { ok: true, message: '' }
+  return gitResultWithOptions(
+    cwd,
+    gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),
+    'fetch',
+    '--prune',
+    '--',
+    remote,
+  )
+}
+
+export async function fetchRemote(
+  cwd: string,
+  remote: string,
+  signal?: AbortSignal,
+  networkOptions?: GitNetworkOptions,
+): Promise<ExecResult> {
+  if (!isSafeRemoteName(remote)) return { ok: false, message: 'error.invalid-arguments' }
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
   return gitResultWithOptions(
     cwd,
     gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),

@@ -127,7 +127,8 @@ function manifest(rootId: string, workspacePath = BRANCH_PATH): BranchWorkspaceM
       {
         repositoryName: 'api',
         targetBranch: 'feature/auth',
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created',
         worktreePath: pathApi.join(workspacePath, 'api'),
         progress: 'complete',

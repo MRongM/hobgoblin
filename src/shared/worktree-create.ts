@@ -1,7 +1,9 @@
 import { isSafeBranchName } from '#/shared/refnames.ts'
 
+export type WorktreeCreationBase = { kind: 'localBranch'; branch: string } | { kind: 'remoteBranch'; remoteRef: string }
+
 export type CreateWorktreeMode =
-  | { kind: 'newBranch'; newBranch: string; baseRef: string }
+  | { kind: 'newBranch'; newBranch: string; creationBase: WorktreeCreationBase }
   | { kind: 'existingBranch'; branch: string }
   | { kind: 'trackRemoteBranch'; remoteRef: string; localBranch: string }
   | { kind: 'detached'; ref: string }
@@ -9,6 +11,7 @@ export type CreateWorktreeMode =
 export interface CreateWorktreeInput {
   worktreePath: string
   mode: CreateWorktreeMode
+  syncBeforeCreate: boolean
 }
 
 export function parseRemoteTrackingRefs(output: string): string[] {
@@ -27,11 +30,15 @@ export function deriveLocalBranchFromRemoteRef(remoteRef: string): string | null
 
 export function normalizeCreateWorktreeInput(input: unknown): CreateWorktreeInput | null {
   if (!input || typeof input !== 'object') return null
-  const raw = input as { worktreePath?: unknown; mode?: unknown }
+  const raw = input as { worktreePath?: unknown; mode?: unknown; syncBeforeCreate?: unknown }
   const worktreePath = typeof raw.worktreePath === 'string' ? raw.worktreePath.trim() : ''
   if (!isAbsoluteWorktreePath(worktreePath)) return null
   const mode = normalizeCreateWorktreeMode(raw.mode)
-  return mode ? { worktreePath, mode } : null
+  if (!mode) return null
+  const syncBeforeCreate = raw.syncBeforeCreate ?? false
+  if (typeof syncBeforeCreate !== 'boolean') return null
+  if (syncBeforeCreate && mode.kind !== 'newBranch' && mode.kind !== 'existingBranch') return null
+  return { worktreePath, mode, syncBeforeCreate }
 }
 
 export function isAbsoluteWorktreePath(value: string): boolean {
@@ -45,9 +52,9 @@ function normalizeCreateWorktreeMode(input: unknown): CreateWorktreeMode | null 
   switch (mode.kind) {
     case 'newBranch': {
       const newBranch = stringField(mode.newBranch)
-      const baseRef = stringField(mode.baseRef)
-      return newBranch && baseRef && isSafeBranchName(newBranch) && isSafeRefInput(baseRef)
-        ? { kind: 'newBranch', newBranch, baseRef }
+      const creationBase = normalizeWorktreeCreationBase(mode.creationBase) ?? normalizeLegacyCreationBase(mode.baseRef)
+      return newBranch && creationBase && isSafeBranchName(newBranch)
+        ? { kind: 'newBranch', newBranch, creationBase }
         : null
     }
     case 'existingBranch': {
@@ -83,8 +90,31 @@ export function isRemoteTrackingRef(ref: string): boolean {
   return isSafeRemoteName(remote) && isSafeBranchName(branch)
 }
 
-function isSafeRemoteName(remote: string): boolean {
+export function isSafeRemoteName(remote: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(remote)
+}
+
+export function normalizeWorktreeCreationBase(input: unknown): WorktreeCreationBase | null {
+  if (!input || typeof input !== 'object') return null
+  const base = input as Record<string, unknown>
+  if (base.kind === 'localBranch') {
+    const branch = stringField(base.branch)
+    return branch && isSafeBranchName(branch) ? { kind: 'localBranch', branch } : null
+  }
+  if (base.kind === 'remoteBranch') {
+    const remoteRef = stringField(base.remoteRef)
+    return remoteRef && isRemoteTrackingRef(remoteRef) ? { kind: 'remoteBranch', remoteRef } : null
+  }
+  return null
+}
+
+export function worktreeCreationBaseRef(base: WorktreeCreationBase): string {
+  return base.kind === 'localBranch' ? base.branch : base.remoteRef
+}
+
+function normalizeLegacyCreationBase(input: unknown): WorktreeCreationBase | null {
+  const branch = stringField(input)
+  return branch && isSafeBranchName(branch) ? { kind: 'localBranch', branch } : null
 }
 
 function isSafeRefInput(ref: string): boolean {

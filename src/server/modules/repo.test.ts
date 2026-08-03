@@ -54,7 +54,9 @@ const mocks = vi.hoisted(() => ({
   isAncestor: vi.fn(),
   isRemoteAncestor: vi.fn(),
   fetchAll: vi.fn(),
+  fetchRemote: vi.fn(),
   fetchRemoteRepository: vi.fn(),
+  fetchRemoteRepositoryByName: vi.fn(),
   getBackgroundSyncRepos: vi.fn(),
   getLocalWorktreeBootstrapPreflight: vi.fn(),
   validateLocalWorktreeBootstrapSelections: vi.fn(),
@@ -175,6 +177,7 @@ vi.mock('node:fs', () => ({
 
 vi.mock('#/system/git/remote.ts', () => ({
   fetchAll: mocks.fetchAll,
+  fetchRemote: mocks.fetchRemote,
   getRemoteInfo: mocks.getRemoteInfo,
   pullBranch: mocks.pullBranch,
   pushBranch: mocks.pushBranch,
@@ -251,6 +254,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   deleteRemoteFileTreeEntries: mocks.deleteRemoteFileTreeEntries,
   discardRemoteChangesForPaths: mocks.discardRemoteChangesForPaths,
   fetchRemoteRepository: mocks.fetchRemoteRepository,
+  fetchRemoteRepositoryByName: mocks.fetchRemoteRepositoryByName,
   getRemoteWorktreeBootstrapPreflight: mocks.getRemoteWorktreeBootstrapPreflight,
   validateRemoteWorktreeBootstrapSelections: mocks.validateRemoteWorktreeBootstrapSelections,
   bootstrapRemoteWorktreeSelectionsAfterCreate: mocks.bootstrapRemoteWorktreeSelectionsAfterCreate,
@@ -343,6 +347,8 @@ beforeEach(() => {
   })
   mocks.readRemoteFileTreeTextFile.mockResolvedValue({ ok: true, content: 'remote\n', byteLength: 7 })
   mocks.fetchRemoteRepository.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.fetchRemote.mockResolvedValue({ ok: true, message: 'fetched exact remote' })
+  mocks.fetchRemoteRepositoryByName.mockResolvedValue({ ok: true, message: 'fetched exact remote' })
   mocks.createWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteLocalRemoteServerBranch.mockResolvedValue({ ok: true, message: 'deleted local remote' })
@@ -1053,12 +1059,197 @@ describe('probeRepository path errors', () => {
 })
 
 describe('repo mutation invalidation publishing', () => {
+  test('createRepositoryWorktree pulls an eligible local creation source before creating', async () => {
+    const order: string[] = []
+    mocks.getWorktrees.mockResolvedValueOnce([{ path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true }])
+    mocks.getBranches.mockResolvedValueOnce([
+      {
+        ...repoSnapshot('main').branches[0]!,
+        tracking: 'origin/main',
+        worktree: { path: '/tmp/repo', isPrimary: true },
+      },
+    ])
+    mocks.pullBranch.mockImplementationOnce(async () => {
+      order.push('pull:main')
+      return { ok: true, message: 'updated main' }
+    })
+    mocks.createWorktree.mockImplementationOnce(async () => {
+      order.push('create')
+      return { ok: true, message: 'created' }
+    })
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryWorktree(
+      '/tmp/repo',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: true,
+      },
+      { kind: 'skip' },
+    )
+
+    expect(result).toEqual({ ok: true, message: 'created' })
+    expect(order).toEqual(['pull:main', 'create'])
+    expect(mocks.pullBranch).toHaveBeenCalledWith('/tmp/repo', 'main', '/tmp/repo', expect.any(AbortSignal), {
+      proxyUrl: 'socks5://127.0.0.1:7890',
+      timeoutMs: 240_000,
+    })
+  })
+
+  test('createRepositoryWorktree fetches the exact remote creation source before creating', async () => {
+    const order: string[] = []
+    mocks.fetchRemote.mockImplementationOnce(async () => {
+      order.push('fetch:upstream')
+      return { ok: true, message: 'updated upstream' }
+    })
+    mocks.createWorktree.mockImplementationOnce(async () => {
+      order.push('create')
+      return { ok: true, message: 'created' }
+    })
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryWorktree(
+      '/tmp/repo',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/release' },
+        },
+        syncBeforeCreate: true,
+      },
+      { kind: 'skip' },
+    )
+
+    expect(result).toEqual({ ok: true, message: 'created' })
+    expect(order).toEqual(['fetch:upstream', 'create'])
+    expect(mocks.fetchRemote).toHaveBeenCalledWith('/tmp/repo', 'upstream', expect.any(AbortSignal), {
+      proxyUrl: 'socks5://127.0.0.1:7890',
+      timeoutMs: 240_000,
+    })
+  })
+
+  test('createRepositoryWorktree stops when source synchronization fails', async () => {
+    mocks.fetchRemote.mockResolvedValueOnce({ ok: false, message: 'fatal: fetch failed' })
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryWorktree(
+      '/tmp/repo',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/main' },
+        },
+        syncBeforeCreate: true,
+      },
+      { kind: 'skip' },
+    )
+
+    expect(result).toEqual({ ok: false, message: 'fatal: fetch failed' })
+    expect(mocks.createWorktree).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('createRepositoryWorktree rejects synchronization for a gone local upstream', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([{ path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true }])
+    mocks.getBranches.mockResolvedValueOnce([
+      {
+        ...repoSnapshot('main').branches[0]!,
+        tracking: 'origin/main',
+        trackingGone: true,
+        worktree: { path: '/tmp/repo', isPrimary: true },
+      },
+    ])
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryWorktree(
+      '/tmp/repo',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'main' },
+        syncBeforeCreate: true,
+      },
+      { kind: 'skip' },
+    )
+
+    expect(result).toEqual({ ok: false, message: 'error.worktree-sync-unavailable' })
+    expect(mocks.pullBranch).not.toHaveBeenCalled()
+    expect(mocks.createWorktree).not.toHaveBeenCalled()
+  })
+
+  test('createRepositoryWorktree preserves cancellation through source synchronization', async () => {
+    const controller = new AbortController()
+    mocks.runServerCancellable.mockImplementationOnce(async (_cwd, _kind, task) => await task(controller.signal))
+    mocks.fetchRemote.mockImplementationOnce(async (_cwd, _remote, signal) => {
+      expect(signal).toBe(controller.signal)
+      controller.abort()
+      return { ok: false, message: 'cancelled' }
+    })
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryWorktree(
+      '/tmp/repo',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/main' },
+        },
+        syncBeforeCreate: true,
+      },
+      { kind: 'skip' },
+    )
+
+    expect(result).toEqual({ ok: false, message: 'cancelled' })
+    expect(mocks.fetchRemote).toHaveBeenCalledWith('/tmp/repo', 'upstream', controller.signal, expect.anything())
+    expect(mocks.createWorktree).not.toHaveBeenCalled()
+  })
+
+  test('createRepositoryWorktree retains repoChanged when create fails after synchronization', async () => {
+    mocks.fetchRemote.mockResolvedValueOnce({ ok: true, message: 'updated upstream' })
+    mocks.createWorktree.mockResolvedValueOnce({ ok: false, message: 'fatal: worktree failed' })
+    const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await createRepositoryWorktree(
+      '/tmp/repo',
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'remoteBranch', remoteRef: 'upstream/main' },
+        },
+        syncBeforeCreate: true,
+      },
+      { kind: 'skip' },
+    )
+
+    expect(result).toEqual({ ok: false, message: 'fatal: worktree failed', repoChanged: true })
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
   test('createRepositoryWorktree passes object-shaped input to the backend and publishes source-token invalidation', async () => {
     const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
 
     const result = await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
       undefined,
       'repo_branch_test',
@@ -1067,7 +1258,11 @@ describe('repo mutation invalidation publishing', () => {
     expect(result).toEqual({ ok: true, message: 'ok' })
     expect(mocks.createWorktree).toHaveBeenCalledWith(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       undefined,
     )
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
@@ -1159,7 +1354,11 @@ describe('repo mutation invalidation publishing', () => {
     const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
     const result = await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       { kind: 'materialize', selections },
     )
 
@@ -1188,7 +1387,11 @@ describe('repo mutation invalidation publishing', () => {
     await expect(
       createRepositoryWorktree(
         '/tmp/repo',
-        { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+        {
+          worktreePath: '/tmp/repo-feature',
+          mode: { kind: 'existingBranch', branch: 'feature/a' },
+          syncBeforeCreate: false,
+        },
         { kind: 'materialize', selections, sourceWorktreePath: '/tmp/repo-source' },
       ),
     ).resolves.toMatchObject({ ok: true })
@@ -1211,7 +1414,11 @@ describe('repo mutation invalidation publishing', () => {
     await expect(
       createRepositoryWorktree(
         'ssh-config://prod/srv/repo',
-        { worktreePath: '/srv/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+        {
+          worktreePath: '/srv/repo-feature',
+          mode: { kind: 'existingBranch', branch: 'feature/a' },
+          syncBeforeCreate: false,
+        },
         { kind: 'materialize', selections, sourceWorktreePath: '/srv/repo-source' },
       ),
     ).resolves.toMatchObject({ ok: true })
@@ -1241,7 +1448,11 @@ describe('repo mutation invalidation publishing', () => {
     const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
     const result = await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       { kind: 'materialize', selections: [{ path: '.env', mode: 'copy' }] },
     )
 
@@ -1257,7 +1468,11 @@ describe('repo mutation invalidation publishing', () => {
     const { createRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
     const result = await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       { kind: 'materialize', selections: [{ path: '.env', mode: 'copy' }] },
     )
 
@@ -1650,7 +1865,12 @@ describe('repo mutation invalidation publishing', () => {
           '/tmp/repo',
           {
             worktreePath: '/tmp/repo-worktree',
-            mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+            mode: {
+              kind: 'newBranch',
+              newBranch: 'feature/a',
+              creationBase: { kind: 'localBranch', branch: 'main' },
+            },
+            syncBeforeCreate: false,
           },
           { kind: 'skip' },
         ),
@@ -1753,7 +1973,12 @@ describe('repo mutation invalidation publishing', () => {
           '/tmp/repo',
           {
             worktreePath: '/tmp/repo-worktree',
-            mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+            mode: {
+              kind: 'newBranch',
+              newBranch: 'feature/a',
+              creationBase: { kind: 'localBranch', branch: 'main' },
+            },
+            syncBeforeCreate: false,
           },
           { kind: 'skip' },
         ),
@@ -1772,7 +1997,15 @@ describe('repo mutation invalidation publishing', () => {
 
     const result = await createRepositoryWorktree(
       '/tmp/repo',
-      { worktreePath: 'relative/path', mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' } },
+      {
+        worktreePath: 'relative/path',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/a',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
     )
 

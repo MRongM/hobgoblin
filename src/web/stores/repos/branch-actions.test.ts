@@ -77,8 +77,9 @@ function createNewBranchWorktreeAction(
       mode: {
         kind: 'newBranch',
         newBranch: options.newBranch ?? 'feature/new',
-        baseRef: options.baseRef ?? 'feature/a',
+        creationBase: { kind: 'localBranch', branch: options.baseRef ?? 'feature/a' },
       },
+      syncBeforeCreate: false,
     },
     worktreeBootstrap: { kind: 'skip' },
   }

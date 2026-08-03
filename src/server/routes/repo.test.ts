@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cleanupRepositoryWorktree: vi.fn(),
+  createRepositoryWorktree: vi.fn(),
   createRepositoryFileTreeFile: vi.fn(),
   discardRepositoryChanges: vi.fn(),
   getRepositoryCommitDetail: vi.fn(),
@@ -52,7 +53,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   commitRepositoryChanges: vi.fn(),
   createRepositoryBranch: vi.fn(),
   createRepositoryFileTreeFile: mocks.createRepositoryFileTreeFile,
-  createRepositoryWorktree: vi.fn(),
+  createRepositoryWorktree: mocks.createRepositoryWorktree,
   deleteRepositoryBranch: vi.fn(),
   deleteRepositoryRemoteTag: mocks.deleteRepositoryRemoteTag,
   deleteRepositoryFileTreeEntries: vi.fn(),
@@ -572,7 +573,11 @@ describe('repo routes', () => {
 
     expect(createRepositoryWorktree).toHaveBeenCalledWith(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: false,
+      },
       { kind: 'skip' },
       expect.any(AbortSignal),
       undefined,
@@ -599,6 +604,7 @@ describe('repo routes', () => {
         cwd: '/tmp/repo',
         worktreePath: '/tmp/repo-feature',
         mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: true,
         worktreeBootstrap,
       }),
     })
@@ -607,7 +613,11 @@ describe('repo routes', () => {
     await expect(response.json()).resolves.toEqual({ ok: true, message: 'ok' })
     expect(createRepositoryWorktree).toHaveBeenCalledWith(
       '/tmp/repo',
-      { worktreePath: '/tmp/repo-feature', mode: { kind: 'existingBranch', branch: 'feature/a' } },
+      {
+        worktreePath: '/tmp/repo-feature',
+        mode: { kind: 'existingBranch', branch: 'feature/a' },
+        syncBeforeCreate: true,
+      },
       worktreeBootstrap,
       expect.any(AbortSignal),
       undefined,

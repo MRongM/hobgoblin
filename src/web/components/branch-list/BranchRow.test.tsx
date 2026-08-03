@@ -1116,7 +1116,7 @@ describe('BranchRow', () => {
     )
   })
 
-  test('keeps worktree creation and refresh out of branch workspace member menus', async () => {
+  test('adds worktree creation and refresh to branch workspace member menus', async () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
 
@@ -1135,14 +1135,20 @@ describe('BranchRow', () => {
     )
 
     const menuLabels = (await openRowMenu()).map((item) => item.textContent?.trim())
-    expect(menuLabels).not.toContain('action.create-worktree')
-    expect(menuLabels).not.toContain('action.refresh')
+    expect(menuLabels).toContain('action.create-worktree')
+    expect(menuLabels).toContain('action.refresh')
 
     const row = document.body.querySelector('li')
     if (!(row instanceof HTMLElement)) throw new Error('missing member worktree row')
     const contextLabels = (await openContextMenu(row)).map((item) => item.textContent?.trim())
-    expect(contextLabels).not.toContain('action.create-worktree')
-    expect(contextLabels).not.toContain('action.refresh')
+    expect(contextLabels).toContain('action.create-worktree')
+    expect(contextLabels).toContain('action.refresh')
+
+    await clickContextMenuItem(row, 'action.create-worktree')
+    await clickContextMenuItem(row, 'action.refresh')
+
+    expect(branchActionState.createWorktreeOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.syncOnSelect).toHaveBeenCalledTimes(1)
   })
 
   test('clicking the branch row selects its branch', () => {

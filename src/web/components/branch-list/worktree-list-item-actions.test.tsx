@@ -140,11 +140,11 @@ describe('projectWorktreeListItemActions', () => {
 
     expect(ids(projection.menuGroups)).toEqual([
       ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
-      ['pull', 'push', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
+      ['pull', 'push', 'createWorktree', 'sync', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
       ['createTag'],
       ['closeAllTerminals', 'resetHard'],
     ])
-    expect(projection.contextMenu.actions).toEqual([])
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
   })
 
@@ -160,5 +160,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.disabled).toBe(true)
     expect(projection.internalTerminal?.disabled).toBe(true)
     expect(projection.contextMenu.externalTerminal.disabled).toBe(true)
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
+    expect(projection.contextMenu.actions.every((item) => item.disabled)).toBe(true)
   })
 })

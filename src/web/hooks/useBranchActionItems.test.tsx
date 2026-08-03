@@ -1047,7 +1047,12 @@ describe('useBranchActionItems', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/repo-feature-new',
-          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: { kind: 'skip' },
       },
@@ -1098,7 +1103,12 @@ describe('useBranchActionItems', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/repo-feature-new',
-          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: {
           kind: 'materialize',
@@ -1203,7 +1213,12 @@ describe('useBranchActionItems', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/repo-feature-new',
-          mode: { kind: 'newBranch', newBranch: 'feature/new', baseRef: 'feature/base' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/new',
+            creationBase: { kind: 'localBranch', branch: 'feature/base' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: {
           kind: 'materialize',

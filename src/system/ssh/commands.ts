@@ -13,7 +13,7 @@ import { BRANCH_CREATED_FROM_CONFIG_PATTERN, branchCreatedFromConfigKey } from '
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
 import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
-import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type {
   WorktreeBootstrapCandidateScope,
   WorktreeBootstrapTargetEntry,
@@ -552,7 +552,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
           createScript,
           command.path,
           command.input.mode.newBranch,
-          command.input.mode.baseRef,
+          worktreeCreationBaseRef(command.input.mode.creationBase),
         )
       }
       if (command.input.mode.kind === 'trackRemoteBranch') {
@@ -1501,7 +1501,7 @@ function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
         shellQuote(input.mode.newBranch),
         '--',
         shellQuote(input.worktreePath),
-        shellQuote(input.mode.baseRef),
+        shellQuote(worktreeCreationBaseRef(input.mode.creationBase)),
       ].join(' ')
     case 'existingBranch':
       return ['--', shellQuote(input.worktreePath), shellQuote(input.mode.branch)].join(' ')

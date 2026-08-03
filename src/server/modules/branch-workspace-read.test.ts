@@ -19,7 +19,8 @@ function manifest(branch = 'feature/auth', overrides: Partial<BranchWorkspaceMan
       {
         repositoryName: 'api',
         targetBranch: branch,
-        baseBranch: 'main',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
         branchOrigin: 'created',
         worktreePath: path.join(workspacePath, 'api'),
         progress: 'complete',

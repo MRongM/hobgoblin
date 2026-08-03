@@ -234,7 +234,12 @@ describe('remote fetch timestamps', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/worktrees/feature-a',
-          mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/a',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: { kind: 'skip' },
       },
@@ -263,7 +268,12 @@ describe('remote fetch timestamps', () => {
         kind: 'createWorktree',
         input: {
           worktreePath: '/tmp/worktrees/feature-a',
-          mode: { kind: 'newBranch', newBranch: 'feature/a', baseRef: 'main' },
+          mode: {
+            kind: 'newBranch',
+            newBranch: 'feature/a',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+          },
+          syncBeforeCreate: false,
         },
         worktreeBootstrap: { kind: 'skip' },
       },

@@ -32,7 +32,11 @@ import { defaultWorktreePath, formatWorktreePath, tildify, untildify } from '#/w
 import { cn } from '#/web/lib/cn.ts'
 import { validateBranchName } from '#/shared/refnames.ts'
 import { isResolvableRemotePathInput } from '#/shared/remote-repo.ts'
-import { deriveLocalBranchFromRemoteRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import {
+  deriveLocalBranchFromRemoteRef,
+  isRemoteTrackingRef,
+  type CreateWorktreeInput,
+} from '#/shared/worktree-create.ts'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
 import type { WorktreeBootstrapPreflight, WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
 import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
@@ -88,6 +92,7 @@ export function CreateWorktreeDialog({
   const [base, setBase] = useState<string>('')
   const [branch, setBranch] = useState('')
   const [existingBranch, setExistingBranch] = useState('')
+  const [syncBeforeCreate, setSyncBeforeCreate] = useState(false)
   const [remoteRef, setRemoteRef] = useState('')
   const [localBranch, setLocalBranch] = useState('')
   const [detachedRef, setDetachedRef] = useState('')
@@ -115,6 +120,7 @@ export function CreateWorktreeDialog({
     setBase(initialBase)
     setBranch(defaultNewBranchName(initialBase))
     setExistingBranch(initialBase)
+    setSyncBeforeCreate(canSynchronizeBranch(repo, initialBase))
     setRemoteRef('')
     setLocalBranch('')
     setDetachedRef('')
@@ -244,22 +250,39 @@ export function CreateWorktreeDialog({
     switch (mode) {
       case 'newBranch':
         return branchTrimmed && !branchError && baseExists
-          ? { worktreePath: effectivePath, mode: { kind: 'newBranch', newBranch: branchTrimmed, baseRef: base } }
+          ? {
+              worktreePath: effectivePath,
+              mode: {
+                kind: 'newBranch',
+                newBranch: branchTrimmed,
+                creationBase: { kind: 'localBranch', branch: base },
+              },
+              syncBeforeCreate: false,
+            }
           : null
       case 'existingBranch':
         return existingBranch && existingBranchExists
-          ? { worktreePath: effectivePath, mode: { kind: 'existingBranch', branch: existingBranch } }
+          ? {
+              worktreePath: effectivePath,
+              mode: { kind: 'existingBranch', branch: existingBranch },
+              syncBeforeCreate: syncBeforeCreate && canSynchronizeBranch(repo, existingBranch),
+            }
           : null
       case 'trackRemoteBranch':
         return activeRemoteRef && trackLocalBranch && !localBranchError
           ? {
               worktreePath: effectivePath,
               mode: { kind: 'trackRemoteBranch', remoteRef: activeRemoteRef, localBranch: trackLocalBranch },
+              syncBeforeCreate: false,
             }
           : null
       case 'detached':
         return detachedRefTrimmed && !detachedRefError
-          ? { worktreePath: effectivePath, mode: { kind: 'detached', ref: detachedRefTrimmed } }
+          ? {
+              worktreePath: effectivePath,
+              mode: { kind: 'detached', ref: detachedRefTrimmed },
+              syncBeforeCreate: false,
+            }
           : null
     }
     const exhaustive: never = mode
@@ -384,30 +407,53 @@ export function CreateWorktreeDialog({
         )}
 
         {mode === 'existingBranch' && (
-          <Field className="mt-2" data-invalid={existingBranchError ? true : undefined}>
-            <FieldLabel htmlFor="cwt-existing-branch">{t('action.create-worktree-existing-label')}</FieldLabel>
-            <Select value={existingBranch} onValueChange={setExistingBranch}>
-              <SelectTrigger
-                id="cwt-existing-branch"
-                size="sm"
-                className="w-full"
-                aria-invalid={!!existingBranchError}
-                aria-describedby={existingBranchError ? 'cwt-existing-branch-error' : undefined}
+          <>
+            <Field className="mt-2" data-invalid={existingBranchError ? true : undefined}>
+              <FieldLabel htmlFor="cwt-existing-branch">{t('action.create-worktree-existing-label')}</FieldLabel>
+              <Select
+                value={existingBranch}
+                onValueChange={(next) => {
+                  setExistingBranch(next)
+                  setSyncBeforeCreate(canSynchronizeBranch(repo, next))
+                }}
               >
-                <SelectValue placeholder={t('action.create-worktree-existing-placeholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {repo.data.branches.map((b) => (
-                  <SelectItem key={b.name} value={b.name} textValue={b.name}>
-                    <span className="truncate">{b.name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldError id="cwt-existing-branch-error" reserveHeight aria-live="polite" aria-atomic="true">
-              {existingBranchError}
-            </FieldError>
-          </Field>
+                <SelectTrigger
+                  id="cwt-existing-branch"
+                  size="sm"
+                  className="w-full"
+                  aria-invalid={!!existingBranchError}
+                  aria-describedby={existingBranchError ? 'cwt-existing-branch-error' : undefined}
+                >
+                  <SelectValue placeholder={t('action.create-worktree-existing-placeholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {repo.data.branches.map((b) => (
+                    <SelectItem key={b.name} value={b.name} textValue={b.name}>
+                      <span className="truncate">{b.name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldError id="cwt-existing-branch-error" reserveHeight aria-live="polite" aria-atomic="true">
+                {existingBranchError}
+              </FieldError>
+            </Field>
+            <Field>
+              <label htmlFor="cwt-sync-before-create" className="flex items-center gap-2 text-xs font-medium">
+                <input
+                  id="cwt-sync-before-create"
+                  type="checkbox"
+                  checked={syncBeforeCreate && canSynchronizeBranch(repo, existingBranch)}
+                  disabled={!canSynchronizeBranch(repo, existingBranch)}
+                  onChange={(event) => setSyncBeforeCreate(event.target.checked)}
+                />
+                {t('action.create-worktree-sync-before-create')}
+              </label>
+              <FieldDescription reserveHeight>
+                {canSynchronizeBranch(repo, existingBranch) ? '' : t('action.create-worktree-sync-no-upstream')}
+              </FieldDescription>
+            </Field>
+          </>
         )}
 
         {mode === 'trackRemoteBranch' && (
@@ -597,4 +643,9 @@ function defaultRemoteWorktreePath(repoPath: string, name: string): string {
   const baseName = normalized.split('/').filter(Boolean).at(-1) ?? 'worktree'
   const parent = normalized.slice(0, Math.max(0, normalized.lastIndexOf('/'))) || '/'
   return `${parent === '/' ? '' : parent}/${baseName}-${slug}`
+}
+
+function canSynchronizeBranch(repo: RepoState, branch: string): boolean {
+  const details = repo.data.branches.find((candidate) => candidate.name === branch)
+  return !!details?.tracking && !details.trackingGone && isRemoteTrackingRef(details.tracking)
 }

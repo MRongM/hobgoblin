@@ -207,6 +207,15 @@ export function WorkspaceRepositoryRail({
             available: repo.availability.phase === 'available',
             branches: repo.data.branches.map((branch) => branch.name),
             defaultBranch,
+            branchDetails: Object.fromEntries(
+              repo.data.branches.map((branch) => [
+                branch.name,
+                {
+                  ...(branch.tracking ? { tracking: branch.tracking } : {}),
+                  ...(branch.trackingGone ? { trackingGone: true } : {}),
+                },
+              ]),
+            ),
             primaryWorktreePath: Object.values(repo.data.worktreesByPath).find((worktree) => worktree.isMain)?.path,
             sourceWorktreeByBranch: Object.fromEntries(
               repo.data.branches.flatMap((branch) =>
