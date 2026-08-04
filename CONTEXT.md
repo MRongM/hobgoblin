@@ -93,7 +93,7 @@ A renderer-local, touch-sized interaction strip at the right edge of a Mobile We
 _Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
 
 **Mobile Web terminal command deck**:
-A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order and whose action row starts with a local return-to-bottom action before terminal input, switching, command composition, renderer-local width presentation, and Focus. Its 32-pixel-high keys retain a 44-pixel minimum width. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. Its action row starts with a local return-to-bottom action before terminal input, switching, command composition, renderer-local width presentation, and Focus. All keys are 32 pixels high. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
 _Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
 
 **Mobile Web terminal focus mode**:

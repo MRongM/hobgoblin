@@ -33,6 +33,10 @@ describe('MobileTerminalCommandDeck', () => {
     try {
       const rows = [...fixture.container.querySelectorAll('.goblin-terminal-command-deck__row')]
       expect(rows).toHaveLength(3)
+      expect(
+        rows.slice(0, 2).every((row) => row.classList.contains('goblin-terminal-command-deck__row--extra-keys')),
+      ).toBe(true)
+      expect(rows[2]?.classList.contains('goblin-terminal-command-deck__row--extra-keys')).toBe(false)
       expect(buttonLabels(rows[0])).toEqual(['ESC', '/', '-', 'HOME', '↑', 'END', 'PGUP'])
       expect(buttonLabels(rows[1])).toEqual(['TAB', 'CTRL', 'ALT', '←', '↓', '→', 'PGDN'])
       expect(buttonLabels(rows[2])).toEqual([

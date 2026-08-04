@@ -84,6 +84,9 @@ describe('terminal session CSS layout contract', () => {
     expect(css).not.toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*position:\s*absolute;/)
     expect(css).toMatch(/\.goblin-terminal-command-deck__row\s*\{[^}]*overflow-x:\s*auto;/)
     expect(css).toMatch(/\.goblin-terminal-command-deck__row\s*\{[^}]*touch-action:\s*pan-x;/)
+    expect(css).toMatch(
+      /\.goblin-terminal-command-deck__row--extra-keys > \.goblin-terminal-command-deck__btn\s*\{[^}]*flex:\s*1 0 44px;/,
+    )
   })
 
   test('keeps the auxiliary keyboard compact and its focus exit handle at the top right', () => {

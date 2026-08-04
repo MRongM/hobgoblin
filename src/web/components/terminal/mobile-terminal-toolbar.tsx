@@ -84,7 +84,7 @@ export function MobileTerminalCommandDeck({
       aria-label={t('terminal.command-deck')}
     >
       {TERMINAL_EXTRA_KEY_ROWS.map((row, rowIndex) => (
-        <div key={rowIndex} className="goblin-terminal-command-deck__row">
+        <div key={rowIndex} className="goblin-terminal-command-deck__row goblin-terminal-command-deck__row--extra-keys">
           {row.map((key) => {
             const active = key.key === 'control' ? ctrlPressed : key.key === 'alt' ? altPressed : false
             const label = active ? `${key.label} on` : key.label

@@ -545,6 +545,7 @@ describe('TerminalSlot', () => {
         'terminal.command-deck.scroll-to-bottom',
         'terminal.takeover',
       ])
+      expect(buttons.map((button) => button.dataset.variant)).toEqual(['secondary', 'secondary'])
 
       await act(async () => {
         buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))

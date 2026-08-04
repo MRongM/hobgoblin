@@ -505,6 +505,10 @@
   display: none;
 }
 
+.goblin-terminal-command-deck__row--extra-keys > .goblin-terminal-command-deck__btn {
+  flex: 1 0 44px;
+}
+
 .goblin-terminal-command-deck__btn {
   height: 32px;
   min-width: 44px;

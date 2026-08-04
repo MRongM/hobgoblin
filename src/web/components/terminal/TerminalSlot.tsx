@@ -772,7 +772,7 @@ function ViewerStatus({
         {message}
       </span>
       <div className="goblin-terminal-slot__viewer-actions">
-        <Button type="button" size="sm" variant="ghost" onClick={onScrollToBottom} disabled={!takeoverKey}>
+        <Button type="button" size="sm" variant="secondary" onClick={onScrollToBottom} disabled={!takeoverKey}>
           {scrollToBottomLabel}
         </Button>
         <Button
