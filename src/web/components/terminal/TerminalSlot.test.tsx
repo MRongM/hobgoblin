@@ -3,6 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import type { TerminalCustomButton } from '#/shared/settings.ts'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
@@ -16,8 +17,12 @@ import type {
   TerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
 
+const i18nMocks = vi.hoisted(() => ({
+  translations: {} as Record<string, string>,
+}))
+
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string) => key,
+  useT: () => (key: string) => i18nMocks.translations[key] ?? key,
 }))
 
 const appShellMocks = vi.hoisted(() => ({
@@ -60,7 +65,7 @@ const runtimeSettingsMocks = vi.hoisted(() => ({
   terminalFontSize: 14,
   terminalCustomButtonsVisible: true,
   terminalCustomButtonSize: 'medium' as 'small' | 'medium' | 'large',
-  terminalCustomButtons: [] as { label: string; value: string; action?: 'execute' | 'input' }[],
+  terminalCustomButtons: [] as TerminalCustomButton[],
 }))
 
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
@@ -79,6 +84,7 @@ afterEach(() => {
   runtimeSettingsMocks.terminalCustomButtonsVisible = true
   runtimeSettingsMocks.terminalCustomButtonSize = 'medium'
   runtimeSettingsMocks.terminalCustomButtons = []
+  i18nMocks.translations = {}
   appShellMocks.readSystemClipboardFilePaths.mockReset()
   appShellMocks.readSystemClipboardFilePaths.mockResolvedValue([])
   appShellMocks.saveClipboardBinaryFilesFromPaste.mockReset()
@@ -897,6 +903,63 @@ describe('TerminalSlot', () => {
       })
 
       expect(writeInput).toHaveBeenCalledWith('terminal-1', 'git status --short\r')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('resolves a built-in terminal button preset before submitting it', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    i18nMocks.translations = {
+      'terminal.custom-button-presets.confirm-continue.label': '确认、继续',
+      'terminal.custom-button-presets.confirm-continue.value': '确认、继续',
+    }
+    runtimeSettingsMocks.terminalCustomButtons = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ]
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const focusTerminal = vi.fn()
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput, focusTerminal })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const button = Array.from(container.querySelectorAll('button')).find((node) => node.textContent === '确认、继续')
+      expect(button).toBeInstanceOf(HTMLButtonElement)
+      expect(button?.title).toBe('确认、继续')
+
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', '确认、继续\r')
+      expect(focusTerminal).toHaveBeenCalledWith('terminal-1')
     } finally {
       await act(async () => root.unmount())
       container.remove()

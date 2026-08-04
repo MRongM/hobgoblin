@@ -82,6 +82,62 @@ describe('i18n dictionaries', () => {
     expect(ko['action.commit-auto-commit-and-push']).toBe('생성 후 커밋하고 푸시')
   })
 
+  test('localizes every built-in terminal button preset', () => {
+    const ids = [
+      'confirm-continue',
+      'try-if-needed',
+      'show-progress',
+      'autonomous-decisions',
+      'commit-and-push',
+      'ship-release',
+      'batch-operations',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const id of ids) {
+        expect(dict[`terminal.custom-button-presets.${id}.label` as DictKey], `${lang}.${id}.label`).toBeTruthy()
+        expect(dict[`terminal.custom-button-presets.${id}.value` as DictKey], `${lang}.${id}.value`).toBeTruthy()
+      }
+    }
+
+    expect(ids.map((id) => en[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      'Confirm, continue',
+      'Try if needed',
+      'Progress',
+      'Decide autonomously',
+      'Commit, push',
+      'Merge and release',
+      'Batch operations',
+    ])
+    expect(ids.map((id) => zh[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      '确认、继续',
+      '试试、需要',
+      '进度',
+      '自主决策',
+      '提交、推送',
+      '提推合发更',
+      '批量操作',
+    ])
+    expect(ids.map((id) => ja[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      '確認・続行',
+      '必要なら試す',
+      '進捗',
+      '自律判断',
+      'コミット・プッシュ',
+      'マージ・リリース',
+      '一括操作',
+    ])
+    expect(ids.map((id) => ko[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      '확인·계속',
+      '필요하면 시도',
+      '진행 상황',
+      '자율 결정',
+      '커밋·푸시',
+      '병합·릴리스',
+      '일괄 작업',
+    ])
+  })
+
   test('uses direction-specific repository merge copy in every locale', () => {
     const keys = [
       'action.merge-in',

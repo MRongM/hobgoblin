@@ -79,9 +79,17 @@ test('initializes server-settings.json with defaults when no persisted settings 
     terminalFontSize: 14,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
-    terminalCustomButtons: [],
     lanEnabled: false,
   })
+  expect(prefs.terminalCustomButtons.map((button) => button.presetId)).toEqual([
+    'confirm-continue',
+    'try-if-needed',
+    'show-progress',
+    'autonomous-decisions',
+    'commit-and-push',
+    'ship-release',
+    'batch-operations',
+  ])
   expect(await mod.getServerSessionState()).toMatchObject({
     openRepos: [],
     activeRepo: null,
@@ -794,6 +802,66 @@ test('limits persisted terminal custom buttons to 20 valid entries', async () =>
   expect(prefs.terminalCustomButtons).toHaveLength(20)
   expect(prefs.terminalCustomButtons[0]).toEqual({ label: 'button-0', value: 'echo 0', action: 'execute' })
   expect(prefs.terminalCustomButtons[19]).toEqual({ label: 'button-19', value: 'echo 19', action: 'execute' })
+})
+
+test('seeds presets when terminal custom buttons were never persisted', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ lang: 'zh' })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect((await mod.getServerSettingsPrefs()).terminalCustomButtons.map((button) => button.presetId)).toEqual([
+    'confirm-continue',
+    'try-if-needed',
+    'show-progress',
+    'autonomous-decisions',
+    'commit-and-push',
+    'ship-release',
+    'batch-operations',
+  ])
+})
+
+test('preserves an explicitly empty terminal custom button list', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({ terminalCustomButtons: [] })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect((await mod.getServerSettingsPrefs()).terminalCustomButtons).toEqual([])
+})
+
+test('preserves known terminal custom button preset ids', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    terminalCustomButtons: [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ],
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect((await mod.getServerSettingsPrefs()).terminalCustomButtons[0]).toEqual({
+    label: 'Confirm, continue',
+    value: 'Confirm and continue',
+    action: 'execute',
+    presetId: 'confirm-continue',
+  })
+})
+
+test('drops unknown preset ids without dropping valid literal button data', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({
+    terminalCustomButtons: [{ label: 'Status', value: 'git status', action: 'execute', presetId: 'unknown-preset' }],
+  })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect((await mod.getServerSettingsPrefs()).terminalCustomButtons[0]).toEqual({
+    label: 'Status',
+    value: 'git status',
+    action: 'execute',
+  })
 })
 
 test('accepts current design color themes and normalizes legacy apple plus unknown presets', async () => {

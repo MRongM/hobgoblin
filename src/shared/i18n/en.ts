@@ -819,6 +819,24 @@ export const en = {
   'terminal.empty': 'No terminal open',
   'terminal.drop-hint': 'Drop to paste path',
   'terminal.custom-buttons': 'Custom terminal buttons',
+  'terminal.custom-button-presets.confirm-continue.label': 'Confirm, continue',
+  'terminal.custom-button-presets.confirm-continue.value': 'Confirm and continue',
+  'terminal.custom-button-presets.try-if-needed.label': 'Try if needed',
+  'terminal.custom-button-presets.try-if-needed.value': 'Try it if needed',
+  'terminal.custom-button-presets.show-progress.label': 'Progress',
+  'terminal.custom-button-presets.show-progress.value': 'What is the current progress?',
+  'terminal.custom-button-presets.autonomous-decisions.label': 'Decide autonomously',
+  'terminal.custom-button-presets.autonomous-decisions.value':
+    'Confirmed. Make decisions autonomously and execute the plan inline. Defer anything requiring my confirmation until the end.',
+  'terminal.custom-button-presets.commit-and-push.label': 'Commit, push',
+  'terminal.custom-button-presets.commit-and-push.value':
+    'Generate the commit message, commit the changes, and push them to the remote.',
+  'terminal.custom-button-presets.ship-release.label': 'Merge and release',
+  'terminal.custom-button-presets.ship-release.value':
+    'Merge into main, create a tag, generate an English release description, create a new release, and update Pages.',
+  'terminal.custom-button-presets.batch-operations.label': 'Batch operations',
+  'terminal.custom-button-presets.batch-operations.value':
+    "1. Pull and update the current repository's source branch. 2. Batch-merge it into the current branch.",
   'terminal.mirror-controlled': 'Read-only · controlled by another client',
   'terminal.unowned': 'Read-only · no client currently controls this terminal',
   'terminal.takeover': 'Take over terminal',

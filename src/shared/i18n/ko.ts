@@ -806,6 +806,23 @@ export const ko: Record<DictKey, string> = {
   'terminal.empty': '열린 터미널 없음',
   'terminal.drop-hint': '놓아서 경로 붙여넣기',
   'terminal.custom-buttons': '사용자 지정 터미널 버튼',
+  'terminal.custom-button-presets.confirm-continue.label': '확인·계속',
+  'terminal.custom-button-presets.confirm-continue.value': '확인하고 계속 진행해 주세요',
+  'terminal.custom-button-presets.try-if-needed.label': '필요하면 시도',
+  'terminal.custom-button-presets.try-if-needed.value': '필요하면 시도해 주세요',
+  'terminal.custom-button-presets.show-progress.label': '진행 상황',
+  'terminal.custom-button-presets.show-progress.value': '현재 진행 상황이 어떻게 되나요?',
+  'terminal.custom-button-presets.autonomous-decisions.label': '자율 결정',
+  'terminal.custom-button-presets.autonomous-decisions.value':
+    '확인했습니다. 자율적으로 결정하고 inline 방식으로 계획을 실행해 주세요. 제 확인이 필요한 항목은 마지막에 모아 주세요.',
+  'terminal.custom-button-presets.commit-and-push.label': '커밋·푸시',
+  'terminal.custom-button-presets.commit-and-push.value': '커밋 내용을 생성하고 커밋한 다음 원격에 푸시해 주세요.',
+  'terminal.custom-button-presets.ship-release.label': '병합·릴리스',
+  'terminal.custom-button-presets.ship-release.value':
+    'main에 병합하고 tag를 생성한 뒤 영어 release 설명과 새 release를 만들고 Pages를 업데이트해 주세요.',
+  'terminal.custom-button-presets.batch-operations.label': '일괄 작업',
+  'terminal.custom-button-presets.batch-operations.value':
+    '1. 현재 리포지토리의 원본 브랜치를 풀하여 업데이트합니다. 2. 현재 브랜치에 일괄 병합합니다.',
   'terminal.mirror-controlled': '읽기 전용 · 다른 클라이언트에서 제어 중입니다',
   'terminal.unowned': '읽기 전용 · 현재 제어 중인 클라이언트가 없습니다',
   'terminal.takeover': '터미널 제어 가져오기',

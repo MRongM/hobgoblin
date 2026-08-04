@@ -87,6 +87,10 @@ import {
   type TelegramNotificationSettingsSnapshot,
   type TelegramNotificationSettingsUpdateInput,
 } from '#/shared/telegram-notifications.ts'
+import {
+  createDefaultTerminalCustomButtons,
+  isTerminalCustomButtonPresetId,
+} from '#/shared/terminal-custom-button-presets.ts'
 
 type FetchIntervalListener = (sec: number) => void
 interface ServerSettingsData {
@@ -173,9 +177,7 @@ export class TelegramNotificationSettingsError extends Error {
 }
 
 function normalizeRefreshInterval(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(0, Math.min(3600, Math.round(value)))
-    : fallback
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(3600, Math.round(value))) : fallback
 }
 
 function normalizeThemePref(value: unknown): ThemePref {
@@ -276,7 +278,13 @@ function normalizeTerminalCustomButtons(value: unknown): TerminalCustomButton[] 
     if (typeof button.label !== 'string' || typeof button.value !== 'string') continue
     const label = button.label.trim()
     if (!label || button.value.trim().length === 0) continue
-    normalized.push({ label, value: button.value, action: normalizeTerminalCustomButtonAction(button.action) })
+    const normalizedButton: TerminalCustomButton = {
+      label,
+      value: button.value,
+      action: normalizeTerminalCustomButtonAction(button.action),
+    }
+    if (isTerminalCustomButtonPresetId(button.presetId)) normalizedButton.presetId = button.presetId
+    normalized.push(normalizedButton)
     if (normalized.length >= MAX_TERMINAL_CUSTOM_BUTTONS) break
   }
   return normalized
@@ -678,7 +686,10 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
       terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
-      terminalCustomButtons: normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
+      terminalCustomButtons:
+        parsed.terminalCustomButtons === undefined
+          ? createDefaultTerminalCustomButtons()
+          : normalizeTerminalCustomButtons(parsed.terminalCustomButtons),
       lanEnabled: normalizeLanEnabled(parsed.lanEnabled),
       serverPort: normalizeServerPort(parsed.serverPort),
       webAccessEnabled:

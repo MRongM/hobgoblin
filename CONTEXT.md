@@ -76,6 +76,10 @@ _Avoid_: Terminal toolbar, detail toolbar
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
 
+**Built-in terminal button preset**:
+An app-supplied custom terminal button whose label and sent text follow the application language until the user edits it. Reordering preserves the preset, editing turns it into an ordinary custom terminal button, and removing it is a durable user choice.
+_Avoid_: Fixed terminal action, translated shell command, mandatory terminal button
+
 **Terminal focus mode**:
 A temporary desktop presentation that maximizes the selected internal terminal by hiding the workspace navigation and file surfaces until the user exits focus. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
 _Avoid_: Detail focus mode, workspace focus mode

@@ -26,12 +26,13 @@ import {
   SettingsSelect,
 } from '#/web/components/settings/SettingsPrimitives.tsx'
 import { moveTerminalCustomButtonRow } from '#/web/components/settings/terminal-custom-button-order.ts'
+import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
 import {
   useRuntimeTerminalSettings,
   useTerminalCustomButtonsController,
 } from '#/web/runtime-settings-terminal-buttons.ts'
 import { useFontSettingsController } from '#/web/runtime-settings-fonts.ts'
-import { useT } from '#/web/stores/i18n.ts'
+import { useI18nStore, useT, type Dict } from '#/web/stores/i18n.ts'
 
 type EditableTerminalCustomButton = TerminalCustomButton & {
   id: string
@@ -42,38 +43,45 @@ function actionFromButton(button: TerminalCustomButton): 'execute' | 'input' {
   return button.action === 'input' ? 'input' : 'execute'
 }
 
-function editableFromButtons(buttons: TerminalCustomButton[]): EditableTerminalCustomButton[] {
-  return buttons.map((button, index) => ({
-    id: `${index}:${button.label}:${button.value}:${actionFromButton(button)}`,
-    label: button.label,
-    value: button.value,
-    action: actionFromButton(button),
-  }))
+function editableFromButtons(buttons: TerminalCustomButton[], dict: Dict): EditableTerminalCustomButton[] {
+  return buttons.map((button, index) => {
+    const resolved = resolveTerminalCustomButtonPreset(button, (key) => dict[key] ?? key)
+    return {
+      id: `${index}:${button.presetId ?? `${button.label}:${button.value}`}:${actionFromButton(button)}`,
+      label: resolved.label,
+      value: resolved.value,
+      action: actionFromButton(button),
+      presetId: button.presetId,
+    }
+  })
 }
 
 function validButtons(rows: EditableTerminalCustomButton[]): TerminalCustomButton[] {
   return rows
-    .map((row) => ({ label: row.label.trim(), value: row.value, action: row.action }))
+    .map((row) => ({
+      label: row.label.trim(),
+      value: row.value,
+      action: row.action,
+      ...(row.presetId ? { presetId: row.presetId } : {}),
+    }))
     .filter((row) => row.label.length > 0 && row.value.trim().length > 0)
     .slice(0, 20)
 }
 
 export function TerminalSettings() {
   const t = useT()
+  const dict = useI18nStore((state) => state.dict)
   const {
     terminalCustomButtons: buttons,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
     terminalFontSize,
   } = useRuntimeTerminalSettings()
-  const initialRows = useMemo(() => editableFromButtons(buttons), [buttons])
+  const initialRows = useMemo(() => editableFromButtons(buttons, dict), [buttons, dict])
   const [rows, setRows] = useState<EditableTerminalCustomButton[]>(initialRows)
   const [dirty, setDirty] = useState(false)
-  const {
-    setTerminalCustomButtons,
-    setTerminalCustomButtonsVisible,
-    setTerminalCustomButtonSize,
-  } = useTerminalCustomButtonsController()
+  const { setTerminalCustomButtons, setTerminalCustomButtonsVisible, setTerminalCustomButtonSize } =
+    useTerminalCustomButtonsController()
   const { setTerminalFontSize } = useFontSettingsController()
 
   useEffect(() => {
@@ -91,7 +99,13 @@ export function TerminalSettings() {
   }
 
   function replaceRow(rowId: string, patch: Partial<Omit<EditableTerminalCustomButton, 'id'>>) {
-    updateRows(rows.map((item) => (item.id === rowId ? { ...item, ...patch } : item)))
+    updateRows(
+      rows.map((item) => {
+        if (item.id !== rowId) return item
+        const { presetId: _presetId, ...literal } = item
+        return { ...literal, ...patch }
+      }),
+    )
   }
 
   function removeRow(rowId: string) {
@@ -106,7 +120,7 @@ export function TerminalSettings() {
   async function save() {
     const nextButtons = validButtons(rows)
     await setTerminalCustomButtons(nextButtons)
-    setRows(editableFromButtons(nextButtons))
+    setRows(editableFromButtons(nextButtons, dict))
     setDirty(false)
   }
 

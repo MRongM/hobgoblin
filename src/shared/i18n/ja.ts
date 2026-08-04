@@ -820,6 +820,24 @@ export const ja: Record<DictKey, string> = {
   'terminal.empty': '開いているターミナルはありません',
   'terminal.drop-hint': 'ドロップしてパスを貼り付け',
   'terminal.custom-buttons': 'カスタムターミナルボタン',
+  'terminal.custom-button-presets.confirm-continue.label': '確認・続行',
+  'terminal.custom-button-presets.confirm-continue.value': '確認して続行してください',
+  'terminal.custom-button-presets.try-if-needed.label': '必要なら試す',
+  'terminal.custom-button-presets.try-if-needed.value': '必要なら試してみてください',
+  'terminal.custom-button-presets.show-progress.label': '進捗',
+  'terminal.custom-button-presets.show-progress.value': '現在の進捗はどうなっていますか',
+  'terminal.custom-button-presets.autonomous-decisions.label': '自律判断',
+  'terminal.custom-button-presets.autonomous-decisions.value':
+    '確認しました。自律的に判断し、inline方式で計画を実行してください。私の確認が必要な項目は最後にまとめてください。',
+  'terminal.custom-button-presets.commit-and-push.label': 'コミット・プッシュ',
+  'terminal.custom-button-presets.commit-and-push.value':
+    'コミット内容を生成し、コミットしてリモートへプッシュしてください。',
+  'terminal.custom-button-presets.ship-release.label': 'マージ・リリース',
+  'terminal.custom-button-presets.ship-release.value':
+    'main にマージし、tag を生成し、英語の release 説明を生成して新しい release を作成し、Pages を更新してください。',
+  'terminal.custom-button-presets.batch-operations.label': '一括操作',
+  'terminal.custom-button-presets.batch-operations.value':
+    '1. 現在のリポジトリの元ブランチをプルして更新する。2. 現在のブランチへ一括でマージする。',
   'terminal.mirror-controlled': '読み取り専用 · 別のクライアントが操作中です',
   'terminal.unowned': '読み取り専用 · 現在操作中のクライアントはありません',
   'terminal.takeover': 'ターミナルを引き継ぐ',

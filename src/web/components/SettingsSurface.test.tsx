@@ -4,11 +4,14 @@ import { act, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { TerminalCustomButton } from '#/shared/settings.ts'
+import { DICTS } from '#/shared/i18n/dictionaries.ts'
 import { SettingsSurface } from '#/web/components/SettingsSurface.tsx'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import { useI18nStore } from '#/web/stores/i18n.ts'
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -22,6 +25,8 @@ type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
 }))
+
+let terminalCustomButtonsFixture: TerminalCustomButton[] = []
 
 function defaultRpcResult(path: string, input?: unknown) {
   if (path === 'settings.get') {
@@ -48,7 +53,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       terminalFontSize: 14,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
-      terminalCustomButtons: [],
+      terminalCustomButtons: terminalCustomButtonsFixture,
       lanEnabled: false,
       session: {
         openRepos: [],
@@ -209,6 +214,8 @@ beforeEach(() => {
   resetReposStore()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   dndState.lastDragEnd = null
+  terminalCustomButtonsFixture = []
+  useI18nStore.setState({ lang: 'en', pref: 'auto', dict: {} })
   sendTestNotification.mockClear()
   toastMocks.success.mockClear()
   toastMocks.info.mockClear()
@@ -974,6 +981,85 @@ describe('SettingsSurface', () => {
     expect(terminalCustomButtonLabelsFromPayload()).toEqual(['beta', 'gamma', 'alpha'])
   })
 
+  test('shows built-in terminal button presets in the current application language', async () => {
+    terminalCustomButtonsFixture = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ]
+    useI18nStore.setState({ lang: 'zh', pref: 'zh', dict: DICTS.zh })
+
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    const labelInput = await waitForInputValue('terminal-custom-button-label-0', '确认、继续')
+    const valueInput = document.getElementById('terminal-custom-button-value-0')
+
+    expect(labelInput.value).toBe('确认、继续')
+    expect(valueInput).toBeInstanceOf(HTMLTextAreaElement)
+    expect((valueInput as HTMLTextAreaElement).value).toBe('确认、继续')
+  })
+
+  test('preserves a built-in terminal button preset id when reordering', async () => {
+    terminalCustomButtonsFixture = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+      { label: 'Status', value: 'git status', action: 'execute' },
+    ]
+
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    await waitForInputValue('terminal-custom-button-label-0', 'Confirm, continue')
+    await act(async () => {
+      buttonsByLabel('settings.terminal-custom-buttons.move-down')[0]?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(lastTerminalCustomButtonsPayload()).toEqual([
+      { label: 'Status', value: 'git status', action: 'execute' },
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ])
+  })
+
+  test('turns a built-in terminal button preset into a custom button when edited', async () => {
+    terminalCustomButtonsFixture = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ]
+
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    const labelInput = await waitForInputValue('terminal-custom-button-label-0', 'Confirm, continue')
+    await act(async () => {
+      setInputValue(labelInput, 'Continue')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(lastTerminalCustomButtonsPayload()).toEqual([
+      { label: 'Continue', value: 'Confirm and continue', action: 'execute' },
+    ])
+  })
+
   test('disables terminal custom button move controls at list boundaries', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
     await addTerminalCustomButton('alpha', 'echo alpha')
@@ -1068,6 +1154,18 @@ async function waitForText(text: string) {
     })
   }
   throw new Error(`Missing text: ${text}`)
+}
+
+async function waitForInputValue(id: string, value: string): Promise<HTMLInputElement> {
+  for (let i = 0; i < 5; i += 1) {
+    const input = document.getElementById(id)
+    if (input instanceof HTMLInputElement && input.value === value) return input
+    await act(async () => {
+      await Promise.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+  throw new Error(`Missing input value: ${id}=${value}`)
 }
 
 function buttonByText(text: string): HTMLButtonElement {

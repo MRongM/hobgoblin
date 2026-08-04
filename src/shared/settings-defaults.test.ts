@@ -60,6 +60,16 @@ describe('settings defaults', () => {
     expect((defaultSettingsPrefs() as { terminalCustomButtonSize?: string }).terminalCustomButtonSize).toBe('medium')
   })
 
+  test('returns isolated built-in terminal button preset defaults', () => {
+    const first = defaultSettingsPrefs().terminalCustomButtons
+    const second = defaultSettingsPrefs().terminalCustomButtons
+
+    expect(first).toHaveLength(7)
+    expect(second).toEqual(first)
+    expect(second).not.toBe(first)
+    expect(second[0]).not.toBe(first[0])
+  })
+
   test('enables terminal bell notifications by default without overriding opt-out', () => {
     expect(DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED).toBe(true)
     expect(defaultSettingsPrefs().terminalNotificationsEnabled).toBe(true)

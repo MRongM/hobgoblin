@@ -39,6 +39,7 @@ import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-butt
 import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
 import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
+import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
 interface TerminalSlotProps {
   repoRoot: string
   worktreePath: string
@@ -330,7 +331,9 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   }, [isController])
   const visibleCustomButtons =
     isController && terminalCustomButtonsVisible
-      ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
+      ? terminalCustomButtons
+          .map((button) => resolveTerminalCustomButtonPreset(button, t))
+          .filter((button) => button.label.trim() && button.value.trim())
       : []
   const hasBottomDock = visibleCustomButtons.length > 0
 
@@ -442,7 +445,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
               const action = button.action === 'input' ? 'input' : 'execute'
               return (
                 <Button
-                  key={`${index}:${button.label}:${button.value}:${action}`}
+                  key={`${index}:${button.presetId ?? `${button.label}:${button.value}`}:${action}`}
                   type="button"
                   size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
                   variant="secondary"
