@@ -45,6 +45,7 @@ import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
 import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
 import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
+import { DesktopTerminalDock } from '#/web/components/terminal/DesktopTerminalDock.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
@@ -816,42 +817,46 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
             ? { '--goblin-terminal-visual-viewport-bottom-inset': `${visualViewportBottomInset}px` }
             : {}),
         } as CSSProperties)
-  const customButtonsDock =
-    visibleCustomButtons.length > 0 || hasDesktopCycleButtons ? (
-      <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
-        {hasDesktopCycleButtons && (
-          <TerminalCycleButtons
-            terminalCount={switchableTerminalCount}
-            onCycleTerminal={cycleTerminal}
-            buttonClassName="goblin-terminal-custom-buttons__button goblin-terminal-custom-buttons__button--medium"
-          />
+  const customButtonElements = visibleCustomButtons.map((button, index) => {
+    const action = button.action === 'input' ? 'input' : 'execute'
+    return (
+      <Button
+        key={`${index}:${button.presetId ?? `${button.label}:${button.value}`}:${action}`}
+        type="button"
+        size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
+        variant="secondary"
+        className={cn(
+          'goblin-terminal-custom-buttons__button',
+          `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
         )}
-        {visibleCustomButtons.map((button, index) => {
-          const action = button.action === 'input' ? 'input' : 'execute'
-          return (
-            <Button
-              key={`${index}:${button.presetId ?? `${button.label}:${button.value}`}:${action}`}
-              type="button"
-              size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
-              variant="secondary"
-              className={cn(
-                'goblin-terminal-custom-buttons__button',
-                `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
-              )}
-              title={button.value}
-              onClick={() => {
-                if (!key) return
-                if (action === 'input') writeInput(key, button.value)
-                else writeInput(key, `${button.value}\r`)
-                focusTerminal(key)
-              }}
-            >
-              {button.label}
-            </Button>
-          )
-        })}
-      </div>
-    ) : null
+        title={button.value}
+        onClick={() => {
+          if (!key) return
+          if (action === 'input') writeInput(key, button.value)
+          else writeInput(key, `${button.value}\r`)
+          focusTerminal(key)
+        }}
+      >
+        {button.label}
+      </Button>
+    )
+  })
+  const customButtonsDock = hasDesktopCycleButtons ? (
+    <DesktopTerminalDock
+      key={key}
+      terminalCount={switchableTerminalCount}
+      onCycleTerminal={cycleTerminal}
+      onScrollToBottom={handleScrollToBottom}
+      onInput={(data) => {
+        if (key) writeInput(key, data)
+      }}
+      quickInputButtons={customButtonElements}
+    />
+  ) : visibleCustomButtons.length > 0 ? (
+    <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
+      {customButtonElements}
+    </div>
+  ) : null
 
   return (
     <div

@@ -1412,20 +1412,28 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('embeds desktop cycle buttons before custom terminal buttons in the existing dock', async () => {
+  test('orders desktop dock controls before separated quick input buttons', async () => {
     runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
     const fixture = await renderCrossProjectCycleFixture('controller', false)
 
     try {
       const customDock = fixture.container.querySelector('.goblin-terminal-custom-buttons')
+      const dockRow = customDock?.querySelector('.goblin-terminal-custom-buttons__row')
       expect(customDock).toBeInstanceOf(HTMLDivElement)
       expect(fixture.container.querySelector('.goblin-terminal-bottom-dock__desktop-row')).toBeNull()
       expect(fixture.container.querySelector('.goblin-terminal-cycle-dock')).toBeNull()
-      expect([...(customDock?.querySelectorAll('button') ?? [])].map((button) => button.textContent)).toEqual([
+      expect(dockRow).toBeInstanceOf(HTMLDivElement)
+      expect([...(dockRow?.children ?? [])].map((child) => child.textContent)).toEqual([
         'T↑',
         'T↓',
+        'terminal.command-deck.scroll-to-bottom',
+        'terminal.command-deck.compose',
+        '|',
         'status',
       ])
+      expect(dockRow?.querySelector('.goblin-terminal-custom-buttons__separator')?.getAttribute('aria-hidden')).toBe(
+        'true',
+      )
 
       const next = customDock?.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
       await act(async () => next?.click())
@@ -1448,7 +1456,43 @@ describe('TerminalSlot', () => {
       expect([...(customDock?.querySelectorAll('button') ?? [])].map((button) => button.textContent)).toEqual([
         'T↑',
         'T↓',
+        'terminal.command-deck.scroll-to-bottom',
+        'terminal.command-deck.compose',
       ])
+      expect(customDock?.querySelector('.goblin-terminal-custom-buttons__separator')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('opens the desktop command input, scrolls locally, and submits the command', async () => {
+    const writeInput = vi.fn()
+    const scrollToBottom = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput, scrollToBottom })
+
+    try {
+      const dock = container.querySelector('.goblin-terminal-custom-buttons')
+      const button = (label: string) =>
+        [...(dock?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+          (candidate) => candidate.textContent === label,
+        )
+
+      await act(async () => button('terminal.command-deck.scroll-to-bottom')?.click())
+      expect(scrollToBottom).toHaveBeenCalledWith('terminal-1')
+
+      await act(async () => button('terminal.command-deck.compose')?.click())
+      const input = dock?.querySelector<HTMLInputElement>('.goblin-terminal-custom-buttons__composer-input')
+      expect(input?.placeholder).toBe('terminal.command-deck.input-placeholder')
+      expect(document.activeElement).toBe(input)
+
+      await act(async () => setTerminalInputValue(input, 'printf test'))
+      await act(async () => button('terminal.command-deck.send')?.click())
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'printf test\r')
+      expect(input?.value).toBe('')
+
+      await act(async () => button('terminal.command-deck.hide-compose')?.click())
+      expect(dock?.querySelector('.goblin-terminal-custom-buttons__composer-input')).toBeNull()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -2630,6 +2674,13 @@ function terminalPointerEvent(
     ...(options.timeStamp === undefined ? {} : { timeStamp: { value: options.timeStamp } }),
   })
   return event
+}
+
+function setTerminalInputValue(input: HTMLInputElement | null | undefined, value: string): void {
+  if (!input) throw new Error('missing terminal command input')
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 function installAnimationFrameHarness() {

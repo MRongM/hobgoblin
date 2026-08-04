@@ -81,8 +81,12 @@ The top row of the terminal area, containing terminal tabs and terminal-level ac
 _Avoid_: Terminal toolbar, detail toolbar
 
 **Terminal cycle controls**:
-The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the existing custom terminal button dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
+The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
 _Avoid_: Project switcher, terminal tabs, terminal takeover
+
+**Desktop/Web terminal command dock**:
+A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling, local Return to bottom, and renderer-local command composition, followed by a visual divider and any configured custom terminal buttons. The command draft is ephemeral to the selected terminal and is never persisted or synchronized. It is distinct from the Mobile Web terminal command deck and the removed persistent external input box.
+_Avoid_: Mobile Web terminal command deck, terminal topbar, external input box
 
 **Internal terminal**:
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.

@@ -425,6 +425,50 @@
   pointer-events: auto;
 }
 
+.goblin-terminal-custom-buttons--desktop {
+  align-items: stretch;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.goblin-terminal-custom-buttons__row {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-custom-buttons__separator {
+  display: inline-flex;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--color-toolbar-border);
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+}
+
+.goblin-terminal-custom-buttons__composer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.goblin-terminal-custom-buttons__composer-input {
+  width: clamp(160px, 32vw, 360px);
+  min-width: 0;
+  height: 24px;
+  flex: 1;
+  font-size: 12px;
+}
+
 .goblin-terminal-custom-buttons__button {
   max-width: 180px;
   min-width: 0;
