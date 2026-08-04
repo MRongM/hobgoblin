@@ -569,8 +569,8 @@ describe('SettingsSurface', () => {
     expect(proxyUrlInput.compareDocumentPosition(gitProxySwitch) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
   })
 
-  test('configures protected Web access without echoing password fields', async () => {
-    await render(<SettingsSurface page="security" onPageChange={() => {}} />)
+  test('configures protected Web access from LAN settings without echoing password fields', async () => {
+    await render(<SettingsSurface page="lan" onPageChange={() => {}} />)
 
     const usernameInput = document.getElementById('settings-web-access-username')
     const passwordInput = document.getElementById('settings-web-access-password')
@@ -582,6 +582,8 @@ describe('SettingsSurface', () => {
     expect(passwordInput.type).toBe('password')
     expect(passwordInput.value).toBe('')
     expect(confirmInput.value).toBe('')
+    expect(document.getElementById('settings-lan-enabled')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('settings.nav.security')
 
     await act(async () => {
       switchById('settings-web-access-enabled').click()
@@ -607,6 +609,16 @@ describe('SettingsSurface', () => {
       username: 'operator',
       password: 'test-password',
     })
+  })
+
+  test('keeps LAN host controls Electron-only while exposing merged security settings on Web', async () => {
+    delete testWindow.goblinNative
+
+    await render(<SettingsSurface page="lan" onPageChange={() => {}} />)
+
+    expect(document.getElementById('settings-lan-enabled')).toBeNull()
+    expect(document.getElementById('settings-web-access-username')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('settings.nav.security')
   })
 
   test('edits git network proxy settings from proxy settings', async () => {
@@ -710,14 +722,17 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('keeps application and terminal font-size controls out of Files settings', async () => {
-    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+  test('merges file-area settings into General and removes the Files destination', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
 
-    expect(document.getElementById('settings-app-font-size')).toBeNull()
+    expect(document.getElementById('settings-app-font-size')).not.toBeNull()
+    expect(document.getElementById('settings-file-tree-pane-size')).not.toBeNull()
+    expect(document.getElementById('settings-file-tree-clipboard-max-bytes')).not.toBeNull()
     expect(document.getElementById('settings-file-tree-font-size')).toBeNull()
     expect(document.getElementById('settings-file-tree-topbar-font-size')).toBeNull()
     expect(document.getElementById('settings-terminal-font-size')).toBeNull()
     expect(document.body.textContent).not.toContain('settings.files.font.title')
+    expect(document.body.textContent).not.toContain('settings.nav.files')
   })
 
   test('edits the new project default file area height ratio from settings without changing project overrides', async () => {
@@ -731,7 +746,7 @@ describe('SettingsSurface', () => {
       workspaceLayout: 'left-right',
       fileTreePaneSizes: { 'left-right': 66.7 },
     })
-    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
 
     const input = document.getElementById('settings-file-tree-pane-size')
     if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree pane size input')

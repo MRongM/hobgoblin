@@ -7,21 +7,17 @@ import type { SettingsPage } from '#/shared/settings-pages.ts'
 import {
   AppWindow,
   Bell,
-  FolderTree,
   Globe,
   Info,
   Keyboard,
-  LockKeyhole,
   Settings2,
   Shield,
   SlidersHorizontal,
   TerminalSquare,
   type LucideIcon,
 } from 'lucide-react'
-import { getInitialBootstrap } from '#/web/bootstrap.ts'
 const SETTINGS_PAGE_ICONS = {
   general: Settings2,
-  files: FolderTree,
   terminal: TerminalSquare,
   shortcuts: Keyboard,
   notifications: Bell,
@@ -29,7 +25,6 @@ const SETTINGS_PAGE_ICONS = {
   sync: SlidersHorizontal,
   proxy: Globe,
   apps: AppWindow,
-  security: LockKeyhole,
   lan: Globe,
   about: Info,
 } as const satisfies Record<SettingsPage, LucideIcon>
@@ -42,10 +37,6 @@ interface SettingsLayoutProps {
   onPageChange?: (page: SettingsPage) => void
 }
 
-function isLanPageVisible(): boolean {
-  return getInitialBootstrap().runtime.kind === 'electron'
-}
-
 export function SettingsLayout({
   page,
   topInset = 0,
@@ -54,7 +45,7 @@ export function SettingsLayout({
   onPageChange,
 }: SettingsLayoutProps) {
   const t = useT()
-  const pages = SETTINGS_PAGES.filter((pageKey) => pageKey !== 'lan' || isLanPageVisible()).map((pageKey) => {
+  const pages = SETTINGS_PAGES.map((pageKey) => {
     const config = SETTINGS_PAGE_CONFIG[pageKey]
     return {
       page: pageKey,

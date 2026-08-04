@@ -81,9 +81,13 @@ describe('mainRouter', () => {
   test('registers a route for every settings page', async () => {
     const { mainRouter } = await import('#/web/main-router.tsx')
 
+    expect(SETTINGS_PAGES).not.toContain('files')
+    expect(SETTINGS_PAGES).not.toContain('security')
     for (const page of SETTINGS_PAGES) {
       expect(mainRouter.routesByPath[`/settings/${page}`], `missing settings route for ${page}`).toBeDefined()
     }
+    expect(mainRouter.routesByPath['/settings/files']).toBeDefined()
+    expect(mainRouter.routesByPath['/settings/security']).toBeDefined()
   }, 30_000)
 
   test('registers and renders the detached file area route only for a detached renderer surface', async () => {
@@ -135,7 +139,7 @@ describe('mainRouter', () => {
     expect(container.querySelector('[data-testid="route-settings-page"]')).toBeNull()
   })
 
-  test('keeps one App instance mounted while settings routes change', async () => {
+  test('keeps one App instance mounted while legacy settings routes redirect to merged destinations', async () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
     const { mainRouter, MainWindowRouterProvider } = await import('#/web/main-router.tsx')
     await mainRouter.navigate({ to: '/workspace' })
@@ -158,7 +162,13 @@ describe('mainRouter', () => {
       await mainRouter.navigate({ to: '/settings/files' })
     })
 
-    expect(container.querySelector('[data-testid="route-settings-page"]')?.textContent).toBe('files')
+    expect(container.querySelector('[data-testid="route-settings-page"]')?.textContent).toBe('general')
+    routerBootstrap.runtimeKind = 'web'
+    await act(async () => {
+      await mainRouter.navigate({ to: '/settings/security' })
+    })
+
+    expect(container.querySelector('[data-testid="route-settings-page"]')?.textContent).toBe('lan')
     expect(appLifecycle.mounts).toBe(1)
     expect(appLifecycle.unmounts).toBe(0)
   })

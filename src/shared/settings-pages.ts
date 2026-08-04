@@ -1,6 +1,5 @@
 export const SETTINGS_PAGES = [
   'general',
-  'files',
   'terminal',
   'shortcuts',
   'notifications',
@@ -8,7 +7,6 @@ export const SETTINGS_PAGES = [
   'sync',
   'proxy',
   'apps',
-  'security',
   'lan',
   'about',
 ] as const
@@ -21,7 +19,6 @@ export function isSettingsPage(value: string | null | undefined): value is Setti
 
 export const SETTINGS_PAGE_CONFIG = {
   general: { titleKey: 'settings.group.general', labelKey: 'settings.group.general' },
-  files: { titleKey: 'settings.files.title', labelKey: 'settings.nav.files' },
   terminal: { titleKey: 'settings.terminal-custom-buttons.title', labelKey: 'settings.nav.terminal' },
   shortcuts: { titleKey: 'settings.shortcuts', labelKey: 'settings.nav.shortcuts' },
   notifications: { titleKey: 'settings.nav.notifications', labelKey: 'settings.nav.notifications' },
@@ -29,7 +26,6 @@ export const SETTINGS_PAGE_CONFIG = {
   sync: { titleKey: 'settings.nav.refresh', labelKey: 'settings.nav.refresh' },
   proxy: { titleKey: 'settings.proxy.title', labelKey: 'settings.nav.proxy' },
   apps: { titleKey: 'settings.group.apps', labelKey: 'settings.group.apps' },
-  security: { titleKey: 'settings.security.title', labelKey: 'settings.nav.security' },
   lan: { titleKey: 'settings.lan.title', labelKey: 'settings.nav.lan' },
   about: { titleKey: 'settings.about', labelKey: 'settings.about' },
 } as const satisfies Record<SettingsPage, { titleKey: string; labelKey: string }>

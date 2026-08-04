@@ -11,6 +11,7 @@ import { SshRemoteSettings } from '#/web/components/settings/pages/SshRemoteSett
 import { SecuritySettings } from '#/web/components/settings/pages/SecuritySettings.tsx'
 import { SyncSettings } from '#/web/components/settings/pages/SyncSettings.tsx'
 import { TerminalSettings } from '#/web/components/settings/pages/TerminalSettings.tsx'
+import { getRendererBridge } from '#/web/renderer-bridge.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import type { SettingsPage } from '#/shared/rpc.ts'
 interface SettingsSurfaceProps {
@@ -21,12 +22,17 @@ interface SettingsSurfaceProps {
 }
 export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSelected = true }: SettingsSurfaceProps) {
   useT()
+  const electron = getRendererBridge().kind() === 'electron'
 
   return (
     <SettingsLayout page={page} onPageChange={onPageChange} topInset={topInset} autoFocusSelected={autoFocusSelected}>
       <>
-        {page === 'general' && <GeneralSettings />}
-        {page === 'files' && <FileAreaSettings />}
+        {page === 'general' && (
+          <>
+            <GeneralSettings />
+            <FileAreaSettings />
+          </>
+        )}
         {page === 'terminal' && <TerminalSettings />}
         {page === 'apps' && <ExternalAppSettings />}
         {page === 'sync' && <SyncSettings />}
@@ -34,8 +40,12 @@ export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSel
         {page === 'ssh' && <SshRemoteSettings />}
         {page === 'shortcuts' && <KeyboardShortcutSettings />}
         {page === 'notifications' && <NotificationSettings />}
-        {page === 'security' && <SecuritySettings />}
-        {page === 'lan' && <LanSettings />}
+        {page === 'lan' && (
+          <>
+            {electron && <LanSettings />}
+            <SecuritySettings />
+          </>
+        )}
         {page === 'about' && <AboutSettings />}
       </>
     </SettingsLayout>
