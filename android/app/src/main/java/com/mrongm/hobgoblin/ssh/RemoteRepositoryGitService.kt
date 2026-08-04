@@ -5,6 +5,7 @@ import com.mrongm.hobgoblin.domain.ssh.HostKeyTrust
 import com.mrongm.hobgoblin.domain.ssh.RemoteDirectoryEntry
 import com.mrongm.hobgoblin.domain.ssh.RemoteProjectInspection
 import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectPathResolution
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryBranch
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryCommit
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositorySnapshot
@@ -35,6 +36,22 @@ class RemoteRepositoryGitService(
         )
         require(result.ok) { result.message.ifBlank { result.stderr.ifBlank { "Project validation failed" } } }
         return parseRemoteProjectInspection(target.remotePath, result.stdout)
+    }
+
+    fun resolveProjectPaths(
+        target: RemoteTarget,
+        remotePaths: List<String>,
+    ): Map<String, RemoteProjectPathResolution> {
+        val uniquePaths = remotePaths.distinct()
+        if (uniquePaths.isEmpty()) return emptyMap()
+        val fingerprint = trustedFingerprint(target)
+        val result = client.runCommand(
+            target = target,
+            script = projectPathResolutionScript(uniquePaths),
+            secrets = SshConnectionSecrets(acceptedHostFingerprint = fingerprint),
+        )
+        require(result.ok) { result.message.ifBlank { result.stderr.ifBlank { "Project path resolution failed" } } }
+        return parseRemoteProjectPathResolutions(result.stdout)
     }
 
     fun loadSnapshot(target: RemoteTarget): RemoteRepositorySnapshot {
@@ -85,14 +102,46 @@ internal fun parseRemoteProjectInspection(requestedPath: String, output: String)
     }
     val resolvedPath = sections[ProjectPathMarker].orEmpty().firstOrNull { it.isNotBlank() }.orEmpty()
     require(resolvedPath.startsWith("/")) { "Remote project path is invalid." }
+    val worktreePath = sections[ProjectWorktreeMarker].orEmpty()
+        .firstOrNull { it.isNotBlank() }
+        ?: resolvedPath
+    require(worktreePath.startsWith("/")) { "Remote worktree path is invalid." }
     return RemoteProjectInspection(
         requestedPath = requestedPath,
         resolvedPath = resolvedPath,
         kind = kind,
         currentRef = sections[ProjectCurrentMarker].orEmpty().firstOrNull { it.isNotBlank() },
         defaultBranch = sections[ProjectDefaultMarker].orEmpty().firstOrNull { it.isNotBlank() },
+        worktreePath = worktreePath,
     )
 }
+
+internal fun parseRemoteProjectPathResolutions(output: String): Map<String, RemoteProjectPathResolution> =
+    output.lineSequence()
+        .filter { it.isNotBlank() }
+        .mapNotNull { line ->
+            val fields = line.split(BranchFieldSeparator, limit = 4)
+            val requestedPath = fields.getOrNull(0).orEmpty()
+            val kind = fields.getOrNull(1)?.let(RemoteProjectKind::fromStorageValue)
+            val worktreePath = fields.getOrNull(2).orEmpty()
+            val projectPath = fields.getOrNull(3).orEmpty()
+            if (
+                kind == null ||
+                !requestedPath.startsWith("/") ||
+                !worktreePath.startsWith("/") ||
+                !projectPath.startsWith("/")
+            ) {
+                null
+            } else {
+                RemoteProjectPathResolution(
+                    requestedPath = requestedPath,
+                    kind = kind,
+                    projectPath = projectPath,
+                    worktreePath = worktreePath,
+                )
+            }
+        }
+        .associateBy(RemoteProjectPathResolution::requestedPath)
 
 internal fun parseRemoteRepositorySnapshot(output: String): RemoteRepositorySnapshot {
     val sections = parseMarkedSections(output, SnapshotMarkers)
@@ -181,19 +230,49 @@ private fun projectInspectionScript(remotePath: String): String {
         top=${'$'}(git -C "${'$'}resolved" rev-parse --show-toplevel 2>/dev/null || true)
         if [ -n "${'$'}top" ]; then
           kind=git
+          worktree=${'$'}top
           primary_worktree=${'$'}(git -C "${'$'}top" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr(${'$'}0, 10); exit }')
           if [ -n "${'$'}primary_worktree" ]; then resolved=${'$'}primary_worktree; else resolved=${'$'}top; fi
         else
           kind=plain
+          worktree=${'$'}resolved
         fi
         printf '%s\n' ${shellQuote(ProjectKindMarker)}
         printf '%s\n' "${'$'}kind"
         printf '%s\n' ${shellQuote(ProjectPathMarker)}
         printf '%s\n' "${'$'}resolved"
+        printf '%s\n' ${shellQuote(ProjectWorktreeMarker)}
+        printf '%s\n' "${'$'}worktree"
         printf '%s\n' ${shellQuote(ProjectCurrentMarker)}
         if [ "${'$'}kind" = git ]; then git -C "${'$'}resolved" symbolic-ref --short HEAD 2>/dev/null || git -C "${'$'}resolved" rev-parse --short HEAD 2>/dev/null || true; fi
         printf '%s\n' ${shellQuote(ProjectDefaultMarker)}
         if [ "${'$'}kind" = git ]; then git -C "${'$'}resolved" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || true; fi
+    """.trimIndent()
+}
+
+private fun projectPathResolutionScript(remotePaths: List<String>): String {
+    val invocations = remotePaths.joinToString("\n") { remotePath ->
+        "resolve_project_path ${shellQuote(remotePath)}"
+    }
+    return """
+        resolve_project_path() {
+          requested=${'$'}1
+          [ -d "${'$'}requested" ] || return 0
+          [ -r "${'$'}requested" ] || return 0
+          resolved=${'$'}(cd "${'$'}requested" 2>/dev/null && pwd -P) || return 0
+          worktree=${'$'}(git -C "${'$'}resolved" rev-parse --show-toplevel 2>/dev/null || true)
+          if [ -n "${'$'}worktree" ]; then
+            kind=git
+            project=${'$'}(git -C "${'$'}worktree" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr(${'$'}0, 10); exit }')
+            [ -n "${'$'}project" ] || project=${'$'}worktree
+          else
+            kind=plain
+            worktree=${'$'}resolved
+            project=${'$'}resolved
+          fi
+          printf '%s\000%s\000%s\000%s\n' "${'$'}requested" "${'$'}kind" "${'$'}worktree" "${'$'}project"
+        }
+        $invocations
     """.trimIndent()
 }
 
@@ -303,6 +382,7 @@ private const val WorktreesMarker = "__HOBGOBLIN_ANDROID_WORKTREES__"
 private const val WorktreeStatusMarker = "__HOBGOBLIN_ANDROID_WORKTREE_STATUS__"
 private const val ProjectKindMarker = "__HOBGOBLIN_ANDROID_PROJECT_KIND__"
 private const val ProjectPathMarker = "__HOBGOBLIN_ANDROID_PROJECT_PATH__"
+private const val ProjectWorktreeMarker = "__HOBGOBLIN_ANDROID_PROJECT_WORKTREE__"
 private const val ProjectCurrentMarker = "__HOBGOBLIN_ANDROID_PROJECT_CURRENT__"
 private const val ProjectDefaultMarker = "__HOBGOBLIN_ANDROID_PROJECT_DEFAULT__"
 private const val DirectoryFieldSeparator = '\t'
@@ -321,6 +401,7 @@ private val SnapshotMarkers = setOf(
 private val ProjectInspectMarkers = setOf(
     ProjectKindMarker,
     ProjectPathMarker,
+    ProjectWorktreeMarker,
     ProjectCurrentMarker,
     ProjectDefaultMarker,
 )

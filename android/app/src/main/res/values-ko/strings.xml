@@ -414,6 +414,8 @@
     <string name="tmux_stale">마지막으로 성공한 검색 결과 표시 중: %1$s</string>
     <string name="tmux_scan_failed">tmux 세션을 검색할 수 없습니다</string>
     <string name="tmux_import_project">프로젝트 가져오기</string>
+    <string name="tmux_import_as_git_repository">Git 저장소로 가져오기</string>
+    <string name="tmux_import_as_plain_workspace">일반 작업 공간으로 가져오기</string>
     <string name="tmux_project_imported">가져옴</string>
     <string name="host_tmux_default_server">기본 server</string>
     <string name="host_tmux_default_session">기본 tmux 세션</string>

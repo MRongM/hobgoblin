@@ -1,5 +1,6 @@
 package com.mrongm.hobgoblin.navigation
 
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 
 data class HostDetailReturn(
@@ -17,6 +18,7 @@ sealed interface AppRoute {
     data class AddRepository(
         val initialHostId: String? = null,
         val initialRemotePath: String? = null,
+        val initialProjectKind: RemoteProjectKind? = null,
         val tmuxReturn: TmuxReturn? = null,
     ) : AppRoute
     data object Settings : AppRoute

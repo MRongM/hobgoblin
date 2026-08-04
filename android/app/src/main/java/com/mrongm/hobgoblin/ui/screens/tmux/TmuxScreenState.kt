@@ -1,7 +1,14 @@
 package com.mrongm.hobgoblin.ui.screens.tmux
 
 import com.mrongm.hobgoblin.domain.ResourceState
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectPathResolution
 import com.mrongm.hobgoblin.navigation.AppRoute
+import com.mrongm.hobgoblin.terminals.HostTmuxPathGroup
+
+data class HostTmuxCatalogSnapshot(
+    val groups: List<HostTmuxPathGroup>,
+    val projectPathResolutions: Map<String, RemoteProjectPathResolution> = emptyMap(),
+)
 
 internal fun tmuxRoute(): AppRoute.Tmux = AppRoute.Tmux()
 

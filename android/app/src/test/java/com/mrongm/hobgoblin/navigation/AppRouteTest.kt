@@ -1,5 +1,6 @@
 package com.mrongm.hobgoblin.navigation
 
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
 import com.mrongm.hobgoblin.terminals.TerminalSessionRecord
 import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import org.junit.Assert.assertEquals
@@ -62,7 +63,10 @@ class AppRouteTest {
 
     @Test
     fun `ordinary project setup has no import context`() {
-        assertEquals(AppRoute.Projects, projectSetupReturnRoute(AppRoute.AddRepository()))
+        val route = AppRoute.AddRepository()
+
+        assertEquals(null, route.initialProjectKind)
+        assertEquals(AppRoute.Projects, projectSetupReturnRoute(route))
     }
 
     @Test
@@ -70,11 +74,13 @@ class AppRouteTest {
         val route = AppRoute.AddRepository(
             initialHostId = "host-1",
             initialRemotePath = "/srv/app",
+            initialProjectKind = RemoteProjectKind.PlainWorkspace,
             tmuxReturn = TmuxReturn("host-1"),
         )
 
         assertEquals("host-1", route.initialHostId)
         assertEquals("/srv/app", route.initialRemotePath)
+        assertEquals(RemoteProjectKind.PlainWorkspace, route.initialProjectKind)
         assertEquals(AppRoute.Tmux("host-1"), projectSetupReturnRoute(route))
     }
 

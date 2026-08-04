@@ -30,8 +30,13 @@ class TmuxScreenContractTest {
         val source = source("ui/screens/tmux/TmuxScreen.kt")
 
         assertTrue(source.contains("onImportDirectory"))
-        assertTrue(source.contains("hostTmuxPathIsImported"))
+        assertTrue(source.contains("hostTmuxProjectImportOptions"))
+        assertTrue(source.contains("option.imported"))
+        assertTrue(source.contains("RemoteProjectKind.GitRepository"))
+        assertTrue(source.contains("RemoteProjectKind.PlainWorkspace"))
         assertTrue(source.contains("R.string.tmux_import_project"))
+        assertTrue(source.contains("R.string.tmux_import_as_git_repository"))
+        assertTrue(source.contains("R.string.tmux_import_as_plain_workspace"))
         assertTrue(source.contains("R.string.tmux_project_imported"))
     }
 
@@ -40,11 +45,16 @@ class TmuxScreenContractTest {
         val source = source("HobgoblinAndroidApp.kt")
 
         assertTrue(source.contains("initialHostId = hostId"))
-        assertTrue(source.contains("initialRemotePath = initialPath"))
+        assertTrue(source.contains("initialRemotePath = remotePath"))
+        assertTrue(source.contains("initialProjectKind = projectKind"))
         assertTrue(source.contains("tmuxReturn = TmuxReturn(hostId)"))
         assertTrue(source.contains("projectSetupReturnRoute(currentRoute)"))
         assertTrue(source.contains("initialHostId = currentRoute.initialHostId"))
         assertTrue(source.contains("initialRemotePath = currentRoute.initialRemotePath"))
+        assertTrue(source.contains("initialProjectKind = currentRoute.initialProjectKind"))
+        assertTrue(source.contains("remoteRepositoryGitService.resolveProjectPaths("))
+        assertTrue(source.contains("HostTmuxCatalogSnapshot("))
+        assertTrue(source.contains("remoteTmuxSessionService.discoverHostSessions("))
     }
 
     @Test

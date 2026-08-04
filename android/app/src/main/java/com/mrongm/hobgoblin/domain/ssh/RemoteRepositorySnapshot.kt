@@ -6,12 +6,20 @@ data class RemoteDirectoryEntry(
     val isDirectory: Boolean,
 )
 
+data class RemoteProjectPathResolution(
+    val requestedPath: String,
+    val kind: RemoteProjectKind,
+    val projectPath: String,
+    val worktreePath: String,
+)
+
 data class RemoteProjectInspection(
     val requestedPath: String,
     val resolvedPath: String,
     val kind: RemoteProjectKind,
     val currentRef: String?,
     val defaultBranch: String?,
+    val worktreePath: String = resolvedPath,
 )
 
 data class RemoteRepositorySnapshot(

@@ -153,6 +153,8 @@ Explicit tmux launch is fail-closed on Android and desktop. If tmux is unavailab
 
 Android allocates the interactive SSH PTY first and starts each project terminal with an SSH `exec` request carrying `exec /bin/sh -lc '<startup-script>'`. The startup command therefore bypasses the remote login shell's interactive input buffer while the resulting native shell or tmux client still owns the same PTY for input and resize. This avoids both zsh continuation/ZLE processing and macOS PTY canonical-line limits. The nested script executes `new-session`, each `set-option`, and `attach-session` as separate fail-fast commands. The same transport and POSIX command work on Linux without changing tmux names, servers, metadata, or login-shell executable resolution.
 
+Android sets `COLORTERM=truecolor` on tmux invocations in interactive create and attach paths. This lets tmux preserve the 24-bit SGR foreground and background colors emitted by terminal applications, including light and dark AI TUI input surfaces, instead of quantizing them to the 256-color palette. Discovery, inventory, and close commands remain unchanged, and Hobgoblin does not override the remote application's palette.
+
 Inspect the live metadata with:
 
 ```sh

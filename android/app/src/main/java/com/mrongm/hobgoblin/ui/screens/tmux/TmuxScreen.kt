@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.ManualItemOrderPolicy
 import com.mrongm.hobgoblin.domain.ResourceState
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectPathResolution
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.terminals.HostDiscoveredTmuxSession
@@ -64,12 +66,12 @@ fun TmuxScreen(
     hosts: List<SshHostProfile>,
     selectedHost: SshHostProfile?,
     repositories: List<RemoteRepositoryProfile>,
-    tmuxState: ResourceState<List<HostTmuxPathGroup>>,
+    tmuxState: ResourceState<HostTmuxCatalogSnapshot>,
     tmuxRefreshing: Boolean,
     onSelectHost: (String) -> Unit,
     onAddHost: () -> Unit,
     onRefreshTmux: () -> Unit,
-    onImportDirectory: (String) -> Unit,
+    onImportDirectory: (RemoteProjectKind?, String) -> Unit,
     onOpenTmuxSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedTmuxSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
     onReconnectTmuxSession: (TerminalSessionRecord) -> Unit,
@@ -281,10 +283,10 @@ private fun HostTmuxCatalog(
     hostId: String,
     hostTitle: String,
     repositories: List<RemoteRepositoryProfile>,
-    state: ResourceState<List<HostTmuxPathGroup>>,
+    state: ResourceState<HostTmuxCatalogSnapshot>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    onImportDirectory: (String) -> Unit,
+    onImportDirectory: (RemoteProjectKind?, String) -> Unit,
     onOpenSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
     onReconnectSession: (TerminalSessionRecord) -> Unit,
@@ -314,7 +316,8 @@ private fun HostTmuxCatalog(
             )
             is ResourceState.Loaded -> HostTmuxGroups(
                 hostId = hostId,
-                groups = state.value,
+                groups = state.value.groups,
+                projectPathResolutions = state.value.projectPathResolutions,
                 repositories = repositories,
                 staleReason = null,
                 actionError = actionError,
@@ -333,7 +336,8 @@ private fun HostTmuxCatalog(
             )
             is ResourceState.Stale -> HostTmuxGroups(
                 hostId = hostId,
-                groups = state.value,
+                groups = state.value.groups,
+                projectPathResolutions = state.value.projectPathResolutions,
                 repositories = repositories,
                 staleReason = state.reason,
                 actionError = actionError,
@@ -578,11 +582,12 @@ private fun CatalogNotice(message: String) {
 private fun HostTmuxGroups(
     hostId: String,
     groups: List<HostTmuxPathGroup>,
+    projectPathResolutions: Map<String, RemoteProjectPathResolution>,
     repositories: List<RemoteRepositoryProfile>,
     staleReason: String?,
     actionError: String?,
     onRefresh: () -> Unit,
-    onImportDirectory: (String) -> Unit,
+    onImportDirectory: (RemoteProjectKind?, String) -> Unit,
     onOpenSession: (HostDiscoveredTmuxSession) -> Unit,
     retainedSessions: Map<HostDiscoveredTmuxSession, TerminalSessionRecord>,
     onReconnectSession: (TerminalSessionRecord) -> Unit,
@@ -616,7 +621,15 @@ private fun HostTmuxGroups(
         }
         groups.forEach { group ->
             item(key = "heading:${group.initialPath}") {
-                val imported = hostTmuxPathIsImported(hostId, group.initialPath, repositories)
+                val importOptions = hostTmuxProjectImportOptions(
+                    hostId = hostId,
+                    initialPath = group.initialPath,
+                    resolution = projectPathResolutions[group.initialPath],
+                    savedPathResolutions = projectPathResolutions,
+                    repositories = repositories,
+                )
+                val allImported = importOptions.all(HostTmuxProjectImportOption::imported)
+                var importMenuExpanded by remember(group.initialPath) { mutableStateOf(false) }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -637,15 +650,58 @@ private fun HostTmuxGroups(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    TextButton(
-                        enabled = !imported,
-                        onClick = { onImportDirectory(group.initialPath) },
-                    ) {
-                        Text(
-                            stringResource(
-                                if (imported) R.string.tmux_project_imported else R.string.tmux_import_project,
-                            ),
-                        )
+                    Box {
+                        TextButton(
+                            enabled = !allImported,
+                            onClick = {
+                                if (importOptions.size == 1) {
+                                    importOptions.singleOrNull { option -> !option.imported }?.let { option ->
+                                        onImportDirectory(option.kind, option.remotePath)
+                                    }
+                                } else {
+                                    importMenuExpanded = true
+                                }
+                            },
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (allImported) R.string.tmux_project_imported else R.string.tmux_import_project,
+                                ),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = importMenuExpanded,
+                            onDismissRequest = { importMenuExpanded = false },
+                        ) {
+                            importOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                stringResource(
+                                                    when (option.kind) {
+                                                        RemoteProjectKind.GitRepository -> R.string.tmux_import_as_git_repository
+                                                        RemoteProjectKind.PlainWorkspace -> R.string.tmux_import_as_plain_workspace
+                                                        null -> R.string.tmux_import_project
+                                                    },
+                                                ),
+                                            )
+                                            if (option.imported) {
+                                                Text(
+                                                    stringResource(R.string.tmux_project_imported),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                            }
+                                        }
+                                    },
+                                    enabled = !option.imported,
+                                    onClick = {
+                                        importMenuExpanded = false
+                                        onImportDirectory(option.kind, option.remotePath)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }

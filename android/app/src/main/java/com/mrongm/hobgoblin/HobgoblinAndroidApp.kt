@@ -69,6 +69,7 @@ import com.mrongm.hobgoblin.ui.screens.terminals.TerminalsScreen
 import com.mrongm.hobgoblin.ui.screens.terminals.terminalSessionReconnectAvailable
 import com.mrongm.hobgoblin.ui.screens.terminals.terminalTargetLabel
 import com.mrongm.hobgoblin.ui.screens.tmux.TmuxScreen
+import com.mrongm.hobgoblin.ui.screens.tmux.HostTmuxCatalogSnapshot
 import com.mrongm.hobgoblin.ui.screens.tmux.selectTmuxHost
 import com.mrongm.hobgoblin.ui.screens.tmux.tmuxNeedsScan
 import com.mrongm.hobgoblin.ui.screens.tmux.tmuxRoute
@@ -160,7 +161,7 @@ fun HobgoblinAndroidApp(
     var repositoriesState: ResourceState<List<RemoteRepositoryProfile>> by remember {
         mutableStateOf(ResourceState.Loaded(initialRepositories))
     }
-    var hostTmuxState: ResourceState<List<HostTmuxPathGroup>> by remember {
+    var hostTmuxState: ResourceState<HostTmuxCatalogSnapshot> by remember {
         mutableStateOf(ResourceState.Idle)
     }
     var hostTmuxStateHostId: String? by remember { mutableStateOf(null) }
@@ -268,8 +269,35 @@ fun HobgoblinAndroidApp(
                 remoteTmuxSessionService.discoverHostSessions(RemoteTarget.fromHostProfile(host))
             }
             val nextState = when (result) {
-                is RemoteHostTmuxDiscoveryResult.Loaded ->
-                    ResourceState.Loaded(HostTmuxPathGroup.from(result.sessions))
+                is RemoteHostTmuxDiscoveryResult.Loaded -> {
+                    val groups = HostTmuxPathGroup.from(result.sessions)
+                    val resolutionPaths = buildList {
+                        addAll(groups.map(HostTmuxPathGroup::initialPath))
+                        addAll(
+                            currentRepositories()
+                                .filter { repository -> repository.hostProfileId == host.id }
+                                .map(RemoteRepositoryProfile::remotePath),
+                        )
+                    }
+                    val resolutions = try {
+                        withContext(Dispatchers.IO) {
+                            remoteRepositoryGitService.resolveProjectPaths(
+                                target = RemoteTarget.fromHostProfile(host),
+                                remotePaths = resolutionPaths,
+                            )
+                        }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        emptyMap()
+                    }
+                    ResourceState.Loaded(
+                        HostTmuxCatalogSnapshot(
+                            groups = groups,
+                            projectPathResolutions = resolutions,
+                        ),
+                    )
+                }
                 is RemoteHostTmuxDiscoveryResult.Failed -> failedRefresh(previous, result.message)
             }
             if ((route as? AppRoute.Tmux)?.selectedHostId == requestedHostId) {
@@ -393,8 +421,8 @@ fun HobgoblinAndroidApp(
                 state = hostTmuxState,
             )
             val discoveredTmuxSessions = when (visibleTmuxState) {
-                is ResourceState.Loaded -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
-                is ResourceState.Stale -> visibleTmuxState.value.flatMap(HostTmuxPathGroup::sessions)
+                is ResourceState.Loaded -> visibleTmuxState.value.groups.flatMap(HostTmuxPathGroup::sessions)
+                is ResourceState.Stale -> visibleTmuxState.value.groups.flatMap(HostTmuxPathGroup::sessions)
                 ResourceState.Idle,
                 ResourceState.Loading,
                 is ResourceState.Error,
@@ -477,11 +505,12 @@ fun HobgoblinAndroidApp(
                         },
                         onAddHost = { route = AppRoute.AddHost },
                         onRefreshTmux = { hostTmuxRefreshNonce += 1 },
-                        onImportDirectory = { initialPath ->
+                        onImportDirectory = { projectKind, remotePath ->
                             val hostId = requireNotNull(tmuxVisit.selectedHostId)
                             route = AppRoute.AddRepository(
                                 initialHostId = hostId,
-                                initialRemotePath = initialPath,
+                                initialRemotePath = remotePath,
+                                initialProjectKind = projectKind,
                                 tmuxReturn = TmuxReturn(hostId),
                             )
                         },
@@ -620,6 +649,7 @@ fun HobgoblinAndroidApp(
             repositories = currentRepositories(),
             initialHostId = currentRoute.initialHostId,
             initialRemotePath = currentRoute.initialRemotePath,
+            initialProjectKind = currentRoute.initialProjectKind,
             onBack = { route = projectSetupReturnRoute(currentRoute) },
             onSaveRepository = { repository ->
                 remoteRepositoryStore.saveRepository(repository)
