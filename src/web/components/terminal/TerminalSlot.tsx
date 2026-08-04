@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -80,7 +81,9 @@ interface TerminalSlotProps {
 
 export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
+  const terminalHostId = useId()
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const mobileScrollScrubberRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const bottomDockRef = useRef<HTMLDivElement | null>(null)
   const touchScrollRef = useRef<MobileTerminalTouchGesture | null>(null)
@@ -91,6 +94,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [fitToWidth, setFitToWidth] = useState(true)
+  const [mobileFocusMode, setMobileFocusMode] = useState(false)
   const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
   const context = useTerminalSessionContext()
   const {
@@ -106,6 +110,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     clearSearch,
     writeExtraKey,
     writeInput,
+    scrollToBottom,
     scrollByTouch,
     takeover,
     restart,
@@ -132,18 +137,38 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
   const isMobileTerminal = isMobile && (isController || isReadonly) && !!key
+  const isMobileFocusMode = isMobile && isController && !!key && mobileFocusMode
+
+  useEffect(() => {
+    setMobileFocusMode(false)
+  }, [attachment?.role, isMobile, key])
 
   const cancelTouchInertia = useCallback(() => {
     if (touchInertiaFrameRef.current !== null) window.cancelAnimationFrame(touchInertiaFrameRef.current)
     touchInertiaFrameRef.current = null
     touchInertiaRef.current = null
   }, [])
-
-  useEffect(() => {
+  const stopTouchMotion = useCallback(() => {
     touchScrollRef.current = null
     cancelTouchInertia()
-    return cancelTouchInertia
-  }, [attachment?.role, cancelTouchInertia, isMobileTerminal, key, snapshot.phase])
+  }, [cancelTouchInertia])
+  const initializeMobileScrollScrubber = useCallback((scrubber: HTMLDivElement | null) => {
+    mobileScrollScrubberRef.current = scrubber
+    if (!scrubber) return
+    scrubber.dataset.active = 'false'
+    scrubber.dataset.position = '0%'
+    scrubber.style.setProperty('--goblin-terminal-scrub-position', '0%')
+    scrubber.setAttribute('aria-valuemin', '0')
+    scrubber.setAttribute('aria-valuemax', '100')
+    scrubber.setAttribute('aria-valuenow', '0')
+    scrubber.setAttribute('aria-valuetext', '0%')
+    scrubber.hidden = true
+  }, [])
+
+  useEffect(() => {
+    stopTouchMotion()
+    return stopTouchMotion
+  }, [attachment?.role, isMobileTerminal, key, snapshot.phase, stopTouchMotion])
 
   useLayoutEffect(() => {
     if (fitToWidth && hostRef.current) hostRef.current.scrollLeft = 0
@@ -336,9 +361,15 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host || !descriptor) return
-    attach(descriptor, host, { onRevealPath: handleRevealPath, onOpenPathInEditor: handleOpenPathInEditor })
+    attach(descriptor, host, {
+      onRevealPath: handleRevealPath,
+      onOpenPathInEditor: handleOpenPathInEditor,
+      ...(isMobileTerminal && mobileScrollScrubberRef.current
+        ? { mobileScrollScrubber: mobileScrollScrubberRef.current }
+        : {}),
+    })
     return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath])
+  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath, isMobileTerminal])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return
@@ -498,7 +529,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           .filter((button) => button.label.trim() && button.value.trim())
       : []
   const hasMobileCommandDeck = isMobile && isController && !!key
-  const hasBottomDock = visibleCustomButtons.length > 0 || hasMobileCommandDeck
+  const hasBottomDock = !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileCommandDeck)
 
   const cycleTerminal = useCallback(
     (direction: -1 | 1) => {
@@ -512,6 +543,11 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     },
     [key, selectTerminal, terminalWorktreeKey, worktreeSnapshot.sessions],
   )
+  const handleScrollToBottom = useCallback(() => {
+    if (!key) return
+    stopTouchMotion()
+    scrollToBottom(key)
+  }, [key, scrollToBottom, stopTouchMotion])
 
   useLayoutEffect(() => {
     if (!hasBottomDock) {
@@ -573,6 +609,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         </div>
       )}
       <div
+        id={terminalHostId}
         ref={hostRef}
         className={cn(
           'goblin-terminal-slot__host',
@@ -585,7 +622,31 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
         onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
       />
+      {isMobileTerminal && (
+        <div
+          ref={initializeMobileScrollScrubber}
+          className="goblin-terminal-edge-scrubber"
+          role="scrollbar"
+          tabIndex={0}
+          aria-controls={terminalHostId}
+          aria-label={t('terminal.mobile-scroll-scrubber')}
+          aria-orientation="vertical"
+          onPointerDown={stopTouchMotion}
+        />
+      )}
       <div className="goblin-terminal-float-group">
+        {isMobileFocusMode && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="goblin-terminal-focus-exit"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => setMobileFocusMode(false)}
+          >
+            {t('terminal.command-deck.exit-focus')}
+          </Button>
+        )}
         {searchOpen && (
           <div className="goblin-terminal-slot__search">
             <input
@@ -648,8 +709,10 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
               fitToWidth={fitToWidth}
               onExtraKey={(input) => writeExtraKey(key, input)}
               onInput={(data) => writeInput(key, data)}
+              onScrollToBottom={handleScrollToBottom}
               onCycleTerminal={cycleTerminal}
               onFitToWidthChange={setFitToWidth}
+              onEnterFocus={() => setMobileFocusMode(true)}
             />
           )}
         </div>
@@ -657,8 +720,10 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       {isReadonly && (
         <ViewerStatus
           message={readonlyMessage}
+          scrollToBottomLabel={t('terminal.command-deck.scroll-to-bottom')}
           takeoverLabel={t('terminal.takeover')}
           takeoverKey={key}
+          onScrollToBottom={handleScrollToBottom}
           onTakeover={takeover}
           takeoverPending={snapshot.takeoverPending}
         />
@@ -684,27 +749,42 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
 interface ViewerStatusProps {
   message: string
+  scrollToBottomLabel: string
   takeoverLabel: string
   takeoverKey: string | null
+  onScrollToBottom: () => void
   onTakeover: (key: string) => void
   takeoverPending?: boolean
 }
 
-function ViewerStatus({ message, takeoverLabel, takeoverKey, onTakeover, takeoverPending }: ViewerStatusProps) {
+function ViewerStatus({
+  message,
+  scrollToBottomLabel,
+  takeoverLabel,
+  takeoverKey,
+  onScrollToBottom,
+  onTakeover,
+  takeoverPending,
+}: ViewerStatusProps) {
   return (
     <div className="goblin-terminal-slot__viewer-status">
       <span className="goblin-terminal-slot__viewer-message" role="status" aria-live="polite" aria-atomic="true">
         {message}
       </span>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        onClick={() => takeoverKey && onTakeover(takeoverKey)}
-        disabled={!takeoverKey || takeoverPending}
-      >
-        {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
-      </Button>
+      <div className="goblin-terminal-slot__viewer-actions">
+        <Button type="button" size="sm" variant="ghost" onClick={onScrollToBottom} disabled={!takeoverKey}>
+          {scrollToBottomLabel}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => takeoverKey && onTakeover(takeoverKey)}
+          disabled={!takeoverKey || takeoverPending}
+        >
+          {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
+        </Button>
+      </div>
     </div>
   )
 }

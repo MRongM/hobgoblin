@@ -137,6 +137,7 @@ const xtermMocks = vi.hoisted(() => {
     private keyHandlers: Array<(event: { key: string; domEvent: KeyboardEvent }) => void> = []
     private bellHandlers: Array<() => void> = []
     private scrollHandlers: Array<(position: number) => void> = []
+    private writeParsedHandlers: Array<() => void> = []
     private titleHandlers: Array<(title: string) => void> = []
     private bufferChangeHandlers: Array<(buffer: { type: 'normal' | 'alternate' }) => void> = []
     private themeValue: { background?: string; foreground?: string } | undefined
@@ -240,6 +241,13 @@ const xtermMocks = vi.hoisted(() => {
       return { dispose: vi.fn(() => (this.scrollHandlers = this.scrollHandlers.filter((handler) => handler !== cb))) }
     }
 
+    onWriteParsed(cb: () => void) {
+      this.writeParsedHandlers.push(cb)
+      return {
+        dispose: vi.fn(() => (this.writeParsedHandlers = this.writeParsedHandlers.filter((handler) => handler !== cb))),
+      }
+    }
+
     onTitleChange(cb: (title: string) => void) {
       this.titleHandlers.push(cb)
       return { dispose: vi.fn(() => (this.titleHandlers = this.titleHandlers.filter((handler) => handler !== cb))) }
@@ -317,6 +325,10 @@ const xtermMocks = vi.hoisted(() => {
       const active = this.buffer.active
       active.viewportY = Math.max(0, Math.min(active.baseY, viewportY))
       this.dispatchTerminalScroll()
+    }
+
+    emitWriteParsed() {
+      for (const handler of this.writeParsedHandlers) handler()
     }
 
     private dispatchViewportScroll() {
@@ -571,6 +583,17 @@ const descriptor = {
   branch: 'feature',
   worktreePath: '/worktree',
 }
+
+function terminalScrubberPointerEvent(type: 'pointerdown' | 'pointermove' | 'pointerup', clientY: number): Event {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY })
+  Object.defineProperties(event, {
+    pointerId: { value: 1 },
+    pointerType: { value: 'touch' },
+    isPrimary: { value: true },
+  })
+  return event
+}
+
 beforeEach(() => {
   xtermMocks.terminals.length = 0
   xtermMocks.fitAddons.length = 0
@@ -846,6 +869,91 @@ describe('ManagedTerminalSession', () => {
     expect(fitAddon.fit).toHaveBeenCalledTimes(2)
     expect(term.cols).toBe(100)
     expect(terminalCalls.resize).not.toHaveBeenCalled()
+  })
+
+  test('scrubs Mobile Web normal-buffer history from the terminal edge without a range input', async () => {
+    const host = document.createElement('div')
+    const parking = document.createElement('div')
+    const scrubberHost = document.createElement('div')
+    const scrubber = document.createElement('div')
+    const bubbledPointerDown = vi.fn()
+    const capturedPointers = new Set<number>()
+    const releasePointerCapture = vi.fn((pointerId: number) => capturedPointers.delete(pointerId))
+    Object.defineProperties(scrubber, {
+      setPointerCapture: {
+        value: vi.fn((pointerId: number) => capturedPointers.add(pointerId)),
+      },
+      hasPointerCapture: {
+        value: vi.fn((pointerId: number) => capturedPointers.has(pointerId)),
+      },
+      releasePointerCapture: {
+        value: releasePointerCapture,
+      },
+    })
+    scrubberHost.addEventListener('pointerdown', bubbledPointerDown)
+    scrubberHost.appendChild(scrubber)
+    scrubber.hidden = true
+    document.body.appendChild(host)
+    document.body.appendChild(scrubberHost)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host, { mobileScrollScrubber: scrubber })
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 120
+    term.emitTerminalScroll(45)
+
+    expect(scrubber.hidden).toBe(false)
+    expect(scrubber.getAttribute('aria-valuemin')).toBe('0')
+    expect(scrubber.getAttribute('aria-valuemax')).toBe('100')
+    expect(scrubber.getAttribute('aria-valuenow')).toBe('38')
+    expect(scrubber.dataset.position).toBe('38%')
+
+    term.buffer.active.baseY = 140
+    term.emitWriteParsed()
+    expect(scrubber.getAttribute('aria-valuenow')).toBe('32')
+    expect(scrubber.dataset.position).toBe('32%')
+
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerdown', 200))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(70)
+    expect(bubbledPointerDown).toHaveBeenCalledTimes(1)
+    expect(scrubber.dataset.active).toBe('true')
+    expect(scrubber.dataset.position).toBe('50%')
+
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointermove', 400))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(140)
+    expect(scrubber.dataset.position).toBe('100%')
+
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerup', 400))
+    expect(scrubber.dataset.active).toBe('false')
+
+    scrubber.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(0)
+    expect(scrubber.dataset.position).toBe('0%')
+
+    scrubber.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(140)
+    expect(scrubber.dataset.position).toBe('100%')
+
+    term.emitBufferChange('alternate')
+    expect(scrubber.hidden).toBe(true)
+
+    term.emitBufferChange('normal')
+    expect(scrubber.hidden).toBe(false)
+    releasePointerCapture.mockClear()
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerdown', 100))
+    session.detach(host, parking)
+    expect(releasePointerCapture).toHaveBeenCalledWith(1)
+    expect(scrubber.hidden).toBe(true)
+    term.scrollToLine.mockClear()
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerdown', 100))
+    expect(term.scrollToLine).not.toHaveBeenCalled()
+    session.dispose({ closeSession: false })
+    scrubberHost.remove()
+    host.remove()
   })
 
   test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {
@@ -1546,6 +1654,8 @@ describe('ManagedTerminalSession', () => {
       controllerStatus: 'connected',
       canTakeover: true,
     })
+    expect((xtermMocks.terminals[0]!.options as { disableStdin?: boolean }).disableStdin).toBe(true)
+    expect(xtermMocks.terminals[0]!.textarea).toMatchObject({ readOnly: true, inputMode: 'none' })
   })
 
   test('clears a pending controller resize when attach resolves as viewer', async () => {
@@ -2014,6 +2124,10 @@ describe('ManagedTerminalSession', () => {
       controllerStatus: 'connected',
       canTakeover: false,
     })
+    expect((term.options as { disableStdin?: boolean }).disableStdin).toBe(false)
+    expect(term.textarea?.readOnly).toBe(false)
+    expect(term.textarea?.hasAttribute('inputmode')).toBe(false)
+    session.dispose({ closeSession: false })
   })
 
   test('takeover applies authoritative server response instead of optimistic local control', async () => {

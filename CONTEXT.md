@@ -77,12 +77,20 @@ A Hobgoblin-managed terminal session rendered inside the selected worktree's ter
 _Avoid_: New terminal, embedded terminal
 
 **Mobile Web terminal vertical scroll gesture**:
-A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a tap retains ordinary terminal focus behavior.
+A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a controller tap retains ordinary terminal focus behavior, while a read-only tap never invokes the input method.
 _Avoid_: Page scroll, terminal input gesture, takeover gesture, history-only gesture
 
+**Mobile Web terminal edge scrubber**:
+A renderer-local, touch-sized interaction strip at the right edge of a Mobile Web internal terminal that lets controller, viewer, and unowned attachments drag directly to an absolute normal-buffer history position. It has no idle track or thumb; while dragging or keyboard-focused it briefly shows a terminal-style position tick and a 14-pixel percentage readout. It is unavailable when the active buffer has no normal scrollback, cancels gesture inertia when grabbed, and never requests terminal input control or synchronizes viewing position through the server.
+_Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
+
 **Mobile Web terminal command deck**:
-A controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order and whose action row owns terminal switching, command composition, and renderer-local width presentation. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order and whose action row starts with a local return-to-bottom action before terminal input, switching, command composition, renderer-local width presentation, and Focus. Its 32-pixel-high keys retain a 44-pixel minimum width. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
 _Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
+
+**Mobile Web terminal focus mode**:
+A temporary, controller-only presentation for the selected Mobile Web internal terminal that hides the complete auxiliary bottom dock, including the command deck, composer, and custom terminal buttons. A small top-right exit handle restores the dock; changing terminal, attachment authority, or mobile presentation resets the mode. It is renderer-local, never persisted or synchronized, and does not hide Web navigation or enter desktop Terminal focus mode.
+_Avoid_: Desktop Terminal focus mode, browser fullscreen, hidden system keyboard, persisted terminal layout
 
 **Mobile Web terminal input latency**:
 The perceived delay between direct virtual-keyboard input or committed input-method text and the corresponding internal terminal response or echo becoming visible. Input-method pre-edit text is not terminal input; candidate UI and system keyboard animation latency are excluded.

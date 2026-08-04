@@ -520,20 +520,28 @@ describe('i18n dictionaries', () => {
   test('localizes the Mobile Web terminal command deck in every dictionary', () => {
     const keys = [
       'terminal.command-deck',
+      'terminal.command-deck.scroll-to-bottom',
       'terminal.command-deck.previous-terminal',
       'terminal.command-deck.next-terminal',
       'terminal.command-deck.compose',
       'terminal.command-deck.hide-compose',
       'terminal.command-deck.original-width',
       'terminal.command-deck.fit-width',
+      'terminal.command-deck.focus',
+      'terminal.command-deck.exit-focus',
       'terminal.command-deck.input-placeholder',
       'terminal.command-deck.send',
+      'terminal.mobile-scroll-scrubber',
     ] as const
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
     expect(zh['terminal.command-deck.compose' as keyof typeof zh]).toBe('命令输入')
+    expect(zh['terminal.command-deck.scroll-to-bottom' as keyof typeof zh]).toBe('回到底部')
     expect(zh['terminal.command-deck.fit-width' as keyof typeof zh]).toBe('适应宽度')
+    expect(zh['terminal.command-deck.focus' as keyof typeof zh]).toBe('专注模式')
+    expect(zh['terminal.command-deck.exit-focus' as keyof typeof zh]).toBe('退出专注模式')
+    expect(zh['terminal.mobile-scroll-scrubber' as keyof typeof zh]).toBe('拖动浏览终端历史')
   })
 
   test('includes discard selected changes copy', () => {

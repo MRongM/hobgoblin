@@ -64,8 +64,11 @@ export class TerminalSessionView {
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
   private worktreePath: string | null = null
+  private mobileScrollScrubber: HTMLElement | null = null
+  private mobileScrollScrubberPointerId: number | null = null
   private fontSize: number
   private fontFamily: string
+  private inputEnabled = true
   private terminalThemeMode: () => TerminalThemeMode
   private readonly safariShiftKeyResolver = new SafariShiftKeyResolver()
   private pendingCoreUserInput = 0
@@ -114,6 +117,25 @@ export class TerminalSessionView {
     this.openPathInEditorHandler = handler
   }
 
+  setMobileScrollScrubber(scrubber: HTMLElement | null): void {
+    if (this.mobileScrollScrubber === scrubber) {
+      this.syncMobileScrollScrubber()
+      return
+    }
+    if (this.mobileScrollScrubber) {
+      const pointerId = this.mobileScrollScrubberPointerId
+      if (pointerId !== null && this.mobileScrollScrubber.hasPointerCapture?.(pointerId)) {
+        this.mobileScrollScrubber.releasePointerCapture(pointerId)
+      }
+      this.removeMobileScrollScrubberListeners(this.mobileScrollScrubber)
+      resetMobileScrollScrubber(this.mobileScrollScrubber)
+    }
+    this.mobileScrollScrubberPointerId = null
+    this.mobileScrollScrubber = scrubber
+    if (scrubber) this.addMobileScrollScrubberListeners(scrubber)
+    this.syncMobileScrollScrubber()
+  }
+
   setWorktreePath(worktreePath: string | null): void {
     this.worktreePath = worktreePath
   }
@@ -148,6 +170,13 @@ export class TerminalSessionView {
     const term = this.term
     if (!term) return
     term.options.windowsPty = windowsPty
+  }
+
+  setInputEnabled(inputEnabled: boolean): void {
+    this.inputEnabled = inputEnabled
+    const term = this.term
+    if (!term) return
+    this.applyInputMode(term)
   }
 
   attach(host: HTMLElement): void {
@@ -206,6 +235,7 @@ export class TerminalSessionView {
       rows: geometry.rows,
       cursorBlink: true,
       cursorStyle: 'bar',
+      disableStdin: !this.inputEnabled,
       fontFamily: this.fontFamily,
       fontSize: this.fontSize,
       lineHeight: 1,
@@ -232,11 +262,25 @@ export class TerminalSessionView {
     this.disposables.push(term.onData((data) => this.handlers.onInput(this.inputFromXtermData(data, 'data'))))
     this.disposables.push(term.onBinary((data) => this.handlers.onInput(this.inputFromXtermData(data, 'binary'))))
     this.disposables.push(term.onBell(() => this.handlers.onBell()))
-    this.disposables.push(term.onResize((size) => this.handlers.onResize(size)))
-    this.disposables.push(term.buffer.onBufferChange(() => this.fitNow()))
+    this.disposables.push(
+      term.onResize((size) => {
+        this.handlers.onResize(size)
+        this.syncMobileScrollScrubber()
+      }),
+    )
+    this.disposables.push(term.onScroll(() => this.syncMobileScrollScrubber()))
+    this.disposables.push(term.onWriteParsed(() => this.syncMobileScrollScrubber()))
+    this.disposables.push(
+      term.buffer.onBufferChange(() => {
+        this.fitNow()
+        this.syncMobileScrollScrubber()
+      }),
+    )
     term.open(this.xtermHost)
+    this.applyInputMode(term)
     this.installResizeObserver()
     this.installFontObserver(term)
+    this.syncMobileScrollScrubber()
     return term
   }
 
@@ -246,6 +290,19 @@ export class TerminalSessionView {
 
   focus(): void {
     this.term?.focus()
+  }
+
+  private applyInputMode(term: XTermTerminal): void {
+    term.options.disableStdin = !this.inputEnabled
+    const textarea = term.textarea
+    if (!textarea) return
+    textarea.readOnly = !this.inputEnabled
+    if (this.inputEnabled) {
+      textarea.removeAttribute('inputmode')
+      return
+    }
+    textarea.inputMode = 'none'
+    if (textarea.ownerDocument.activeElement === textarea) textarea.blur()
   }
 
   serialize(): string {
@@ -258,10 +315,12 @@ export class TerminalSessionView {
 
   scrollToBottom(): void {
     scrollTerminalToBottom(this.term)
+    this.syncMobileScrollScrubber()
   }
 
   scrollLines(amount: number): void {
     this.term?.scrollLines(amount)
+    this.syncMobileScrollScrubber()
   }
 
   scrollByTouch(input: TerminalTouchScrollInput): void {
@@ -271,6 +330,7 @@ export class TerminalSessionView {
 
     if (term.buffer.active.type === 'normal' && term.modes.mouseTrackingMode === 'none') {
       term.scrollLines(lines)
+      this.syncMobileScrollScrubber()
       return
     }
 
@@ -347,8 +407,127 @@ export class TerminalSessionView {
     this.serializeAddon = null
     this.term?.dispose()
     this.term = null
+    this.syncMobileScrollScrubber()
     this.xtermHost.replaceChildren()
     if (!this.frame.contains(this.xtermHost)) this.frame.appendChild(this.xtermHost)
+  }
+
+  private addMobileScrollScrubberListeners(scrubber: HTMLElement): void {
+    scrubber.addEventListener('pointerdown', this.handleMobileScrollScrubberPointerDown)
+    scrubber.addEventListener('pointermove', this.handleMobileScrollScrubberPointerMove)
+    scrubber.addEventListener('pointerup', this.handleMobileScrollScrubberPointerEnd)
+    scrubber.addEventListener('pointercancel', this.handleMobileScrollScrubberPointerEnd)
+    scrubber.addEventListener('keydown', this.handleMobileScrollScrubberKeyDown)
+  }
+
+  private removeMobileScrollScrubberListeners(scrubber: HTMLElement): void {
+    scrubber.removeEventListener('pointerdown', this.handleMobileScrollScrubberPointerDown)
+    scrubber.removeEventListener('pointermove', this.handleMobileScrollScrubberPointerMove)
+    scrubber.removeEventListener('pointerup', this.handleMobileScrollScrubberPointerEnd)
+    scrubber.removeEventListener('pointercancel', this.handleMobileScrollScrubberPointerEnd)
+    scrubber.removeEventListener('keydown', this.handleMobileScrollScrubberKeyDown)
+  }
+
+  private readonly handleMobileScrollScrubberPointerDown = (event: PointerEvent): void => {
+    if (event.isPrimary === false || (event.pointerType === 'mouse' && event.button !== 0)) return
+    const scrubber = this.mobileScrollScrubber
+    if (!scrubber || !this.scrollMobileHistoryToClientY(event.clientY)) return
+
+    event.preventDefault()
+    this.mobileScrollScrubberPointerId = event.pointerId
+    scrubber.dataset.active = 'true'
+    scrubber.setPointerCapture?.(event.pointerId)
+  }
+
+  private readonly handleMobileScrollScrubberPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId !== this.mobileScrollScrubberPointerId) return
+    event.preventDefault()
+    this.scrollMobileHistoryToClientY(event.clientY)
+  }
+
+  private readonly handleMobileScrollScrubberPointerEnd = (event: PointerEvent): void => {
+    if (event.pointerId !== this.mobileScrollScrubberPointerId) return
+    event.preventDefault()
+    const scrubber = this.mobileScrollScrubber
+    if (scrubber?.hasPointerCapture?.(event.pointerId)) scrubber.releasePointerCapture(event.pointerId)
+    this.mobileScrollScrubberPointerId = null
+    if (scrubber) scrubber.dataset.active = 'false'
+    this.syncMobileScrollScrubber()
+  }
+
+  private readonly handleMobileScrollScrubberKeyDown = (event: KeyboardEvent): void => {
+    const term = this.term
+    const buffer = term?.buffer.active
+    if (!term || buffer?.type !== 'normal' || buffer.baseY <= 0) return
+
+    const baseY = Math.max(0, Math.trunc(buffer.baseY))
+    const viewportY = Math.max(0, Math.min(baseY, Math.trunc(buffer.viewportY)))
+    const pageSize = Math.max(1, Math.trunc(term.rows))
+    const targetLine =
+      event.key === 'ArrowUp'
+        ? viewportY - 1
+        : event.key === 'ArrowDown'
+          ? viewportY + 1
+          : event.key === 'PageUp'
+            ? viewportY - pageSize
+            : event.key === 'PageDown'
+              ? viewportY + pageSize
+              : event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? baseY
+                  : null
+    if (targetLine === null) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    term.scrollToLine(Math.max(0, Math.min(baseY, targetLine)))
+    this.syncMobileScrollScrubber()
+  }
+
+  private scrollMobileHistoryToClientY(clientY: number): boolean {
+    const scrubber = this.mobileScrollScrubber
+    const term = this.term
+    const buffer = term?.buffer.active
+    if (!scrubber || !term || buffer?.type !== 'normal' || buffer.baseY <= 0) {
+      this.syncMobileScrollScrubber()
+      return false
+    }
+    const rect = scrubber.getBoundingClientRect()
+    if (rect.height <= 0) return false
+    const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    const baseY = Math.max(0, Math.trunc(buffer.baseY))
+    term.scrollToLine(Math.round(baseY * ratio))
+    this.syncMobileScrollScrubber()
+    return true
+  }
+
+  private syncMobileScrollScrubber(): void {
+    const scrubber = this.mobileScrollScrubber
+    if (!scrubber) return
+    const buffer = this.term?.buffer.active
+    if (!buffer || buffer.type !== 'normal' || buffer.baseY <= 0) {
+      const pointerId = this.mobileScrollScrubberPointerId
+      if (pointerId !== null && scrubber.hasPointerCapture?.(pointerId)) scrubber.releasePointerCapture(pointerId)
+      this.mobileScrollScrubberPointerId = null
+      resetMobileScrollScrubber(scrubber)
+      return
+    }
+    const baseY = Math.max(0, Math.trunc(buffer.baseY))
+    const viewportY = Math.max(0, Math.min(baseY, Math.trunc(buffer.viewportY)))
+    const percent = Math.round((viewportY / baseY) * 100)
+    const position = `${percent}%`
+    if (scrubber.getAttribute('aria-valuemin') !== '0') scrubber.setAttribute('aria-valuemin', '0')
+    if (scrubber.getAttribute('aria-valuemax') !== '100') scrubber.setAttribute('aria-valuemax', '100')
+    if (scrubber.getAttribute('aria-valuenow') !== String(percent)) {
+      scrubber.setAttribute('aria-valuenow', String(percent))
+    }
+    if (scrubber.getAttribute('aria-valuetext') !== position) scrubber.setAttribute('aria-valuetext', position)
+    if (scrubber.dataset.position !== position) scrubber.dataset.position = position
+    if (scrubber.style.getPropertyValue('--goblin-terminal-scrub-position') !== position) {
+      scrubber.style.setProperty('--goblin-terminal-scrub-position', position)
+    }
+    if (scrubber.hidden) scrubber.hidden = false
   }
 
   private installKeyboardHandlers(term: XTermTerminal, onInput: (input: TerminalInput) => void): void {
@@ -634,6 +813,19 @@ function blurElementIfFocused(element: HTMLElement): void {
 function hasMeasurableBox(element: HTMLElement): boolean {
   const rect = element.getBoundingClientRect()
   return rect.width > 0 && rect.height > 0
+}
+
+function resetMobileScrollScrubber(scrubber: HTMLElement): void {
+  if (scrubber.getAttribute('aria-valuemin') !== '0') scrubber.setAttribute('aria-valuemin', '0')
+  if (scrubber.getAttribute('aria-valuemax') !== '100') scrubber.setAttribute('aria-valuemax', '100')
+  if (scrubber.getAttribute('aria-valuenow') !== '0') scrubber.setAttribute('aria-valuenow', '0')
+  if (scrubber.getAttribute('aria-valuetext') !== '0%') scrubber.setAttribute('aria-valuetext', '0%')
+  if (scrubber.dataset.active !== 'false') scrubber.dataset.active = 'false'
+  if (scrubber.dataset.position !== '0%') scrubber.dataset.position = '0%'
+  if (scrubber.style.getPropertyValue('--goblin-terminal-scrub-position') !== '0%') {
+    scrubber.style.setProperty('--goblin-terminal-scrub-position', '0%')
+  }
+  if (!scrubber.hidden) scrubber.hidden = true
 }
 
 function scrollTerminalToBottom(term: XTermTerminal | null): void {

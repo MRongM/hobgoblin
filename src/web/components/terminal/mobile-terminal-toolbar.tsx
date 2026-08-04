@@ -14,8 +14,10 @@ interface MobileTerminalCommandDeckProps {
   fitToWidth: boolean
   onExtraKey: (input: TerminalExtraKeyInput) => void
   onInput: (data: string) => void
+  onScrollToBottom: () => void
   onCycleTerminal: (direction: -1 | 1) => void
   onFitToWidthChange: (fitToWidth: boolean) => void
+  onEnterFocus: () => void
   className?: string
 }
 
@@ -31,8 +33,10 @@ export function MobileTerminalCommandDeck({
   fitToWidth,
   onExtraKey,
   onInput,
+  onScrollToBottom,
   onCycleTerminal,
   onFitToWidthChange,
+  onEnterFocus,
   className,
 }: MobileTerminalCommandDeckProps) {
   const t = useT()
@@ -104,6 +108,16 @@ export function MobileTerminalCommandDeck({
       ))}
 
       <div className="goblin-terminal-command-deck__row goblin-terminal-command-deck__row--actions">
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="goblin-terminal-command-deck__btn goblin-terminal-command-deck__btn--action"
+          onPointerDown={preserveTerminalFocus}
+          onClick={onScrollToBottom}
+        >
+          {t('terminal.command-deck.scroll-to-bottom')}
+        </Button>
         {DIRECT_INPUT_ACTIONS.map((action) => (
           <Button
             key={action.title}
@@ -164,6 +178,16 @@ export function MobileTerminalCommandDeck({
           onClick={() => onFitToWidthChange(!fitToWidth)}
         >
           {t(fitToWidth ? 'terminal.command-deck.original-width' : 'terminal.command-deck.fit-width')}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="goblin-terminal-command-deck__btn goblin-terminal-command-deck__btn--action"
+          onPointerDown={preserveTerminalFocus}
+          onClick={onEnterFocus}
+        >
+          {t('terminal.command-deck.focus')}
         </Button>
       </div>
 

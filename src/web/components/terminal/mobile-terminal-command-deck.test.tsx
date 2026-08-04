@@ -7,12 +7,14 @@ import { MobileTerminalCommandDeck } from '#/web/components/terminal/mobile-term
 
 const translations: Record<string, string> = {
   'terminal.command-deck': 'Terminal command deck',
+  'terminal.command-deck.scroll-to-bottom': 'Back to bottom',
   'terminal.command-deck.previous-terminal': 'Previous terminal',
   'terminal.command-deck.next-terminal': 'Next terminal',
   'terminal.command-deck.compose': 'Compose',
   'terminal.command-deck.hide-compose': 'Hide compose',
   'terminal.command-deck.original-width': 'Original width',
   'terminal.command-deck.fit-width': 'Fit width',
+  'terminal.command-deck.focus': 'Focus',
   'terminal.command-deck.input-placeholder': 'Command',
   'terminal.command-deck.send': 'Send',
 }
@@ -33,7 +35,18 @@ describe('MobileTerminalCommandDeck', () => {
       expect(rows).toHaveLength(3)
       expect(buttonLabels(rows[0])).toEqual(['ESC', '/', '-', 'HOME', '↑', 'END', 'PGUP'])
       expect(buttonLabels(rows[1])).toEqual(['TAB', 'CTRL', 'ALT', '←', '↓', '→', 'PGDN'])
-      expect(buttonLabels(rows[2])).toEqual(['ENTER', '⌫', 'CTRL+C', 'CTRL+L', 'T↑', 'T↓', 'Compose', 'Original width'])
+      expect(buttonLabels(rows[2])).toEqual([
+        'Back to bottom',
+        'ENTER',
+        '⌫',
+        'CTRL+C',
+        'CTRL+L',
+        'T↑',
+        'T↓',
+        'Compose',
+        'Original width',
+        'Focus',
+      ])
     } finally {
       await fixture.cleanup()
     }
@@ -79,6 +92,7 @@ describe('MobileTerminalCommandDeck', () => {
         )
 
       await act(async () => {
+        button('Back to bottom')?.click()
         button('ENTER')?.click()
         button('⌫')?.click()
         button('CTRL+C')?.click()
@@ -86,6 +100,7 @@ describe('MobileTerminalCommandDeck', () => {
         button('T↑')?.click()
         button('T↓')?.click()
       })
+      expect(fixture.onScrollToBottom).toHaveBeenCalledTimes(1)
       expect(fixture.onInput.mock.calls).toEqual([['\r'], ['\x7f'], ['\x03'], ['\x0c']])
       expect(fixture.onCycleTerminal.mock.calls).toEqual([[-1], [1]])
 
@@ -99,6 +114,9 @@ describe('MobileTerminalCommandDeck', () => {
 
       await act(async () => button('Original width')?.click())
       expect(fixture.onFitToWidthChange).toHaveBeenCalledWith(false)
+
+      await act(async () => button('Focus')?.click())
+      expect(fixture.onEnterFocus).toHaveBeenCalledTimes(1)
     } finally {
       await fixture.cleanup()
     }
@@ -112,8 +130,10 @@ async function renderToolbar() {
   const root = createRoot(container)
   const onExtraKey = vi.fn()
   const onInput = vi.fn()
+  const onScrollToBottom = vi.fn()
   const onCycleTerminal = vi.fn()
   const onFitToWidthChange = vi.fn()
+  const onEnterFocus = vi.fn()
 
   await act(async () => {
     root.render(
@@ -122,8 +142,10 @@ async function renderToolbar() {
         fitToWidth
         onExtraKey={onExtraKey}
         onInput={onInput}
+        onScrollToBottom={onScrollToBottom}
         onCycleTerminal={onCycleTerminal}
         onFitToWidthChange={onFitToWidthChange}
+        onEnterFocus={onEnterFocus}
       />,
     )
   })
@@ -132,8 +154,10 @@ async function renderToolbar() {
     container,
     onExtraKey,
     onInput,
+    onScrollToBottom,
     onCycleTerminal,
     onFitToWidthChange,
+    onEnterFocus,
     cleanup: async () => {
       await act(async () => root.unmount())
       container.remove()

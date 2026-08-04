@@ -53,12 +53,56 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toMatch(/\.goblin-terminal-slot__host--touch-scroll\s*\{[^}]*touch-action:\s*pan-x pinch-zoom;/)
   })
 
+  test('provides a touch-sized edge scrubber without a persistent scrollbar', () => {
+    expect(css).not.toContain('.goblin-terminal-mobile-scrollbar')
+    expect(css).not.toContain('::-webkit-slider-thumb')
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber\s*\{[^}]*position:\s*absolute;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber\s*\{[^}]*right:\s*0;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber\s*\{[^}]*width:\s*32px;/)
+    expect(css).toMatch(
+      /\.goblin-terminal-edge-scrubber\s*\{[^}]*bottom:\s*var\(--goblin-terminal-edge-scrubber-bottom\);/,
+    )
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber\s*\{[^}]*background:\s*transparent;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber\s*\{[^}]*touch-action:\s*none;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber::before\s*\{[^}]*content:\s*attr\(data-position\);/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber::after\s*\{[^}]*height:\s*2px;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber\[data-active='true'\]::before/)
+    expect(css).toMatch(
+      /\.goblin-terminal-slot:has\(\.goblin-terminal-bottom-dock\) \.goblin-terminal-edge-scrubber\s*\{[^}]*--goblin-terminal-edge-scrubber-bottom:\s*calc\(var\(--goblin-terminal-bottom-dock-height\) \+ 8px\);/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-slot:has\(\.goblin-terminal-slot__viewer-status\) \.goblin-terminal-edge-scrubber\s*\{[^}]*--goblin-terminal-edge-scrubber-bottom:\s*88px;/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-slot:has\(\.goblin-terminal-focus-exit\) \.goblin-terminal-edge-scrubber\s*\{[^}]*--goblin-terminal-edge-scrubber-top:\s*50px;/,
+    )
+  })
+
   test('lays out the mobile command deck inside the dock without floating over output', () => {
     expect(css).toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*width:\s*100%;/)
     expect(css).toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*pointer-events:\s*auto;/)
     expect(css).not.toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*position:\s*absolute;/)
     expect(css).toMatch(/\.goblin-terminal-command-deck__row\s*\{[^}]*overflow-x:\s*auto;/)
     expect(css).toMatch(/\.goblin-terminal-command-deck__row\s*\{[^}]*touch-action:\s*pan-x;/)
+  })
+
+  test('keeps the auxiliary keyboard compact and its focus exit handle at the top right', () => {
+    expect(css).toMatch(/\.goblin-terminal-command-deck__btn\s*\{[^}]*height:\s*32px;/)
+    expect(css).toMatch(/\.goblin-terminal-command-deck__btn\s*\{[^}]*min-height:\s*32px;/)
+    expect(css).toMatch(/\.goblin-terminal-command-deck__composer-input\s*\{[^}]*height:\s*32px;/)
+    expect(css).toMatch(/\.goblin-terminal-focus-exit\s*\{[^}]*pointer-events:\s*auto;/)
+  })
+
+  test('shows the active scrubber percentage two font sizes larger', () => {
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber::before\s*\{[^}]*min-width:\s*52px;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber::before\s*\{[^}]*padding:\s*5px 9px;/)
+    expect(css).toMatch(/\.goblin-terminal-edge-scrubber::before\s*\{[^}]*font-size:\s*14px;/)
+  })
+
+  test('keeps read-only return-to-bottom and takeover actions together', () => {
+    expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*display:\s*flex;/)
+    expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*flex:\s*0 0 auto;/)
+    expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*pointer-events:\s*auto;/)
   })
 
   test('uses a horizontally pannable 720px terminal only in original-width mode', () => {

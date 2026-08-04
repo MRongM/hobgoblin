@@ -112,6 +112,7 @@ export class ManagedTerminalSession {
     if (this.disposed) return
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
+    this.view.setMobileScrollScrubber(handlers?.mobileScrollScrubber ?? null)
     this.view.attach(host)
     if (!this.view.currentTerminal()) this.start()
     else this.view.fitSoon()
@@ -122,6 +123,7 @@ export class ManagedTerminalSession {
     this.clearTerminalFocusIfOwned()
     this.view.setRevealPathHandler(null)
     this.view.setOpenPathInEditorHandler(null)
+    this.view.setMobileScrollScrubber(null)
     this.view.detach(host, parkingRoot)
   }
 
@@ -273,8 +275,7 @@ export class ManagedTerminalSession {
       phase: input.phase,
       message: input.message,
     })
-    const isController = this.runtime.canResize()
-    if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
+    this.syncViewForOwnership(wasController)
     if (previousSessionId !== input.sessionId) {
       this.backgroundBellScanner.reset()
       this.prioritizeNextOutput = false
@@ -301,7 +302,7 @@ export class ManagedTerminalSession {
     const changed = this.runtime.handleOwnership(event)
     const pendingCleared = this.runtime.clearTakeoverPending()
     if (changed) {
-      this.syncViewAfterOwnershipChange(wasController)
+      this.syncViewForOwnership(wasController)
     }
     if (changed || pendingCleared) {
       this.notify()
@@ -337,7 +338,7 @@ export class ManagedTerminalSession {
         const wasController = this.runtime.canResize()
         const changed = this.runtime.applyTakeoverResult(result)
         const pendingCleared = this.runtime.clearTakeoverPending()
-        if (changed) this.syncViewAfterOwnershipChange(wasController)
+        if (changed) this.syncViewForOwnership(wasController)
         if (changed || pendingCleared) this.notify()
       })
       .catch(() => {})
@@ -434,7 +435,7 @@ export class ManagedTerminalSession {
     this.windowsPty = result.windowsPty
     this.view.setWindowsPty(this.windowsPty)
     const isController = this.runtime.canResize()
-    if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
+    this.syncViewForOwnership(wasController)
     if (isController) {
       const canonicalSize = this.runtime.currentCanonicalSize()
       if (term.cols !== canonicalSize.cols || term.rows !== canonicalSize.rows) {
@@ -601,8 +602,9 @@ export class ManagedTerminalSession {
       .catch(() => {})
   }
 
-  private syncViewAfterOwnershipChange(wasController: boolean): void {
+  private syncViewForOwnership(wasController: boolean): void {
     const isController = this.runtime.canResize()
+    this.view.setInputEnabled(this.runtime.canWrite())
     if (!isController) {
       this.cancelResizeFlush()
       this.pendingResize = null

@@ -443,6 +443,7 @@ describe('TerminalSlot', () => {
     document.body.appendChild(container)
     const root: Root = createRoot(container)
     const takeover = vi.fn()
+    const scrollToBottom = vi.fn()
     const summaries = [
       {
         key: 'terminal-1',
@@ -487,7 +488,7 @@ describe('TerminalSlot', () => {
       createTerminal: async () => 'terminal-1',
       restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
-      scrollToBottom: vi.fn(),
+      scrollToBottom,
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
@@ -537,15 +538,20 @@ describe('TerminalSlot', () => {
       expect(viewerStatus?.querySelector('.goblin-terminal-slot__viewer-message')?.getAttribute('role')).toBe('status')
       expect(container.querySelector('.goblin-terminal-slot__viewer-overlay')).toBeNull()
       expect(container.querySelector('.goblin-terminal-slot__viewer-output')).toBeNull()
-      const button = Array.from(container.querySelectorAll('button')).find(
-        (node) => node.textContent === 'terminal.takeover',
-      )
-      expect(button).toBeDefined()
+      const viewerActions = viewerStatus?.querySelector('.goblin-terminal-slot__viewer-actions')
+      expect(viewerActions).toBeInstanceOf(HTMLDivElement)
+      const buttons = Array.from(viewerActions?.querySelectorAll('button') ?? [])
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        'terminal.command-deck.scroll-to-bottom',
+        'terminal.takeover',
+      ])
 
       await act(async () => {
-        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       })
 
+      expect(scrollToBottom).toHaveBeenCalledWith('terminal-1')
       expect(takeover).toHaveBeenCalledWith('terminal-1')
     } finally {
       await act(async () => root.unmount())
@@ -792,6 +798,118 @@ describe('TerminalSlot', () => {
     } finally {
       await act(async () => root.unmount())
       container.remove()
+    }
+  })
+
+  test('uses a local Mobile Web focus mode to hide and restore the complete auxiliary keyboard dock', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const focus = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'terminal.command-deck.focus',
+      )
+      expect(focus).toBeInstanceOf(HTMLButtonElement)
+      expect(container.querySelector('.goblin-terminal-bottom-dock')).toBeInstanceOf(HTMLDivElement)
+      expect(container.querySelector('.goblin-terminal-custom-buttons')).toBeInstanceOf(HTMLDivElement)
+
+      await act(async () => focus?.click())
+      expect(container.querySelector('.goblin-terminal-bottom-dock')).toBeNull()
+      expect(container.querySelector('.goblin-terminal-command-deck')).toBeNull()
+      expect(container.querySelector('.goblin-terminal-custom-buttons')).toBeNull()
+
+      const exitFocus = container.querySelector<HTMLButtonElement>('.goblin-terminal-focus-exit')
+      expect(exitFocus?.textContent).toBe('terminal.command-deck.exit-focus')
+      expect(container.querySelector('.goblin-terminal-float-group')?.contains(exitFocus)).toBe(true)
+
+      await act(async () => exitFocus?.click())
+      expect(container.querySelector('.goblin-terminal-bottom-dock')).toBeInstanceOf(HTMLDivElement)
+      expect(container.querySelector('.goblin-terminal-command-deck')).toBeInstanceOf(HTMLDivElement)
+      expect(container.querySelector('.goblin-terminal-focus-exit')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('stops touch inertia before the first command-deck action returns to bottom', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const animationFrames = installAnimationFrameHarness()
+    const scrollToBottom = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { scrollToBottom })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, timeStamp: 1 }))
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 150, timeStamp: 17 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 150, timeStamp: 21 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(1)
+
+      const actionRow = container.querySelector('.goblin-terminal-command-deck__row--actions')
+      const firstAction = actionRow?.querySelector<HTMLButtonElement>(':scope > button')
+      expect(firstAction?.textContent).toBe('terminal.command-deck.scroll-to-bottom')
+      await act(async () => firstAction?.click())
+
+      expect(scrollToBottom).toHaveBeenCalledWith('terminal-1')
+      expect(animationFrames.pendingCount()).toBe(0)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      animationFrames.restore()
+    }
+  })
+
+  test.each(['controller', 'viewer', 'unowned'] as const)(
+    'binds a hidden-until-used Mobile Web edge scrubber for a %s attachment',
+    async (role) => {
+      mobileDetectionMocks.isMobileDevice = true
+      const attach = vi.fn()
+      const { container, root } = await renderTerminalSlotFixture(role, { attach })
+
+      try {
+        const scrubber = container.querySelector<HTMLElement>('.goblin-terminal-edge-scrubber')
+        expect(scrubber).toBeInstanceOf(HTMLDivElement)
+        expect(scrubber?.getAttribute('role')).toBe('scrollbar')
+        expect(scrubber?.getAttribute('aria-label')).toBe('terminal.mobile-scroll-scrubber')
+        expect(scrubber?.getAttribute('aria-orientation')).toBe('vertical')
+        expect(scrubber?.hidden).toBe(true)
+        expect(container.querySelector('input[type="range"]')).toBeNull()
+        expect(container.querySelector('.goblin-terminal-mobile-scrollbar')).toBeNull()
+        const handlers = attach.mock.calls.at(-1)?.[2]
+        expect(handlers?.mobileScrollScrubber).toBe(scrubber)
+      } finally {
+        await act(async () => root.unmount())
+        container.remove()
+      }
+    },
+  )
+
+  test('stops touch inertia when the Mobile Web edge scrubber is grabbed', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const animationFrames = installAnimationFrameHarness()
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, timeStamp: 1 }))
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 150, timeStamp: 17 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 150, timeStamp: 21 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(1)
+
+      const scrollControl = container.querySelector('.goblin-terminal-edge-scrubber')
+      await act(async () => {
+        scrollControl?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 100, timeStamp: 23 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(0)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      animationFrames.restore()
     }
   })
 
