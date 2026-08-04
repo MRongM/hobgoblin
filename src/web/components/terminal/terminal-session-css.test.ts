@@ -119,4 +119,25 @@ describe('terminal session CSS layout contract', () => {
       /\.goblin-terminal-slot__host--original-width > \.goblin-managed-terminal-frame\s*\{[^}]*min-width:\s*720px;/,
     )
   })
+
+  test('presents read-only canonical geometry through a horizontal viewport', () => {
+    expect(css).toMatch(
+      /\.goblin-terminal-slot__host--canonical-readonly\s*\{[^}]*overflow-x:\s*auto;[^}]*overflow-y:\s*hidden;/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-slot__host--canonical-readonly > \.goblin-managed-terminal-frame[^}]*\{[^}]*overflow:\s*visible;/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-slot__host--canonical-readonly \.goblin-managed-terminal-host[^}]*\{[^}]*overflow:\s*visible;/,
+    )
+  })
+
+  test('keeps the terminal Copy action touch-sized and above terminal overlays', () => {
+    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*position:\s*fixed;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*z-index:\s*4;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*min-width:\s*44px;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*min-height:\s*44px;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*left:\s*clamp\(/)
+    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*top:\s*clamp\(/)
+  })
 })

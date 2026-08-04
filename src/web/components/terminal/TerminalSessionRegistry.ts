@@ -25,6 +25,7 @@ import type {
   WorktreeTerminalSnapshot,
   TerminalSessionBase,
   TerminalSessionAttachHandlers,
+  TerminalMobileSelectionPoint,
   TerminalSessionSummary,
   TerminalSnapshot,
   TerminalTouchScrollInput,
@@ -66,6 +67,22 @@ function isValidCreateFirstFrame(result: Extract<TerminalCatalogMutationResult, 
   )
 }
 
+function terminalDescriptorsEqual(left: TerminalDescriptor, right: TerminalDescriptor): boolean {
+  return (
+    left.key === right.key &&
+    left.worktreeTerminalKey === right.worktreeTerminalKey &&
+    left.terminalId === right.terminalId &&
+    left.index === right.index &&
+    left.repoRoot === right.repoRoot &&
+    left.branch === right.branch &&
+    left.worktreePath === right.worktreePath &&
+    left.targetKind === right.targetKind &&
+    left.branchWorkspaceId === right.branchWorkspaceId &&
+    left.tmuxBacked === right.tmuxBacked &&
+    left.tmuxCloseSupported === right.tmuxCloseSupported
+  )
+}
+
 interface ReattachSnapshotCacheEntry {
   sessionId: string
   snapshot: string
@@ -83,6 +100,7 @@ export class TerminalSessionRegistry {
   private readonly snapshotCache = new Map<string, TerminalSnapshot>()
   private readonly reattachSnapshotCache = new Map<string, ReattachSnapshotCacheEntry>()
   private readonly worktreeSnapshotCache = new Map<string, WorktreeTerminalSnapshot>()
+  private terminalCatalogSnapshotCache: readonly TerminalDescriptor[] | null = null
   private readonly pendingCreationsByWorktree = new Map<string, number>()
   private readonly outputActiveKeys = new Set<string>()
   private readonly outputActiveIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -92,6 +110,7 @@ export class TerminalSessionRegistry {
   private readonly outputBurstLastSeq = new Map<string, number>()
   private readonly worktreeListeners = new Map<string, Set<() => void>>()
   private readonly snapshotListeners = new Map<string, Set<() => void>>()
+  private readonly terminalCatalogListeners = new Set<() => void>()
   private readonly displayOrderByKey = new Map<string, number>()
   private readonly hostByWorktree = new Map<string, HTMLElement>()
   private terminalFontSize = DEFAULT_TERMINAL_FONT_SIZE
@@ -154,6 +173,7 @@ export class TerminalSessionRegistry {
     this.snapshotCache.clear()
     this.reattachSnapshotCache.clear()
     this.worktreeSnapshotCache.clear()
+    this.terminalCatalogSnapshotCache = null
     this.pendingCreationsByWorktree.clear()
     this.outputActiveKeys.clear()
     for (const timer of this.outputActiveIdleTimers.values()) clearTimeout(timer)
@@ -164,6 +184,7 @@ export class TerminalSessionRegistry {
     this.outputBurstLastSeq.clear()
     this.worktreeListeners.clear()
     this.snapshotListeners.clear()
+    this.terminalCatalogListeners.clear()
     this.hostByWorktree.clear()
     this.bellController.reset()
   }
@@ -242,6 +263,7 @@ export class TerminalSessionRegistry {
       const branch = branchForTerminalWorktree(this.repoIndex, parsed.repoRoot, parsed.worktreePath)
       if (!branch) continue
       const terminalWorktreeKey = worktreeTerminalKey(parsed.repoRoot, parsed.worktreePath)
+      const branchWorkspaceId = this.repoIndex[parsed.repoRoot]?.branchWorkspaceIdByWorktreePath?.[parsed.worktreePath]
       touchedWorktrees.add(terminalWorktreeKey)
       const descriptor = {
         ...terminalDescriptor(
@@ -251,6 +273,7 @@ export class TerminalSessionRegistry {
         ),
         tmuxBacked: serverSession.tmuxBacked === true,
         tmuxCloseSupported: serverSession.tmuxCloseSupported,
+        ...(branchWorkspaceId ? { targetKind: 'branch-workspace' as const, branchWorkspaceId } : {}),
       }
       if (!this.sessions.has(descriptor.key)) {
         missingLocalCount += 1
@@ -286,7 +309,9 @@ export class TerminalSessionRegistry {
       if (serverSession.controller?.attachmentId === attachmentId) {
         controllerKeyByWorktree.set(terminalWorktreeKey, descriptor.key)
       }
+      const previousDisplayOrder = this.displayOrderByKey.get(descriptor.key)
       this.displayOrderByKey.set(descriptor.key, serverSession.displayOrder)
+      if (previousDisplayOrder !== serverSession.displayOrder) this.notifyTerminalCatalog()
     }
 
     for (const key of localKeys) {
@@ -527,6 +552,30 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.scrollByTouch(input)
   }
 
+  beginMobileSelection = (key: string, point: TerminalMobileSelectionPoint): boolean => {
+    return this.sessions.get(key)?.beginMobileSelection(point) ?? false
+  }
+
+  extendMobileSelection = (key: string, point: TerminalMobileSelectionPoint): void => {
+    this.sessions.get(key)?.extendMobileSelection(point)
+  }
+
+  finishMobileSelection = (key: string, point: TerminalMobileSelectionPoint): void => {
+    this.sessions.get(key)?.finishMobileSelection(point)
+  }
+
+  cancelMobileSelection = (key: string, point: TerminalMobileSelectionPoint): void => {
+    this.sessions.get(key)?.cancelMobileSelection(point)
+  }
+
+  mobileSelectionText = (key: string): string => {
+    return this.sessions.get(key)?.mobileSelectionText() ?? ''
+  }
+
+  clearMobileSelection = (key: string): void => {
+    this.sessions.get(key)?.clearMobileSelection()
+  }
+
   closeTerminalAndDismissDetailIfLast = (
     key: string,
     scope: TerminalWorktreeScope,
@@ -567,6 +616,25 @@ export class TerminalSessionRegistry {
     const next = session.snapshot()
     this.snapshotCache.set(key, next)
     return next
+  }
+
+  terminalCatalogSnapshot = (): readonly TerminalDescriptor[] => {
+    if (this.terminalCatalogSnapshotCache) return this.terminalCatalogSnapshotCache
+    const sessions = Array.from(this.sessions.values()).sort((left, right) => {
+      const leftScope = left.descriptor.worktreeTerminalKey
+      const rightScope = right.descriptor.worktreeTerminalKey
+      if (leftScope !== rightScope) return leftScope < rightScope ? -1 : 1
+      const leftOrder = this.displayOrderByKey.get(left.descriptor.key) ?? left.descriptor.index - 1
+      const rightOrder = this.displayOrderByKey.get(right.descriptor.key) ?? right.descriptor.index - 1
+      return leftOrder - rightOrder || left.descriptor.index - right.descriptor.index
+    })
+    this.terminalCatalogSnapshotCache = sessions.map((session) => session.descriptor)
+    return this.terminalCatalogSnapshotCache
+  }
+
+  subscribeTerminalCatalog = (listener: () => void): (() => void) => {
+    this.terminalCatalogListeners.add(listener)
+    return () => this.terminalCatalogListeners.delete(listener)
   }
 
   isKnownSession = (key: string): boolean => {
@@ -643,6 +711,7 @@ export class TerminalSessionRegistry {
     for (let i = 0; i < orderedKeys.length; i++) {
       this.displayOrderByKey.set(orderedKeys[i], i)
     }
+    this.notifyTerminalCatalog()
     this.notifyWorktree(scope)
     const result = await terminalBridge.reorder({
       repoRoot: parsed.repoRoot,
@@ -654,6 +723,7 @@ export class TerminalSessionRegistry {
         if (order === undefined) this.displayOrderByKey.delete(key)
         else this.displayOrderByKey.set(key, order)
       }
+      this.notifyTerminalCatalog()
       this.notifyWorktree(scope)
     }
     return result
@@ -664,6 +734,11 @@ export class TerminalSessionRegistry {
     const listeners = this.worktreeListeners.get(worktreeTerminalKey)
     if (!listeners) return
     for (const listener of Array.from(listeners)) listener()
+  }
+
+  private notifyTerminalCatalog(): void {
+    this.terminalCatalogSnapshotCache = null
+    for (const listener of Array.from(this.terminalCatalogListeners)) listener()
   }
 
   private beginTerminalCreation(worktreeTerminalKey: string): void {
@@ -828,6 +903,7 @@ export class TerminalSessionRegistry {
     const wasSelected = this.selectedKeyByWorktree.get(worktreeTerminalKey) === key
     this.syncSessionIdIndex(key, null)
     this.sessions.delete(key)
+    this.notifyTerminalCatalog()
     this.snapshotCache.delete(key)
     this.reattachSnapshotCache.delete(key)
     this.displayOrderByKey.delete(key)
@@ -896,16 +972,19 @@ export class TerminalSessionRegistry {
       changedWorktrees.add(session.descriptor.worktreeTerminalKey)
     }
     for (const worktreeTerminalKey of changedWorktrees) this.notifyWorktree(worktreeTerminalKey)
+    if (changedWorktrees.size > 0) this.notifyTerminalCatalog()
   }
 
   private ensureSession(descriptor: TerminalDescriptor): ManagedTerminalSession {
     const current = this.sessions.get(descriptor.key)
     if (current) {
+      const descriptorChanged = !terminalDescriptorsEqual(current.descriptor, descriptor)
       current.updateDescriptor(descriptor)
       this.syncSessionIdIndex(
         descriptor.key,
         current.currentSessionId() ?? this.sessionIdByKey.get(descriptor.key) ?? null,
       )
+      if (descriptorChanged) this.notifyTerminalCatalog()
       this.notifyWorktree(descriptor.worktreeTerminalKey)
       return current
     }
@@ -919,6 +998,7 @@ export class TerminalSessionRegistry {
       (inputDescriptor) => this.noteTerminalInput(inputDescriptor.key),
     )
     this.sessions.set(descriptor.key, session)
+    this.notifyTerminalCatalog()
     this.syncSessionIdIndex(descriptor.key, session.currentSessionId())
     this.snapshotCache.set(descriptor.key, session.snapshot())
     if (!this.selectedKeyByWorktree.has(descriptor.worktreeTerminalKey)) {

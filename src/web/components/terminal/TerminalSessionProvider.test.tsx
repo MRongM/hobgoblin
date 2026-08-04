@@ -1224,6 +1224,8 @@ describe('TerminalSessionProvider', () => {
         repoRoot: REPO_ID,
         branch: 'feature/auth',
         worktreePath: branchWorkspacePath,
+        targetKind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
       })
     } finally {
       await unmount()

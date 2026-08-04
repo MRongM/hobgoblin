@@ -833,6 +833,7 @@ export const ja: Record<DictKey, string> = {
   'terminal.command-deck.input-placeholder': 'コマンドを入力',
   'terminal.command-deck.send': '送信',
   'terminal.mobile-scroll-scrubber': 'ドラッグしてターミナル履歴を表示',
+  'terminal.selection-copy-failed': '選択したターミナルテキストをコピーできませんでした。もう一度お試しください。',
   'terminal.custom-button-presets.confirm-continue.label': '確認・続行',
   'terminal.custom-button-presets.confirm-continue.value': '確認して続行してください',
   'terminal.custom-button-presets.try-if-needed.label': '必要なら試す',

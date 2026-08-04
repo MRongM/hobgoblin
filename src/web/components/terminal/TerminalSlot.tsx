@@ -10,6 +10,7 @@ import {
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { toast } from 'sonner'
@@ -17,6 +18,7 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
@@ -29,7 +31,11 @@ import { transferRepositoryFiles } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
-import { useWorktreeTerminalSnapshot, useTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
+import {
+  useTerminalCatalog,
+  useWorktreeTerminalSnapshot,
+  useTerminalSnapshot,
+} from '#/web/components/terminal/terminal-session-store.ts'
 import { MobileTerminalCommandDeck } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
@@ -37,7 +43,12 @@ import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/mo
 import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
+import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
 const MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX = 8
+const MOBILE_TERMINAL_LONG_PRESS_MS = 500
 const MOBILE_TERMINAL_INERTIA_FRAME_MS = 1000 / 60
 const MOBILE_TERMINAL_INERTIA_DECAY_PER_FRAME = 0.92
 const MOBILE_TERMINAL_INERTIA_MIN_VELOCITY_PX_PER_MS = 0.05
@@ -45,6 +56,24 @@ const MOBILE_TERMINAL_INERTIA_MAX_VELOCITY_PX_PER_MS = 3
 const MOBILE_TERMINAL_INERTIA_MAX_FRAME_MS = 32
 const MOBILE_TERMINAL_INERTIA_RELEASE_WINDOW_MS = 80
 const MOBILE_TERMINAL_TOUCH_VELOCITY_SAMPLE_WEIGHT = 0.35
+
+function terminalCatalogInProjectOrder(catalog: readonly TerminalDescriptor[]): readonly TerminalDescriptor[] {
+  const state = useReposStore.getState()
+  if (state.order.length === 0) return catalog
+  const projectRank = new Map(state.order.map((projectId, index) => [projectId, index]))
+  const rankedCatalog = catalog.map((descriptor, index) => ({
+    descriptor,
+    index,
+    rank: projectRank.get(state.repos[descriptor.repoRoot]?.workspaceRootId ?? descriptor.repoRoot),
+  }))
+  const openProjectCatalog = rankedCatalog.filter(({ rank }) => rank !== undefined)
+  return (openProjectCatalog.length > 0 ? openProjectCatalog : rankedCatalog)
+    .sort(
+      (left, right) =>
+        (left.rank ?? state.order.length) - (right.rank ?? state.order.length) || left.index - right.index,
+    )
+    .map(({ descriptor }) => descriptor)
+}
 
 function clampTouchVelocity(velocityPxPerMs: number): number {
   return Math.max(
@@ -54,15 +83,19 @@ function clampTouchVelocity(velocityPxPerMs: number): number {
 }
 
 interface MobileTerminalTouchGesture {
+  host: HTMLDivElement
   pointerId: number
   startX: number
   startY: number
   lastX: number
   lastY: number
+  candidateX: number
+  candidateY: number
   lastTimestamp: number
   velocityPxPerMs: number
   remainder: number
-  dragging: boolean
+  mode: 'pending' | 'scrolling' | 'selecting'
+  longPressTimer: number | null
 }
 
 interface MobileTerminalTouchInertia {
@@ -73,6 +106,12 @@ interface MobileTerminalTouchInertia {
   lastTimestamp: number
 }
 
+interface MobileTerminalSelectionCopyAction {
+  key: string
+  clientX: number
+  clientY: number
+}
+
 interface TerminalSlotProps {
   repoRoot: string
   worktreePath: string
@@ -81,6 +120,7 @@ interface TerminalSlotProps {
 
 export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
+  const navigation = useMainWindowNavigation()
   const terminalHostId = useId()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mobileScrollScrubberRef = useRef<HTMLDivElement | null>(null)
@@ -97,6 +137,9 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [mobileFocusMode, setMobileFocusMode] = useState(false)
   const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
   const [visualViewportBottomInset, setVisualViewportBottomInset] = useState(0)
+  const [mobileSelectionCopyAction, setMobileSelectionCopyAction] = useState<MobileTerminalSelectionCopyAction | null>(
+    null,
+  )
   const context = useTerminalSessionContext()
   const {
     clearBell,
@@ -113,15 +156,25 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     writeInput,
     scrollToBottom,
     scrollByTouch,
+    beginMobileSelection,
+    extendMobileSelection,
+    finishMobileSelection,
+    cancelMobileSelection,
+    mobileSelectionText,
+    clearMobileSelection,
     takeover,
     restart,
   } = context
   const terminalWorktreeKey = worktreeTerminalKey(repoRoot, worktreePath)
   const worktreeSnapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
+  const terminalCatalog = useTerminalCatalog()
+  const switchableTerminalCatalog = terminalCatalogInProjectOrder(terminalCatalog)
   const descriptor = worktreeSnapshot.selectedDescriptor
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
   const terminalCount = worktreeSnapshot.count
+  const switchableTerminalCount =
+    switchableTerminalCatalog.length > 0 ? switchableTerminalCatalog.length : terminalCount
   const hasSessions = terminalCount > 0
   const renderPending = hasSessions && snapshot.renderPending === true
   const {
@@ -149,10 +202,37 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     touchInertiaFrameRef.current = null
     touchInertiaRef.current = null
   }, [])
+  const cancelLongPressTimer = useCallback((gesture: MobileTerminalTouchGesture | null) => {
+    if (!gesture || gesture.longPressTimer === null) return
+    window.clearTimeout(gesture.longPressTimer)
+    gesture.longPressTimer = null
+  }, [])
+  const releaseGesturePointerCapture = useCallback((gesture: MobileTerminalTouchGesture | null) => {
+    if (!gesture?.host.hasPointerCapture?.(gesture.pointerId)) return
+    gesture.host.releasePointerCapture(gesture.pointerId)
+  }, [])
   const stopTouchMotion = useCallback(() => {
+    const gesture = touchScrollRef.current
+    cancelLongPressTimer(gesture)
+    releaseGesturePointerCapture(gesture)
+    if (key) {
+      if (gesture?.mode === 'selecting') {
+        cancelMobileSelection(key, { clientX: gesture.lastX, clientY: gesture.lastY })
+      } else {
+        clearMobileSelection(key)
+      }
+    }
     touchScrollRef.current = null
     cancelTouchInertia()
-  }, [cancelTouchInertia])
+    setMobileSelectionCopyAction(null)
+  }, [
+    cancelLongPressTimer,
+    cancelMobileSelection,
+    cancelTouchInertia,
+    clearMobileSelection,
+    key,
+    releaseGesturePointerCapture,
+  ])
   const initializeMobileScrollScrubber = useCallback((scrubber: HTMLDivElement | null) => {
     mobileScrollScrubberRef.current = scrubber
     if (!scrubber) return
@@ -177,39 +257,88 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
   const handleTouchScrollStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!isMobileTerminal || event.pointerType !== 'touch' || event.isPrimary === false) return
+      if (!isMobileTerminal || !key || event.pointerType !== 'touch' || event.isPrimary === false) return
       cancelTouchInertia()
-      touchScrollRef.current = {
+      const existingGesture = touchScrollRef.current
+      cancelLongPressTimer(existingGesture)
+      releaseGesturePointerCapture(existingGesture)
+      if (existingGesture?.mode === 'selecting') {
+        cancelMobileSelection(key, { clientX: existingGesture.lastX, clientY: existingGesture.lastY })
+      } else {
+        clearMobileSelection(key)
+      }
+      setMobileSelectionCopyAction(null)
+
+      const gesture: MobileTerminalTouchGesture = {
+        host: event.currentTarget,
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
         lastX: event.clientX,
         lastY: event.clientY,
+        candidateX: event.clientX,
+        candidateY: event.clientY,
         lastTimestamp: event.timeStamp,
         velocityPxPerMs: 0,
         remainder: 0,
-        dragging: false,
+        mode: 'pending',
+        longPressTimer: null,
       }
+      touchScrollRef.current = gesture
+      gesture.longPressTimer = window.setTimeout(() => {
+        if (touchScrollRef.current !== gesture || gesture.mode !== 'pending') return
+        gesture.longPressTimer = null
+        const point = { clientX: gesture.candidateX, clientY: gesture.candidateY }
+        if (!beginMobileSelection(key, point)) {
+          touchScrollRef.current = null
+          return
+        }
+        cancelTouchInertia()
+        gesture.mode = 'selecting'
+        gesture.host.setPointerCapture?.(gesture.pointerId)
+      }, MOBILE_TERMINAL_LONG_PRESS_MS)
     },
-    [cancelTouchInertia, isMobileTerminal],
+    [
+      beginMobileSelection,
+      cancelLongPressTimer,
+      cancelMobileSelection,
+      cancelTouchInertia,
+      clearMobileSelection,
+      isMobileTerminal,
+      key,
+      releaseGesturePointerCapture,
+    ],
   )
   const handleTouchScrollMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const gesture = touchScrollRef.current
       if (!isMobileTerminal || !key || !gesture || event.pointerId !== gesture.pointerId) return
 
-      if (!gesture.dragging) {
+      if (gesture.mode === 'selecting') {
+        event.preventDefault()
+        event.stopPropagation()
+        gesture.lastX = event.clientX
+        gesture.lastY = event.clientY
+        gesture.candidateX = event.clientX
+        gesture.candidateY = event.clientY
+        gesture.lastTimestamp = event.timeStamp
+        extendMobileSelection(key, { clientX: event.clientX, clientY: event.clientY })
+        return
+      }
+
+      if (gesture.mode === 'pending') {
         const horizontalDistance = Math.abs(event.clientX - gesture.startX)
         const verticalDistance = Math.abs(event.clientY - gesture.startY)
+        gesture.candidateX = event.clientX
+        gesture.candidateY = event.clientY
         if (Math.max(horizontalDistance, verticalDistance) < MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX) return
+        cancelLongPressTimer(gesture)
         if (horizontalDistance > verticalDistance) {
-          if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId)
-          }
+          releaseGesturePointerCapture(gesture)
           touchScrollRef.current = null
           return
         }
-        gesture.dragging = true
+        gesture.mode = 'scrolling'
         event.currentTarget.setPointerCapture?.(event.pointerId)
       }
 
@@ -244,7 +373,15 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         clientY: event.clientY,
       })
     },
-    [isMobileTerminal, key, scrollByTouch, terminalFontSize],
+    [
+      cancelLongPressTimer,
+      extendMobileSelection,
+      isMobileTerminal,
+      key,
+      releaseGesturePointerCapture,
+      scrollByTouch,
+      terminalFontSize,
+    ],
   )
   const startTouchInertia = useCallback(
     (gesture: MobileTerminalTouchGesture, releaseTimestamp: number) => {
@@ -301,18 +438,39 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     (event: ReactPointerEvent<HTMLDivElement>, allowInertia: boolean) => {
       const gesture = touchScrollRef.current
       if (gesture?.pointerId !== event.pointerId) return
-      if (gesture.dragging) {
+      cancelLongPressTimer(gesture)
+      if (gesture.mode === 'scrolling' || gesture.mode === 'selecting') {
         event.preventDefault()
         event.stopPropagation()
       }
-      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId)
-      }
+      releaseGesturePointerCapture(gesture)
       touchScrollRef.current = null
-      if (allowInertia && gesture.dragging) startTouchInertia(gesture, event.timeStamp)
+      if (gesture.mode === 'selecting') {
+        const point = { clientX: event.clientX, clientY: event.clientY }
+        if (allowInertia && key) {
+          finishMobileSelection(key, point)
+          const selectedText = mobileSelectionText(key)
+          setMobileSelectionCopyAction(selectedText ? { key, ...point } : null)
+        } else if (key) {
+          cancelMobileSelection(key, point)
+          setMobileSelectionCopyAction(null)
+        }
+        cancelTouchInertia()
+        return
+      }
+      if (allowInertia && gesture.mode === 'scrolling') startTouchInertia(gesture, event.timeStamp)
       else cancelTouchInertia()
     },
-    [cancelTouchInertia, startTouchInertia],
+    [
+      cancelLongPressTimer,
+      cancelMobileSelection,
+      cancelTouchInertia,
+      finishMobileSelection,
+      key,
+      mobileSelectionText,
+      releaseGesturePointerCapture,
+      startTouchInertia,
+    ],
   )
   const handleTouchScrollEnd = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => finishTouchScroll(event, true),
@@ -322,6 +480,27 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     (event: ReactPointerEvent<HTMLDivElement>) => finishTouchScroll(event, false),
     [finishTouchScroll],
   )
+  const handleTouchContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (touchScrollRef.current?.mode !== 'selecting') return
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
+
+  const copyMobileTerminalSelection = useCallback(async () => {
+    const action = mobileSelectionCopyAction
+    if (!action) return
+    const text = mobileSelectionText(action.key)
+    if (!text) {
+      setMobileSelectionCopyAction(null)
+      return
+    }
+    if (!(await writeTerminalClipboardText(text))) {
+      toast.error(t('terminal.selection-copy-failed'))
+      return
+    }
+    clearMobileSelection(action.key)
+    setMobileSelectionCopyAction((current) => (current === action ? null : current))
+  }, [clearMobileSelection, mobileSelectionCopyAction, mobileSelectionText, t])
 
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
@@ -562,7 +741,29 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
   const cycleTerminal = useCallback(
     (direction: -1 | 1) => {
-      if (!key || worktreeSnapshot.sessions.length <= 1) return
+      if (!key) return
+      const orderedCatalog = terminalCatalogInProjectOrder(terminalCatalog)
+      if (orderedCatalog.length > 1) {
+        const currentIndex = orderedCatalog.findIndex((session) => session.key === key)
+        if (currentIndex >= 0) {
+          const target = orderedCatalog[(currentIndex + direction + orderedCatalog.length) % orderedCatalog.length]
+          if (!target) return
+          selectTerminal(target.worktreeTerminalKey, target.key)
+          if (target.worktreeTerminalKey !== terminalWorktreeKey) {
+            const state = useReposStore.getState()
+            if (target.targetKind === 'branch-workspace' && target.branchWorkspaceId) {
+              state.activateBranchWorkspace(target.repoRoot, target.branchWorkspaceId)
+            } else if (target.branch === NON_GIT_WORKSPACE_TERMINAL_BRANCH) {
+              navigation.showRepoDetailTab(target.repoRoot, 'terminal')
+            } else {
+              navigation.showRepoBranchDetailTab(target.repoRoot, target.branch, 'terminal')
+            }
+            state.setDetailCollapsed(false)
+          }
+          return
+        }
+      }
+      if (worktreeSnapshot.sessions.length <= 1) return
       const currentIndex = worktreeSnapshot.sessions.findIndex((session) => session.key === key)
       const safeCurrentIndex = currentIndex < 0 ? 0 : currentIndex
       const nextIndex =
@@ -570,7 +771,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       const next = worktreeSnapshot.sessions[nextIndex]
       if (next) selectTerminal(terminalWorktreeKey, next.key)
     },
-    [key, selectTerminal, terminalWorktreeKey, worktreeSnapshot.sessions],
+    [key, navigation, selectTerminal, terminalCatalog, terminalWorktreeKey, worktreeSnapshot.sessions],
   )
   const handleScrollToBottom = useCallback(() => {
     if (!key) return
@@ -647,6 +848,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         ref={hostRef}
         className={cn(
           'goblin-terminal-slot__host',
+          isReadonly && 'goblin-terminal-slot__host--canonical-readonly',
           isMobileTerminal && 'goblin-terminal-slot__host--touch-scroll',
           isMobileTerminal && !fitToWidth && 'goblin-terminal-slot__host--original-width',
         )}
@@ -655,7 +857,29 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         onPointerMove={isMobileTerminal ? handleTouchScrollMove : undefined}
         onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
         onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
+        onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
       />
+      {mobileSelectionCopyAction && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="goblin-terminal-selection-copy"
+          style={
+            {
+              '--goblin-terminal-selection-copy-x': `${mobileSelectionCopyAction.clientX}px`,
+              '--goblin-terminal-selection-copy-y': `${mobileSelectionCopyAction.clientY}px`,
+            } as CSSProperties
+          }
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={() => void copyMobileTerminalSelection()}
+        >
+          {t('menu.edit.copy')}
+        </Button>
+      )}
       {isMobileTerminal && (
         <div
           ref={initializeMobileScrollScrubber}
@@ -739,7 +963,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           {hasMobileCommandDeck && (
             <MobileTerminalCommandDeck
               key={key}
-              terminalCount={terminalCount}
+              terminalCount={switchableTerminalCount}
               fitToWidth={fitToWidth}
               onExtraKey={(input) => writeExtraKey(key, input)}
               onInput={(data) => writeInput(key, data)}

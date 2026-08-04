@@ -42,6 +42,15 @@ import {
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 import type { TerminalTouchScrollInput } from '#/web/components/terminal/types.ts'
+import type { TerminalMobileSelectionPoint } from '#/web/components/terminal/types.ts'
+import {
+  beginTerminalMobileSelection,
+  cancelTerminalMobileSelection,
+  clearTerminalMobileSelection,
+  extendTerminalMobileSelection,
+  finishTerminalMobileSelection,
+  terminalMobileSelectionText,
+} from '#/web/components/terminal/terminal-mobile-selection.ts'
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
 
@@ -60,6 +69,7 @@ export class TerminalSessionView {
   private fitFlushTimer: number | null = null
   private fontFitTimer: number | null = null
   private pinToBottomFrame: number | null = null
+  private autoFitEnabled = true
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
@@ -163,6 +173,14 @@ export class TerminalSessionView {
     const term = this.term
     if (!term) return
     this.applyTerminalTheme(term, terminalThemeForCurrentDocument(this.terminalThemeMode()))
+  }
+
+  setAutoFitEnabled(enabled: boolean): void {
+    if (this.autoFitEnabled === enabled) return
+    this.autoFitEnabled = enabled
+    if (enabled) return
+    this.cancelFitFlush()
+    this.cancelFontFit()
   }
 
   setWindowsPty(windowsPty: TerminalWindowsPty | undefined): void {
@@ -292,6 +310,13 @@ export class TerminalSessionView {
     this.term?.focus()
   }
 
+  resizeTo(cols: number, rows: number): void {
+    const term = this.term
+    if (!term || (term.cols === cols && term.rows === rows)) return
+    term.resize(cols, rows)
+    this.pinToBottomSoon()
+  }
+
   private applyInputMode(term: XTermTerminal): void {
     term.options.disableStdin = !this.inputEnabled
     const textarea = term.textarea
@@ -354,6 +379,30 @@ export class TerminalSessionView {
     }
   }
 
+  beginMobileSelection(point: TerminalMobileSelectionPoint): boolean {
+    return beginTerminalMobileSelection(this.term, point)
+  }
+
+  extendMobileSelection(point: TerminalMobileSelectionPoint): void {
+    extendTerminalMobileSelection(this.term, point)
+  }
+
+  finishMobileSelection(point: TerminalMobileSelectionPoint): void {
+    finishTerminalMobileSelection(this.term, point)
+  }
+
+  cancelMobileSelection(point: TerminalMobileSelectionPoint): void {
+    cancelTerminalMobileSelection(this.term, point)
+  }
+
+  mobileSelectionText(): string {
+    return terminalMobileSelectionText(this.term)
+  }
+
+  clearMobileSelection(): void {
+    clearTerminalMobileSelection(this.term)
+  }
+
   inputForExtraKey(input: TerminalExtraKeyInput): string | null {
     const term = this.term
     if (!term) return null
@@ -373,7 +422,7 @@ export class TerminalSessionView {
   }
 
   fitSoon(): void {
-    if (!this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
+    if (!this.autoFitEnabled || !this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     const dimensions = this.fitAddon.proposeDimensions()
     if (!dimensions || (dimensions.cols === this.term.cols && dimensions.rows === this.term.rows)) return
     this.cancelFitFlush()
@@ -384,7 +433,7 @@ export class TerminalSessionView {
   }
 
   fitNow(): void {
-    if (!this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
+    if (!this.autoFitEnabled || !this.term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     this.fitAddon.fit()
     this.pinToBottomSoon()
   }
@@ -402,6 +451,7 @@ export class TerminalSessionView {
     this.safariShiftKeyResolver.reset()
     this.pendingCoreUserInput = 0
     this.pendingFallbackUserInput = []
+    clearTerminalMobileSelection(this.term)
     this.fitAddon = null
     this.searchAddon = null
     this.serializeAddon = null
@@ -752,7 +802,7 @@ export class TerminalSessionView {
   }
 
   private scheduleFontFit(term: XTermTerminal): void {
-    if (this.term !== term) return
+    if (!this.autoFitEnabled || this.term !== term) return
     this.cancelFontFit()
     this.fontFitTimer = window.setTimeout(() => {
       this.fontFitTimer = null
@@ -767,7 +817,7 @@ export class TerminalSessionView {
   }
 
   private fitForFontLoad(term: XTermTerminal): void {
-    if (this.term !== term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
+    if (!this.autoFitEnabled || this.term !== term || !this.fitAddon || !hasMeasurableBox(this.xtermHost)) return
     this.fitAddon.fit()
     this.pinToBottomSoon()
   }

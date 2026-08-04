@@ -9,7 +9,7 @@ import type {
   TerminalRestartInput,
   TerminalWindowsPty,
 } from '#/shared/terminal.ts'
-import { resolveTerminalOwnership } from '#/shared/terminal.ts'
+import { normalizeTerminalSize, resolveTerminalOwnership } from '#/shared/terminal.ts'
 import { terminalBridge } from '#/web/terminal.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
@@ -29,6 +29,7 @@ import type {
   TerminalOwnershipViewModel,
   TerminalSearchResult,
   TerminalSessionAttachHandlers,
+  TerminalMobileSelectionPoint,
   TerminalTouchScrollInput,
 } from '#/web/components/terminal/types.ts'
 const RESIZE_DEBOUNCE_MS = 80
@@ -113,9 +114,11 @@ export class ManagedTerminalSession {
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
     this.view.setMobileScrollScrubber(handlers?.mobileScrollScrubber ?? null)
+    this.view.setAutoFitEnabled(this.runtime.canResize())
     this.view.attach(host)
     if (!this.view.currentTerminal()) this.start()
-    else this.view.fitSoon()
+    else if (this.runtime.canResize()) this.view.fitSoon()
+    else this.applyCanonicalSizeToView()
     this.flushPendingFocus()
   }
 
@@ -172,6 +175,30 @@ export class ManagedTerminalSession {
 
   scrollByTouch(input: TerminalTouchScrollInput): void {
     this.view.scrollByTouch(input)
+  }
+
+  beginMobileSelection(point: TerminalMobileSelectionPoint): boolean {
+    return this.view.beginMobileSelection(point)
+  }
+
+  extendMobileSelection(point: TerminalMobileSelectionPoint): void {
+    this.view.extendMobileSelection(point)
+  }
+
+  finishMobileSelection(point: TerminalMobileSelectionPoint): void {
+    this.view.finishMobileSelection(point)
+  }
+
+  cancelMobileSelection(point: TerminalMobileSelectionPoint): void {
+    this.view.cancelMobileSelection(point)
+  }
+
+  mobileSelectionText(): string {
+    return this.view.mobileSelectionText()
+  }
+
+  clearMobileSelection(): void {
+    this.view.clearMobileSelection()
   }
 
   writeExtraKey(input: TerminalExtraKeyInput): void {
@@ -386,13 +413,16 @@ export class ManagedTerminalSession {
 
   private async openPhase(token: number): Promise<{ term: XTermTerminal; preloaded: boolean }> {
     if (this.disposed || this.startToken !== token || this.view.currentTerminal()) throw new StartCancelledError()
-    const geometry = this.view.measureGeometry()
-    if (!geometry) throw new Error('error.terminal-not-measurable')
+    const measuredGeometry = this.view.measureGeometry()
+    if (!measuredGeometry) throw new Error('error.terminal-not-measurable')
+    const isController = this.runtime.canResize()
+    const geometry = isController ? measuredGeometry : (this.canonicalGeometry() ?? measuredGeometry)
+    this.view.setAutoFitEnabled(isController)
     const term = this.view.openTerminal(geometry, (input) => this.writeInput(input), this.windowsPty)
     const preloaded = await this.preloadHydratedSnapshot(token, term)
     await waitForTerminalLayout()
     this.guardStart(token, term)
-    this.view.fitNow()
+    if (isController) this.view.fitNow()
     await waitForTerminalLayout()
     this.guardStart(token, term)
     return { term, preloaded }
@@ -602,18 +632,32 @@ export class ManagedTerminalSession {
       .catch(() => {})
   }
 
+  private canonicalGeometry(): { cols: number; rows: number } | null {
+    const { cols, rows } = this.runtime.currentCanonicalSize()
+    return normalizeTerminalSize(cols, rows)
+  }
+
+  private applyCanonicalSizeToView(): void {
+    const geometry = this.canonicalGeometry()
+    if (geometry) this.view.resizeTo(geometry.cols, geometry.rows)
+  }
+
   private syncViewForOwnership(wasController: boolean): void {
     const isController = this.runtime.canResize()
     this.view.setInputEnabled(this.runtime.canWrite())
+    this.view.setAutoFitEnabled(isController)
     if (!isController) {
       this.cancelResizeFlush()
       this.pendingResize = null
       this.pendingWriteBuffer = ''
       this.prioritizeNextOutput = false
+      this.applyCanonicalSizeToView()
     }
-    if (wasController === isController) return
-    if (this.view.currentTerminal()) this.view.fitSoon()
-    else if (this.view.isConnected()) this.start()
+    if (!this.view.currentTerminal()) {
+      if (this.view.isConnected()) this.start()
+      return
+    }
+    if (wasController !== isController && isController) this.view.fitSoon()
   }
 
   private cancelResizeFlush(): void {

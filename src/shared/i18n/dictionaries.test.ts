@@ -532,6 +532,7 @@ describe('i18n dictionaries', () => {
       'terminal.command-deck.input-placeholder',
       'terminal.command-deck.send',
       'terminal.mobile-scroll-scrubber',
+      'terminal.selection-copy-failed',
     ] as const
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
@@ -542,6 +543,7 @@ describe('i18n dictionaries', () => {
     expect(zh['terminal.command-deck.focus' as keyof typeof zh]).toBe('专注模式')
     expect(zh['terminal.command-deck.exit-focus' as keyof typeof zh]).toBe('退出专注模式')
     expect(zh['terminal.mobile-scroll-scrubber' as keyof typeof zh]).toBe('拖动浏览终端历史')
+    expect(zh['terminal.selection-copy-failed' as keyof typeof zh]).toBe('无法复制所选终端文本，请重试')
   })
 
   test('includes discard selected changes copy', () => {

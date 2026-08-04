@@ -90,7 +90,13 @@ const xtermMocks = vi.hoisted(() => {
     focus = vi.fn(() => this.textarea?.focus())
     customKeyEventHandler: ((event: KeyboardEvent) => boolean) | null = null
     viewportElement: HTMLDivElement | null = null
+    screenElement: HTMLDivElement | null = null
     textarea: HTMLTextAreaElement | undefined = undefined
+    selectionText = ''
+    getSelection = vi.fn(() => this.selectionText)
+    clearSelection = vi.fn(() => {
+      this.selectionText = ''
+    })
     bufferLines: string[] = []
     linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
     buffer = {
@@ -206,8 +212,10 @@ const xtermMocks = vi.hoisted(() => {
       this.element.className = 'xterm'
       this.viewportElement = document.createElement('div')
       this.viewportElement.className = 'xterm-viewport'
+      this.screenElement = document.createElement('div')
+      this.screenElement.className = 'xterm-screen'
       this.textarea = document.createElement('textarea')
-      this.element.append(this.viewportElement, this.textarea)
+      this.element.append(this.viewportElement, this.screenElement, this.textarea)
       host.appendChild(this.element)
     }
 
@@ -956,6 +964,44 @@ describe('ManagedTerminalSession', () => {
     host.remove()
   })
 
+  test('delegates renderer-local Mobile Web selection without terminal authority calls', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.selectionText = 'copy me'
+    const mouseDown = vi.fn()
+    const mouseMove = vi.fn()
+    const mouseUp = vi.fn()
+    term.element?.addEventListener('mousedown', mouseDown)
+
+    terminalCalls.write.mockClear()
+    terminalCalls.resize.mockClear()
+    terminalCalls.takeover.mockClear()
+
+    expect(session.beginMobileSelection({ clientX: 80, clientY: 60 })).toBe(true)
+    document.addEventListener('mousemove', mouseMove, { once: true })
+    session.extendMobileSelection({ clientX: 120, clientY: 70 })
+    document.addEventListener('mouseup', mouseUp, { once: true })
+    session.finishMobileSelection({ clientX: 130, clientY: 75 })
+
+    expect(mouseDown).toHaveBeenCalledTimes(1)
+    expect(mouseMove).toHaveBeenCalledTimes(1)
+    expect(mouseUp).toHaveBeenCalledTimes(1)
+    expect(session.mobileSelectionText()).toBe('copy me')
+
+    session.clearMobileSelection()
+    expect(term.clearSelection).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.write).not.toHaveBeenCalled()
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
+    expect(terminalCalls.takeover).not.toHaveBeenCalled()
+  })
+
   test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -1562,7 +1608,7 @@ describe('ManagedTerminalSession', () => {
     expect(session.snapshot().phase).toBe('open')
   })
 
-  test('opens xterm for an initially hydrated viewer', async () => {
+  test('opens xterm at canonical geometry for an initially hydrated viewer', async () => {
     terminalCalls.attach.mockResolvedValueOnce(
       attachResult('session-1', {
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
@@ -1584,7 +1630,7 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
 
     expect(xtermMocks.terminals).toHaveLength(1)
-    expect(xtermMocks.terminals[0]).toMatchObject({ cols: 100, rows: 30 })
+    expect(xtermMocks.terminals[0]).toMatchObject({ cols: 120, rows: 40 })
     expect(terminalCalls.attach).toHaveBeenCalled()
     expect(session.snapshot().attachment).toMatchObject({
       role: 'viewer',
@@ -1719,6 +1765,71 @@ describe('ManagedTerminalSession', () => {
     expect(term.reset).toHaveBeenCalled()
     expect(term.write).toHaveBeenNthCalledWith(1, 'hydrated-screen', expect.any(Function))
     expect(terminalCalls.attach).toHaveBeenCalled()
+  })
+
+  test('opens a hydrated viewer at canonical geometry before replaying its snapshot', async () => {
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', {
+        controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        canonicalCols: 120,
+        canonicalRows: 40,
+        snapshot: 'hydrated-screen',
+        snapshotSeq: 5,
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session, {
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canonicalCols: 120,
+      canonicalRows: 40,
+      snapshot: 'hydrated-screen',
+      snapshotSeq: 5,
+    })
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    expect(term).toMatchObject({ initialCols: 120, initialRows: 40, cols: 120, rows: 40 })
+    expect(term.write).toHaveBeenNthCalledWith(1, 'hydrated-screen', expect.any(Function))
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
+  })
+
+  test('applies viewer canonical geometry before authoritative attach replay', async () => {
+    const attachRequest = deferred<TerminalAttachResult>()
+    terminalCalls.attach.mockImplementationOnce(() => attachRequest.promise)
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushUntil(() => terminalCalls.attach.mock.calls.length > 0)
+
+    const term = xtermMocks.terminals[0]!
+    let replayGeometry: { cols: number; rows: number } | null = null
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      replayGeometry = { cols: term.cols, rows: term.rows }
+      if (callback) queueMicrotask(callback)
+    })
+
+    attachRequest.resolve(
+      attachResult('session-1', {
+        controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        canonicalCols: 120,
+        canonicalRows: 40,
+        snapshot: 'authoritative-screen',
+        snapshotSeq: 6,
+      }),
+    )
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    expect(replayGeometry).toEqual({ cols: 120, rows: 40 })
+    expect(term).toMatchObject({ cols: 120, rows: 40 })
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
   test('does not rewrite the same server snapshot after preloading it', async () => {
@@ -2167,7 +2278,7 @@ describe('ManagedTerminalSession', () => {
     })
   })
 
-  test('preserves the xterm and local geometry when a controller becomes a viewer', async () => {
+  test('preserves the xterm and applies canonical geometry when a controller becomes a viewer', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2187,12 +2298,12 @@ describe('ManagedTerminalSession', () => {
 
     expect(xtermMocks.terminals).toHaveLength(1)
     expect(term.dispose).not.toHaveBeenCalled()
-    expect(term.cols).toBe(100)
-    expect(term.rows).toBe(30)
+    expect(term.cols).toBe(120)
+    expect(term.rows).toBe(40)
     expect(session.snapshot().attachment?.role).toBe('viewer')
   })
 
-  test('fits viewer geometry to the local host without publishing a PTY resize', async () => {
+  test('keeps viewer geometry canonical when local layout changes', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2212,15 +2323,14 @@ describe('ManagedTerminalSession', () => {
     })
     fitAddon.fit.mockClear()
     fitAddon.proposeDimensions.mockReturnValue({ cols: 90, rows: 20 })
-    fitAddon.fit.mockImplementation(() => term.resize(90, 20))
     terminalCalls.resize.mockClear()
 
     const observer = MockResizeObserver.instances.at(-1)!
     observer.cb([], observer as unknown as ResizeObserver)
     await flushResizeDebounce()
 
-    expect(fitAddon.fit).toHaveBeenCalled()
-    expect(term).toMatchObject({ cols: 90, rows: 20 })
+    expect(fitAddon.fit).not.toHaveBeenCalled()
+    expect(term).toMatchObject({ cols: 120, rows: 40 })
     expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 120, canonicalRows: 40 })
     expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
@@ -2251,8 +2361,9 @@ describe('ManagedTerminalSession', () => {
     terminalCalls.resize.mockClear()
 
     fitAddon.proposeDimensions.mockReturnValue({ cols: 90, rows: 20 })
-    fitAddon.fit.mockImplementation(() => term.resize(90, 20))
     term.emitBufferChange('alternate')
+
+    expect(term).toMatchObject({ cols: 120, rows: 40 })
 
     session.handleOwnership({
       sessionId: 'session-1',
@@ -2262,16 +2373,15 @@ describe('ManagedTerminalSession', () => {
       canonicalRows: 15,
     })
 
-    expect(term).toMatchObject({ cols: 90, rows: 20 })
+    expect(term).toMatchObject({ cols: 70, rows: 15 })
     expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 70, canonicalRows: 15 })
 
     fitAddon.proposeDimensions.mockReturnValue({ cols: 80, rows: 18 })
-    fitAddon.fit.mockImplementation(() => term.resize(80, 18))
     mockFonts.emitLoadingDone()
     await flushResizeDebounce()
 
-    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
-    expect(term).toMatchObject({ cols: 80, rows: 18 })
+    expect(fitAddon.fit).not.toHaveBeenCalled()
+    expect(term).toMatchObject({ cols: 70, rows: 15 })
     expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 70, canonicalRows: 15 })
     expect(terminalCalls.resize).not.toHaveBeenCalled()
   })

@@ -4,9 +4,12 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { TerminalCustomButton } from '#/shared/settings.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
+import { MainWindowNavigationProvider } from '#/web/main-window-navigation.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 import {
   TerminalSessionContext,
   TerminalSessionReadContext,
@@ -21,8 +24,24 @@ const i18nMocks = vi.hoisted(() => ({
   translations: {} as Record<string, string>,
 }))
 
+const clipboardMocks = vi.hoisted(() => ({
+  writeTerminalClipboardText: vi.fn(async () => true),
+}))
+
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+}))
+
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string) => i18nMocks.translations[key] ?? key,
+}))
+
+vi.mock('#/web/components/terminal/terminal-clipboard.ts', () => ({
+  writeTerminalClipboardText: clipboardMocks.writeTerminalClipboardText,
+}))
+
+vi.mock('sonner', () => ({
+  toast: { error: toastMocks.error },
 }))
 
 const appShellMocks = vi.hoisted(() => ({
@@ -91,8 +110,12 @@ afterEach(() => {
   repoClientMocks.transferRepositoryFiles.mockReset()
   editorOpenMocks.openWorktreeEditorTarget.mockReset()
   editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true })
+  clipboardMocks.writeTerminalClipboardText.mockReset()
+  clipboardMocks.writeTerminalClipboardText.mockResolvedValue(true)
+  toastMocks.error.mockReset()
   mobileDetectionMocks.isMobileDevice = false
   document.body.innerHTML = ''
+  vi.useRealTimers()
 })
 
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
@@ -342,6 +365,12 @@ describe('TerminalSlot', () => {
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
+      beginMobileSelection: vi.fn(() => false),
+      extendMobileSelection: vi.fn(),
+      finishMobileSelection: vi.fn(),
+      cancelMobileSelection: vi.fn(),
+      mobileSelectionText: vi.fn(() => ''),
+      clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
@@ -492,6 +521,12 @@ describe('TerminalSlot', () => {
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
+      beginMobileSelection: vi.fn(() => false),
+      extendMobileSelection: vi.fn(),
+      finishMobileSelection: vi.fn(),
+      cancelMobileSelection: vi.fn(),
+      mobileSelectionText: vi.fn(() => ''),
+      clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
@@ -532,6 +567,7 @@ describe('TerminalSlot', () => {
       const host = container.querySelector('.goblin-terminal-slot__host')
       expect(host?.getAttribute('aria-readonly')).toBe('true')
       expect(host?.classList.contains('goblin-terminal-slot__host--hidden')).toBe(false)
+      expect(host?.classList.contains('goblin-terminal-slot__host--canonical-readonly')).toBe(true)
       const viewerStatus = container.querySelector('.goblin-terminal-slot__viewer-status')
       expect(viewerStatus).toBeTruthy()
       expect(viewerStatus?.getAttribute('role')).toBeNull()
@@ -563,11 +599,18 @@ describe('TerminalSlot', () => {
   test.each(['controller', 'viewer', 'unowned'] as const)(
     'routes primary vertical touch drags through mobile terminal scrolling for a %s attachment',
     async (role) => {
+      vi.useFakeTimers()
       mobileDetectionMocks.isMobileDevice = true
       const scrollByTouch = vi.fn()
+      const beginMobileSelection = vi.fn(() => true)
       const writeInput = vi.fn()
       const takeover = vi.fn()
-      const { container, root } = await renderTerminalSlotFixture(role, { scrollByTouch, writeInput, takeover })
+      const { container, root } = await renderTerminalSlotFixture(role, {
+        scrollByTouch,
+        beginMobileSelection,
+        writeInput,
+        takeover,
+      })
 
       try {
         const host = container.querySelector('.goblin-terminal-slot__host')
@@ -588,8 +631,10 @@ describe('TerminalSlot', () => {
 
         await act(async () => {
           host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 190 }))
+          vi.advanceTimersByTime(500)
         })
         expect(setPointerCapture).toHaveBeenCalledWith(1)
+        expect(beginMobileSelection).not.toHaveBeenCalled()
         expect(scrollByTouch).not.toHaveBeenCalled()
 
         const verticalMove = terminalPointerEvent('pointermove', { clientY: 170 })
@@ -625,9 +670,14 @@ describe('TerminalSlot', () => {
   )
 
   test('leaves taps, touch slop, and horizontal drags to ordinary terminal interaction', async () => {
+    vi.useFakeTimers()
     mobileDetectionMocks.isMobileDevice = true
     const scrollByTouch = vi.fn()
-    const { container, root } = await renderTerminalSlotFixture('controller', { scrollByTouch })
+    const beginMobileSelection = vi.fn(() => true)
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      scrollByTouch,
+      beginMobileSelection,
+    })
 
     try {
       const host = container.querySelector('.goblin-terminal-slot__host')
@@ -641,6 +691,7 @@ describe('TerminalSlot', () => {
         host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 100, clientY: 200 }))
         host?.dispatchEvent(slopMove)
         host?.dispatchEvent(tapEnd)
+        vi.advanceTimersByTime(500)
       })
       expect(slopMove.defaultPrevented).toBe(false)
       expect(tapEnd.defaultPrevented).toBe(false)
@@ -650,14 +701,287 @@ describe('TerminalSlot', () => {
       await act(async () => {
         host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 100, clientY: 200, pointerId: 2 }))
         host?.dispatchEvent(horizontalMove)
+        vi.advanceTimersByTime(500)
       })
       expect(horizontalMove.defaultPrevented).toBe(false)
       expect(setPointerCapture).not.toHaveBeenCalled()
       expect(scrollByTouch).not.toHaveBeenCalled()
+      expect(beginMobileSelection).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()
     }
+  })
+
+  test.each(['controller', 'viewer', 'unowned'] as const)(
+    'long-presses a word, extends selection, and offers Copy for a %s attachment',
+    async (role) => {
+      vi.useFakeTimers()
+      mobileDetectionMocks.isMobileDevice = true
+      const beginMobileSelection = vi.fn(() => true)
+      const extendMobileSelection = vi.fn()
+      const finishMobileSelection = vi.fn()
+      const mobileSelectionText = vi.fn(() => 'selected word')
+      const writeInput = vi.fn()
+      const takeover = vi.fn()
+      const { container, root } = await renderTerminalSlotFixture(role, {
+        beginMobileSelection,
+        extendMobileSelection,
+        finishMobileSelection,
+        mobileSelectionText,
+        writeInput,
+        takeover,
+      })
+
+      try {
+        const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+        const setPointerCapture = vi.fn()
+        const releasePointerCapture = vi.fn()
+        Object.defineProperties(host, {
+          setPointerCapture: { configurable: true, value: setPointerCapture },
+          hasPointerCapture: { configurable: true, value: () => true },
+          releasePointerCapture: { configurable: true, value: releasePointerCapture },
+        })
+
+        await act(async () => {
+          host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120 }))
+          host?.dispatchEvent(terminalPointerEvent('pointermove', { clientX: 84, clientY: 123 }))
+          vi.advanceTimersByTime(499)
+        })
+        expect(beginMobileSelection).not.toHaveBeenCalled()
+
+        await act(async () => vi.advanceTimersByTime(1))
+        expect(beginMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 84, clientY: 123 })
+        expect(setPointerCapture).toHaveBeenCalledWith(1)
+
+        const selectionMove = terminalPointerEvent('pointermove', { clientX: 145, clientY: 150 })
+        const selectionEnd = terminalPointerEvent('pointerup', { clientX: 150, clientY: 155 })
+        await act(async () => {
+          host?.dispatchEvent(selectionMove)
+          host?.dispatchEvent(selectionEnd)
+        })
+
+        expect(selectionMove.defaultPrevented).toBe(true)
+        expect(selectionEnd.defaultPrevented).toBe(true)
+        expect(extendMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 145, clientY: 150 })
+        expect(finishMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 150, clientY: 155 })
+        expect(mobileSelectionText).toHaveBeenCalledWith('terminal-1')
+        expect(releasePointerCapture).toHaveBeenCalledWith(1)
+        expect(container.querySelector('.goblin-terminal-selection-copy')?.textContent).toBe('menu.edit.copy')
+        expect(writeInput).not.toHaveBeenCalled()
+        expect(takeover).not.toHaveBeenCalled()
+      } finally {
+        await act(async () => root.unmount())
+        container.remove()
+      }
+    },
+  )
+
+  test('copies the current selection and clears it only after clipboard success', async () => {
+    vi.useFakeTimers()
+    mobileDetectionMocks.isMobileDevice = true
+    const clearMobileSelection = vi.fn()
+    const mobileSelectionText = vi.fn(() => 'copy on release')
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      beginMobileSelection: vi.fn(() => true),
+      finishMobileSelection: vi.fn(),
+      mobileSelectionText,
+      clearMobileSelection,
+    })
+
+    try {
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      Object.defineProperties(host, {
+        setPointerCapture: { configurable: true, value: vi.fn() },
+        hasPointerCapture: { configurable: true, value: () => false },
+      })
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120 }))
+        vi.advanceTimersByTime(500)
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientX: 90, clientY: 130 }))
+      })
+
+      const copy = container.querySelector<HTMLButtonElement>('.goblin-terminal-selection-copy')
+      expect(copy).toBeInstanceOf(HTMLButtonElement)
+      clearMobileSelection.mockClear()
+      await act(async () => {
+        copy?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await Promise.resolve()
+      })
+
+      expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('copy on release')
+      expect(clearMobileSelection).toHaveBeenCalledWith('terminal-1')
+      expect(container.querySelector('.goblin-terminal-selection-copy')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not offer Copy when xterm reports an empty selection on release', async () => {
+    vi.useFakeTimers()
+    mobileDetectionMocks.isMobileDevice = true
+    const { container, root } = await renderTerminalSlotFixture('viewer', {
+      beginMobileSelection: vi.fn(() => true),
+      finishMobileSelection: vi.fn(),
+      mobileSelectionText: vi.fn(() => ''),
+    })
+
+    try {
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      Object.defineProperties(host, {
+        setPointerCapture: { configurable: true, value: vi.fn() },
+        hasPointerCapture: { configurable: true, value: () => false },
+      })
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120 }))
+        vi.advanceTimersByTime(500)
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientX: 90, clientY: 130 }))
+      })
+
+      expect(container.querySelector('.goblin-terminal-selection-copy')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('retains selection and Copy action when every clipboard path fails', async () => {
+    vi.useFakeTimers()
+    mobileDetectionMocks.isMobileDevice = true
+    i18nMocks.translations['terminal.selection-copy-failed'] = 'Copy failed'
+    clipboardMocks.writeTerminalClipboardText.mockResolvedValue(false)
+    const clearMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', {
+      beginMobileSelection: vi.fn(() => true),
+      finishMobileSelection: vi.fn(),
+      mobileSelectionText: vi.fn(() => 'retry selection'),
+      clearMobileSelection,
+    })
+
+    try {
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      Object.defineProperties(host, {
+        setPointerCapture: { configurable: true, value: vi.fn() },
+        hasPointerCapture: { configurable: true, value: () => false },
+      })
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120 }))
+        vi.advanceTimersByTime(500)
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientX: 90, clientY: 130 }))
+      })
+      const copy = container.querySelector<HTMLButtonElement>('.goblin-terminal-selection-copy')
+
+      clearMobileSelection.mockClear()
+      await act(async () => {
+        copy?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await Promise.resolve()
+      })
+
+      expect(clearMobileSelection).not.toHaveBeenCalled()
+      expect(toastMocks.error).toHaveBeenCalledWith('Copy failed')
+      expect(container.querySelector('.goblin-terminal-selection-copy')).toBe(copy)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('cancels a committed long-press selection without showing Copy', async () => {
+    vi.useFakeTimers()
+    mobileDetectionMocks.isMobileDevice = true
+    const cancelMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('unowned', {
+      beginMobileSelection: vi.fn(() => true),
+      cancelMobileSelection,
+      mobileSelectionText: vi.fn(() => 'should not copy'),
+    })
+
+    try {
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      Object.defineProperties(host, {
+        setPointerCapture: { configurable: true, value: vi.fn() },
+        hasPointerCapture: { configurable: true, value: () => false },
+      })
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120 }))
+        vi.advanceTimersByTime(500)
+        host?.dispatchEvent(terminalPointerEvent('pointercancel', { clientX: 90, clientY: 130 }))
+      })
+
+      expect(cancelMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 90, clientY: 130 })
+      expect(container.querySelector('.goblin-terminal-selection-copy')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('cancels and releases a committed selection before a new primary touch starts', async () => {
+    vi.useFakeTimers()
+    mobileDetectionMocks.isMobileDevice = true
+    const cancelMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      beginMobileSelection: vi.fn(() => true),
+      cancelMobileSelection,
+    })
+
+    try {
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      const capturedPointers = new Set<number>()
+      const releasePointerCapture = vi.fn((pointerId: number) => capturedPointers.delete(pointerId))
+      Object.defineProperties(host, {
+        setPointerCapture: {
+          configurable: true,
+          value: (pointerId: number) => capturedPointers.add(pointerId),
+        },
+        hasPointerCapture: {
+          configurable: true,
+          value: (pointerId: number) => capturedPointers.has(pointerId),
+        },
+        releasePointerCapture: { configurable: true, value: releasePointerCapture },
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120, pointerId: 1 }))
+        vi.advanceTimersByTime(500)
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientX: 95, clientY: 135, pointerId: 1 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 40, clientY: 60, pointerId: 2 }))
+      })
+
+      expect(cancelMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 95, clientY: 135 })
+      expect(releasePointerCapture).toHaveBeenCalledWith(1)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('releases pointer capture when a committed selection unmounts', async () => {
+    vi.useFakeTimers()
+    mobileDetectionMocks.isMobileDevice = true
+    const cancelMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', {
+      beginMobileSelection: vi.fn(() => true),
+      cancelMobileSelection,
+    })
+    const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+    const releasePointerCapture = vi.fn()
+    Object.defineProperties(host, {
+      setPointerCapture: { configurable: true, value: vi.fn() },
+      hasPointerCapture: { configurable: true, value: () => true },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    })
+
+    await act(async () => {
+      host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 80, clientY: 120 }))
+      vi.advanceTimersByTime(500)
+      root.unmount()
+    })
+
+    expect(cancelMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 80, clientY: 120 })
+    expect(releasePointerCapture).toHaveBeenCalledWith(1)
+    container.remove()
   })
 
   test('continues a recent fast manual drag with decelerating terminal inertia', async () => {
@@ -1008,6 +1332,331 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('cycles the command deck to a terminal in another project', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture('controller')
+    const target = {
+      ...descriptor,
+      key: '/repo-b\0/worktree-b\0terminal-1',
+      worktreeTerminalKey: '/repo-b\0/worktree-b',
+      repoRoot: '/repo-b',
+      worktreePath: '/worktree-b',
+      branch: 'feature-b',
+    }
+    const terminalCatalog = [descriptor, target]
+    const selectTerminal = vi.fn()
+    const showRepoBranchDetailTab = vi.fn()
+    const context = terminalContext({ selectTerminal })
+    const readContext = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      terminalCatalogSnapshot: () => terminalCatalog,
+      subscribeTerminalCatalog: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    } as TerminalSessionReadContextValue
+
+    await act(async () => {
+      root.render(
+        <MainWindowNavigationProvider
+          value={{
+            activateRepo: vi.fn(),
+            closeRepo: vi.fn(),
+            cycleRepo: vi.fn(),
+            selectRepoBranch: vi.fn(),
+            showRepoDetailTab: vi.fn(),
+            showRepoBranchDetailTab,
+            openSettings: vi.fn(),
+          }}
+        >
+          <TerminalSessionContext.Provider value={context}>
+            <TerminalSessionReadContext.Provider value={readContext}>
+              <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+            </TerminalSessionReadContext.Provider>
+          </TerminalSessionContext.Provider>
+        </MainWindowNavigationProvider>,
+      )
+    })
+
+    try {
+      const next = container.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      expect(next?.disabled).toBe(false)
+      await act(async () => next?.click())
+
+      expect(selectTerminal).toHaveBeenCalledWith('/repo-b\0/worktree-b', target.key)
+      expect(showRepoBranchDetailTab).toHaveBeenCalledWith('/repo-b', 'feature-b', 'terminal')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('restores a branch workspace context when cycling across projects', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture('controller')
+    const target = {
+      ...descriptor,
+      key: '/workspace-b\0/workspace-b/goblin-feature\0terminal-1',
+      worktreeTerminalKey: '/workspace-b\0/workspace-b/goblin-feature',
+      repoRoot: '/workspace-b',
+      worktreePath: '/workspace-b/goblin-feature',
+      branch: 'feature-b',
+      targetKind: 'branch-workspace' as const,
+      branchWorkspaceId: 'branch-workspace-b',
+    }
+    const terminalCatalog = [descriptor, target]
+    const selectTerminal = vi.fn()
+    const showRepoBranchDetailTab = vi.fn()
+    const activateBranchWorkspace = vi.fn()
+    const previousActivateBranchWorkspace = useReposStore.getState().activateBranchWorkspace
+    useReposStore.setState({ activateBranchWorkspace })
+    const context = terminalContext({ selectTerminal })
+    const readContext = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      terminalCatalogSnapshot: () => terminalCatalog,
+      subscribeTerminalCatalog: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    } as TerminalSessionReadContextValue
+
+    await act(async () => {
+      root.render(
+        <MainWindowNavigationProvider
+          value={{
+            activateRepo: vi.fn(),
+            closeRepo: vi.fn(),
+            cycleRepo: vi.fn(),
+            selectRepoBranch: vi.fn(),
+            showRepoDetailTab: vi.fn(),
+            showRepoBranchDetailTab,
+            openSettings: vi.fn(),
+          }}
+        >
+          <TerminalSessionContext.Provider value={context}>
+            <TerminalSessionReadContext.Provider value={readContext}>
+              <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+            </TerminalSessionReadContext.Provider>
+          </TerminalSessionContext.Provider>
+        </MainWindowNavigationProvider>,
+      )
+    })
+
+    try {
+      const next = container.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      await act(async () => next?.click())
+
+      expect(selectTerminal).toHaveBeenCalledWith(target.worktreeTerminalKey, target.key)
+      expect(activateBranchWorkspace).toHaveBeenCalledWith('/workspace-b', 'branch-workspace-b')
+      expect(showRepoBranchDetailTab).not.toHaveBeenCalled()
+    } finally {
+      useReposStore.setState({ activateBranchWorkspace: previousActivateBranchWorkspace })
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('opens the project terminal when cycling to a non-git workspace', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture('controller')
+    const target = {
+      ...descriptor,
+      key: '/workspace-b\0/workspace-b\0terminal-1',
+      worktreeTerminalKey: '/workspace-b\0/workspace-b',
+      repoRoot: '/workspace-b',
+      worktreePath: '/workspace-b',
+      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
+    }
+    const terminalCatalog = [descriptor, target]
+    const selectTerminal = vi.fn()
+    const showRepoDetailTab = vi.fn()
+    const showRepoBranchDetailTab = vi.fn()
+    const context = terminalContext({ selectTerminal })
+    const readContext = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      terminalCatalogSnapshot: () => terminalCatalog,
+      subscribeTerminalCatalog: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    } as TerminalSessionReadContextValue
+
+    await act(async () => {
+      root.render(
+        <MainWindowNavigationProvider
+          value={{
+            activateRepo: vi.fn(),
+            closeRepo: vi.fn(),
+            cycleRepo: vi.fn(),
+            selectRepoBranch: vi.fn(),
+            showRepoDetailTab,
+            showRepoBranchDetailTab,
+            openSettings: vi.fn(),
+          }}
+        >
+          <TerminalSessionContext.Provider value={context}>
+            <TerminalSessionReadContext.Provider value={readContext}>
+              <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+            </TerminalSessionReadContext.Provider>
+          </TerminalSessionContext.Provider>
+        </MainWindowNavigationProvider>,
+      )
+    })
+
+    try {
+      const next = container.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      await act(async () => next?.click())
+
+      expect(selectTerminal).toHaveBeenCalledWith(target.worktreeTerminalKey, target.key)
+      expect(showRepoDetailTab).toHaveBeenCalledWith('/workspace-b', 'terminal')
+      expect(showRepoBranchDetailTab).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('cycles terminals in project switcher order instead of catalog insertion order', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture('controller')
+    const targetA = {
+      ...descriptor,
+      key: '/repo-a\0/repo-a\0terminal-1',
+      worktreeTerminalKey: '/repo-a\0/repo-a',
+      repoRoot: '/repo-a',
+      worktreePath: '/repo-a',
+      branch: 'feature-a',
+    }
+    const targetB = {
+      ...descriptor,
+      key: '/repo-b\0/repo-b\0terminal-1',
+      worktreeTerminalKey: '/repo-b\0/repo-b',
+      repoRoot: '/repo-b',
+      worktreePath: '/repo-b',
+      branch: 'feature-b',
+    }
+    const terminalCatalog = [descriptor, targetB, targetA]
+    const selectTerminal = vi.fn()
+    const showRepoBranchDetailTab = vi.fn()
+    const previousOrder = useReposStore.getState().order
+    useReposStore.setState({ order: ['/repo', '/repo-a', '/repo-b'] })
+    const context = terminalContext({ selectTerminal })
+    const readContext = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      terminalCatalogSnapshot: () => terminalCatalog,
+      subscribeTerminalCatalog: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    } as TerminalSessionReadContextValue
+
+    await act(async () => {
+      root.render(
+        <MainWindowNavigationProvider
+          value={{
+            activateRepo: vi.fn(),
+            closeRepo: vi.fn(),
+            cycleRepo: vi.fn(),
+            selectRepoBranch: vi.fn(),
+            showRepoDetailTab: vi.fn(),
+            showRepoBranchDetailTab,
+            openSettings: vi.fn(),
+          }}
+        >
+          <TerminalSessionContext.Provider value={context}>
+            <TerminalSessionReadContext.Provider value={readContext}>
+              <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+            </TerminalSessionReadContext.Provider>
+          </TerminalSessionContext.Provider>
+        </MainWindowNavigationProvider>,
+      )
+    })
+
+    try {
+      const next = container.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      await act(async () => next?.click())
+
+      expect(selectTerminal).toHaveBeenCalledWith(targetA.worktreeTerminalKey, targetA.key)
+      expect(showRepoBranchDetailTab).toHaveBeenCalledWith('/repo-a', 'feature-a', 'terminal')
+    } finally {
+      useReposStore.setState({ order: previousOrder })
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not cycle to terminals retained from closed projects', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture('controller')
+    const staleTarget = {
+      ...descriptor,
+      key: '/closed-repo\0/closed-repo\0terminal-1',
+      worktreeTerminalKey: '/closed-repo\0/closed-repo',
+      repoRoot: '/closed-repo',
+      worktreePath: '/closed-repo',
+    }
+    const terminalCatalog = [descriptor, staleTarget]
+    const previousOrder = useReposStore.getState().order
+    useReposStore.setState({ order: ['/repo'] })
+    const readContext = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      terminalCatalogSnapshot: () => terminalCatalog,
+      subscribeTerminalCatalog: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    } as TerminalSessionReadContextValue
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={terminalContext()}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const next = container.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      expect(next?.disabled).toBe(true)
+    } finally {
+      useReposStore.setState({ order: previousOrder })
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('toggles the Mobile Web terminal between fitted and horizontally pannable width', async () => {
     mobileDetectionMocks.isMobileDevice = true
     const { container, root } = await renderTerminalSlotFixture('controller')
@@ -1056,6 +1705,12 @@ describe('TerminalSlot', () => {
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
+      beginMobileSelection: vi.fn(() => false),
+      extendMobileSelection: vi.fn(),
+      finishMobileSelection: vi.fn(),
+      cancelMobileSelection: vi.fn(),
+      mobileSelectionText: vi.fn(() => ''),
+      clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
@@ -1169,6 +1824,12 @@ describe('TerminalSlot', () => {
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
+      beginMobileSelection: vi.fn(() => false),
+      extendMobileSelection: vi.fn(),
+      finishMobileSelection: vi.fn(),
+      cancelMobileSelection: vi.fn(),
+      mobileSelectionText: vi.fn(() => ''),
+      clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
@@ -1900,6 +2561,12 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),
+    beginMobileSelection: vi.fn(() => false),
+    extendMobileSelection: vi.fn(),
+    finishMobileSelection: vi.fn(),
+    cancelMobileSelection: vi.fn(),
+    mobileSelectionText: vi.fn(() => ''),
+    clearMobileSelection: vi.fn(),
     clearBell: vi.fn(() => false),
     closeTerminalAndDismissDetailIfLast: vi.fn(),
     registerWorktreeHost: vi.fn(),

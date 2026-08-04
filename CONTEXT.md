@@ -88,6 +88,10 @@ _Avoid_: New terminal, embedded terminal
 A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a controller tap retains ordinary terminal focus behavior, while a read-only tap never invokes the input method.
 _Avoid_: Page scroll, terminal input gesture, takeover gesture, history-only gesture
 
+**Mobile Web terminal text selection**:
+A renderer-local interaction that begins when a primary touch remains within terminal touch slop for a long press, selects the xterm word under that touch, and lets continued dragging extend the xterm selection before a local Copy action is offered on release. It is available to controller, viewer, and unowned attachments, never sends terminal input or mouse protocol, never requests takeover, and never synchronizes selected text; ordinary vertical drags remain terminal scrolling and ordinary horizontal drags remain local width panning.
+_Avoid_: Native DOM selection, terminal mouse input, automatic copy, synchronized selection
+
 **Mobile Web terminal edge scrubber**:
 A renderer-local, touch-sized interaction strip at the right edge of a Mobile Web internal terminal that lets controller, viewer, and unowned attachments drag directly to an absolute normal-buffer history position. It has no idle track or thumb; while dragging or keyboard-focused it briefly shows a terminal-style position tick and a 14-pixel percentage readout. It is unavailable when the active buffer has no normal scrollback, cancels gesture inertia when grabbed, and never requests terminal input control or synchronizes viewing position through the server.
 _Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
@@ -189,12 +193,12 @@ The per-launch choice between the native login shell and the compatibility-named
 _Avoid_: Tmux setting, terminal preference, external terminal mode
 
 **Canonical terminal geometry**:
-The server-owned PTY column and row count published by the current controller attachment.
+The server-owned PTY column and row count published by the current controller attachment and used by read-only attachments to parse that terminal's VT stream. A read-only renderer may expose a smaller local presentation viewport, but it never substitutes that viewport's dimensions while parsing controller-sized output.
 _Avoid_: Viewer size, shared viewport size
 
 **Local terminal geometry**:
-The renderer-local xterm column and row count fitted to one client's visible host. It is never synchronized or persisted; only a controller may publish it as new canonical terminal geometry.
-_Avoid_: Canonical size, remote size
+The renderer-local xterm column and row count fitted to one controlling attachment's visible host. It is never synchronized or persisted and only that controller may publish it as new canonical terminal geometry; viewer and unowned attachments instead keep canonical terminal geometry and pan their local presentation viewport without resizing xterm or the PTY.
+_Avoid_: Canonical size, read-only presentation viewport, remote size
 
 **External terminal**:
 An operating-system terminal application opened outside Hobgoblin at a selected workspace path, or launched with an attach-only command for one revalidated Host tmux inventory session. Host-inventory attach never creates a replacement session and does not require the session's original directory to still exist.

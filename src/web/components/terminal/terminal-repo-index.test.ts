@@ -55,6 +55,9 @@ describe('repoIndexFromRepos', () => {
       '/workspace': NON_GIT_WORKSPACE_TERMINAL_BRANCH,
       '/workspace/goblin-feature': 'feature/auth',
     })
+    expect(index['/workspace']?.branchWorkspaceIdByWorktreePath).toEqual({
+      '/workspace/goblin-feature': '/workspace/goblin-feature',
+    })
     expect(branchForTerminalWorktree(index, '/workspace', '/workspace/goblin-feature')).toBe('feature/auth')
   })
 })

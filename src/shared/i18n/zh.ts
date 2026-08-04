@@ -787,6 +787,7 @@ export const zh: Record<DictKey, string> = {
   'terminal.command-deck.input-placeholder': '输入命令',
   'terminal.command-deck.send': '发送',
   'terminal.mobile-scroll-scrubber': '拖动浏览终端历史',
+  'terminal.selection-copy-failed': '无法复制所选终端文本，请重试',
   'terminal.custom-button-presets.confirm-continue.label': '确认、继续',
   'terminal.custom-button-presets.confirm-continue.value': '确认、继续',
   'terminal.custom-button-presets.try-if-needed.label': '试试、需要',
