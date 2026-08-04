@@ -414,6 +414,8 @@
     <string name="tmux_stale">前回成功したスキャン結果を表示しています：%1$s</string>
     <string name="tmux_scan_failed">tmux セッションをスキャンできません</string>
     <string name="tmux_import_project">プロジェクトをインポート</string>
+    <string name="tmux_import_as_git_repository">Git リポジトリとしてインポート</string>
+    <string name="tmux_import_as_plain_workspace">プレーンワークスペースとしてインポート</string>
     <string name="tmux_project_imported">インポート済み</string>
     <string name="host_tmux_default_server">デフォルト server</string>
     <string name="host_tmux_default_session">デフォルト tmux セッション</string>

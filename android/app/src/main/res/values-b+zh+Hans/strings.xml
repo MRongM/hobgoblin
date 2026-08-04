@@ -414,6 +414,8 @@
     <string name="tmux_stale">正在显示上次成功扫描的结果：%1$s</string>
     <string name="tmux_scan_failed">无法扫描 tmux 会话</string>
     <string name="tmux_import_project">导入项目</string>
+    <string name="tmux_import_as_git_repository">作为 Git 仓库导入</string>
+    <string name="tmux_import_as_plain_workspace">作为普通工作区导入</string>
     <string name="tmux_project_imported">已导入</string>
     <string name="host_tmux_default_server">默认 server</string>
     <string name="host_tmux_default_session">默认 tmux 会话</string>

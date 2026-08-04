@@ -56,6 +56,14 @@ _Avoid_: Legacy Hobgoblin tmux session, project-scoped tmux session, native shel
 An explicit Android action that takes one directory from the current tmux scan into the Project setup flow, where it is validated and saved as a device-local Project. It is distinct from tmux discovery, terminal recovery, and automatic or batch project import.
 _Avoid_: Automatic project discovery, tmux project synchronization, session import
 
+**Android tmux Git repository import**:
+One Android tmux directory import choice that identifies a Git repository by its repository primary worktree, even when the scanned directory belongs to another worktree. Its availability is independent from importing the scanned worktree as a plain workspace.
+_Avoid_: Main-branch import, current-worktree project, automatic repository import
+
+**Android tmux plain workspace import**:
+One Android tmux directory import choice that treats the current Git worktree root as a plain workspace without Git project behavior. It may coexist with an Android tmux Git repository import for the same repository, and its availability is determined independently by project type and current-worktree path.
+_Avoid_: Git repository import, arbitrary tmux child directory, linked repository
+
 **Tmux server target**:
 The exact default or strictly named project-scoped tmux server on which one discovered session was observed and to which Android must later attach it. It is part of host-level recovery identity because a session name may exist on more than one server and a project-root hash cannot be reversed.
 _Avoid_: Project root, socket scan result, tmux session name

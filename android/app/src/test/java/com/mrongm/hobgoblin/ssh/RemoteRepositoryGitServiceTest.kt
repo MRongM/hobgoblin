@@ -49,6 +49,8 @@ class RemoteRepositoryGitServiceTest {
             git
             __HOBGOBLIN_ANDROID_PROJECT_PATH__
             /srv/app
+            __HOBGOBLIN_ANDROID_PROJECT_WORKTREE__
+            /srv/app-feature
             __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
             feature/android
             __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
@@ -59,6 +61,7 @@ class RemoteRepositoryGitServiceTest {
 
         assertEquals(RemoteProjectKind.GitRepository, inspection.kind)
         assertEquals("/srv/app", inspection.resolvedPath)
+        assertEquals("/srv/app-feature", inspection.worktreePath)
         assertEquals("feature/android", inspection.currentRef)
         assertEquals("main", inspection.defaultBranch)
     }
@@ -70,6 +73,8 @@ class RemoteRepositoryGitServiceTest {
             plain
             __HOBGOBLIN_ANDROID_PROJECT_PATH__
             /srv/scripts
+            __HOBGOBLIN_ANDROID_PROJECT_WORKTREE__
+            /srv/scripts
             __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
             __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
         """.trimIndent()
@@ -78,6 +83,7 @@ class RemoteRepositoryGitServiceTest {
 
         assertEquals(RemoteProjectKind.PlainWorkspace, inspection.kind)
         assertEquals("/srv/scripts", inspection.resolvedPath)
+        assertEquals("/srv/scripts", inspection.worktreePath)
         assertEquals(null, inspection.currentRef)
         assertEquals(null, inspection.defaultBranch)
     }
@@ -153,6 +159,8 @@ class RemoteRepositoryGitServiceTest {
             git
             __HOBGOBLIN_ANDROID_PROJECT_PATH__
             /srv/app
+            __HOBGOBLIN_ANDROID_PROJECT_WORKTREE__
+            /srv/app-feature
             __HOBGOBLIN_ANDROID_PROJECT_CURRENT__
             main
             __HOBGOBLIN_ANDROID_PROJECT_DEFAULT__
@@ -168,9 +176,69 @@ class RemoteRepositoryGitServiceTest {
         val script = client.scripts.single()
 
         assertEquals("/srv/app", inspection.resolvedPath)
+        assertEquals("/srv/app-feature", inspection.worktreePath)
         assertTrue(script.contains("worktree list --porcelain"))
         assertTrue(script.contains("primary_worktree="))
         assertTrue(script.contains("resolved=\$primary_worktree"))
+    }
+
+    @Test
+    fun `project path resolution parser keeps primary and current worktree identities`() {
+        val output = listOf(
+            "/srv/app-feature\u0000git\u0000/srv/app-feature\u0000/srv/app",
+            "/srv/scripts\u0000plain\u0000/srv/scripts\u0000/srv/scripts",
+            "/srv/invalid\u0000unknown\u0000/srv/invalid\u0000/srv/invalid",
+            "relative\u0000git\u0000relative\u0000relative",
+        ).joinToString("\n")
+
+        val resolutions = parseRemoteProjectPathResolutions(output)
+
+        assertEquals(setOf("/srv/app-feature", "/srv/scripts"), resolutions.keys)
+        assertEquals(RemoteProjectKind.GitRepository, resolutions.getValue("/srv/app-feature").kind)
+        assertEquals("/srv/app", resolutions.getValue("/srv/app-feature").projectPath)
+        assertEquals("/srv/app-feature", resolutions.getValue("/srv/app-feature").worktreePath)
+        assertEquals(RemoteProjectKind.PlainWorkspace, resolutions.getValue("/srv/scripts").kind)
+        assertEquals("/srv/scripts", resolutions.getValue("/srv/scripts").projectPath)
+        assertEquals("/srv/scripts", resolutions.getValue("/srv/scripts").worktreePath)
+    }
+
+    @Test
+    fun `project path resolution batches unique paths in one trusted command`() {
+        val output = listOf(
+            "/srv/app-feature\u0000git\u0000/srv/app-feature\u0000/srv/app",
+            "/srv/scripts\u0000plain\u0000/srv/scripts\u0000/srv/scripts",
+        ).joinToString("\n")
+        val client = FakeSshClient(
+            commandResults = listOf(SshCommandResult(ok = true, stdout = output)),
+        )
+        val service = RemoteRepositoryGitService(
+            client = client,
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        val resolutions = service.resolveProjectPaths(
+            target = target("/"),
+            remotePaths = listOf("/srv/app-feature", "/srv/app-feature", "/srv/scripts"),
+        )
+
+        assertEquals(setOf("/srv/app-feature", "/srv/scripts"), resolutions.keys)
+        assertEquals(1, client.fingerprintReads)
+        assertEquals(1, client.scripts.size)
+        assertEquals(1, Regex("resolve_project_path '/srv/app-feature'").findAll(client.scripts.single()).count())
+        assertTrue(client.scripts.single().contains("worktree list --porcelain"))
+    }
+
+    @Test
+    fun `empty project path resolution avoids host and command work`() {
+        val client = FakeSshClient()
+        val service = RemoteRepositoryGitService(
+            client = client,
+            hostKeyStore = FakeHostKeyTrustStore("SHA256:test"),
+        )
+
+        assertEquals(emptyMap<String, Any>(), service.resolveProjectPaths(target("/"), emptyList()))
+        assertEquals(0, client.fingerprintReads)
+        assertTrue(client.scripts.isEmpty())
     }
 
     @Test
@@ -310,9 +378,13 @@ class RemoteRepositoryGitServiceTest {
         private val commandResults: List<SshCommandResult> = emptyList(),
     ) : SshClientFacade {
         private var commandIndex = 0
+        var fingerprintReads = 0
         val scripts = mutableListOf<String>()
 
-        override fun fetchHostFingerprint(target: RemoteTarget): String = fingerprint
+        override fun fetchHostFingerprint(target: RemoteTarget): String {
+            fingerprintReads += 1
+            return fingerprint
+        }
 
         override fun runDiagnosticProbe(
             target: RemoteTarget,

@@ -150,7 +150,7 @@ object TmuxSessionProtocol {
         val serverName = serverName(projectRoot) ?: return null
         val sessionTarget = "=${identity.sessionName}"
         val paneTarget = "$sessionTarget:"
-        val projectTmux = "$TmuxExecutableReference -L ${shellQuote(serverName)}"
+        val projectTmux = "$InteractiveTmuxExecutableReference -L ${shellQuote(serverName)}"
         val projectCreateCommand = createAndAttachCommandForTmux(
             projectTmux,
             identity,
@@ -166,7 +166,7 @@ object TmuxSessionProtocol {
             paneTarget,
         )
         val legacyAttachCommand = configureAndAttachCommandForTmux(
-            TmuxExecutableReference,
+            InteractiveTmuxExecutableReference,
             identity,
             terminalNumber,
             sessionTarget,
@@ -188,7 +188,7 @@ object TmuxSessionProtocol {
         val serverName = serverName(projectRoot) ?: return null
         val sessionTarget = "=${identity.sessionName}"
         val paneTarget = "$sessionTarget:"
-        val projectTmux = "$TmuxExecutableReference -L ${shellQuote(serverName)}"
+        val projectTmux = "$InteractiveTmuxExecutableReference -L ${shellQuote(serverName)}"
         val projectAttachCommand = configureAndAttachCommandForTmux(
             projectTmux,
             identity,
@@ -197,7 +197,7 @@ object TmuxSessionProtocol {
             paneTarget,
         )
         val legacyAttachCommand = configureAndAttachCommandForTmux(
-            TmuxExecutableReference,
+            InteractiveTmuxExecutableReference,
             identity,
             terminalNumber,
             sessionTarget,
@@ -219,8 +219,9 @@ object TmuxSessionProtocol {
         val sessionTarget = "=${identity.sessionName}"
         val paneTarget = "$sessionTarget:"
         val tmuxCommand = when (server) {
-            TmuxServerTarget.Default -> TmuxExecutableReference
-            is TmuxServerTarget.Named -> "$TmuxExecutableReference -L ${shellQuote(server.serverName)}"
+            TmuxServerTarget.Default -> InteractiveTmuxExecutableReference
+            is TmuxServerTarget.Named ->
+                "$InteractiveTmuxExecutableReference -L ${shellQuote(server.serverName)}"
         }
         val attachCommand = configureAndAttachCommandForTmux(
             tmuxCommand = tmuxCommand,
@@ -396,8 +397,9 @@ object TmuxSessionProtocol {
     fun attachExistingCommand(target: TmuxSessionTarget): String? {
         val sessionTarget = "=${target.sessionName}"
         val tmuxCommand = when (val server = target.server) {
-            TmuxServerTarget.Default -> TmuxExecutableReference
-            is TmuxServerTarget.Named -> "$TmuxExecutableReference -L ${shellQuote(server.serverName)}"
+            TmuxServerTarget.Default -> InteractiveTmuxExecutableReference
+            is TmuxServerTarget.Named ->
+                "$InteractiveTmuxExecutableReference -L ${shellQuote(server.serverName)}"
         }
         return "if $tmuxCommand has-session -t ${shellQuote(sessionTarget)} 2>/dev/null; then " +
             "$tmuxCommand attach-session -t ${shellQuote(sessionTarget)}; " +
@@ -798,6 +800,7 @@ object TmuxSessionProtocol {
     private const val LegacyScopeMarker = "legacy"
     private const val TmuxResolverFunction = "resolve_hobgoblin_tmux"
     private const val TmuxExecutableReference = "\"${'$'}hobgoblin_tmux_bin\""
+    private const val InteractiveTmuxExecutableReference = "COLORTERM=truecolor $TmuxExecutableReference"
     private const val InitPathOption = "@hobgoblin_init_path"
     private const val TerminalNumberOption = "@hobgoblin_terminal_number"
     private const val HashHexChars = 24

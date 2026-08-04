@@ -1,6 +1,8 @@
 package com.mrongm.hobgoblin.ui.screens.tmux
 
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectPathResolution
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.hostTmuxRecoveryCandidate
 import com.mrongm.hobgoblin.requireHostTmuxRemoteCloseSuccess
@@ -45,6 +47,146 @@ class TmuxCatalogPresentationTest {
 
         assertFalse(hostTmuxPathIsImported("host-2", "/srv/app", listOf(project)))
         assertFalse(hostTmuxPathIsImported("host-1", "/srv/api", listOf(project)))
+    }
+
+    @Test
+    fun `git worktree offers primary repository and current plain workspace imports`() {
+        val options = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/app-feature",
+            resolution = gitResolution(),
+            savedPathResolutions = emptyMap(),
+            repositories = emptyList(),
+        )
+
+        assertEquals(
+            listOf(RemoteProjectKind.GitRepository, RemoteProjectKind.PlainWorkspace),
+            options.map(HostTmuxProjectImportOption::kind),
+        )
+        assertEquals(listOf("/srv/app", "/srv/app-feature"), options.map(HostTmuxProjectImportOption::remotePath))
+        assertTrue(options.none(HostTmuxProjectImportOption::imported))
+    }
+
+    @Test
+    fun `git and plain tmux import availability are independent`() {
+        val git = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "App",
+            remotePath = "/srv/app",
+            kind = RemoteProjectKind.GitRepository,
+        )
+        val plain = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "Feature",
+            remotePath = "/srv/app-feature",
+            kind = RemoteProjectKind.PlainWorkspace,
+        )
+
+        val gitImported = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/app-feature",
+            resolution = gitResolution(),
+            savedPathResolutions = emptyMap(),
+            repositories = listOf(git),
+        )
+        val plainImported = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/app-feature",
+            resolution = gitResolution(),
+            savedPathResolutions = emptyMap(),
+            repositories = listOf(plain),
+        )
+        val bothImported = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/app-feature",
+            resolution = gitResolution(),
+            savedPathResolutions = emptyMap(),
+            repositories = listOf(git, plain),
+        )
+
+        assertEquals(listOf(true, false), gitImported.map(HostTmuxProjectImportOption::imported))
+        assertEquals(listOf(false, true), plainImported.map(HostTmuxProjectImportOption::imported))
+        assertTrue(bothImported.all(HostTmuxProjectImportOption::imported))
+    }
+
+    @Test
+    fun `saved linked worktree git project is compared by its primary worktree`() {
+        val saved = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "Legacy",
+            remotePath = "/srv/app-other-feature",
+            kind = RemoteProjectKind.GitRepository,
+        )
+        val savedResolution = gitResolution(
+            requestedPath = "/srv/app-other-feature",
+            worktreePath = "/srv/app-other-feature",
+        )
+
+        val options = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/app-feature",
+            resolution = gitResolution(),
+            savedPathResolutions = mapOf(saved.remotePath to savedResolution),
+            repositories = listOf(saved),
+        )
+
+        assertTrue(options.first { it.kind == RemoteProjectKind.GitRepository }.imported)
+        assertFalse(options.first { it.kind == RemoteProjectKind.PlainWorkspace }.imported)
+    }
+
+    @Test
+    fun `plain tmux directory offers only a type sensitive plain import`() {
+        val gitAtSamePath = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "Git",
+            remotePath = "/srv/scripts",
+            kind = RemoteProjectKind.GitRepository,
+        )
+        val resolution = RemoteProjectPathResolution(
+            requestedPath = "/srv/scripts",
+            kind = RemoteProjectKind.PlainWorkspace,
+            projectPath = "/srv/scripts",
+            worktreePath = "/srv/scripts",
+        )
+
+        val options = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/scripts",
+            resolution = resolution,
+            savedPathResolutions = emptyMap(),
+            repositories = listOf(gitAtSamePath),
+        )
+
+        assertEquals(listOf(RemoteProjectKind.PlainWorkspace), options.map(HostTmuxProjectImportOption::kind))
+        assertFalse(options.single().imported)
+    }
+
+    @Test
+    fun `missing tmux path resolution preserves exact auto import fallback`() {
+        val project = RemoteRepositoryProfile.create(
+            hostProfileId = "host-1",
+            alias = "App",
+            remotePath = "/srv/app-feature",
+        )
+
+        val imported = hostTmuxProjectImportOptions(
+            hostId = "host-1",
+            initialPath = "/srv/app-feature/",
+            resolution = null,
+            savedPathResolutions = emptyMap(),
+            repositories = listOf(project),
+        )
+        val otherHost = hostTmuxProjectImportOptions(
+            hostId = "host-2",
+            initialPath = "/srv/app-feature",
+            resolution = null,
+            savedPathResolutions = emptyMap(),
+            repositories = listOf(project),
+        )
+
+        assertEquals(null, imported.single().kind)
+        assertTrue(imported.single().imported)
+        assertFalse(otherHost.single().imported)
     }
 
     @Test
@@ -196,5 +338,15 @@ class TmuxCatalogPresentationTest {
         tmuxServerTarget = TmuxServerTarget.Default,
         status = status,
         openedAt = 1L,
+    )
+
+    private fun gitResolution(
+        requestedPath: String = "/srv/app-feature",
+        worktreePath: String = "/srv/app-feature",
+    ): RemoteProjectPathResolution = RemoteProjectPathResolution(
+        requestedPath = requestedPath,
+        kind = RemoteProjectKind.GitRepository,
+        projectPath = "/srv/app",
+        worktreePath = worktreePath,
     )
 }

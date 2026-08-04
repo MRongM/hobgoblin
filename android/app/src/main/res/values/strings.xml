@@ -415,6 +415,8 @@
     <string name="tmux_stale">Showing the last successful scan: %1$s</string>
     <string name="tmux_scan_failed">Unable to scan tmux sessions</string>
     <string name="tmux_import_project">Import project</string>
+    <string name="tmux_import_as_git_repository">Import as Git repository</string>
+    <string name="tmux_import_as_plain_workspace">Import as plain workspace</string>
     <string name="tmux_project_imported">Imported</string>
     <string name="host_tmux_default_server">default server</string>
     <string name="host_tmux_default_session">default tmux session</string>
