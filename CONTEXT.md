@@ -9,8 +9,12 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 ## Language
 
 **Android terminals tab**:
-The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal in stable creation order so an existing session can be reopened quickly. Its item backgrounds distinguish running (green), disconnected (yellow), exited/failed (red), and starting (neutral) states. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
+The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal by descending retained-terminal opened time so the newest item is first and an existing session can be reopened quickly. Each item shows that opened time in localized relative form, and its header status badge distinguishes running (green), disconnected/failed (red), exited (gray), and starting (neutral) states while preserving a text label. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
+
+**Android retained terminal opened time**:
+The immutable device-local time assigned when a retained Android terminal record first enters the terminal list, including a recovered tmux record. It orders the Android terminals tab newest-first and is displayed there as localized relative time. Reconnecting, terminal input or output, status changes, and list navigation never change it. It is distinct from terminal activity time and from the unknown remote creation time of a recovered tmux session.
+_Avoid_: Last activity time, reconnect time, remote tmux creation time
 
 **Android retained terminal close**:
 An explicit, confirmed Android terminal action that stops its active Android controller while retaining the device-local session record and list item for later reconnection. The Terminals-tab item offers it only while the retained session is starting or running, in the same action position later occupied by reconnect. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session. It is distinct from terminal backgrounding, retained terminal deletion, associated tmux session cleanup, or deleting a Host or Project.
@@ -28,8 +32,12 @@ _Avoid_: New terminal, open terminal, automatic retry
 A non-destructive navigation from an Android terminal screen to the Android terminals tab that leaves its retained session running or reconnectable. A rightward terminal-page swipe uses this path even for a Host temporary terminal, while the existing Back path retains its own destination-specific behavior.
 _Avoid_: Application backgrounding, terminal close, terminal disconnect
 
+**Android project created time**:
+The immutable device-local time when one Android Project is first saved to the local Project list. It is distinct from remote directory, repository, or Git history creation time; editing the Project never changes it, and legacy records without trustworthy time data remain explicitly unknown.
+_Avoid_: Repository creation time, directory creation time, project edit time
+
 **Android manual item order**:
-The restorable, device-local order chosen by dragging Android Host, Project, or Project Worktree items from their dedicated drag handles. Host and Project orders are global to their respective lists; Worktree order is scoped to one Project. The Android Terminals tab instead uses stable creation order. Manual order changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
+The restorable, device-local order chosen by dragging Android Host, Project, or Project Worktree items from their dedicated drag handles. Host and Project orders are global to their respective lists; Worktree order is scoped to one Project. Before a Project order exists, Projects use descending Android project created time; the Android Terminals tab instead always uses descending retained-terminal opened time. Manual order changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
 _Avoid_: Git worktree order, remote sort order, synchronized order
 
 **Android terminal focus mode**:

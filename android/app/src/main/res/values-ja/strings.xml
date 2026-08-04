@@ -173,6 +173,8 @@
     <string name="projects_filtered_empty_description">%1$s に保存済みプロジェクトはありません。</string>
     <string name="projects_git_repository">Git リポジトリ</string>
     <string name="projects_plain_workspace">プレーンワークスペース</string>
+    <string name="projects_created_at">作成：%1$s</string>
+    <string name="projects_created_unknown">作成日時不明</string>
     <string name="projects_selected_host">選択中のホスト</string>
     <string name="projects_empty_title">プロジェクトがありません</string>
     <string name="projects_empty_on_host">%1$s にプロジェクトはありません</string>
@@ -380,6 +382,7 @@
     <string name="terminals_workspace_directory">ワークスペースディレクトリ</string>
     <string name="terminals_context">%1$s · %2$s</string>
     <string name="terminals_location">%1$s ·</string>
+    <string name="terminals_opened_at">開始：%1$s</string>
     <string name="terminals_close_tmux">%1$s の Android 接続を閉じますが、後で再接続できるようターミナル一覧には残します。リモート tmux セッションは実行を継続します。</string>
     <string name="terminals_close_native">%1$s を停止しますが、後で再接続できるようターミナル一覧には残します。</string>
     <string name="terminals_delete_tmux">%1$s をターミナル一覧から削除し、アクティブな Android 接続を停止します。リモート tmux セッションは実行を継続します。</string>
