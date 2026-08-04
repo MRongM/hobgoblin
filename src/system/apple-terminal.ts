@@ -2,8 +2,12 @@ import { execa } from 'execa'
 import type { ExecResult } from '#/shared/git-types.ts'
 import { statSync } from 'node:fs'
 import path from 'node:path'
-import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
-import { buildExternalRemoteTerminalInvocation, type ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
+import { buildManagedLocalTerminalInvocation, type LocalTerminalInvocationOptions } from '#/system/local-terminal.ts'
+import {
+  buildExternalRemoteTerminalInvocation,
+  type ExternalRemoteTerminalTarget,
+  type RemoteTerminalInvocationOptions,
+} from '#/system/remote-terminal.ts'
 import { normalizeTmuxSessionDescriptor, type TmuxSessionDescriptor } from '#/system/tmux-session.ts'
 
 const OPEN_TIMEOUT_MS = 10_000
@@ -29,10 +33,11 @@ function isUsableDirectory(p: string): boolean {
  *  so there are no escaping or injection concerns. */
 export async function openInAppleTerminal(
   target: TmuxSessionDescriptor,
-  options: { useTmux?: boolean } = {},
+  options: LocalTerminalInvocationOptions = {},
 ): Promise<{ ok: boolean; message: string }> {
   const descriptor = normalizeTmuxSessionDescriptor(target)
-  if (!descriptor || !isUsableDirectory(descriptor.workingDirectory)) {
+  const attachesExistingSession = options.existingTmuxSessionKind !== undefined
+  if (!descriptor || (!attachesExistingSession && !isUsableDirectory(descriptor.workingDirectory))) {
     return { ok: false, message: 'error.invalid-path' }
   }
 
@@ -55,7 +60,7 @@ export async function openInAppleTerminal(
 
 export async function openRemoteInAppleTerminal(
   target: ExternalRemoteTerminalTarget,
-  options: { useTmux?: boolean } = {},
+  options: RemoteTerminalInvocationOptions = {},
 ): Promise<{ ok: boolean; message: string }> {
   const invocation = buildExternalRemoteTerminalInvocation(target, options)
   if (!invocation) return { ok: false, message: 'error.invalid-arguments' }

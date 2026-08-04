@@ -7,6 +7,7 @@ const TMUX_SERVER_PROTOCOL = 'hobgoblin-tmux-server-v1'
 const TMUX_SERVER_PREFIX = 'hobgoblin-project-v1-'
 const HOBGOBLIN_TMUX_SESSION_NAME_RE = /^hobgoblin-v1-[a-f0-9]{24}$/u
 const HOBGOBLIN_TMUX_SERVER_NAME_RE = /^hobgoblin-project-v1-[a-f0-9]{24}$/u
+const MAX_TMUX_SESSION_NAME_CHARS = 256
 const MAX_TMUX_SESSION_PATH_CHARS = 4096
 const UNSAFE_PATH_CHARS_RE = /[\0-\x1f\x7f]/
 
@@ -21,6 +22,14 @@ export interface TmuxSessionDescriptor {
   projectRoot: string
   workingDirectory: string
   terminalNumber: number
+}
+
+export type ExistingTmuxSessionKind = 'hobgoblin' | 'default'
+
+export interface ExistingTmuxSessionTarget {
+  kind: ExistingTmuxSessionKind
+  sessionName: string
+  serverName?: string
 }
 
 export function buildTmuxServerName(projectRootInput: string): string | null {
@@ -86,11 +95,41 @@ export function buildTmuxAttachShellCommand(
   }
 }
 
+export function buildExistingTmuxAttachShellCommand(
+  target: ExistingTmuxSessionTarget,
+): { sessionName: string; command: string } | null {
+  if (target.kind === 'default') {
+    if (target.serverName !== undefined || !isSafeTmuxSessionName(target.sessionName)) return null
+  } else if (target.kind === 'hobgoblin') {
+    if (
+      !isHobgoblinTmuxSessionName(target.sessionName) ||
+      (target.serverName !== undefined && !isHobgoblinTmuxServerName(target.serverName))
+    ) {
+      return null
+    }
+  } else {
+    return null
+  }
+  const serverName = target.serverName ?? 'default'
+  return {
+    sessionName: target.sessionName,
+    command: `tmux -L ${shellQuote(serverName)} attach-session -t ${shellQuote(`=${target.sessionName}`)}`,
+  }
+}
+
 export function buildRequiredTmuxShellScript(workingDirectoryInput: string, tmuxCommand: string): string | null {
   const workingDirectory = normalizeTmuxSessionPath(workingDirectoryInput)
   if (!workingDirectory || tmuxCommand.length === 0) return null
+  return buildRequiredTmuxCommandShellScript(tmuxCommand, [`cd ${shellQuote(workingDirectory)} || exit`])
+}
+
+export function buildRequiredTmuxAttachShellScript(tmuxCommand: string): string | null {
+  return tmuxCommand.length > 0 ? buildRequiredTmuxCommandShellScript(tmuxCommand) : null
+}
+
+function buildRequiredTmuxCommandShellScript(tmuxCommand: string, prefix: readonly string[] = []): string {
   return [
-    `cd ${shellQuote(workingDirectory)} || exit`,
+    ...prefix,
     'if ! command -v tmux >/dev/null 2>&1; then',
     `  printf '%s\\n' ${shellQuote(TMUX_UNAVAILABLE_MESSAGE)} >&2`,
     '  exit 127',
@@ -155,6 +194,15 @@ export function normalizeTmuxSessionPath(value: string): string | null {
 
 export function isHobgoblinTmuxSessionName(value: unknown): value is string {
   return typeof value === 'string' && HOBGOBLIN_TMUX_SESSION_NAME_RE.test(value)
+}
+
+export function isSafeTmuxSessionName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_TMUX_SESSION_NAME_CHARS &&
+    !UNSAFE_PATH_CHARS_RE.test(value)
+  )
 }
 
 export function isHobgoblinTmuxServerName(value: unknown): value is string {

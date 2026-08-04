@@ -7,7 +7,12 @@ import {
   FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
-import { buildTmuxServerName, isHobgoblinTmuxSessionName, isHobgoblinTmuxServerName } from '#/system/tmux-session.ts'
+import {
+  buildTmuxServerName,
+  isHobgoblinTmuxSessionName,
+  isHobgoblinTmuxServerName,
+  isSafeTmuxSessionName,
+} from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
 import { BRANCH_CREATED_FROM_CONFIG_PATTERN, branchCreatedFromConfigKey } from '#/system/git/branches.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
@@ -260,7 +265,9 @@ function scriptForCommand(command: RemoteCommandKind): string {
     }
     case 'tmuxKillHostSessionByName': {
       if (
-        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        !(command.serverName === undefined
+          ? isSafeTmuxSessionName(command.sessionName)
+          : isHobgoblinTmuxSessionName(command.sessionName)) ||
         (command.serverName !== undefined && !isHobgoblinTmuxServerName(command.serverName))
       ) {
         throw new TypeError('error.invalid-arguments')

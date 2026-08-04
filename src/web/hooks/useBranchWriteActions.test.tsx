@@ -34,6 +34,11 @@ vi.mock('#/web/repo-client.ts', () => ({
 const toastMock = vi.hoisted(() => ({ info: vi.fn() }))
 vi.mock('sonner', () => ({ toast: toastMock }))
 
+vi.mock('#/web/stores/i18n.ts', () => ({
+  useT: () => (key: string, params?: Record<string, string | number>) =>
+    params?.branch ? `${key}:${params.branch}` : key,
+}))
+
 const draftMocks = vi.hoisted(() => ({ openDraft: vi.fn() }))
 vi.mock('#/web/components/branch-list/InlineCommitDraftProvider.tsx', () => ({
   useInlineCommitDraft: () => null,
@@ -104,9 +109,7 @@ describe('useBranchWriteActions', () => {
 
     root = createRoot(container)
     await act(async () => {
-      root!.render(
-        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />,
-      )
+      root!.render(<BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />)
     })
 
     await act(async () => {
@@ -128,9 +131,7 @@ describe('useBranchWriteActions', () => {
 
     root = createRoot(container)
     await act(async () => {
-      root!.render(
-        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />,
-      )
+      root!.render(<BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />)
     })
 
     await act(async () => {
@@ -181,6 +182,31 @@ describe('useBranchWriteActions', () => {
     expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', 'main')
     expect(onPush).toHaveBeenCalled()
     expect(calls).toEqual(['pull', 'merge', 'push'])
+  })
+
+  test('interpolates the destination branch in the merge-in dialog title after opening', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } }),
+        createRepoBranch('main'),
+      ],
+      currentBranch: 'feature/current',
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />)
+    })
+
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'merge')?.onSelect()
+    })
+
+    expect(document.body.querySelector('[data-slot="dialog-title"]')?.textContent).toBe(
+      'action.merge-in-title:feature/current',
+    )
   })
 
   test('keeps merge-in identity and exposes adjacent merge-out only for a clean source', async () => {

@@ -1,9 +1,12 @@
 import {
+  buildExistingTmuxAttachShellCommand,
+  buildRequiredTmuxAttachShellScript,
   buildTmuxAttachShellCommand,
   buildRequiredTmuxShellScript,
   buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
+  type ExistingTmuxSessionKind,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
 
@@ -17,6 +20,7 @@ export interface LocalTerminalInvocation {
 
 export interface LocalTerminalInvocationOptions {
   useTmux?: boolean
+  existingTmuxSessionKind?: ExistingTmuxSessionKind
   existingTmuxSessionName?: string
   existingTmuxServerName?: string
   platform?: NodeJS.Platform
@@ -32,18 +36,33 @@ export function buildManagedLocalTerminalInvocation(
   const descriptor = normalizeTmuxSessionDescriptor(target)
   const existingSessionName = options.existingTmuxSessionName
   const existingServerName = options.existingTmuxServerName
-  if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
-  if (
-    existingServerName !== undefined &&
-    (!existingSessionName || existingServerName !== buildTmuxServerName(descriptor?.projectRoot ?? ''))
-  ) {
-    return null
+  const existingSessionKind = options.existingTmuxSessionKind
+  let existingTmuxInvocation: { sessionName: string; command: string } | null = null
+  if (existingSessionKind !== undefined) {
+    if (!existingSessionName) return null
+    existingTmuxInvocation = buildExistingTmuxAttachShellCommand({
+      kind: existingSessionKind,
+      sessionName: existingSessionName,
+      ...(existingServerName === undefined ? {} : { serverName: existingServerName }),
+    })
+    if (!existingTmuxInvocation) return null
+  } else {
+    if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
+    if (
+      existingServerName !== undefined &&
+      (!existingSessionName || existingServerName !== buildTmuxServerName(descriptor?.projectRoot ?? ''))
+    ) {
+      return null
+    }
+    existingTmuxInvocation = existingSessionName
+      ? {
+          sessionName: existingSessionName,
+          command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
+        }
+      : null
   }
   const tmuxInvocation = existingSessionName
-    ? {
-        sessionName: existingSessionName,
-        command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
-      }
+    ? existingTmuxInvocation
     : descriptor
       ? buildTmuxAttachShellCommand(descriptor)
       : null
@@ -52,7 +71,9 @@ export function buildManagedLocalTerminalInvocation(
     safeAbsoluteCommand(options.fallbackShell) ??
     safeAbsoluteCommand(process.env.SHELL) ??
     (platform === 'darwin' ? '/bin/zsh' : '/bin/sh')
-  const script = buildRequiredTmuxShellScript(descriptor.workingDirectory, tmuxInvocation.command)
+  const script = existingSessionKind
+    ? buildRequiredTmuxAttachShellScript(tmuxInvocation.command)
+    : buildRequiredTmuxShellScript(descriptor.workingDirectory, tmuxInvocation.command)
   if (!script) return null
   return {
     command: fallbackShell,

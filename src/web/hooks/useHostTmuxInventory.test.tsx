@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   hostPlatform: 'linux',
   preview: vi.fn(),
   close: vi.fn(),
+  open: vi.fn(),
   toastInfo: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('#/web/bootstrap.ts', () => ({
 vi.mock('#/web/tmux-cleanup-client.ts', () => ({
   previewHostTmuxSessions: mocks.preview,
   closeHostTmuxSessions: mocks.close,
+  openHostTmuxSession: mocks.open,
 }))
 vi.mock('sonner', () => ({
   toast: { info: mocks.toastInfo, success: mocks.toastSuccess, error: mocks.toastError },
@@ -92,6 +94,8 @@ describe('useHostTmuxInventory', () => {
     expect(document.body.textContent).toContain('hobgoblin-v1-0123456789abcdef01234567')
     expect(document.body.textContent).toContain('tmux.host-inventory.attached:2')
     expect(document.body.textContent).toContain('tmux.host-inventory.detached')
+    expect(document.body.textContent).toContain('tmux.host-inventory.default-session')
+    expect(document.body.textContent).not.toContain('tmux.host-inventory.terminal-number:undefined')
     expect(document.body.textContent).toContain('tmux.host-inventory.warning')
     expect(document.body.textContent).not.toContain('tmux.host-inventory.project-root')
     const checkboxes = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[data-host-tmux-session]'))
@@ -108,7 +112,7 @@ describe('useHostTmuxInventory', () => {
     mocks.close.mockResolvedValue({
       ok: true,
       closed: [sessions[0]],
-      missing: [{ sessionName: sessions[1]!.sessionName }],
+      missing: [{ kind: 'default', sessionName: sessions[1]!.sessionName }],
       failed: [{ session: sessions[2], message: 'permission denied' }],
     })
     renderHarness('/work/repo')
@@ -125,9 +129,9 @@ describe('useHostTmuxInventory', () => {
     expect(mocks.close).toHaveBeenCalledWith({
       projectRoot: '/work/repo',
       approvedSessions: [
-        { sessionName: sessions[0]!.sessionName, serverName: sessions[0]!.serverName },
-        { sessionName: sessions[1]!.sessionName },
-        { sessionName: sessions[2]!.sessionName, serverName: sessions[2]!.serverName },
+        { kind: 'hobgoblin', sessionName: sessions[0]!.sessionName, serverName: sessions[0]!.serverName },
+        { kind: 'default', sessionName: sessions[1]!.sessionName },
+        { kind: 'hobgoblin', sessionName: sessions[2]!.sessionName, serverName: sessions[2]!.serverName },
       ],
     })
     expect(document.body.textContent).not.toContain(sessions[0]!.sessionName)
@@ -137,6 +141,40 @@ describe('useHostTmuxInventory', () => {
     expect(mocks.toastError).toHaveBeenCalledWith('tmux.host-inventory.partial:1,1,1', {
       description: `${sessions[2]!.sessionName}: permission denied`,
     })
+  })
+
+  test('opens one exact scanned session externally without selecting it for close', async () => {
+    expect(useHostTmuxInventory).toBeTypeOf('function')
+    if (!useHostTmuxInventory) return
+    const sessions = inventorySessions()
+    mocks.preview.mockResolvedValue({ ok: true, sessions })
+    mocks.open.mockResolvedValueOnce({ ok: true, status: 'opened' }).mockResolvedValueOnce({
+      ok: true,
+      status: 'missing',
+    })
+    renderHarness('/work/repo')
+    await click('[data-testid="host-inventory-action"]')
+
+    const openButtons = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[data-host-tmux-open-session]'))
+    expect(openButtons).toHaveLength(3)
+    await act(async () => {
+      openButtons[1]!.click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.open).toHaveBeenCalledWith({
+      projectRoot: '/work/repo',
+      session: { kind: 'default', sessionName: sessions[1]!.sessionName },
+    })
+    const checkboxes = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[data-host-tmux-session]'))
+    expect(checkboxes[1]?.dataset.state).toBe('unchecked')
+    expect(mocks.toastError).not.toHaveBeenCalled()
+
+    await act(async () => {
+      openButtons[1]!.click()
+      await Promise.resolve()
+    })
+    expect(mocks.toastError).toHaveBeenCalledWith('tmux.host-inventory.open-missing')
   })
 
   test('ignores duplicate scan triggers while the first request is pending', async () => {
@@ -185,6 +223,7 @@ function Harness({ projectRoot }: { projectRoot: string }) {
 function inventorySessions() {
   return [
     {
+      kind: 'hobgoblin' as const,
       sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
       initialPath: '/work/feature',
       terminalNumber: 1,
@@ -192,12 +231,13 @@ function inventorySessions() {
       serverName: 'hobgoblin-project-v1-0123456789abcdef01234567',
     },
     {
-      sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef',
+      kind: 'default' as const,
+      sessionName: 'editor work',
       initialPath: '/work/feature',
-      terminalNumber: 2,
       attachedClients: 0,
     },
     {
+      kind: 'hobgoblin' as const,
       sessionName: 'hobgoblin-v1-fedcba9876543210fedcba98',
       initialPath: '/other/worktree',
       terminalNumber: 3,

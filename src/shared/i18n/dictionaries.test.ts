@@ -138,6 +138,10 @@ describe('i18n dictionaries', () => {
       'tmux.host-inventory.description',
       'tmux.host-inventory.select-session',
       'tmux.host-inventory.terminal-number',
+      'tmux.host-inventory.default-session',
+      'tmux.host-inventory.open-external',
+      'tmux.host-inventory.open-failed',
+      'tmux.host-inventory.open-missing',
       'tmux.host-inventory.detached',
       'tmux.host-inventory.attached',
       'tmux.host-inventory.warning',
@@ -153,6 +157,7 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['tmux.host-inventory.action']).toBe('扫描主机 tmux 会话')
     expect(zh['tmux.host-inventory.close-selected']).toContain('关闭所选会话')
+    expect(zh['tmux.host-inventory.none']).not.toContain('Hobgoblin')
   })
 
   test('includes invalid worktree cleanup copy in every locale', () => {

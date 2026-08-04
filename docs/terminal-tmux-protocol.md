@@ -223,22 +223,36 @@ Opening a default session stores an exact `TmuxSessionTarget` and uses `has-sess
 
 Deleting an Android record leaves either kind of remote session running by default. If the user separately approves remote close, Android re-lists the exact server. Hobgoblin sessions must still match their fixed identity metadata; default sessions must still match the exact default server and opaque session name. Only then may Android issue exact `kill-session`.
 
-## Host-wide inventory and selected close
+## Host-wide inventory, exact attach, and selected close
 
 The project context menu may use one selected project only as a local or SSH host locator. A host inventory is not project-scoped: it resolves the authenticated operating-system user's UID inside that login context, enumerates every socket in that user's effective tmux socket directory whose name matches the exact `hobgoblin-project-v1-<24 lowercase hex>` protocol, and scans each server through that exact derived socket before inspecting the same user's default socket for upgrade compatibility. It never scans another Unix user's socket directory or accepts an arbitrary `-S` socket path from the renderer.
 
-Each host-inventory row includes initial path, terminal number, `session_attached`, the session name, and an internal server-origin marker. A row is eligible only when:
+Desktop requests fixed Hobgoblin metadata together with live `session_path`:
+
+```sh
+#{@hobgoblin_init_path}\t#{@hobgoblin_terminal_number}\t#{session_attached}\t#{session_name}\t#{session_path}
+```
+
+SSH appends the validated internal server-origin marker as a sixth field. Every row first attempts the current Hobgoblin classification. A Hobgoblin row is eligible only when:
 
 - the initial directory is a normalized absolute POSIX path;
 - the terminal number and attached-client count are canonical non-negative integers, with the terminal number greater than zero;
 - the session name matches the exact current `hobgoblin-v1-<24 lowercase hex>` protocol; and
 - the origin is an exact Hobgoblin project-server name or the explicit `legacy-default` marker.
 
-A name alone is insufficient: missing or malformed initial-path, terminal-number, attachment-count, or server-origin data still excludes the row. Project-root metadata may be present but is neither returned nor validated by host inventory.
+A name alone is insufficient: missing or malformed fixed initial-path, terminal-number, attachment-count, or server-origin data still excludes a Hobgoblin row. Project-root metadata may be present but is neither returned nor validated by host inventory.
 
-The inventory displays attached and detached sessions. Selection starts empty. Closing selected sessions sends exact session-name and server-origin pairs back to the server; the server re-enumerates and revalidates the live rows immediately before sequential `kill-session` commands. A newly created row, a same-named row on another server, or a row whose metadata changed after preview never inherits approval. Sessions that already disappeared are reported separately, and one close failure does not roll back successful closes.
+If that classification fails, Desktop accepts the row as an ordinary default session only when the origin is the exact `legacy-default` server marker, the opaque name is non-empty, at most 256 characters, and free of control characters, live `session_path` is a lexically normalized absolute path, and the attached-client count is valid. Ordinary rows on project-scoped servers remain hidden. A default row has no terminal number or named-server origin in the public contract.
 
-Like the rest of the v1 metadata, host manageability is not authentication against another process running as the same operating-system user. Its safety purpose is to prevent name-only, malformed, stale-origin, and arbitrary-server rows from entering the destructive selection surface while keeping orphaned current-protocol sessions manually removable.
+The inventory displays attached and detached sessions of both kinds. Selection starts empty. Every identity carries its kind plus exact session name and server origin, so a default-server session that changes between Hobgoblin and ordinary classification cannot inherit an earlier approval.
+
+The Host close API validates the approval array as one unit. If any identity is malformed or violates its kind-bound origin rules, the entire request is rejected before re-enumeration or any kill command; invalid entries are never silently dropped from an otherwise actionable batch.
+
+Opening one row in an external terminal first re-enumerates the host and resolves that exact live identity. The local or SSH command uses `tmux -L <server-or-default> attach-session -t '=<session_name>'`, so an inherited `TMUX` environment cannot redirect it away from the validated origin. It never runs `new-session`, writes Hobgoblin options, or falls back to another row. The attach-only shell does not `cd` to `session_path`, so a still-running orphan can be inspected after its original directory was removed. A row that disappeared or changed kind/origin returns missing without launching a replacement terminal command.
+
+Closing selected sessions likewise re-enumerates and revalidates the live rows immediately before sequential exact `kill-session` commands. A newly created row, a same-named row on another server, or a row whose metadata or kind changed after preview never inherits approval. Sessions that already disappeared are reported separately, and one close failure does not roll back successful closes.
+
+Like the rest of the v1 metadata, host manageability is not authentication against another process running as the same operating-system user. Its safety purpose is to prevent malformed, stale-origin, and arbitrary-server rows from entering exact attach or destructive-close surfaces while keeping orphaned sessions inspectable and manually removable.
 
 ## Runtime association and exact close
 

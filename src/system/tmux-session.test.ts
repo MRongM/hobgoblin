@@ -4,6 +4,7 @@ import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import * as tmuxSession from '#/system/tmux-session.ts'
 import {
+  buildExistingTmuxAttachShellCommand,
   buildTmuxAttachShellCommand,
   buildTmuxSessionName,
   isHobgoblinTmuxSessionName,
@@ -202,6 +203,39 @@ describe('buildTmuxAttachShellCommand', () => {
 })
 
 describe('tmux cleanup protocol helpers', () => {
+  test('builds exact attach targets only for recognized Host session kinds', () => {
+    expect(buildExistingTmuxAttachShellCommand({ kind: 'default', sessionName: "editor's work" })).toEqual({
+      sessionName: "editor's work",
+      command: "tmux -L 'default' attach-session -t '=editor'\\''s work'",
+    })
+    expect(
+      buildExistingTmuxAttachShellCommand({
+        kind: 'unknown' as 'default',
+        sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      }),
+    ).toBeNull()
+  })
+
+  test('accepts bounded opaque tmux session names without control characters', () => {
+    const isSafeSessionName = (
+      tmuxSession as typeof tmuxSession & { isSafeTmuxSessionName?: (value: unknown) => boolean }
+    ).isSafeTmuxSessionName
+
+    expect(isSafeSessionName).toBeTypeOf('function')
+    if (!isSafeSessionName) return
+
+    expect(isSafeSessionName('editor')).toBe(true)
+    expect(isSafeSessionName("editor's work:1")).toBe(true)
+    expect(isSafeSessionName('x'.repeat(256))).toBe(true)
+    expect(isSafeSessionName('')).toBe(false)
+    expect(isSafeSessionName('x'.repeat(257))).toBe(false)
+    expect(isSafeSessionName('editor\twork')).toBe(false)
+    expect(isSafeSessionName('editor\nwork')).toBe(false)
+    expect(isSafeSessionName('editor\0work')).toBe(false)
+    expect(isSafeSessionName(`editor${String.fromCharCode(127)}work`)).toBe(false)
+    expect(isSafeSessionName(null)).toBe(false)
+  })
+
   test('accepts only current Hobgoblin v1 session names', () => {
     expect(isHobgoblinTmuxSessionName('hobgoblin-v1-aebf050981ac829e36100020')).toBe(true)
     expect(isHobgoblinTmuxSessionName('hobgoblin-v1-AEBF050981AC829E36100020')).toBe(false)

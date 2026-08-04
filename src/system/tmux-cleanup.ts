@@ -6,6 +6,7 @@ import {
   buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   isHobgoblinTmuxServerName,
+  isSafeTmuxSessionName,
   normalizeTmuxSessionPath,
   TMUX_INIT_PATH_OPTION,
   TMUX_TERMINAL_NUMBER_OPTION,
@@ -19,7 +20,7 @@ const MISSING_TMUX_SESSION_RE = /(?:can't find session|session not found)/iu
 let localTmuxExecutable = TMUX_COMMAND
 
 export const TMUX_SESSION_LIST_FORMAT = `#{${TMUX_INIT_PATH_OPTION}}\t#{${TMUX_TERMINAL_NUMBER_OPTION}}\t#{session_attached}\t#{session_name}`
-export const TMUX_HOST_SESSION_LIST_FORMAT = TMUX_SESSION_LIST_FORMAT
+export const TMUX_HOST_SESSION_LIST_FORMAT = `${TMUX_SESSION_LIST_FORMAT}\t#{session_path}`
 
 export type TmuxProcessResult =
   | { ok: true; stdout: string; stderr: string }
@@ -103,45 +104,58 @@ export function parseTmuxHostSessionList(output: string, fixedServerOrigin?: str
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (!line) continue
     const fields = line.split('\t')
-    const expectedFieldCount = fixedServerOrigin === undefined ? 5 : 4
+    const expectedFieldCount = fixedServerOrigin === undefined ? 6 : 5
     if (fields.length !== expectedFieldCount) return null
-    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName, rowOrigin] = fields
+    const [rawInitialPath, rawTerminalNumber, rawAttachedClients, sessionName, rawSessionPath, rowOrigin] = fields
     const serverOrigin = fixedServerOrigin ?? rowOrigin
     if (serverOrigin !== 'legacy-default' && !isHobgoblinTmuxServerName(serverOrigin)) return null
-    const initialPath = normalizeTmuxSessionPath(rawInitialPath ?? '')
+    if (!isSafeTmuxSessionName(sessionName)) continue
+
+    const metadataInitialPath = normalizeTmuxSessionPath(rawInitialPath ?? '')
     const terminalNumber = parseRecordedTerminalNumber(rawTerminalNumber)
     const attachedClients = parseAttachedClientCount(rawAttachedClients)
+    if (attachedClients === null) continue
+
     if (
-      !sessionName ||
-      !isHobgoblinTmuxSessionName(sessionName) ||
-      !initialPath ||
-      initialPath !== rawInitialPath ||
-      terminalNumber === null ||
-      attachedClients === null
+      isHobgoblinTmuxSessionName(sessionName) &&
+      metadataInitialPath &&
+      metadataInitialPath === rawInitialPath &&
+      terminalNumber !== null
     ) {
+      sessions.push({
+        kind: 'hobgoblin',
+        sessionName,
+        initialPath: metadataInitialPath,
+        terminalNumber,
+        attachedClients,
+        ...(serverOrigin === 'legacy-default' ? {} : { serverName: serverOrigin }),
+      })
       continue
     }
+
+    if (serverOrigin !== 'legacy-default') continue
+    const sessionPath = normalizeTmuxSessionPath(rawSessionPath ?? '')
+    if (!sessionPath || sessionPath !== rawSessionPath) continue
     sessions.push({
+      kind: 'default',
       sessionName,
-      initialPath,
-      terminalNumber,
+      initialPath: sessionPath,
       attachedClients,
-      ...(serverOrigin === 'legacy-default' ? {} : { serverName: serverOrigin }),
     })
   }
   return sessions
 }
 
 function parseRecordedTerminalNumber(value: string | undefined): number | null {
-  if (!value || !/^\d+$/u.test(value)) return null
+  if (!value || !/^[1-9]\d*$/u.test(value)) return null
   const terminalNumber = Number.parseInt(value, 10)
-  return Number.isSafeInteger(terminalNumber) && terminalNumber > 0 ? terminalNumber : null
+  return Number.isSafeInteger(terminalNumber) ? terminalNumber : null
 }
 
 function parseAttachedClientCount(value: string | undefined): number | null {
-  if (!value || !/^\d+$/u.test(value)) return null
+  if (!value || !/^(?:0|[1-9]\d*)$/u.test(value)) return null
   const attachedClients = Number.parseInt(value, 10)
-  return Number.isSafeInteger(attachedClients) && attachedClients >= 0 ? attachedClients : null
+  return Number.isSafeInteger(attachedClients) ? attachedClients : null
 }
 
 export async function listLocalTmuxSessions(options: LocalTmuxListOptions): Promise<TmuxListResult> {
@@ -207,7 +221,7 @@ export async function listLocalHostTmuxSessions(options: LocalTmuxHostListOption
     sessions.push(...listed.sessions)
   }
   const legacy = await listLocalTmuxHostServer(
-    ['-u', 'list-sessions', '-F', TMUX_HOST_SESSION_LIST_FORMAT],
+    ['-L', 'default', '-u', 'list-sessions', '-F', TMUX_HOST_SESSION_LIST_FORMAT],
     options,
     'legacy-default',
   )
@@ -303,12 +317,14 @@ export async function killLocalHostTmuxSessionByName(
   options: LocalTmuxHostKillOptions,
 ): Promise<TmuxCommandResult> {
   if (
-    !isHobgoblinTmuxSessionName(sessionName) ||
+    !(options.serverName === undefined
+      ? isSafeTmuxSessionName(sessionName)
+      : isHobgoblinTmuxSessionName(sessionName)) ||
     (options.serverName !== undefined && !isHobgoblinTmuxServerName(options.serverName))
   ) {
     return { ok: false, message: 'error.invalid-arguments' }
   }
-  const args = [...(options.serverName ? ['-L', options.serverName] : []), 'kill-session', '-t', `=${sessionName}`]
+  const args = ['-L', options.serverName ?? 'default', 'kill-session', '-t', `=${sessionName}`]
   const result = await (options.run ?? runLocalTmuxCommand)(args, options.signal)
   return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
 }

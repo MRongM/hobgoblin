@@ -109,6 +109,36 @@ describe('openInPreferredTerminal', () => {
     ])
   })
 
+  test('keeps concurrent exact tmux targets distinct within the same directory', async () => {
+    vi.mocked(isGhosttyInstalled).mockReturnValue(true)
+    vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)
+    const resolveOpens: Array<(result: { ok: true; message: string }) => void> = []
+    vi.mocked(openInGhostty).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveOpens.push(resolve)
+        }),
+    )
+
+    const first = openInPreferredTerminal(localTarget, 'auto', {
+      useTmux: true,
+      existingTmuxSessionKind: 'default',
+      existingTmuxSessionName: 'editor',
+    })
+    const second = openInPreferredTerminal(localTarget, 'auto', {
+      useTmux: true,
+      existingTmuxSessionKind: 'default',
+      existingTmuxSessionName: 'logs',
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const openCount = vi.mocked(openInGhostty).mock.calls.length
+    for (const resolve of resolveOpens) resolve({ ok: true, message: localTarget.workingDirectory })
+    await Promise.all([first, second])
+
+    expect(openCount).toBe(2)
+  })
+
   test('falls back to Terminal.app in auto mode when detection reports available', async () => {
     vi.mocked(isGhosttyInstalled).mockReturnValue(false)
     vi.mocked(isAppleTerminalInstalled).mockResolvedValue(true)

@@ -1,9 +1,12 @@
 import {
+  buildExistingTmuxAttachShellCommand,
+  buildRequiredTmuxAttachShellScript,
   buildTmuxAttachShellCommand,
   buildRequiredTmuxShellScript,
   buildTmuxServerName,
   isHobgoblinTmuxSessionName,
   normalizeTmuxSessionDescriptor,
+  type ExistingTmuxSessionKind,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
 
@@ -24,6 +27,7 @@ export interface RemoteTerminalInvocation {
 export interface RemoteTerminalInvocationOptions {
   sshOptions?: readonly string[]
   useTmux?: boolean
+  existingTmuxSessionKind?: ExistingTmuxSessionKind
   existingTmuxSessionName?: string
   existingTmuxServerName?: string
 }
@@ -37,25 +41,42 @@ export function buildManagedRemoteTerminalInvocation(
 
   const existingSessionName = options.existingTmuxSessionName
   const existingServerName = options.existingTmuxServerName
-  if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
-  if (
-    existingServerName !== undefined &&
-    (!existingSessionName || existingServerName !== buildTmuxServerName(descriptor.projectRoot))
-  ) {
-    return null
+  const existingSessionKind = options.existingTmuxSessionKind
+  let existingTmuxInvocation: { sessionName: string; command: string } | null = null
+  if (existingSessionKind !== undefined) {
+    if (!existingSessionName) return null
+    existingTmuxInvocation = buildExistingTmuxAttachShellCommand({
+      kind: existingSessionKind,
+      sessionName: existingSessionName,
+      ...(existingServerName === undefined ? {} : { serverName: existingServerName }),
+    })
+    if (!existingTmuxInvocation) return null
+  } else {
+    if (existingSessionName !== undefined && !isHobgoblinTmuxSessionName(existingSessionName)) return null
+    if (
+      existingServerName !== undefined &&
+      (!existingSessionName || existingServerName !== buildTmuxServerName(descriptor.projectRoot))
+    ) {
+      return null
+    }
+    existingTmuxInvocation = existingSessionName
+      ? {
+          sessionName: existingSessionName,
+          command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
+        }
+      : null
   }
   const tmuxInvocation =
     options.useTmux === true
       ? existingSessionName
-        ? {
-            sessionName: existingSessionName,
-            command: `tmux${existingServerName ? ` -L ${shellQuote(existingServerName)}` : ''} attach-session -t ${shellQuote(`=${existingSessionName}`)}`,
-          }
+        ? existingTmuxInvocation
         : buildTmuxAttachShellCommand(descriptor)
       : null
   if (options.useTmux === true && !tmuxInvocation) return null
   const script = tmuxInvocation
-    ? buildTmuxRemoteLoginShellScript(descriptor, tmuxInvocation.command)
+    ? existingSessionKind
+      ? requireTmuxAttachShellScript(tmuxInvocation.command)
+      : buildTmuxRemoteLoginShellScript(descriptor, tmuxInvocation.command)
     : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
   return buildSshInvocation(target.alias, script, tmuxInvocation?.sessionName ?? null, options)
 }
@@ -78,6 +99,12 @@ function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, tmuxComm
 function requireTmuxShellScript(workingDirectory: string, tmuxCommand: string): string {
   const script = buildRequiredTmuxShellScript(workingDirectory, tmuxCommand)
   if (!script) throw new Error('Invalid tmux terminal invocation')
+  return script
+}
+
+function requireTmuxAttachShellScript(tmuxCommand: string): string {
+  const script = buildRequiredTmuxAttachShellScript(tmuxCommand)
+  if (!script) throw new Error('Invalid tmux attach invocation')
   return script
 }
 

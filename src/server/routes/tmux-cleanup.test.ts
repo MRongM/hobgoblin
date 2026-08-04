@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   cleanupAssociatedTmuxSessions: vi.fn(),
   previewHostTmuxSessions: vi.fn(),
   closeHostTmuxSessions: vi.fn(),
+  openHostTmuxSession: vi.fn(),
 }))
 
 vi.mock('#/server/modules/tmux-cleanup.ts', () => mocks)
@@ -97,12 +98,12 @@ describe('tmux cleanup routes', () => {
         projectRoot: 'ssh-config://prod/srv/repo',
         approvedSessions: [
           {
+            kind: 'hobgoblin',
             sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
             serverName: 'hobgoblin-project-v1-0123456789abcdef01234567',
             ignored: true,
           },
-          { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef' },
-          { sessionName: 7 },
+          { kind: 'default', sessionName: 'editor work' },
         ],
       }),
     })
@@ -119,11 +120,58 @@ describe('tmux cleanup routes', () => {
         projectRoot: 'ssh-config://prod/srv/repo',
         approvedSessions: [
           {
+            kind: 'hobgoblin',
             sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
             serverName: 'hobgoblin-project-v1-0123456789abcdef01234567',
           },
-          { sessionName: 'hobgoblin-v1-89abcdef0123456789abcdef' },
+          { kind: 'default', sessionName: 'editor work' },
         ],
+      },
+      undefined,
+      expect.any(AbortSignal),
+    )
+  })
+
+  test('rejects the entire Host close request when any approved identity is invalid', async () => {
+    const { createTmuxCleanupRoutes } = await import('#/server/routes/tmux-cleanup.ts')
+    const app = createTmuxCleanupRoutes()
+
+    const response = await app.request('http://localhost/host-execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectRoot: '/work/repo',
+        approvedSessions: [
+          { kind: 'default', sessionName: 'editor work' },
+          { kind: 'default', sessionName: 'invalid-origin', serverName: 'named' },
+        ],
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.closeHostTmuxSessions).not.toHaveBeenCalled()
+  })
+
+  test('forwards one typed Host session identity for external open', async () => {
+    mocks.openHostTmuxSession.mockResolvedValue({ ok: true, status: 'opened' })
+    const { createTmuxCleanupRoutes } = await import('#/server/routes/tmux-cleanup.ts')
+    const app = createTmuxCleanupRoutes()
+
+    const response = await app.request('http://localhost/host-open', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectRoot: '/work/repo',
+        session: { kind: 'default', sessionName: 'editor work', ignored: true },
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mocks.openHostTmuxSession).toHaveBeenCalledWith(
+      {
+        projectRoot: '/work/repo',
+        session: { kind: 'default', sessionName: 'editor work' },
       },
       undefined,
       expect.any(AbortSignal),

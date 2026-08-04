@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { AlertTriangle, Folder, Loader2, ScanSearch, Terminal } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Folder, Loader2, ScanSearch, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
-import type { TmuxHostSessionRecord, TmuxSessionIdentity } from '#/shared/tmux-cleanup.ts'
+import type { TmuxHostSessionIdentity, TmuxHostSessionRecord } from '#/shared/tmux-cleanup.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -17,7 +17,7 @@ import {
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import { closeHostTmuxSessions, previewHostTmuxSessions } from '#/web/tmux-cleanup-client.ts'
+import { closeHostTmuxSessions, openHostTmuxSession, previewHostTmuxSessions } from '#/web/tmux-cleanup-client.ts'
 
 interface HostTmuxInventoryOptions {
   projectRoot?: string
@@ -37,7 +37,7 @@ export function useHostTmuxInventory({
   const t = useT()
   const [sessions, setSessions] = useState<TmuxHostSessionRecord[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
-  const { isPending, run } = useAsyncPending<'preview' | 'close'>()
+  const { pending, isPending, run } = useAsyncPending<'preview' | 'close' | `open:${string}`>()
   const visible = hostInventoryVisible(projectRoot)
   const actionDisabled = disabled || isPending
 
@@ -107,6 +107,20 @@ export function useHostTmuxInventory({
     }
   }
 
+  const executeOpen = async (session: TmuxHostSessionRecord) => {
+    if (!projectRoot) return
+    try {
+      const result = await openHostTmuxSession({ projectRoot, session: tmuxSessionIdentity(session) })
+      if (!result.ok) {
+        toast.error(t('tmux.host-inventory.open-failed'), { description: t(result.message) })
+      } else if (result.status === 'missing') {
+        toast.error(t('tmux.host-inventory.open-missing'))
+      }
+    } catch (error) {
+      toast.error(t('tmux.host-inventory.open-failed'), { description: errorMessage(error) })
+    }
+  }
+
   const closeDialog = () => {
     if (isPending) return
     setSessions(null)
@@ -163,8 +177,9 @@ export function useHostTmuxInventory({
                   {directorySessions.map((session) => {
                     const identityKey = tmuxSessionIdentityKey(session)
                     const checked = selected.has(identityKey)
+                    const openActionId = `open:${identityKey}` as const
                     return (
-                      <label key={identityKey} className="flex min-w-0 items-start gap-2.5 px-3 py-2">
+                      <div key={identityKey} className="flex min-w-0 items-start gap-2.5 px-3 py-2">
                         <Checkbox
                           data-host-tmux-session={identityKey}
                           variant="destructive"
@@ -180,7 +195,9 @@ export function useHostTmuxInventory({
                               {session.sessionName}
                             </code>
                             <span className="rounded-sm border border-border/70 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              {t('tmux.host-inventory.terminal-number', { number: session.terminalNumber })}
+                              {session.kind === 'hobgoblin'
+                                ? t('tmux.host-inventory.terminal-number', { number: session.terminalNumber })
+                                : t('tmux.host-inventory.default-session')}
                             </span>
                             <span
                               className={
@@ -195,7 +212,23 @@ export function useHostTmuxInventory({
                             </span>
                           </span>
                         </span>
-                      </label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          data-host-tmux-open-session={session.sessionName}
+                          disabled={isPending}
+                          aria-label={t('tmux.host-inventory.open-external', { name: session.sessionName })}
+                          title={t('tmux.host-inventory.open-external', { name: session.sessionName })}
+                          onClick={() => void run(openActionId, () => executeOpen(session))}
+                        >
+                          {pending === openActionId ? (
+                            <Loader2 className="animate-spin" aria-hidden="true" />
+                          ) : (
+                            <ExternalLink aria-hidden="true" />
+                          )}
+                        </Button>
+                      </div>
                     )
                   })}
                 </div>
@@ -242,15 +275,18 @@ function groupSessionsByDirectory(
   return [...groups]
 }
 
-function tmuxSessionIdentity(session: TmuxHostSessionRecord): TmuxSessionIdentity {
-  return {
-    sessionName: session.sessionName,
-    ...(session.serverName === undefined ? {} : { serverName: session.serverName }),
-  }
+function tmuxSessionIdentity(session: TmuxHostSessionRecord): TmuxHostSessionIdentity {
+  return session.kind === 'default'
+    ? { kind: 'default', sessionName: session.sessionName }
+    : {
+        kind: 'hobgoblin',
+        sessionName: session.sessionName,
+        ...(session.serverName === undefined ? {} : { serverName: session.serverName }),
+      }
 }
 
-function tmuxSessionIdentityKey(identity: TmuxSessionIdentity): string {
-  return `${identity.serverName ?? 'legacy-default'}\0${identity.sessionName}`
+function tmuxSessionIdentityKey(identity: TmuxHostSessionIdentity | TmuxHostSessionRecord): string {
+  return `${identity.kind}\0${identity.serverName ?? 'legacy-default'}\0${identity.sessionName}`
 }
 
 function hostInventoryVisible(projectRoot?: string): boolean {

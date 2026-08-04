@@ -49,7 +49,7 @@ The Android main-navigation destination where the user explicitly selects one sa
 _Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, tmux session creator
 
 **Default tmux session**:
-An ordinary user-created tmux session found on the selected SSH Host's default tmux server that does not carry a valid current-protocol Hobgoblin tmux identity. It keeps its own tmux session name and is distinct from a Hobgoblin session found on either the default or a project-scoped server.
+An ordinary user-created tmux session found on the selected local or SSH host's default tmux server that does not carry a valid current-protocol Hobgoblin tmux identity. It keeps its own opaque tmux session name, may appear in the Android Host catalog or Desktop Host inventory, and is distinct from a Hobgoblin session found on either the default or a project-scoped server.
 _Avoid_: Legacy Hobgoblin tmux session, project-scoped tmux session, native shell
 
 **Android tmux directory project import**:
@@ -137,7 +137,7 @@ A current-protocol tmux session found in the selected operating-system user's co
 _Avoid_: Any tmux session, project-verified session, authenticated tmux session
 
 **Host tmux session inventory**:
-An explicit project-menu action that uses the selected project's local or SSH host only as a host locator, enumerates Hobgoblin project-scoped tmux servers plus the compatibility default server for that operating-system user, and lists every host-manageable Hobgoblin tmux session with its fixed directory. The user may select none or several sessions and explicitly close only those selections after the server revalidates their operational metadata and exact server origins.
+An explicit project-menu action that uses the selected project's local or SSH host only as a host locator, enumerates Hobgoblin project-scoped tmux servers plus the default server for that operating-system user, and lists host-manageable Hobgoblin sessions together with safe ordinary default-server sessions. The user may exact-attach one revalidated live row in an external terminal, or select none or several rows and explicitly close only those selections after the server revalidates their kind, name, metadata, and exact server origins.
 _Avoid_: Project tmux sessions, background tmux scan, automatic tmux cleanup
 
 **Recovered Android tmux terminal**:
@@ -157,7 +157,7 @@ The renderer-local xterm column and row count fitted to one client's visible hos
 _Avoid_: Canonical size, remote size
 
 **External terminal**:
-An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
+An operating-system terminal application opened outside Hobgoblin at a selected workspace path, or launched with an attach-only command for one revalidated Host tmux inventory session. Host-inventory attach never creates a replacement session and does not require the session's original directory to still exist.
 _Avoid_: Native terminal, system terminal
 
 **Associated Hobgoblin tmux session**:

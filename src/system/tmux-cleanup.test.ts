@@ -83,6 +83,17 @@ describe('parseTmuxSessionList', () => {
     ).toEqual([])
   })
 
+  test('rejects non-canonical decimal metadata', () => {
+    expect(
+      parseTmuxSessionList(
+        [
+          '/srv/repo\t01\t0\thobgoblin-v1-aebf050981ac829e36100020',
+          '/srv/repo\t1\t00\thobgoblin-v1-0123456789abcdef01234567',
+        ].join('\n'),
+      ),
+    ).toEqual([])
+  })
+
   test('returns null instead of guessing malformed field boundaries', () => {
     expect(parseTmuxSessionList('missing-fields')).toBeNull()
     expect(parseTmuxSessionList('/srv/repo\t1\t0\tname\textra')).toBeNull()
@@ -410,10 +421,10 @@ describe('local host tmux inventory', () => {
     vi.resetModules()
     mocks.execa.mockReset()
     mocks.execa.mockImplementation(async (_executable, args: string[]) => {
-      if (args[0] === '-L') {
+      if (args[0] === '-L' && args[1] === PROJECT_SERVER_NAME) {
         return {
           exitCode: 0,
-          stdout: '/srv/legacy\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\n',
+          stdout: '/srv/legacy\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t/srv/live\n',
           stderr: '',
         }
       }
@@ -431,6 +442,7 @@ describe('local host tmux inventory', () => {
       ok: true,
       sessions: [
         {
+          kind: 'hobgoblin',
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/legacy',
           terminalNumber: 1,
@@ -442,7 +454,7 @@ describe('local host tmux inventory', () => {
     expect(mocks.execa).toHaveBeenCalledTimes(2)
   })
 
-  test('parses Android-compatible operational rows with an exact project or legacy server origin', () => {
+  test('parses Hobgoblin rows and projects ordinary sessions only from the default server', () => {
     const parseHostList = (
       tmuxCleanup as typeof tmuxCleanup & {
         parseTmuxHostSessionList?: (output: string) => unknown
@@ -454,12 +466,15 @@ describe('local host tmux inventory', () => {
     expect(
       parseHostList(
         [
-          `/srv/projects/example/worktrees/feature\t1\t2\thobgoblin-v1-aebf050981ac829e36100020\t${PROJECT_SERVER_NAME}`,
-          '/srv/projects/example\t2\t0\thobgoblin-v1-0123456789abcdef01234567\tlegacy-default',
+          `/srv/projects/example/worktrees/feature\t1\t2\thobgoblin-v1-aebf050981ac829e36100020\t/srv/live\t${PROJECT_SERVER_NAME}`,
+          '/srv/projects/example\t2\t0\thobgoblin-v1-0123456789abcdef01234567\t/srv/current\tlegacy-default',
+          "\t\t1\teditor's work\t/srv/editor\tlegacy-default",
+          `\t\t0\tforeign\t/srv/foreign\t${PROJECT_SERVER_NAME}`,
         ].join('\n'),
       ),
     ).toEqual([
       {
+        kind: 'hobgoblin',
         sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
         initialPath: '/srv/projects/example/worktrees/feature',
         terminalNumber: 1,
@@ -467,19 +482,42 @@ describe('local host tmux inventory', () => {
         serverName: PROJECT_SERVER_NAME,
       },
       {
+        kind: 'hobgoblin',
         sessionName: 'hobgoblin-v1-0123456789abcdef01234567',
         initialPath: '/srv/projects/example',
         terminalNumber: 2,
         attachedClients: 0,
       },
+      {
+        kind: 'default',
+        sessionName: "editor's work",
+        initialPath: '/srv/editor',
+        attachedClients: 1,
+      },
     ])
     expect(
-      parseHostList('/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\tunknown-server'),
+      parseHostList('/srv/projects/example\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t/srv/live\tunknown-server'),
     ).toBeNull()
+    expect(parseHostList('\t\t0\tuser-session\t/srv/projects/example/../other\tlegacy-default')).toEqual([])
+  })
+
+  test('rejects non-canonical decimal metadata in Host rows', () => {
+    const parseHostList = (
+      tmuxCleanup as typeof tmuxCleanup & {
+        parseTmuxHostSessionList?: (output: string) => unknown
+      }
+    ).parseTmuxHostSessionList
+    expect(parseHostList).toBeTypeOf('function')
+    if (!parseHostList) return
+
     expect(
-      parseHostList('/srv/projects/example/../other\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\tlegacy-default'),
+      parseHostList(
+        [
+          `/srv/repo\t01\t0\thobgoblin-v1-aebf050981ac829e36100020\t/srv/repo\t${PROJECT_SERVER_NAME}`,
+          '\t\t00\teditor work\t/srv/editor\tlegacy-default',
+        ].join('\n'),
+      ),
     ).toEqual([])
-    expect(parseHostList('/srv/projects/example\t1\t0\tuser-session\tlegacy-default')).toEqual([])
   })
 
   test('discovers only sorted Hobgoblin socket names for the current tmux user directory', async () => {
@@ -560,7 +598,7 @@ describe('local host tmux inventory', () => {
       }
       return {
         ok: true,
-        stdout: '/srv/projects/example/worktrees/feature\t1\t0\thobgoblin-v1-aebf050981ac829e36100020',
+        stdout: '/srv/projects/example/worktrees/feature\t1\t0\thobgoblin-v1-aebf050981ac829e36100020\t/srv/live',
         stderr: '',
       }
     })
@@ -574,6 +612,7 @@ describe('local host tmux inventory', () => {
       ok: true,
       sessions: [
         {
+          kind: 'hobgoblin',
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/projects/example/worktrees/feature',
           terminalNumber: 1,
@@ -581,6 +620,7 @@ describe('local host tmux inventory', () => {
           serverName: PROJECT_SERVER_NAME,
         },
         {
+          kind: 'hobgoblin',
           sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
           initialPath: '/srv/projects/example/worktrees/feature',
           terminalNumber: 1,
@@ -591,7 +631,7 @@ describe('local host tmux inventory', () => {
     expect(run.mock.calls.map(([args]) => args.slice(0, 2))).toEqual([
       ['-L', PROJECT_SERVER_NAME],
       ['-L', serverB],
-      ['-u', 'list-sessions'],
+      ['-L', 'default'],
     ])
   })
 
@@ -615,7 +655,7 @@ describe('local host tmux inventory', () => {
     ).resolves.toEqual({ ok: false, message: 'error.tmux-invalid-output' })
   })
 
-  test('kills only a current session at a validated exact host server origin', async () => {
+  test('kills current named-server sessions and safe opaque default-server sessions', async () => {
     const killHost = (
       tmuxCleanup as typeof tmuxCleanup & {
         killLocalHostTmuxSessionByName?: (
@@ -634,10 +674,20 @@ describe('local host tmux inventory', () => {
       message: '',
     })
     expect(run).toHaveBeenCalledWith(['-L', PROJECT_SERVER_NAME, 'kill-session', '-t', `=${sessionName}`], undefined)
+    await expect(killHost("editor's work", { run })).resolves.toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenNthCalledWith(2, ['-L', 'default', 'kill-session', '-t', "=editor's work"], undefined)
+    await expect(killHost("editor's work", { serverName: PROJECT_SERVER_NAME, run })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(killHost('editor\nwork', { run })).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
     await expect(killHost(sessionName, { serverName: 'user-server', run })).resolves.toEqual({
       ok: false,
       message: 'error.invalid-arguments',
     })
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(run).toHaveBeenCalledTimes(2)
   })
 })

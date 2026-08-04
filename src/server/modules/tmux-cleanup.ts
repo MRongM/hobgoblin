@@ -4,16 +4,20 @@ import {
   type HostTmuxCloseInput,
   type HostTmuxCloseResult,
   type HostTmuxInventoryResult,
+  type HostTmuxOpenInput,
+  type HostTmuxOpenResult,
   type HostTmuxTargetInput,
   type TmuxCleanupPreviewResult,
   type TmuxCleanupResult,
+  type TmuxHostSessionIdentity,
   type TmuxHostSessionRecord,
-  type TmuxSessionIdentity,
   type TmuxSessionRecord,
 } from '#/shared/tmux-cleanup.ts'
+import type { ExecResult } from '#/shared/git-types.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { isRemoteRepoId, type RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { resolveRemoteRepoTarget } from '#/server/modules/repo-backend.ts'
+import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { runRemoteCommand, type RemoteCommandResult } from '#/system/ssh/commands.ts'
 import {
   isTmuxSessionMissingMessage,
@@ -30,9 +34,11 @@ import {
 import {
   isHobgoblinTmuxSessionName,
   isHobgoblinTmuxServerName,
+  isSafeTmuxSessionName,
   normalizeTmuxSessionPath,
   resolveTmuxSessionTerminalNumbers,
 } from '#/system/tmux-session.ts'
+import { openInPreferredTerminal, openRemoteInPreferredTerminal } from '#/system/terminals.ts'
 
 const MAX_APPROVED_SESSION_NAMES = 256
 const LEGACY_SERVER_IDENTITY = 'legacy-default'
@@ -45,6 +51,9 @@ export interface TmuxCleanupDependencies {
   killLocalHostByName?: typeof killLocalHostTmuxSessionByName
   resolveRemote?: (repoId: string) => Promise<RemoteRepoTarget>
   runRemote?: typeof runRemoteCommand
+  getSettingsPrefs?: typeof getServerSettingsPrefs
+  openLocalTerminal?: typeof openInPreferredTerminal
+  openRemoteTerminal?: typeof openRemoteInPreferredTerminal
 }
 
 interface TmuxRuntime {
@@ -59,6 +68,7 @@ type RuntimeResult = { ok: true; runtime: TmuxRuntime } | { ok: false; message: 
 interface TmuxHostRuntime {
   list: () => Promise<TmuxHostListResult>
   kill: (session: TmuxHostSessionRecord) => Promise<TmuxCommandResult>
+  open: (session: TmuxHostSessionRecord) => Promise<ExecResult>
 }
 
 type HostRuntimeResult = { ok: true; runtime: TmuxHostRuntime } | { ok: false; message: string }
@@ -158,6 +168,32 @@ export async function previewHostTmuxSessions(
   return listed.ok ? { ok: true, sessions: manageableHostTmuxSessions(listed.sessions) } : listed
 }
 
+export async function openHostTmuxSession(
+  input: HostTmuxOpenInput,
+  dependencies: TmuxCleanupDependencies = {},
+  signal?: AbortSignal,
+): Promise<HostTmuxOpenResult> {
+  const approvedSessions = normalizeApprovedHostSessions(input?.session ? [input.session] : null)
+  if (!approvedSessions || approvedSessions.length !== 1) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const resolved = await resolveTmuxHostRuntime(input, dependencies, signal)
+  if (!resolved.ok) return resolved
+  const listed = await safelyListHost(resolved.runtime)
+  if (!listed.ok) return listed
+  const approved = approvedSessions[0]!
+  const live = manageableHostTmuxSessions(listed.sessions).find(
+    (session) => tmuxSessionIdentityKey(session) === tmuxSessionIdentityKey(approved),
+  )
+  if (!live) return { ok: true, status: 'missing' }
+  try {
+    const opened = await resolved.runtime.open(live)
+    return opened.ok ? { ok: true, status: 'opened' } : { ok: false, message: opened.message }
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) }
+  }
+}
+
 export async function closeHostTmuxSessions(
   input: HostTmuxCloseInput,
   dependencies: TmuxCleanupDependencies = {},
@@ -174,7 +210,7 @@ export async function closeHostTmuxSessions(
     manageableHostTmuxSessions(listed.sessions).map((session) => [tmuxSessionIdentityKey(session), session]),
   )
   const closed: TmuxHostSessionRecord[] = []
-  const missing: TmuxSessionIdentity[] = []
+  const missing: TmuxHostSessionIdentity[] = []
   const failed: Extract<HostTmuxCloseResult, { ok: true }>['failed'] = []
   for (const approved of approvedSessions) {
     const session = liveByIdentity.get(tmuxSessionIdentityKey(approved))
@@ -290,12 +326,22 @@ async function resolveTmuxHostRuntime(
   if (!remote) {
     const listLocalHost = dependencies.listLocalHost ?? listLocalHostTmuxSessions
     const killLocalHostByName = dependencies.killLocalHostByName ?? killLocalHostTmuxSessionByName
+    const getSettingsPrefs = dependencies.getSettingsPrefs ?? getServerSettingsPrefs
+    const openLocalTerminal = dependencies.openLocalTerminal ?? openInPreferredTerminal
     return {
       ok: true,
       runtime: {
         list: async () => await listLocalHost({ signal }),
         kill: async (session) =>
           await killLocalHostByName(session.sessionName, { serverName: session.serverName, signal }),
+        open: async (session) => {
+          const prefs = await getSettingsPrefs()
+          return await openLocalTerminal(
+            hostTerminalTarget(input.projectRoot, session),
+            prefs.terminalApp,
+            hostTerminalOpenOptions(session),
+          )
+        },
       },
     }
   }
@@ -303,6 +349,8 @@ async function resolveTmuxHostRuntime(
   try {
     const target = await (dependencies.resolveRemote ?? resolveRemoteRepoTarget)(input.projectRoot)
     const runRemote = dependencies.runRemote ?? runRemoteCommand
+    const getSettingsPrefs = dependencies.getSettingsPrefs ?? getServerSettingsPrefs
+    const openRemoteTerminal = dependencies.openRemoteTerminal ?? openRemoteInPreferredTerminal
     return {
       ok: true,
       runtime: {
@@ -319,10 +367,38 @@ async function resolveTmuxHostRuntime(
           )
           return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
         },
+        open: async (session) => {
+          const prefs = await getSettingsPrefs()
+          return await openRemoteTerminal(
+            {
+              alias: target.alias,
+              ...hostTerminalTarget(target.remotePath, session),
+            },
+            prefs.terminalApp,
+            hostTerminalOpenOptions(session),
+          )
+        },
       },
     }
   } catch (error) {
     return { ok: false, message: errorMessage(error) }
+  }
+}
+
+function hostTerminalTarget(projectRoot: string, session: TmuxHostSessionRecord) {
+  return {
+    projectRoot,
+    workingDirectory: session.initialPath,
+    terminalNumber: session.kind === 'hobgoblin' ? session.terminalNumber : 1,
+  }
+}
+
+function hostTerminalOpenOptions(session: TmuxHostSessionRecord) {
+  return {
+    useTmux: true as const,
+    existingTmuxSessionKind: session.kind,
+    existingTmuxSessionName: session.sessionName,
+    ...(session.serverName === undefined ? {} : { existingTmuxServerName: session.serverName }),
   }
 }
 
@@ -388,16 +464,32 @@ function manageableHostTmuxSessions(sessions: readonly TmuxHostSessionRecord[]):
     if (
       !initialPath ||
       initialPath !== session.initialPath ||
-      !isHobgoblinTmuxSessionName(session.sessionName) ||
-      (session.serverName !== undefined && !isHobgoblinTmuxServerName(session.serverName)) ||
-      !Number.isSafeInteger(session.terminalNumber) ||
-      session.terminalNumber < 1 ||
       !Number.isSafeInteger(session.attachedClients) ||
       session.attachedClients < 0
-    ) {
+    )
+      continue
+
+    let normalized: TmuxHostSessionRecord
+    if (session.kind === 'default') {
+      if (session.serverName !== undefined || !isSafeTmuxSessionName(session.sessionName)) continue
+      normalized = {
+        kind: 'default',
+        sessionName: session.sessionName,
+        initialPath,
+        attachedClients: session.attachedClients,
+      }
+    } else if (session.kind === 'hobgoblin') {
+      if (
+        !isHobgoblinTmuxSessionName(session.sessionName) ||
+        (session.serverName !== undefined && !isHobgoblinTmuxServerName(session.serverName)) ||
+        !Number.isSafeInteger(session.terminalNumber) ||
+        session.terminalNumber < 1
+      )
+        continue
+      normalized = { ...session, initialPath }
+    } else {
       continue
     }
-    const normalized = { ...session, initialPath }
     const identity = tmuxSessionIdentityKey(normalized)
     if (!sessionsByIdentity.has(identity)) sessionsByIdentity.set(identity, normalized)
   }
@@ -407,7 +499,9 @@ function manageableHostTmuxSessions(sessions: readonly TmuxHostSessionRecord[]):
 function compareHostTmuxSessions(a: TmuxHostSessionRecord, b: TmuxHostSessionRecord): number {
   const byPath = compareText(a.initialPath, b.initialPath)
   if (byPath !== 0) return byPath
-  if (a.terminalNumber !== b.terminalNumber) return a.terminalNumber - b.terminalNumber
+  const aTerminalNumber = a.kind === 'hobgoblin' ? a.terminalNumber : Number.MAX_SAFE_INTEGER
+  const bTerminalNumber = b.kind === 'hobgoblin' ? b.terminalNumber : Number.MAX_SAFE_INTEGER
+  if (aTerminalNumber !== bTerminalNumber) return aTerminalNumber - bTerminalNumber
   const byServer = compareText(a.serverName ?? '', b.serverName ?? '')
   if (byServer !== 0) return byServer
   return compareText(a.sessionName, b.sessionName)
@@ -423,26 +517,37 @@ function normalizeApprovedSessionNames(value: unknown): string[] | null {
   return unique.every(isHobgoblinTmuxSessionName) ? unique : null
 }
 
-function normalizeApprovedHostSessions(value: unknown): TmuxSessionIdentity[] | null {
+function normalizeApprovedHostSessions(value: unknown): TmuxHostSessionIdentity[] | null {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_APPROVED_SESSION_NAMES) return null
-  const unique = new Map<string, TmuxSessionIdentity>()
+  const unique = new Map<string, TmuxHostSessionIdentity>()
   for (const candidate of value) {
     if (!candidate || typeof candidate !== 'object') return null
-    const { sessionName, serverName } = candidate as { sessionName?: unknown; serverName?: unknown }
-    if (
-      !isHobgoblinTmuxSessionName(sessionName) ||
-      (serverName !== undefined && !isHobgoblinTmuxServerName(serverName))
-    ) {
+    const { kind, sessionName, serverName } = candidate as {
+      kind?: unknown
+      sessionName?: unknown
+      serverName?: unknown
+    }
+    let identity: TmuxHostSessionIdentity
+    if (kind === 'default') {
+      if (!isSafeTmuxSessionName(sessionName) || serverName !== undefined) return null
+      identity = { kind, sessionName }
+    } else if (kind === 'hobgoblin') {
+      if (
+        !isHobgoblinTmuxSessionName(sessionName) ||
+        (serverName !== undefined && !isHobgoblinTmuxServerName(serverName))
+      )
+        return null
+      identity = { kind, sessionName, ...(serverName === undefined ? {} : { serverName }) }
+    } else {
       return null
     }
-    const identity = { sessionName, ...(serverName === undefined ? {} : { serverName }) }
     unique.set(tmuxSessionIdentityKey(identity), identity)
   }
   return [...unique.values()]
 }
 
-function tmuxSessionIdentityKey(identity: TmuxSessionIdentity): string {
-  return `${identity.serverName ?? LEGACY_SERVER_IDENTITY}\0${identity.sessionName}`
+function tmuxSessionIdentityKey(identity: TmuxHostSessionIdentity | TmuxHostSessionRecord): string {
+  return `${identity.kind}\0${identity.serverName ?? LEGACY_SERVER_IDENTITY}\0${identity.sessionName}`
 }
 
 function errorMessage(error: unknown): string {

@@ -5,6 +5,8 @@ import type {
   HostTmuxCloseInput,
   HostTmuxCloseResult,
   HostTmuxInventoryResult,
+  HostTmuxOpenInput,
+  HostTmuxOpenResult,
   HostTmuxTargetInput,
   TmuxCleanupPreviewResult,
   TmuxCleanupResult,
@@ -36,4 +38,8 @@ export async function closeHostTmuxSessions(
   signal?: AbortSignal,
 ): Promise<HostTmuxCloseResult> {
   return await postServerJson('/api/tmux-cleanup/host-execute', input, { signal })
+}
+
+export async function openHostTmuxSession(input: HostTmuxOpenInput, signal?: AbortSignal): Promise<HostTmuxOpenResult> {
+  return await postServerJson('/api/tmux-cleanup/host-open', input, { signal })
 }

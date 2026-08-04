@@ -392,7 +392,19 @@ describe('host tmux session inventory', () => {
       closeHostTmuxSessions?: (
         input: {
           projectRoot: string
-          approvedSessions: Array<{ sessionName: string; serverName?: string }>
+          approvedSessions: Array<
+            { kind: 'hobgoblin'; sessionName: string; serverName?: string } | { kind: 'default'; sessionName: string }
+          >
+        },
+        dependencies?: HostDependencies,
+        signal?: AbortSignal,
+      ) => Promise<unknown>
+      openHostTmuxSession?: (
+        input: {
+          projectRoot: string
+          session:
+            | { kind: 'hobgoblin'; sessionName: string; serverName?: string }
+            | { kind: 'default'; sessionName: string }
         },
         dependencies?: HostDependencies,
         signal?: AbortSignal,
@@ -410,12 +422,14 @@ describe('host tmux session inventory', () => {
       ok: true as const,
       sessions: [
         {
+          kind: 'hobgoblin' as const,
           sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 0,
         },
         {
+          kind: 'hobgoblin' as const,
           sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
@@ -423,6 +437,7 @@ describe('host tmux session inventory', () => {
           serverName: LOCAL_SERVER_NAME,
         },
         {
+          kind: 'hobgoblin' as const,
           sessionName: OTHER_NAME,
           initialPath: OTHER_PATH,
           terminalNumber: 3,
@@ -430,6 +445,7 @@ describe('host tmux session inventory', () => {
           serverName: OTHER_SERVER_NAME,
         },
         {
+          kind: 'hobgoblin' as const,
           sessionName: SECOND_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 2,
@@ -451,6 +467,7 @@ describe('host tmux session inventory', () => {
       ok: true,
       sessions: [
         {
+          kind: 'hobgoblin',
           sessionName: OTHER_NAME,
           initialPath: OTHER_PATH,
           terminalNumber: 3,
@@ -458,12 +475,14 @@ describe('host tmux session inventory', () => {
           serverName: OTHER_SERVER_NAME,
         },
         {
+          kind: 'hobgoblin',
           sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
           attachedClients: 0,
         },
         {
+          kind: 'hobgoblin',
           sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
@@ -471,6 +490,7 @@ describe('host tmux session inventory', () => {
           serverName: LOCAL_SERVER_NAME,
         },
         {
+          kind: 'hobgoblin',
           sessionName: SECOND_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 2,
@@ -482,6 +502,293 @@ describe('host tmux session inventory', () => {
     expect(listLocalHost).toHaveBeenCalledWith({ signal: undefined })
   })
 
+  test('previews and revalidates safe ordinary sessions only on the default server', async () => {
+    const module = hostFunctions()
+    if (!module.previewHostTmuxSessions || !module.closeHostTmuxSessions) return
+    const ordinarySession = {
+      kind: 'default' as const,
+      sessionName: "editor's work",
+      initialPath: '/srv/editor',
+      attachedClients: 1,
+    }
+    const listLocalHost = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        ordinarySession,
+        {
+          ...ordinarySession,
+          sessionName: 'foreign',
+          serverName: LOCAL_SERVER_NAME,
+        },
+      ],
+    }))
+    const killLocalHostByName = vi.fn(async () => ({ ok: true as const, message: '' }))
+
+    await expect(
+      module.previewHostTmuxSessions({ projectRoot: LOCAL_PROJECT_ROOT }, { platform: 'linux', listLocalHost }),
+    ).resolves.toEqual({ ok: true, sessions: [ordinarySession] })
+    await expect(
+      module.closeHostTmuxSessions(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          approvedSessions: [{ kind: 'default', sessionName: ordinarySession.sessionName }],
+        },
+        { platform: 'linux', listLocalHost, killLocalHostByName },
+      ),
+    ).resolves.toEqual({ ok: true, closed: [ordinarySession], missing: [], failed: [] })
+    expect(killLocalHostByName).toHaveBeenCalledWith(ordinarySession.sessionName, {
+      serverName: undefined,
+      signal: undefined,
+    })
+  })
+
+  test('does not let a changed default-server session kind inherit close approval', async () => {
+    const module = hostFunctions()
+    if (!module.closeHostTmuxSessions) return
+    const listLocalHost = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        {
+          kind: 'default' as const,
+          sessionName: FIRST_NAME,
+          initialPath: LOCAL_PATH,
+          attachedClients: 0,
+        },
+      ],
+    }))
+    const killLocalHostByName = vi.fn()
+    const approved = { kind: 'hobgoblin' as const, sessionName: FIRST_NAME }
+
+    await expect(
+      module.closeHostTmuxSessions(
+        { projectRoot: LOCAL_PROJECT_ROOT, approvedSessions: [approved] },
+        { platform: 'linux', listLocalHost, killLocalHostByName },
+      ),
+    ).resolves.toEqual({ ok: true, closed: [], missing: [approved], failed: [] })
+    expect(killLocalHostByName).not.toHaveBeenCalled()
+  })
+
+  test('revalidates and opens an ordinary local session in the preferred external terminal', async () => {
+    const module = hostFunctions()
+    expect(module.openHostTmuxSession).toBeTypeOf('function')
+    if (!module.openHostTmuxSession) return
+    const ordinarySession = {
+      kind: 'default' as const,
+      sessionName: 'editor work',
+      initialPath: '/deleted/editor-worktree',
+      attachedClients: 0,
+    }
+    const listLocalHost = vi.fn(async () => ({ ok: true as const, sessions: [ordinarySession] }))
+    const getSettingsPrefs = vi.fn(async () => ({ terminalApp: 'ghostty' }))
+    const openLocalTerminal = vi.fn(async () => ({ ok: true as const, message: ordinarySession.initialPath }))
+
+    await expect(
+      module.openHostTmuxSession(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          session: { kind: 'default', sessionName: ordinarySession.sessionName },
+        },
+        { platform: 'linux', listLocalHost, getSettingsPrefs, openLocalTerminal },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'opened' })
+    expect(openLocalTerminal).toHaveBeenCalledWith(
+      {
+        projectRoot: LOCAL_PROJECT_ROOT,
+        workingDirectory: ordinarySession.initialPath,
+        terminalNumber: 1,
+      },
+      'ghostty',
+      {
+        useTmux: true,
+        existingTmuxSessionKind: 'default',
+        existingTmuxSessionName: ordinarySession.sessionName,
+      },
+    )
+  })
+
+  test('returns missing without opening when the scanned session kind changed', async () => {
+    const module = hostFunctions()
+    expect(module.openHostTmuxSession).toBeTypeOf('function')
+    if (!module.openHostTmuxSession) return
+    const listLocalHost = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        {
+          kind: 'default' as const,
+          sessionName: FIRST_NAME,
+          initialPath: LOCAL_PATH,
+          attachedClients: 0,
+        },
+      ],
+    }))
+    const openLocalTerminal = vi.fn()
+
+    await expect(
+      module.openHostTmuxSession(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          session: { kind: 'hobgoblin', sessionName: FIRST_NAME },
+        },
+        { platform: 'linux', listLocalHost, openLocalTerminal },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'missing' })
+    expect(openLocalTerminal).not.toHaveBeenCalled()
+  })
+
+  test('returns missing without terminal setup when the exact name, origin, or session changed', async () => {
+    const module = hostFunctions()
+    expect(module.openHostTmuxSession).toBeTypeOf('function')
+    if (!module.openHostTmuxSession) return
+    const approved = { kind: 'hobgoblin' as const, sessionName: FIRST_NAME, serverName: LOCAL_SERVER_NAME }
+    const scenarios = [
+      {
+        sessions: [
+          {
+            kind: 'hobgoblin' as const,
+            sessionName: FIRST_NAME,
+            initialPath: LOCAL_PATH,
+            terminalNumber: 1,
+            attachedClients: 0,
+          },
+        ],
+      },
+      {
+        sessions: [
+          {
+            kind: 'hobgoblin' as const,
+            sessionName: SECOND_NAME,
+            initialPath: LOCAL_PATH,
+            terminalNumber: 2,
+            attachedClients: 0,
+            serverName: LOCAL_SERVER_NAME,
+          },
+        ],
+      },
+      { sessions: [] },
+    ]
+
+    for (const scenario of scenarios) {
+      const listLocalHost = vi.fn(async () => ({ ok: true as const, sessions: scenario.sessions }))
+      const getSettingsPrefs = vi.fn()
+      const openLocalTerminal = vi.fn()
+
+      await expect(
+        module.openHostTmuxSession(
+          { projectRoot: LOCAL_PROJECT_ROOT, session: approved },
+          { platform: 'linux', listLocalHost, getSettingsPrefs, openLocalTerminal },
+        ),
+      ).resolves.toEqual({ ok: true, status: 'missing' })
+      expect(getSettingsPrefs).not.toHaveBeenCalled()
+      expect(openLocalTerminal).not.toHaveBeenCalled()
+    }
+  })
+
+  test('opens a default-server Hobgoblin session locally without inventing a named origin', async () => {
+    const module = hostFunctions()
+    expect(module.openHostTmuxSession).toBeTypeOf('function')
+    if (!module.openHostTmuxSession) return
+    const session = {
+      kind: 'hobgoblin' as const,
+      sessionName: FIRST_NAME,
+      initialPath: LOCAL_PATH,
+      terminalNumber: 1,
+      attachedClients: 0,
+    }
+    const listLocalHost = vi.fn(async () => ({ ok: true as const, sessions: [session] }))
+    const getSettingsPrefs = vi.fn(async () => ({ terminalApp: 'ghostty' }))
+    const openLocalTerminal = vi.fn(async () => ({ ok: true as const, message: LOCAL_PATH }))
+
+    await expect(
+      module.openHostTmuxSession(
+        { projectRoot: LOCAL_PROJECT_ROOT, session: { kind: 'hobgoblin', sessionName: FIRST_NAME } },
+        { platform: 'linux', listLocalHost, getSettingsPrefs, openLocalTerminal },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'opened' })
+    expect(openLocalTerminal).toHaveBeenCalledWith(
+      { projectRoot: LOCAL_PROJECT_ROOT, workingDirectory: LOCAL_PATH, terminalNumber: 1 },
+      'ghostty',
+      {
+        useTmux: true,
+        existingTmuxSessionKind: 'hobgoblin',
+        existingTmuxSessionName: FIRST_NAME,
+      },
+    )
+  })
+
+  test('revalidates and opens a named Host session through the selected SSH locator', async () => {
+    const module = hostFunctions()
+    expect(module.openHostTmuxSession).toBeTypeOf('function')
+    if (!module.openHostTmuxSession) return
+    const resolveRemote = vi.fn(async () => REMOTE_TARGET)
+    const runRemote = vi.fn(async () => ({
+      ok: true as const,
+      stdout: `/srv/orphan\t1\t0\t${REMOTE_FIRST_NAME}\t/srv/orphan\t${REMOTE_SERVER_NAME}`,
+      stderr: '',
+    }))
+    const getSettingsPrefs = vi.fn(async () => ({ terminalApp: 'terminal' }))
+    const openRemoteTerminal = vi.fn(async () => ({ ok: true as const, message: '/srv/orphan' }))
+
+    await expect(
+      module.openHostTmuxSession(
+        {
+          projectRoot: REMOTE_REPO,
+          session: { kind: 'hobgoblin', sessionName: REMOTE_FIRST_NAME, serverName: REMOTE_SERVER_NAME },
+        },
+        { platform: 'linux', resolveRemote, runRemote, getSettingsPrefs, openRemoteTerminal },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'opened' })
+    expect(openRemoteTerminal).toHaveBeenCalledWith(
+      {
+        alias: REMOTE_TARGET.alias,
+        projectRoot: REMOTE_TARGET.remotePath,
+        workingDirectory: '/srv/orphan',
+        terminalNumber: 1,
+      },
+      'terminal',
+      {
+        useTmux: true,
+        existingTmuxSessionKind: 'hobgoblin',
+        existingTmuxSessionName: REMOTE_FIRST_NAME,
+        existingTmuxServerName: REMOTE_SERVER_NAME,
+      },
+    )
+  })
+
+  test('opens a default-server Hobgoblin session through SSH without inventing a named origin', async () => {
+    const module = hostFunctions()
+    expect(module.openHostTmuxSession).toBeTypeOf('function')
+    if (!module.openHostTmuxSession) return
+    const resolveRemote = vi.fn(async () => REMOTE_TARGET)
+    const runRemote = vi.fn(async () => ({
+      ok: true as const,
+      stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t/srv/feature\tlegacy-default`,
+      stderr: '',
+    }))
+    const getSettingsPrefs = vi.fn(async () => ({ terminalApp: 'terminal' }))
+    const openRemoteTerminal = vi.fn(async () => ({ ok: true as const, message: '/srv/feature' }))
+
+    await expect(
+      module.openHostTmuxSession(
+        { projectRoot: REMOTE_REPO, session: { kind: 'hobgoblin', sessionName: REMOTE_FIRST_NAME } },
+        { platform: 'linux', resolveRemote, runRemote, getSettingsPrefs, openRemoteTerminal },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'opened' })
+    expect(openRemoteTerminal).toHaveBeenCalledWith(
+      {
+        alias: REMOTE_TARGET.alias,
+        projectRoot: REMOTE_TARGET.remotePath,
+        workingDirectory: '/srv/feature',
+        terminalNumber: 1,
+      },
+      'terminal',
+      {
+        useTmux: true,
+        existingTmuxSessionKind: 'hobgoblin',
+        existingTmuxSessionName: REMOTE_FIRST_NAME,
+      },
+    )
+  })
+
   test('revalidates exact name and origin approvals before sequential close', async () => {
     const module = hostFunctions()
     if (!module.closeHostTmuxSessions) return
@@ -489,6 +796,7 @@ describe('host tmux session inventory', () => {
       ok: true as const,
       sessions: [
         {
+          kind: 'hobgoblin' as const,
           sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
@@ -496,12 +804,14 @@ describe('host tmux session inventory', () => {
           serverName: LOCAL_SERVER_NAME,
         },
         {
+          kind: 'hobgoblin' as const,
           sessionName: SECOND_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 2,
           attachedClients: 0,
         },
         {
+          kind: 'hobgoblin' as const,
           sessionName: OTHER_NAME,
           initialPath: OTHER_PATH,
           terminalNumber: 3,
@@ -514,16 +824,16 @@ describe('host tmux session inventory', () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, message: '' })
       .mockResolvedValueOnce({ ok: false, message: 'permission denied' })
-    const missing = { sessionName: MISSING_NAME, serverName: LOCAL_SERVER_NAME }
+    const missing = { kind: 'hobgoblin' as const, sessionName: MISSING_NAME, serverName: LOCAL_SERVER_NAME }
 
     await expect(
       module.closeHostTmuxSessions(
         {
           projectRoot: LOCAL_PROJECT_ROOT,
           approvedSessions: [
-            { sessionName: FIRST_NAME, serverName: LOCAL_SERVER_NAME },
+            { kind: 'hobgoblin', sessionName: FIRST_NAME, serverName: LOCAL_SERVER_NAME },
             missing,
-            { sessionName: SECOND_NAME },
+            { kind: 'hobgoblin', sessionName: SECOND_NAME },
           ],
         },
         { platform: 'linux', listLocalHost, killLocalHostByName },
@@ -532,6 +842,7 @@ describe('host tmux session inventory', () => {
       ok: true,
       closed: [
         {
+          kind: 'hobgoblin',
           sessionName: FIRST_NAME,
           initialPath: LOCAL_PATH,
           terminalNumber: 1,
@@ -543,6 +854,7 @@ describe('host tmux session inventory', () => {
       failed: [
         {
           session: {
+            kind: 'hobgoblin',
             sessionName: SECOND_NAME,
             initialPath: LOCAL_PATH,
             terminalNumber: 2,
@@ -566,12 +878,12 @@ describe('host tmux session inventory', () => {
       .fn()
       .mockResolvedValueOnce({
         ok: true,
-        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t/srv/feature\t${REMOTE_SERVER_NAME}`,
         stderr: '',
       })
       .mockResolvedValueOnce({
         ok: true,
-        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
+        stdout: `/srv/feature\t1\t0\t${REMOTE_FIRST_NAME}\t/srv/feature\t${REMOTE_SERVER_NAME}`,
         stderr: '',
       })
       .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
@@ -581,6 +893,7 @@ describe('host tmux session inventory', () => {
       ok: true,
       sessions: [
         {
+          kind: 'hobgoblin',
           sessionName: REMOTE_FIRST_NAME,
           initialPath: '/srv/feature',
           terminalNumber: 1,
@@ -593,7 +906,7 @@ describe('host tmux session inventory', () => {
       module.closeHostTmuxSessions(
         {
           projectRoot: REMOTE_REPO,
-          approvedSessions: [{ sessionName: REMOTE_FIRST_NAME, serverName: REMOTE_SERVER_NAME }],
+          approvedSessions: [{ kind: 'hobgoblin', sessionName: REMOTE_FIRST_NAME, serverName: REMOTE_SERVER_NAME }],
         },
         hostDependencies,
       ),
@@ -629,7 +942,7 @@ describe('host tmux session inventory', () => {
       module.closeHostTmuxSessions(
         {
           projectRoot: LOCAL_PROJECT_ROOT,
-          approvedSessions: [{ sessionName: FIRST_NAME, serverName: 'user-server' }],
+          approvedSessions: [{ kind: 'hobgoblin', sessionName: FIRST_NAME, serverName: 'user-server' }],
         },
         { platform: 'linux', listLocalHost },
       ),
