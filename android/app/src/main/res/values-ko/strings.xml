@@ -173,6 +173,8 @@
     <string name="projects_filtered_empty_description">%1$s에 저장된 프로젝트가 없습니다.</string>
     <string name="projects_git_repository">Git 저장소</string>
     <string name="projects_plain_workspace">일반 워크스페이스</string>
+    <string name="projects_created_at">생성: %1$s</string>
+    <string name="projects_created_unknown">생성 시간 알 수 없음</string>
     <string name="projects_selected_host">선택한 호스트</string>
     <string name="projects_empty_title">프로젝트 없음</string>
     <string name="projects_empty_on_host">%1$s에 프로젝트 없음</string>
@@ -380,6 +382,7 @@
     <string name="terminals_workspace_directory">워크스페이스 디렉터리</string>
     <string name="terminals_context">%1$s · %2$s</string>
     <string name="terminals_location">%1$s ·</string>
+    <string name="terminals_opened_at">열림: %1$s</string>
     <string name="terminals_close_tmux">%1$s의 Android 연결을 닫지만 나중에 다시 연결할 수 있도록 터미널 목록에 유지합니다. 원격 tmux 세션은 계속 실행됩니다.</string>
     <string name="terminals_close_native">%1$s을(를) 중지하지만 나중에 다시 연결할 수 있도록 터미널 목록에 유지합니다.</string>
     <string name="terminals_delete_tmux">%1$s을(를) 터미널 목록에서 제거하고 활성 Android 연결을 중지합니다. 원격 tmux 세션은 계속 실행됩니다.</string>

@@ -137,6 +137,10 @@ private val terminalWorkspaceCreatedSessionComparator: Comparator<TerminalSessio
     compareBy<TerminalSessionRecord> { it.openedAt }
         .thenBy { it.id }
 
+private val terminalOverviewOpenedSessionComparator: Comparator<TerminalSessionRecord> =
+    compareByDescending<TerminalSessionRecord> { it.openedAt }
+        .thenBy { it.id }
+
 internal fun terminalWorkspaceOrderedSessions(
     sessions: List<TerminalSessionRecord>,
     hostId: String,
@@ -191,7 +195,7 @@ internal fun terminalGlobalProjectCreatedSessions(
 
 internal fun terminalOverviewOrderedSessions(
     sessions: List<TerminalSessionRecord>,
-): List<TerminalSessionRecord> = sessions.sortedWith(terminalWorkspaceCreatedSessionComparator)
+): List<TerminalSessionRecord> = sessions.sortedWith(terminalOverviewOpenedSessionComparator)
 
 internal fun terminalCycleSessionId(
     sessions: List<TerminalSessionRecord>,

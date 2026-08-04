@@ -1,5 +1,6 @@
 package com.mrongm.hobgoblin.ui.screens.terminals
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,20 +57,23 @@ internal fun terminalOverviewStatusText(session: TerminalSessionRecord): Localiz
     },
 )
 
+internal fun terminalOverviewOpenedText(relativeTime: CharSequence): LocalizedText =
+    LocalizedText(R.string.terminals_opened_at, listOf(relativeTime))
+
 internal enum class TerminalOverviewTone {
     Neutral,
     Running,
-    Disconnected,
+    Alert,
     Exited,
 }
 
 internal fun terminalOverviewTone(status: TerminalSessionStatus): TerminalOverviewTone = when (status) {
     TerminalSessionStatus.Starting -> TerminalOverviewTone.Neutral
     TerminalSessionStatus.Running -> TerminalOverviewTone.Running
-    TerminalSessionStatus.Disconnected -> TerminalOverviewTone.Disconnected
-    TerminalSessionStatus.Exited,
+    TerminalSessionStatus.Disconnected,
     TerminalSessionStatus.Failed,
-    -> TerminalOverviewTone.Exited
+    -> TerminalOverviewTone.Alert
+    TerminalSessionStatus.Exited -> TerminalOverviewTone.Exited
 }
 
 internal enum class TerminalOverviewConnectionAction {
@@ -85,17 +90,36 @@ internal fun terminalOverviewConnectionAction(
 }
 
 @Composable
-private fun terminalOverviewContainerColor(status: TerminalSessionStatus): Color =
-    when (terminalOverviewTone(status)) {
-        TerminalOverviewTone.Neutral -> MaterialTheme.colorScheme.surface
-        TerminalOverviewTone.Running -> HobgoblinColors.Success
-            .copy(alpha = 0.16f)
-            .compositeOver(MaterialTheme.colorScheme.surface)
-        TerminalOverviewTone.Disconnected -> HobgoblinColors.Warning
+private fun TerminalOverviewStatusBadge(session: TerminalSessionRecord) {
+    val (containerColor, contentColor) = when (terminalOverviewTone(session.status)) {
+        TerminalOverviewTone.Neutral ->
+            MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+        TerminalOverviewTone.Running -> HobgoblinColors.Success to Color.White
+        TerminalOverviewTone.Alert ->
+            MaterialTheme.colorScheme.error to MaterialTheme.colorScheme.onError
+        TerminalOverviewTone.Exited -> MaterialTheme.colorScheme.onSurface
             .copy(alpha = 0.18f)
-            .compositeOver(MaterialTheme.colorScheme.surface)
-        TerminalOverviewTone.Exited -> MaterialTheme.colorScheme.errorContainer
+            .compositeOver(MaterialTheme.colorScheme.surface) to MaterialTheme.colorScheme.onSurface
     }
+
+    Surface(
+        color = containerColor,
+        contentColor = contentColor,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Text(
+            terminalOverviewStatusText(session).resolve(),
+            modifier = Modifier.padding(
+                horizontal = HobgoblinSpacing.Sm,
+                vertical = HobgoblinSpacing.Xs,
+            ),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 internal fun terminalOverviewCloseConfirmationText(session: TerminalSessionRecord): LocalizedText = LocalizedText(
     resourceId = if (terminalSessionIsTmuxBacked(session)) {
@@ -290,12 +314,12 @@ private fun TerminalOverviewRow(
     onRequestDelete: () -> Unit,
 ) {
     val title = source.hostTitle.resolve()
-    Card(
+    OutlinedCard(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onOpen),
-        colors = CardDefaults.cardColors(
-            containerColor = terminalOverviewContainerColor(session.status),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
     ) {
@@ -315,13 +339,7 @@ private fun TerminalOverviewRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    terminalOverviewStatusText(session).resolve(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                TerminalOverviewStatusBadge(session)
             }
             Text(
                 source.contextLabel.resolve(),
@@ -352,6 +370,20 @@ private fun TerminalOverviewRow(
                     softWrap = true,
                 )
             }
+            Text(
+                terminalOverviewOpenedText(
+                    DateUtils.getRelativeTimeSpanString(
+                        session.openedAt,
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS,
+                    ),
+                ).resolve(),
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             TerminalSessionIdentityDetails(session = session)
             Row(
                 modifier = Modifier.fillMaxWidth(),

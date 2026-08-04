@@ -4,6 +4,7 @@ import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
 import com.mrongm.hobgoblin.domain.ssh.RemoteRepositoryProfile
 import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
+import com.mrongm.hobgoblin.ui.text.LocalizedText
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -89,6 +90,69 @@ class ProjectsScreenStateTest {
     }
 
     @Test
+    fun `default project display order puts newest project first`() {
+        val oldest = project(id = "oldest", hostId = "host-1", createdAt = 1_000L)
+        val newest = project(id = "newest", hostId = "host-1", createdAt = 3_000L)
+        val middle = project(id = "middle", hostId = "host-1", createdAt = 2_000L)
+
+        val ordered = projectDisplayOrder(listOf(oldest, newest, middle), savedIds = emptyList())
+
+        assertEquals(listOf("newest", "middle", "oldest"), ordered.map { it.id })
+    }
+
+    @Test
+    fun `default project display order keeps unknown legacy projects last and stable`() {
+        val legacyA = project(id = "legacy-a", hostId = "host-1")
+        val known = project(id = "known", hostId = "host-1", createdAt = 1_000L)
+        val legacyB = project(id = "legacy-b", hostId = "host-1")
+
+        val ordered = projectDisplayOrder(listOf(legacyA, known, legacyB), savedIds = emptyList())
+
+        assertEquals(listOf("known", "legacy-a", "legacy-b"), ordered.map { it.id })
+    }
+
+    @Test
+    fun `stale saved project ids fall back to newest first default`() {
+        val older = project(id = "older", hostId = "host-1", createdAt = 1_000L)
+        val newer = project(id = "newer", hostId = "host-1", createdAt = 2_000L)
+
+        val ordered = projectDisplayOrder(listOf(older, newer), savedIds = listOf("deleted"))
+
+        assertEquals(listOf("newer", "older"), ordered.map { it.id })
+    }
+
+    @Test
+    fun `saved project order wins and appends unseen projects`() {
+        val oldest = project(id = "oldest", hostId = "host-1", createdAt = 1_000L)
+        val middle = project(id = "middle", hostId = "host-1", createdAt = 2_000L)
+        val newest = project(id = "newest", hostId = "host-1", createdAt = 3_000L)
+
+        val ordered = projectDisplayOrder(
+            repositories = listOf(oldest, middle, newest),
+            savedIds = listOf("middle", "oldest"),
+        )
+
+        assertEquals(listOf("middle", "oldest", "newest"), ordered.map { it.id })
+    }
+
+    @Test
+    fun `host filter preserves global project display order`() {
+        val hostOneOlder = project(id = "host-1-older", hostId = "host-1", createdAt = 1_000L)
+        val hostTwoNewest = project(id = "host-2-newest", hostId = "host-2", createdAt = 3_000L)
+        val hostOneNewer = project(id = "host-1-newer", hostId = "host-1", createdAt = 2_000L)
+
+        val ordered = projectDisplayOrder(
+            listOf(hostOneOlder, hostTwoNewest, hostOneNewer),
+            savedIds = emptyList(),
+        )
+
+        assertEquals(
+            listOf("host-1-newer", "host-1-older"),
+            projectsForHost(ordered, hostId = "host-1").map { it.id },
+        )
+    }
+
+    @Test
     fun `unfiltered project list omits saved heading but filtered scope remains visible`() {
         val source = projectsScreenSource()
 
@@ -140,6 +204,28 @@ class ProjectsScreenStateTest {
     }
 
     @Test
+    fun `project created text distinguishes known and legacy times`() {
+        assertEquals(
+            LocalizedText(R.string.projects_created_at, listOf("5 minutes ago")),
+            projectCreatedText("5 minutes ago"),
+        )
+        assertEquals(
+            LocalizedText(R.string.projects_created_unknown),
+            projectCreatedText(relativeTime = null),
+        )
+    }
+
+    @Test
+    fun `project cards show localized relative created time from stored timestamp`() {
+        val source = projectsScreenSource()
+
+        assertTrue(source.contains("DateUtils.getRelativeTimeSpanString"))
+        assertTrue(source.contains("repository.createdAt?.let"))
+        assertTrue(source.contains("DateUtils.MINUTE_IN_MILLIS"))
+        assertTrue(source.contains("projectCreatedText(relativeTime).resolve()"))
+    }
+
+    @Test
     fun `project card highlights the full root directory`() {
         val source = projectsScreenSource()
         val pathText = source
@@ -156,12 +242,17 @@ class ProjectsScreenStateTest {
         assertFalse(pathText.contains("TextOverflow.Ellipsis"))
     }
 
-    private fun project(id: String, hostId: String): RemoteRepositoryProfile =
-        RemoteRepositoryProfile.create(
-            hostProfileId = hostId,
-            alias = id,
-            remotePath = "/srv/$id",
-        ).copy(id = id)
+    private fun project(
+        id: String,
+        hostId: String,
+        createdAt: Long? = null,
+    ): RemoteRepositoryProfile = RemoteRepositoryProfile(
+        id = id,
+        hostProfileId = hostId,
+        alias = id,
+        remotePath = "/srv/$id",
+        createdAt = createdAt,
+    )
 
     private fun host(): SshHostProfile = SshHostProfile(
         id = "host-1",

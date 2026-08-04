@@ -173,6 +173,8 @@
     <string name="projects_filtered_empty_description">%1$s 上没有已保存的项目。</string>
     <string name="projects_git_repository">Git 仓库</string>
     <string name="projects_plain_workspace">普通工作区</string>
+    <string name="projects_created_at">创建于%1$s</string>
+    <string name="projects_created_unknown">创建时间未知</string>
     <string name="projects_selected_host">已选主机</string>
     <string name="projects_empty_title">没有项目</string>
     <string name="projects_empty_on_host">%1$s 上没有项目</string>
@@ -380,6 +382,7 @@
     <string name="terminals_workspace_directory">工作区目录</string>
     <string name="terminals_context">%1$s · %2$s</string>
     <string name="terminals_location">%1$s ·</string>
+    <string name="terminals_opened_at">打开于%1$s</string>
     <string name="terminals_close_tmux">此操作将关闭 %1$s 的 Android 连接，但保留在终端列表中以便稍后重新连接。远程 tmux 会话将继续运行。</string>
     <string name="terminals_close_native">此操作将停止 %1$s，但保留在终端列表中以便稍后重新连接。</string>
     <string name="terminals_delete_tmux">此操作将从终端列表移除 %1$s，并停止其活动的 Android 连接。远程 tmux 会话将继续运行。</string>
