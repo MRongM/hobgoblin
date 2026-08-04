@@ -96,6 +96,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [fitToWidth, setFitToWidth] = useState(true)
   const [mobileFocusMode, setMobileFocusMode] = useState(false)
   const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
+  const [visualViewportBottomInset, setVisualViewportBottomInset] = useState(0)
   const context = useTerminalSessionContext()
   const {
     clearBell,
@@ -531,6 +532,34 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const hasMobileCommandDeck = isMobile && isController && !!key
   const hasBottomDock = !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileCommandDeck)
 
+  useLayoutEffect(() => {
+    if (!hasBottomDock || !hasMobileCommandDeck) {
+      setVisualViewportBottomInset(0)
+      return
+    }
+
+    const visualViewport = window.visualViewport
+    if (!visualViewport) {
+      setVisualViewportBottomInset(0)
+      return
+    }
+
+    const updateBottomInset = () => {
+      const next = Math.max(0, Math.ceil(window.innerHeight - visualViewport.offsetTop - visualViewport.height))
+      setVisualViewportBottomInset((current) => (current === next ? current : next))
+    }
+
+    updateBottomInset()
+    visualViewport.addEventListener('resize', updateBottomInset)
+    visualViewport.addEventListener('scroll', updateBottomInset)
+    window.addEventListener('resize', updateBottomInset)
+    return () => {
+      visualViewport.removeEventListener('resize', updateBottomInset)
+      visualViewport.removeEventListener('scroll', updateBottomInset)
+      window.removeEventListener('resize', updateBottomInset)
+    }
+  }, [hasBottomDock, hasMobileCommandDeck])
+
   const cycleTerminal = useCallback(
     (direction: -1 | 1) => {
       if (!key || worktreeSnapshot.sessions.length <= 1) return
@@ -575,9 +604,14 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
   const slotStyle =
-    bottomDockHeight === null
+    bottomDockHeight === null && !hasMobileCommandDeck
       ? undefined
-      : ({ '--goblin-terminal-bottom-dock-height': `${bottomDockHeight}px` } as CSSProperties)
+      : ({
+          ...(bottomDockHeight === null ? {} : { '--goblin-terminal-bottom-dock-height': `${bottomDockHeight}px` }),
+          ...(hasMobileCommandDeck
+            ? { '--goblin-terminal-visual-viewport-bottom-inset': `${visualViewportBottomInset}px` }
+            : {}),
+        } as CSSProperties)
 
   return (
     <div

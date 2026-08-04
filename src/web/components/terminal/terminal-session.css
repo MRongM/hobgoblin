@@ -13,6 +13,7 @@
   --goblin-terminal-float-radius: var(--goblin-control-radius, 8px);
   --goblin-terminal-control-radius: var(--goblin-control-radius, 6px);
   --goblin-terminal-bottom-dock-height: 44px;
+  --goblin-terminal-visual-viewport-bottom-inset: 0px;
 }
 
 .goblin-terminal-slot__host {
@@ -108,7 +109,9 @@
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-terminal-edge-scrubber {
-  --goblin-terminal-edge-scrubber-bottom: calc(var(--goblin-terminal-bottom-dock-height) + 8px);
+  --goblin-terminal-edge-scrubber-bottom: calc(
+    var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-visual-viewport-bottom-inset) + 8px
+  );
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-slot__viewer-status) .goblin-terminal-edge-scrubber {
@@ -263,7 +266,7 @@
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-managed-terminal-frame {
-  padding-bottom: var(--goblin-terminal-bottom-dock-height);
+  padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-visual-viewport-bottom-inset));
 }
 
 .goblin-terminal-slot__search {
@@ -367,7 +370,7 @@
 .goblin-terminal-bottom-dock {
   position: absolute;
   right: 0;
-  bottom: 0;
+  bottom: var(--goblin-terminal-visual-viewport-bottom-inset);
   left: 0;
   z-index: 2;
   display: flex;

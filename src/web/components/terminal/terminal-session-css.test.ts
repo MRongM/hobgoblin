@@ -8,10 +8,15 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toMatch(/\.goblin-managed-terminal-frame\s*\{[^}]*padding:\s*3px;/)
   })
 
-  test('keeps the button dock flush with the terminal bottom edge', () => {
+  test('keeps the button dock at the visible viewport bottom and reserves its full clearance', () => {
     expect(css).toContain('--goblin-terminal-bottom-dock-height: 44px;')
-    expect(css).toContain('padding-bottom: var(--goblin-terminal-bottom-dock-height);')
-    expect(css).toMatch(/\.goblin-terminal-bottom-dock\s*\{[^}]*bottom:\s*0;/)
+    expect(css).toContain('--goblin-terminal-visual-viewport-bottom-inset: 0px;')
+    expect(css).toMatch(
+      /\.goblin-terminal-slot:has\(\.goblin-terminal-bottom-dock\) \.goblin-managed-terminal-frame\s*\{[^}]*padding-bottom:\s*calc\(\s*var\(--goblin-terminal-bottom-dock-height\)\s*\+\s*var\(--goblin-terminal-visual-viewport-bottom-inset\)\s*\);/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-bottom-dock\s*\{[^}]*bottom:\s*var\(--goblin-terminal-visual-viewport-bottom-inset\);/,
+    )
     expect(css).not.toMatch(/\.goblin-terminal-bottom-dock\s*\{[^}]*bottom:\s*var\(--goblin-terminal-overlay-offset\);/)
   })
 
@@ -68,7 +73,7 @@ describe('terminal session CSS layout contract', () => {
     expect(css).toMatch(/\.goblin-terminal-edge-scrubber::after\s*\{[^}]*height:\s*2px;/)
     expect(css).toMatch(/\.goblin-terminal-edge-scrubber\[data-active='true'\]::before/)
     expect(css).toMatch(
-      /\.goblin-terminal-slot:has\(\.goblin-terminal-bottom-dock\) \.goblin-terminal-edge-scrubber\s*\{[^}]*--goblin-terminal-edge-scrubber-bottom:\s*calc\(var\(--goblin-terminal-bottom-dock-height\) \+ 8px\);/,
+      /\.goblin-terminal-slot:has\(\.goblin-terminal-bottom-dock\) \.goblin-terminal-edge-scrubber\s*\{[^}]*--goblin-terminal-edge-scrubber-bottom:\s*calc\(\s*var\(--goblin-terminal-bottom-dock-height\)\s*\+\s*var\(--goblin-terminal-visual-viewport-bottom-inset\)\s*\+\s*8px\s*\);/,
     )
     expect(css).toMatch(
       /\.goblin-terminal-slot:has\(\.goblin-terminal-slot__viewer-status\) \.goblin-terminal-edge-scrubber\s*\{[^}]*--goblin-terminal-edge-scrubber-bottom:\s*88px;/,

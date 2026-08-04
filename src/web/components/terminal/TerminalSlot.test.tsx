@@ -802,6 +802,30 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('tracks the obscured bottom edge of the Mobile Web visual viewport for the command deck', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const visualViewport = installVisualViewportHarness({
+      layoutHeight: 844,
+      height: 524,
+      offsetTop: 0,
+    })
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const slot = container.querySelector<HTMLElement>('.goblin-terminal-slot')
+      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('320px')
+
+      await act(async () => {
+        visualViewport.update({ height: 500, offsetTop: 44 })
+      })
+      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('300px')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      visualViewport.restore()
+    }
+  })
+
   test('uses a local Mobile Web focus mode to hide and restore the complete auxiliary keyboard dock', async () => {
     mobileDetectionMocks.isMobileDevice = true
     runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
@@ -1823,6 +1847,47 @@ function installAnimationFrameHarness() {
       callbacks.clear()
       request.mockRestore()
       cancel.mockRestore()
+    },
+  }
+}
+
+function installVisualViewportHarness(options: { layoutHeight: number; height: number; offsetTop: number }) {
+  const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
+  const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport')
+  let height = options.height
+  let offsetTop = options.offsetTop
+  const visualViewport = new EventTarget() as VisualViewport
+  Object.defineProperties(visualViewport, {
+    height: { configurable: true, get: () => height },
+    offsetLeft: { configurable: true, get: () => 0 },
+    offsetTop: { configurable: true, get: () => offsetTop },
+    pageLeft: { configurable: true, get: () => 0 },
+    pageTop: { configurable: true, get: () => offsetTop },
+    scale: { configurable: true, get: () => 1 },
+    width: { configurable: true, get: () => 390 },
+    onresize: { configurable: true, writable: true, value: null },
+    onscroll: { configurable: true, writable: true, value: null },
+  })
+  Object.defineProperty(window, 'innerHeight', {
+    configurable: true,
+    value: options.layoutHeight,
+  })
+  Object.defineProperty(window, 'visualViewport', {
+    configurable: true,
+    value: visualViewport,
+  })
+
+  return {
+    update: (next: { height: number; offsetTop: number }) => {
+      height = next.height
+      offsetTop = next.offsetTop
+      visualViewport.dispatchEvent(new Event('resize'))
+    },
+    restore: () => {
+      if (originalInnerHeight) Object.defineProperty(window, 'innerHeight', originalInnerHeight)
+      else Reflect.deleteProperty(window, 'innerHeight')
+      if (originalVisualViewport) Object.defineProperty(window, 'visualViewport', originalVisualViewport)
+      else Reflect.deleteProperty(window, 'visualViewport')
     },
   }
 }
