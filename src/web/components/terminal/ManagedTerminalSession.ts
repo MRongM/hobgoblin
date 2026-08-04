@@ -21,6 +21,7 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { isTerminalEmulatorInput, type TerminalInput } from '#/web/components/terminal/terminal-input.ts'
+import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalBellEvent,
@@ -28,6 +29,7 @@ import type {
   TerminalOwnershipViewModel,
   TerminalSearchResult,
   TerminalSessionAttachHandlers,
+  TerminalTouchScrollInput,
 } from '#/web/components/terminal/types.ts'
 const RESIZE_DEBOUNCE_MS = 80
 const EMPTY_SEARCH_RESULT: TerminalSearchResult = { resultIndex: -1, resultCount: 0, found: false }
@@ -55,6 +57,8 @@ export class ManagedTerminalSession {
   private pendingOutput: string[] = []
   private pendingWriteBuffer = ''
   private inputFlushScheduled = false
+  // One-shot bypass of Hobgoblin's frame queue for authoritative output after user intent.
+  private prioritizeNextOutput = false
   private hydratedSnapshot: { snapshot: string; snapshotSeq: number } | null = null
   private windowsPty: TerminalWindowsPty | undefined
   private disposed = false
@@ -164,11 +168,22 @@ export class ManagedTerminalSession {
     return this.view.isTerminalFocusTarget(target)
   }
 
+  scrollByTouch(input: TerminalTouchScrollInput): void {
+    this.view.scrollByTouch(input)
+  }
+
+  writeExtraKey(input: TerminalExtraKeyInput): void {
+    const data = this.view.inputForExtraKey(input)
+    if (data) this.writeInput(data)
+  }
+
   writeInput(input: string | TerminalInput): void {
-    if (typeof input !== 'string' && isTerminalEmulatorInput(input) && this.runtime.isReplaying()) return
+    const isUserIntentInput = typeof input === 'string' || !isTerminalEmulatorInput(input)
+    if (!isUserIntentInput && this.runtime.isReplaying()) return
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId || !this.runtime.canWrite()) return
+    if (isUserIntentInput && data) this.prioritizeNextOutput = true
     this.onInput?.(this.descriptor)
     this.pendingWriteBuffer += data
     this.scheduleInputFlush()
@@ -262,6 +277,7 @@ export class ManagedTerminalSession {
     if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
     if (previousSessionId !== input.sessionId) {
       this.backgroundBellScanner.reset()
+      this.prioritizeNextOutput = false
     }
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify()
@@ -299,6 +315,7 @@ export class ManagedTerminalSession {
   handleExit(event: TerminalExitEvent): boolean {
     if (!this.runtime.handleExit(event)) return false
     this.backgroundBellScanner.reset()
+    this.prioritizeNextOutput = false
     this.flushOutput()
     this.clearTerminalFocusIfOwned()
     this.view.blurIfFocused()
@@ -590,6 +607,7 @@ export class ManagedTerminalSession {
       this.cancelResizeFlush()
       this.pendingResize = null
       this.pendingWriteBuffer = ''
+      this.prioritizeNextOutput = false
     }
     if (wasController === isController) return
     if (this.view.currentTerminal()) this.view.fitSoon()
@@ -605,6 +623,11 @@ export class ManagedTerminalSession {
   private queueOutput(data: string): void {
     if (!this.view.currentTerminal()) return
     this.pendingOutput.push(data)
+    if (this.prioritizeNextOutput) {
+      this.prioritizeNextOutput = false
+      this.flushOutput()
+      return
+    }
     if (this.outputFlushFrame !== null) return
     this.outputFlushFrame = requestAnimationFrame(() => {
       this.outputFlushFrame = null
@@ -642,6 +665,7 @@ export class ManagedTerminalSession {
     this.pendingOutput = []
     this.pendingWriteBuffer = ''
     this.inputFlushScheduled = false
+    this.prioritizeNextOutput = false
     // The xterm view was parsing the stream up to now; scanning resumes from a
     // clean state rather than the middle of whatever sequence it last saw.
     this.backgroundBellScanner.reset()

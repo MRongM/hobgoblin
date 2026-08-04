@@ -517,6 +517,25 @@ describe('i18n dictionaries', () => {
     expect(zh['terminal.exit-focus']).toBe('退出终端最大化')
   })
 
+  test('localizes the Mobile Web terminal command deck in every dictionary', () => {
+    const keys = [
+      'terminal.command-deck',
+      'terminal.command-deck.previous-terminal',
+      'terminal.command-deck.next-terminal',
+      'terminal.command-deck.compose',
+      'terminal.command-deck.hide-compose',
+      'terminal.command-deck.original-width',
+      'terminal.command-deck.fit-width',
+      'terminal.command-deck.input-placeholder',
+      'terminal.command-deck.send',
+    ] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['terminal.command-deck.compose' as keyof typeof zh]).toBe('命令输入')
+    expect(zh['terminal.command-deck.fit-width' as keyof typeof zh]).toBe('适应宽度')
+  })
+
   test('includes discard selected changes copy', () => {
     expect(en['changes.selection-toggle']).toBe('Select')
     expect(en['changes.selection-toggle-title']).toBe('Show selection checkboxes')

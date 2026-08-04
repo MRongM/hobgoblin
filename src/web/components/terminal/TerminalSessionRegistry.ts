@@ -18,6 +18,7 @@ import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-re
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TERMINAL_FONT_FAMILY, measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
+import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 import type {
   TerminalDescriptor,
   TerminalRepoIndex,
@@ -26,6 +27,7 @@ import type {
   TerminalSessionAttachHandlers,
   TerminalSessionSummary,
   TerminalSnapshot,
+  TerminalTouchScrollInput,
   TerminalWorktreeScope,
   TerminalOutputCompletionIntent,
   TerminalCloseOptions,
@@ -521,6 +523,10 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.scrollLines(amount)
   }
 
+  scrollByTouch = (key: string, input: TerminalTouchScrollInput): void => {
+    this.sessions.get(key)?.scrollByTouch(input)
+  }
+
   closeTerminalAndDismissDetailIfLast = (
     key: string,
     scope: TerminalWorktreeScope,
@@ -606,6 +612,10 @@ export class TerminalSessionRegistry {
 
   writeInput = (key: string, data: string): void => {
     this.sessions.get(key)?.writeInput(data)
+  }
+
+  writeExtraKey = (key: string, input: TerminalExtraKeyInput): void => {
+    this.sessions.get(key)?.writeExtraKey(input)
   }
 
   takeover = (key: string): void => {

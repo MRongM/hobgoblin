@@ -76,6 +76,18 @@ _Avoid_: Terminal toolbar, detail toolbar
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
 
+**Mobile Web terminal vertical scroll gesture**:
+A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a tap retains ordinary terminal focus behavior.
+_Avoid_: Page scroll, terminal input gesture, takeover gesture, history-only gesture
+
+**Mobile Web terminal command deck**:
+A controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order and whose action row owns terminal switching, command composition, and renderer-local width presentation. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+_Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
+
+**Mobile Web terminal input latency**:
+The perceived delay between direct virtual-keyboard input or committed input-method text and the corresponding internal terminal response or echo becoming visible. Input-method pre-edit text is not terminal input; candidate UI and system keyboard animation latency are excluded.
+_Avoid_: Keyboard animation lag, composition candidate lag, terminal startup latency
+
 **Built-in terminal button preset**:
 An app-supplied custom terminal button whose label and sent text follow the application language until the user edits it. Reordering preserves the preset, editing turns it into an ordinary custom terminal button, and removing it is a durable user choice.
 _Avoid_: Fixed terminal action, translated shell command, mandatory terminal button

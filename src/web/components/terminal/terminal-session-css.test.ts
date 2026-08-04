@@ -15,9 +15,10 @@ describe('terminal session CSS layout contract', () => {
     expect(css).not.toMatch(/\.goblin-terminal-bottom-dock\s*\{[^}]*bottom:\s*var\(--goblin-terminal-overlay-offset\);/)
   })
 
-  test('keeps only custom button styles in the terminal dock', () => {
+  test('keeps command-deck and custom-button styles in the terminal dock', () => {
     expect(css).toContain('.goblin-terminal-bottom-dock')
     expect(css).toContain('.goblin-terminal-custom-buttons')
+    expect(css).toContain('.goblin-terminal-command-deck')
     const removedClass = ['goblin', 'terminal', 'external', 'input'].join('-')
     expect(css).not.toContain(`.${removedClass}`)
     expect(css).not.toContain(`${removedClass}__control`)
@@ -48,9 +49,22 @@ describe('terminal session CSS layout contract', () => {
     )
   })
 
-  test('reserves vertical touch gestures for mobile read-only terminal scrolling', () => {
+  test('reserves vertical touch gestures for mobile terminal scrolling', () => {
+    expect(css).toMatch(/\.goblin-terminal-slot__host--touch-scroll\s*\{[^}]*touch-action:\s*pan-x pinch-zoom;/)
+  })
+
+  test('lays out the mobile command deck inside the dock without floating over output', () => {
+    expect(css).toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*width:\s*100%;/)
+    expect(css).toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*pointer-events:\s*auto;/)
+    expect(css).not.toMatch(/\.goblin-terminal-command-deck\s*\{[^}]*position:\s*absolute;/)
+    expect(css).toMatch(/\.goblin-terminal-command-deck__row\s*\{[^}]*overflow-x:\s*auto;/)
+    expect(css).toMatch(/\.goblin-terminal-command-deck__row\s*\{[^}]*touch-action:\s*pan-x;/)
+  })
+
+  test('uses a horizontally pannable 720px terminal only in original-width mode', () => {
+    expect(css).toMatch(/\.goblin-terminal-slot__host--original-width\s*\{[^}]*overflow-x:\s*auto;/)
     expect(css).toMatch(
-      /\.goblin-terminal-slot__host--touch-scroll\s*\{[^}]*touch-action:\s*pan-x pinch-zoom;/,
+      /\.goblin-terminal-slot__host--original-width > \.goblin-managed-terminal-frame\s*\{[^}]*min-width:\s*720px;/,
     )
   })
 })

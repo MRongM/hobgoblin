@@ -26,6 +26,7 @@ import {
 import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
 import { registerTerminalLocalUrlLinkProvider } from '#/web/components/terminal/terminal-local-url-links.ts'
 import { registerTerminalOsc52ClipboardHandler } from '#/web/components/terminal/terminal-osc52-clipboard.ts'
+import { terminalInputForExtraKey, type TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import {
   DEFAULT_TERMINAL_FONT_FAMILY,
@@ -40,6 +41,7 @@ import {
 } from '#/web/components/terminal/terminal-input.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
+import type { TerminalTouchScrollInput } from '#/web/components/terminal/types.ts'
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
 
@@ -260,6 +262,44 @@ export class TerminalSessionView {
 
   scrollLines(amount: number): void {
     this.term?.scrollLines(amount)
+  }
+
+  scrollByTouch(input: TerminalTouchScrollInput): void {
+    const term = this.term
+    const lines = Math.trunc(input.lines)
+    if (!term || lines === 0) return
+
+    if (term.buffer.active.type === 'normal' && term.modes.mouseTrackingMode === 'none') {
+      term.scrollLines(lines)
+      return
+    }
+
+    // Alternate buffers and mouse-aware applications must retain xterm's wheel semantics.
+    const element = term.element
+    const WheelEventConstructor = element?.ownerDocument.defaultView?.WheelEvent
+    if (!element || !WheelEventConstructor) return
+    const direction = Math.sign(lines)
+    for (let index = 0; index < Math.abs(lines); index += 1) {
+      element.dispatchEvent(
+        new WheelEventConstructor('wheel', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: input.clientX,
+          clientY: input.clientY,
+          deltaMode: WheelEventConstructor.DOM_DELTA_LINE,
+          deltaY: direction,
+        }),
+      )
+    }
+  }
+
+  inputForExtraKey(input: TerminalExtraKeyInput): string | null {
+    const term = this.term
+    if (!term) return null
+    return terminalInputForExtraKey(input, {
+      applicationCursorKeysMode: term.modes.applicationCursorKeysMode,
+    })
   }
 
   find(term: string, direction: 'next' | 'previous', incremental: boolean): boolean {

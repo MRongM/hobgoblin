@@ -341,6 +341,8 @@ describe('TerminalSlot', () => {
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
+      scrollByTouch: vi.fn(),
+      writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
@@ -488,6 +490,8 @@ describe('TerminalSlot', () => {
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
+      scrollByTouch: vi.fn(),
+      writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
@@ -549,42 +553,61 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test.each(['viewer', 'unowned'] as const)(
-    'scrolls terminal history with primary touch drags for a mobile %s attachment',
+  test.each(['controller', 'viewer', 'unowned'] as const)(
+    'routes primary vertical touch drags through mobile terminal scrolling for a %s attachment',
     async (role) => {
       mobileDetectionMocks.isMobileDevice = true
-      const scrollLines = vi.fn()
+      const scrollByTouch = vi.fn()
       const writeInput = vi.fn()
       const takeover = vi.fn()
-      const { container, root } = await renderTerminalSlotFixture(role, { scrollLines, writeInput, takeover })
+      const { container, root } = await renderTerminalSlotFixture(role, { scrollByTouch, writeInput, takeover })
 
       try {
         const host = container.querySelector('.goblin-terminal-slot__host')
         expect(host).toBeInstanceOf(HTMLElement)
+        const setPointerCapture = vi.fn()
+        Object.defineProperty(host, 'setPointerCapture', { configurable: true, value: setPointerCapture })
 
         await act(async () => {
           host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, pointerType: 'mouse' }))
           host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 170, pointerType: 'mouse' }))
         })
-        expect(scrollLines).not.toHaveBeenCalled()
+        expect(scrollByTouch).not.toHaveBeenCalled()
 
         await act(async () => {
           host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200 }))
+        })
+        expect(setPointerCapture).not.toHaveBeenCalled()
+
+        await act(async () => {
           host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 190 }))
         })
-        expect(scrollLines).not.toHaveBeenCalled()
+        expect(setPointerCapture).toHaveBeenCalledWith(1)
+        expect(scrollByTouch).not.toHaveBeenCalled()
 
+        const verticalMove = terminalPointerEvent('pointermove', { clientY: 170 })
         await act(async () => {
-          host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 170 }))
+          host?.dispatchEvent(verticalMove)
         })
-        expect(scrollLines).toHaveBeenLastCalledWith('terminal-1', 2)
+        expect(verticalMove.defaultPrevented).toBe(true)
+        expect(scrollByTouch).toHaveBeenLastCalledWith('terminal-1', {
+          lines: 2,
+          clientX: 0,
+          clientY: 170,
+        })
 
+        const verticalEnd = terminalPointerEvent('pointerup', { clientY: 170 })
         await act(async () => {
-          host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 170 }))
+          host?.dispatchEvent(verticalEnd)
           host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 100, pointerId: 2 }))
           host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 128, pointerId: 2 }))
         })
-        expect(scrollLines).toHaveBeenLastCalledWith('terminal-1', -2)
+        expect(verticalEnd.defaultPrevented).toBe(true)
+        expect(scrollByTouch).toHaveBeenLastCalledWith('terminal-1', {
+          lines: -2,
+          clientX: 0,
+          clientY: 128,
+        })
         expect(writeInput).not.toHaveBeenCalled()
         expect(takeover).not.toHaveBeenCalled()
       } finally {
@@ -594,21 +617,275 @@ describe('TerminalSlot', () => {
     },
   )
 
-  test('does not install the read-only touch scroll gesture for a mobile controller', async () => {
+  test('leaves taps, touch slop, and horizontal drags to ordinary terminal interaction', async () => {
     mobileDetectionMocks.isMobileDevice = true
-    const scrollLines = vi.fn()
-    const { container, root } = await renderTerminalSlotFixture('controller', { scrollLines })
+    const scrollByTouch = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { scrollByTouch })
 
     try {
       const host = container.querySelector('.goblin-terminal-slot__host')
       expect(host).toBeInstanceOf(HTMLElement)
+      const setPointerCapture = vi.fn()
+      Object.defineProperty(host, 'setPointerCapture', { configurable: true, value: setPointerCapture })
 
+      const slopMove = terminalPointerEvent('pointermove', { clientX: 102, clientY: 196 })
+      const tapEnd = terminalPointerEvent('pointerup', { clientX: 102, clientY: 196 })
       await act(async () => {
-        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200 }))
-        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 160 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 100, clientY: 200 }))
+        host?.dispatchEvent(slopMove)
+        host?.dispatchEvent(tapEnd)
+      })
+      expect(slopMove.defaultPrevented).toBe(false)
+      expect(tapEnd.defaultPrevented).toBe(false)
+      expect(setPointerCapture).not.toHaveBeenCalled()
+
+      const horizontalMove = terminalPointerEvent('pointermove', { clientX: 140, clientY: 205, pointerId: 2 })
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientX: 100, clientY: 200, pointerId: 2 }))
+        host?.dispatchEvent(horizontalMove)
+      })
+      expect(horizontalMove.defaultPrevented).toBe(false)
+      expect(setPointerCapture).not.toHaveBeenCalled()
+      expect(scrollByTouch).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('continues a recent fast manual drag with decelerating terminal inertia', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const animationFrames = installAnimationFrameHarness()
+    const scrollByTouch = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { scrollByTouch })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLElement)
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, timeStamp: 1 }))
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 150, timeStamp: 17 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 150, timeStamp: 21 }))
       })
 
-      expect(scrollLines).not.toHaveBeenCalled()
+      scrollByTouch.mockClear()
+      expect(animationFrames.pendingCount()).toBe(1)
+      let frameTime = 37
+      let frameCount = 0
+      while (animationFrames.pendingCount() > 0 && frameCount < 120) {
+        await act(async () => animationFrames.runNext(frameTime))
+        frameTime += 16
+        frameCount += 1
+      }
+
+      expect(scrollByTouch.mock.calls.length).toBeGreaterThan(1)
+      expect(scrollByTouch.mock.calls.every(([, input]) => input.lines > 0)).toBe(true)
+      expect(frameCount).toBeLessThan(120)
+      expect(animationFrames.pendingCount()).toBe(0)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      animationFrames.restore()
+    }
+  })
+
+  test('cancels pending inertia on a new primary touch and never starts it from pointer cancellation', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const animationFrames = installAnimationFrameHarness()
+    const scrollByTouch = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { scrollByTouch })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, timeStamp: 1 }))
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 150, timeStamp: 17 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 150, timeStamp: 21 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(1)
+
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 120, pointerId: 2, timeStamp: 23 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(0)
+
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 70, pointerId: 2, timeStamp: 39 }))
+        host?.dispatchEvent(terminalPointerEvent('pointercancel', { clientY: 70, pointerId: 2, timeStamp: 41 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(0)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      animationFrames.restore()
+    }
+  })
+
+  test('cancels pending inertia when terminal input authority changes', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const animationFrames = installAnimationFrameHarness()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture('controller')
+    let currentSnapshot = snapshot
+    const context = terminalContext()
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => currentSnapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+
+    await act(async () => renderSlot())
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(terminalPointerEvent('pointerdown', { clientY: 200, timeStamp: 1 }))
+        host?.dispatchEvent(terminalPointerEvent('pointermove', { clientY: 150, timeStamp: 17 }))
+        host?.dispatchEvent(terminalPointerEvent('pointerup', { clientY: 150, timeStamp: 21 }))
+      })
+      expect(animationFrames.pendingCount()).toBe(1)
+
+      currentSnapshot = {
+        ...snapshot,
+        attachment: {
+          ...snapshot.attachment,
+          role: 'viewer',
+          active: false,
+          canTakeover: true,
+        },
+      }
+      await act(async () => renderSlot())
+      expect(animationFrames.pendingCount()).toBe(0)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+      animationFrames.restore()
+    }
+  })
+
+  test('places the controller command deck in the bottom dock and outside the top-right float group', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const floatGroup = container.querySelector('.goblin-terminal-float-group')
+      const bottomDock = container.querySelector('.goblin-terminal-bottom-dock')
+      const commandDeck = container.querySelector('.goblin-terminal-command-deck')
+
+      expect(commandDeck).toBeInstanceOf(HTMLElement)
+      expect(bottomDock).toBeInstanceOf(HTMLElement)
+      expect(commandDeck?.parentElement).toBe(bottomDock)
+      expect(floatGroup?.contains(commandDeck)).toBe(false)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not expose the Mobile Web command deck without controller input authority', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const { container, root } = await renderTerminalSlotFixture('viewer')
+
+    try {
+      expect(container.querySelector('.goblin-terminal-command-deck')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('cycles command-deck terminal actions through the current worktree order', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture('controller')
+    const second = { ...descriptor, key: 'terminal-2', terminalId: 'terminal-2', index: 2 }
+    const third = { ...descriptor, key: 'terminal-3', terminalId: 'terminal-3', index: 3 }
+    const selectTerminal = vi.fn()
+    const context = terminalContext({ selectTerminal })
+    const threeTerminalWorktreeSnapshot = {
+      ...worktreeSnapshot,
+      sessions: [
+        { ...worktreeSnapshot.sessions[0]!, selected: true },
+        { ...second, title: 'shell 2', phase: 'open' as const, selected: false, hasBell: false },
+        { ...third, title: 'shell 3', phase: 'open' as const, selected: false, hasBell: false },
+      ],
+      count: 3,
+    }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => threeTerminalWorktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const previous = container.querySelector<HTMLButtonElement>(
+        'button[title="terminal.command-deck.previous-terminal"]',
+      )
+      const next = container.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      await act(async () => {
+        previous?.click()
+        next?.click()
+      })
+      expect(selectTerminal.mock.calls).toEqual([
+        ['/repo\0/worktree', 'terminal-3'],
+        ['/repo\0/worktree', 'terminal-2'],
+      ])
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('toggles the Mobile Web terminal between fitted and horizontally pannable width', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      const originalWidth = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'terminal.command-deck.original-width',
+      )
+      expect(host?.classList.contains('goblin-terminal-slot__host--original-width')).toBe(false)
+
+      await act(async () => originalWidth?.click())
+      expect(host?.classList.contains('goblin-terminal-slot__host--original-width')).toBe(true)
+
+      if (host) host.scrollLeft = 48
+      const fitWidth = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'terminal.command-deck.fit-width',
+      )
+      await act(async () => fitWidth?.click())
+      expect(host?.classList.contains('goblin-terminal-slot__host--original-width')).toBe(false)
+      expect(host?.scrollLeft).toBe(0)
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -635,6 +912,8 @@ describe('TerminalSlot', () => {
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
+      scrollByTouch: vi.fn(),
+      writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
@@ -746,6 +1025,8 @@ describe('TerminalSlot', () => {
       scrollToBottom: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
+      scrollByTouch: vi.fn(),
+      writeExtraKey: vi.fn(),
       clearBell: vi.fn(() => false),
       closeTerminalAndDismissDetailIfLast: vi.fn(),
       registerWorktreeHost: vi.fn(),
@@ -1374,16 +1655,57 @@ async function renderTerminalSlotFixture(
 }
 
 function terminalPointerEvent(
-  type: 'pointerdown' | 'pointermove' | 'pointerup',
-  options: { clientY: number; pointerId?: number; pointerType?: 'touch' | 'mouse'; isPrimary?: boolean },
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  options: {
+    clientY: number
+    clientX?: number
+    pointerId?: number
+    pointerType?: 'touch' | 'mouse'
+    isPrimary?: boolean
+    timeStamp?: number
+  },
 ): Event {
-  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY: options.clientY })
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: options.clientX ?? 0,
+    clientY: options.clientY,
+  })
   Object.defineProperties(event, {
     pointerId: { value: options.pointerId ?? 1 },
     pointerType: { value: options.pointerType ?? 'touch' },
     isPrimary: { value: options.isPrimary ?? true },
+    ...(options.timeStamp === undefined ? {} : { timeStamp: { value: options.timeStamp } }),
   })
   return event
+}
+
+function installAnimationFrameHarness() {
+  let nextId = 1
+  const callbacks = new Map<number, FrameRequestCallback>()
+  const request = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    const id = nextId
+    nextId += 1
+    callbacks.set(id, callback)
+    return id
+  })
+  const cancel = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((id) => {
+    callbacks.delete(id)
+  })
+  return {
+    pendingCount: () => callbacks.size,
+    runNext: (timeStamp: number) => {
+      const next = callbacks.entries().next().value as [number, FrameRequestCallback] | undefined
+      if (!next) throw new Error('missing animation frame')
+      callbacks.delete(next[0])
+      next[1](timeStamp)
+    },
+    restore: () => {
+      callbacks.clear()
+      request.mockRestore()
+      cancel.mockRestore()
+    },
+  }
 }
 
 function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): TerminalSessionContextValue {
@@ -1393,6 +1715,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
+    scrollByTouch: vi.fn(),
     clearBell: vi.fn(() => false),
     closeTerminalAndDismissDetailIfLast: vi.fn(),
     registerWorktreeHost: vi.fn(),
@@ -1409,6 +1732,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     serialize: vi.fn(() => ''),
     ...overrides,
     restoreTmuxSessions: overrides.restoreTmuxSessions ?? vi.fn(async () => 0),
+    writeExtraKey: overrides.writeExtraKey ?? vi.fn(),
   }
 }
 

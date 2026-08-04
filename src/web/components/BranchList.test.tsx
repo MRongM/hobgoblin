@@ -209,6 +209,8 @@ function terminalCommandContext(): TerminalSessionContextValue {
     scrollToBottom: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
+    scrollByTouch: vi.fn(),
+    writeExtraKey: vi.fn(),
     clearBell: vi.fn(() => false),
     closeTerminalAndDismissDetailIfLast: vi.fn(),
     registerWorktreeHost: vi.fn(),

@@ -6,6 +6,7 @@ import type {
   TerminalSessionPhase,
 } from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 export type TerminalPhase = TerminalSessionPhase
 
 export interface TerminalDescriptor {
@@ -85,6 +86,12 @@ export interface TerminalSearchResult {
   found: boolean
 }
 
+export interface TerminalTouchScrollInput {
+  lines: number
+  clientX: number
+  clientY: number
+}
+
 export interface TerminalSessionBase {
   repoRoot: string
   branch: string
@@ -143,6 +150,7 @@ export interface TerminalSessionContextValue {
   scrollToBottom: (key: string) => void
   focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
+  scrollByTouch: (key: string, input: TerminalTouchScrollInput) => void
   clearBell: (key: string) => boolean
   closeTerminalAndDismissDetailIfLast: (
     key: string,
@@ -157,6 +165,7 @@ export interface TerminalSessionContextValue {
   findNext: (key: string, term: string, incremental?: boolean) => TerminalSearchResult
   findPrevious: (key: string, term: string) => TerminalSearchResult
   clearSearch: (key: string) => void
+  writeExtraKey: (key: string, input: TerminalExtraKeyInput) => void
   writeInput: (key: string, data: string) => void
   takeover: (key: string) => void
   /** Reorder terminal sessions within a worktree. */
