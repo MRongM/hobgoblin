@@ -40,13 +40,13 @@ describe('MobileTerminalCommandDeck', () => {
       expect(buttonLabels(rows[0])).toEqual(['ESC', '/', '-', 'HOME', '↑', 'END', 'PGUP'])
       expect(buttonLabels(rows[1])).toEqual(['TAB', 'CTRL', 'ALT', '←', '↓', '→', 'PGDN'])
       expect(buttonLabels(rows[2])).toEqual([
+        'T↑',
+        'T↓',
         'Back to bottom',
         'ENTER',
         '⌫',
         'CTRL+C',
         'CTRL+L',
-        'T↑',
-        'T↓',
         'Compose',
         'Original width',
         'Focus',

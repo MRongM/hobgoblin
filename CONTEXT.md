@@ -80,6 +80,10 @@ _Avoid_: Project root, socket scan result, tmux session name
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
 
+**Terminal cycle controls**:
+The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the existing custom terminal button dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
+_Avoid_: Project switcher, terminal tabs, terminal takeover
+
 **Internal terminal**:
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
@@ -97,7 +101,7 @@ A renderer-local, touch-sized interaction strip at the right edge of a Mobile We
 _Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
 
 **Mobile Web terminal command deck**:
-A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. Its action row starts with a local return-to-bottom action before terminal input, switching, command composition, renderer-local width presentation, and Focus. All keys are 32 pixels high. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. Its action row starts with global terminal cycle controls, followed by the local return-to-bottom action, terminal input, command composition, renderer-local width presentation, and Focus. All keys are 32 pixels high. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
 _Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
 
 **Mobile Web terminal focus mode**:

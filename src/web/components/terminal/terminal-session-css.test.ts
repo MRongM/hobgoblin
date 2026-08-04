@@ -30,6 +30,12 @@ describe('terminal session CSS layout contract', () => {
     expect(css).not.toContain(`${removedClass}__resize`)
   })
 
+  test('keeps desktop terminal cycle controls inside the left button dock', () => {
+    expect(css).not.toContain('.goblin-terminal-bottom-dock__desktop-row')
+    expect(css).not.toContain('.goblin-terminal-cycle-dock')
+    expect(css).toMatch(/\.goblin-terminal-custom-buttons\s*\{[^}]*display:\s*flex;[^}]*width:\s*fit-content;/)
+  })
+
   test('keeps the xterm scrollbar blended with the terminal background', () => {
     expect(css).toContain(
       'scrollbar-color: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent) transparent;',
@@ -108,8 +114,12 @@ describe('terminal session CSS layout contract', () => {
   })
 
   test('keeps read-only return-to-bottom and takeover actions together', () => {
+    expect(css).toMatch(
+      /\.goblin-terminal-slot__viewer-status\s*\{[^}]*left:\s*6px;[^}]*right:\s*auto;[^}]*justify-content:\s*flex-start;/,
+    )
     expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*display:\s*flex;/)
     expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*flex:\s*0 0 auto;/)
+    expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*justify-content:\s*flex-start;/)
     expect(css).toMatch(/\.goblin-terminal-slot__viewer-actions\s*\{[^}]*pointer-events:\s*auto;/)
   })
 

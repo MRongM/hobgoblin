@@ -8,6 +8,7 @@ import {
   type TerminalExtraKey,
   type TerminalExtraKeyInput,
 } from '#/web/components/terminal/terminal-extra-keys.ts'
+import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
 
 interface MobileTerminalCommandDeckProps {
   terminalCount: number
@@ -108,6 +109,11 @@ export function MobileTerminalCommandDeck({
       ))}
 
       <div className="goblin-terminal-command-deck__row goblin-terminal-command-deck__row--actions">
+        <TerminalCycleButtons
+          terminalCount={terminalCount}
+          onCycleTerminal={onCycleTerminal}
+          buttonClassName="goblin-terminal-command-deck__btn"
+        />
         <Button
           type="button"
           size="sm"
@@ -132,32 +138,6 @@ export function MobileTerminalCommandDeck({
             {action.label}
           </Button>
         ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          title={t('terminal.command-deck.previous-terminal')}
-          aria-label={t('terminal.command-deck.previous-terminal')}
-          disabled={terminalCount <= 1}
-          className="goblin-terminal-command-deck__btn"
-          onPointerDown={preserveTerminalFocus}
-          onClick={() => onCycleTerminal(-1)}
-        >
-          T↑
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          title={t('terminal.command-deck.next-terminal')}
-          aria-label={t('terminal.command-deck.next-terminal')}
-          disabled={terminalCount <= 1}
-          className="goblin-terminal-command-deck__btn"
-          onPointerDown={preserveTerminalFocus}
-          onClick={() => onCycleTerminal(1)}
-        >
-          T↓
-        </Button>
         <Button
           type="button"
           size="sm"

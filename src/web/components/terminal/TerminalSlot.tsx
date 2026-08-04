@@ -44,6 +44,7 @@ import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
 import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
@@ -709,7 +710,9 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           .filter((button) => button.label.trim() && button.value.trim())
       : []
   const hasMobileCommandDeck = isMobile && isController && !!key
-  const hasBottomDock = !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileCommandDeck)
+  const hasDesktopCycleButtons = !isMobile && isController && !!key
+  const hasBottomDock =
+    !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileCommandDeck || hasDesktopCycleButtons)
 
   useLayoutEffect(() => {
     if (!hasBottomDock || !hasMobileCommandDeck) {
@@ -813,6 +816,42 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
             ? { '--goblin-terminal-visual-viewport-bottom-inset': `${visualViewportBottomInset}px` }
             : {}),
         } as CSSProperties)
+  const customButtonsDock =
+    visibleCustomButtons.length > 0 || hasDesktopCycleButtons ? (
+      <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
+        {hasDesktopCycleButtons && (
+          <TerminalCycleButtons
+            terminalCount={switchableTerminalCount}
+            onCycleTerminal={cycleTerminal}
+            buttonClassName="goblin-terminal-custom-buttons__button goblin-terminal-custom-buttons__button--medium"
+          />
+        )}
+        {visibleCustomButtons.map((button, index) => {
+          const action = button.action === 'input' ? 'input' : 'execute'
+          return (
+            <Button
+              key={`${index}:${button.presetId ?? `${button.label}:${button.value}`}:${action}`}
+              type="button"
+              size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
+              variant="secondary"
+              className={cn(
+                'goblin-terminal-custom-buttons__button',
+                `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
+              )}
+              title={button.value}
+              onClick={() => {
+                if (!key) return
+                if (action === 'input') writeInput(key, button.value)
+                else writeInput(key, `${button.value}\r`)
+                focusTerminal(key)
+              }}
+            >
+              {button.label}
+            </Button>
+          )
+        })}
+      </div>
+    ) : null
 
   return (
     <div
@@ -933,33 +972,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       </div>
       {key && hasBottomDock && (
         <div ref={bottomDockRef} className="goblin-terminal-bottom-dock">
-          {visibleCustomButtons.length > 0 && (
-            <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
-              {visibleCustomButtons.map((button, index) => {
-                const action = button.action === 'input' ? 'input' : 'execute'
-                return (
-                  <Button
-                    key={`${index}:${button.presetId ?? `${button.label}:${button.value}`}:${action}`}
-                    type="button"
-                    size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
-                    variant="secondary"
-                    className={cn(
-                      'goblin-terminal-custom-buttons__button',
-                      `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
-                    )}
-                    title={button.value}
-                    onClick={() => {
-                      if (action === 'input') writeInput(key, button.value)
-                      else writeInput(key, `${button.value}\r`)
-                      focusTerminal(key)
-                    }}
-                  >
-                    {button.label}
-                  </Button>
-                )
-              })}
-            </div>
-          )}
+          {customButtonsDock}
           {hasMobileCommandDeck && (
             <MobileTerminalCommandDeck
               key={key}
@@ -984,6 +997,8 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           onScrollToBottom={handleScrollToBottom}
           onTakeover={takeover}
           takeoverPending={snapshot.takeoverPending}
+          terminalCount={switchableTerminalCount}
+          onCycleTerminal={cycleTerminal}
         />
       )}
       {hasSessions && snapshot.phase === 'error' && snapshot.message !== 'terminal.empty' && (
@@ -1013,6 +1028,8 @@ interface ViewerStatusProps {
   onScrollToBottom: () => void
   onTakeover: (key: string) => void
   takeoverPending?: boolean
+  terminalCount: number
+  onCycleTerminal: (direction: -1 | 1) => void
 }
 
 function ViewerStatus({
@@ -1023,13 +1040,13 @@ function ViewerStatus({
   onScrollToBottom,
   onTakeover,
   takeoverPending,
+  terminalCount,
+  onCycleTerminal,
 }: ViewerStatusProps) {
   return (
     <div className="goblin-terminal-slot__viewer-status">
-      <span className="goblin-terminal-slot__viewer-message" role="status" aria-live="polite" aria-atomic="true">
-        {message}
-      </span>
       <div className="goblin-terminal-slot__viewer-actions">
+        <TerminalCycleButtons terminalCount={terminalCount} onCycleTerminal={onCycleTerminal} />
         <Button type="button" size="sm" variant="secondary" onClick={onScrollToBottom} disabled={!takeoverKey}>
           {scrollToBottomLabel}
         </Button>
@@ -1043,6 +1060,9 @@ function ViewerStatus({
           {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
         </Button>
       </div>
+      <span className="goblin-terminal-slot__viewer-message" role="status" aria-live="polite" aria-atomic="true">
+        {message}
+      </span>
     </div>
   )
 }

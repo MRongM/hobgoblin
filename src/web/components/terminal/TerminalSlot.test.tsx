@@ -571,21 +571,31 @@ describe('TerminalSlot', () => {
       const viewerStatus = container.querySelector('.goblin-terminal-slot__viewer-status')
       expect(viewerStatus).toBeTruthy()
       expect(viewerStatus?.getAttribute('role')).toBeNull()
-      expect(viewerStatus?.querySelector('.goblin-terminal-slot__viewer-message')?.getAttribute('role')).toBe('status')
+      const viewerMessage = viewerStatus?.querySelector('.goblin-terminal-slot__viewer-message')
+      expect(viewerMessage?.getAttribute('role')).toBe('status')
       expect(container.querySelector('.goblin-terminal-slot__viewer-overlay')).toBeNull()
       expect(container.querySelector('.goblin-terminal-slot__viewer-output')).toBeNull()
       const viewerActions = viewerStatus?.querySelector('.goblin-terminal-slot__viewer-actions')
       expect(viewerActions).toBeInstanceOf(HTMLDivElement)
+      expect(viewerStatus?.firstElementChild).toBe(viewerActions)
+      expect(viewerStatus?.lastElementChild).toBe(viewerMessage)
       const buttons = Array.from(viewerActions?.querySelectorAll('button') ?? [])
       expect(buttons.map((button) => button.textContent)).toEqual([
+        'T↑',
+        'T↓',
         'terminal.command-deck.scroll-to-bottom',
         'terminal.takeover',
       ])
-      expect(buttons.map((button) => button.dataset.variant)).toEqual(['secondary', 'secondary'])
+      expect(buttons.map((button) => button.dataset.variant)).toEqual([
+        'secondary',
+        'secondary',
+        'secondary',
+        'secondary',
+      ])
 
       await act(async () => {
-        buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-        buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        buttons[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        buttons[3]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       })
 
       expect(scrollToBottom).toHaveBeenCalledWith('terminal-1')
@@ -1120,6 +1130,9 @@ describe('TerminalSlot', () => {
       expect(bottomDock).toBeInstanceOf(HTMLElement)
       expect(commandDeck?.parentElement).toBe(bottomDock)
       expect(floatGroup?.contains(commandDeck)).toBe(false)
+      expect(container.querySelector('.goblin-terminal-cycle-dock')).toBeNull()
+      expect(container.querySelectorAll('button[title="terminal.command-deck.previous-terminal"]')).toHaveLength(1)
+      expect(container.querySelectorAll('button[title="terminal.command-deck.next-terminal"]')).toHaveLength(1)
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -1182,7 +1195,7 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('stops touch inertia before the first command-deck action returns to bottom', async () => {
+  test('stops touch inertia when the command-deck action returns to bottom', async () => {
     mobileDetectionMocks.isMobileDevice = true
     const animationFrames = installAnimationFrameHarness()
     const scrollToBottom = vi.fn()
@@ -1198,9 +1211,11 @@ describe('TerminalSlot', () => {
       expect(animationFrames.pendingCount()).toBe(1)
 
       const actionRow = container.querySelector('.goblin-terminal-command-deck__row--actions')
-      const firstAction = actionRow?.querySelector<HTMLButtonElement>(':scope > button')
-      expect(firstAction?.textContent).toBe('terminal.command-deck.scroll-to-bottom')
-      await act(async () => firstAction?.click())
+      const scrollToBottomAction = [...(actionRow?.querySelectorAll<HTMLButtonElement>(':scope > button') ?? [])].find(
+        (button) => button.textContent === 'terminal.command-deck.scroll-to-bottom',
+      )
+      expect(scrollToBottomAction).toBeInstanceOf(HTMLButtonElement)
+      await act(async () => scrollToBottomAction?.click())
 
       expect(scrollToBottom).toHaveBeenCalledWith('terminal-1')
       expect(animationFrames.pendingCount()).toBe(0)
@@ -1394,6 +1409,75 @@ describe('TerminalSlot', () => {
     } finally {
       await act(async () => root.unmount())
       container.remove()
+    }
+  })
+
+  test('embeds desktop cycle buttons before custom terminal buttons in the existing dock', async () => {
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
+    const fixture = await renderCrossProjectCycleFixture('controller', false)
+
+    try {
+      const customDock = fixture.container.querySelector('.goblin-terminal-custom-buttons')
+      expect(customDock).toBeInstanceOf(HTMLDivElement)
+      expect(fixture.container.querySelector('.goblin-terminal-bottom-dock__desktop-row')).toBeNull()
+      expect(fixture.container.querySelector('.goblin-terminal-cycle-dock')).toBeNull()
+      expect([...(customDock?.querySelectorAll('button') ?? [])].map((button) => button.textContent)).toEqual([
+        'T↑',
+        'T↓',
+        'status',
+      ])
+
+      const next = customDock?.querySelector<HTMLButtonElement>('button[title="terminal.command-deck.next-terminal"]')
+      await act(async () => next?.click())
+
+      expect(fixture.selectTerminal).toHaveBeenCalledWith(fixture.target.worktreeTerminalKey, fixture.target.key)
+      expect(fixture.showRepoBranchDetailTab).toHaveBeenCalledWith('/repo-b', 'feature-b', 'terminal')
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('keeps the desktop button dock visible with cycle buttons when no custom buttons are configured', async () => {
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      expect(container.querySelector('.goblin-terminal-bottom-dock')).toBeInstanceOf(HTMLDivElement)
+      const customDock = container.querySelector('.goblin-terminal-custom-buttons')
+      expect(customDock).toBeInstanceOf(HTMLDivElement)
+      expect(container.querySelector('.goblin-terminal-cycle-dock')).toBeNull()
+      expect([...(customDock?.querySelectorAll('button') ?? [])].map((button) => button.textContent)).toEqual([
+        'T↑',
+        'T↓',
+      ])
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('places global terminal cycle buttons first and the read-only message last', async () => {
+    const fixture = await renderCrossProjectCycleFixture('viewer', true)
+
+    try {
+      const viewerStatus = fixture.container.querySelector('.goblin-terminal-slot__viewer-status')
+      const viewerActions = fixture.container.querySelector('.goblin-terminal-slot__viewer-actions')
+      const viewerMessage = fixture.container.querySelector('.goblin-terminal-slot__viewer-message')
+      expect(viewerStatus?.firstElementChild).toBe(viewerActions)
+      expect(viewerStatus?.lastElementChild).toBe(viewerMessage)
+      const buttons = [...(viewerActions?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        'T↑',
+        'T↓',
+        'terminal.command-deck.scroll-to-bottom',
+        'terminal.takeover',
+      ])
+
+      await act(async () => buttons[1]?.click())
+
+      expect(fixture.selectTerminal).toHaveBeenCalledWith(fixture.target.worktreeTerminalKey, fixture.target.key)
+      expect(fixture.showRepoBranchDetailTab).toHaveBeenCalledWith('/repo-b', 'feature-b', 'terminal')
+    } finally {
+      await fixture.cleanup()
     }
   })
 
@@ -2456,6 +2540,70 @@ async function renderTerminalSlotFixture(
   })
 
   return { container, root }
+}
+
+async function renderCrossProjectCycleFixture(role: 'controller' | 'viewer', mobile: boolean) {
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  mobileDetectionMocks.isMobileDevice = mobile
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  const { descriptor, worktreeSnapshot, snapshot } = controllerFixture(role)
+  const target = {
+    ...descriptor,
+    key: '/repo-b\0/worktree-b\0terminal-1',
+    worktreeTerminalKey: '/repo-b\0/worktree-b',
+    repoRoot: '/repo-b',
+    worktreePath: '/worktree-b',
+    branch: 'feature-b',
+  }
+  const selectTerminal = vi.fn()
+  const showRepoBranchDetailTab = vi.fn()
+  const context = terminalContext({ selectTerminal })
+  const terminalCatalog = [descriptor, target]
+  const readContext = {
+    worktreeSnapshot: () => worktreeSnapshot,
+    subscribeWorktree: () => () => {},
+    terminalCatalogSnapshot: () => terminalCatalog,
+    subscribeTerminalCatalog: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => snapshot,
+    subscribeSnapshot: () => () => {},
+  } as TerminalSessionReadContextValue
+
+  await act(async () => {
+    root.render(
+      <MainWindowNavigationProvider
+        value={{
+          activateRepo: vi.fn(),
+          closeRepo: vi.fn(),
+          cycleRepo: vi.fn(),
+          selectRepoBranch: vi.fn(),
+          showRepoDetailTab: vi.fn(),
+          showRepoBranchDetailTab,
+          openSettings: vi.fn(),
+        }}
+      >
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>
+      </MainWindowNavigationProvider>,
+    )
+  })
+
+  return {
+    container,
+    target,
+    selectTerminal,
+    showRepoBranchDetailTab,
+    cleanup: async () => {
+      await act(async () => root.unmount())
+      container.remove()
+    },
+  }
 }
 
 function terminalPointerEvent(
