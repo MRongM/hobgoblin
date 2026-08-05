@@ -189,7 +189,3 @@ cd Hobgoblin-<version>
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)
 - [ソースコード](https://github.com/MRongM/hobgoblin)
 - [Releases](https://github.com/MRongM/hobgoblin/releases)
-
-## ライセンス
-
-Hobgoblin は MIT ライセンスです。

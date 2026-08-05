@@ -189,7 +189,3 @@ cd Hobgoblin-<version>
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)
 - [源代码](https://github.com/MRongM/hobgoblin)
 - [Releases](https://github.com/MRongM/hobgoblin/releases)
-
-## 许可证
-
-Hobgoblin 使用 MIT 许可证。

@@ -189,7 +189,3 @@ The deployment archive has no Git metadata, so use `update --no-pull` after repl
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)
 - [Source Code](https://github.com/MRongM/hobgoblin)
 - [Releases](https://github.com/MRongM/hobgoblin/releases)
-
-## License
-
-Hobgoblin is MIT-licensed.
