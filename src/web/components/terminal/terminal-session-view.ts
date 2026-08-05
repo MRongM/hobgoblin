@@ -257,6 +257,9 @@ export class TerminalSessionView {
       fontFamily: this.fontFamily,
       fontSize: this.fontSize,
       lineHeight: 1,
+      linkHandler: {
+        activate: (event, uri) => this.activateExternalLink(event, uri),
+      },
       minimumContrastRatio: 4.5,
       scrollback: TERMINAL_SCROLLBACK_LINES,
       macOptionIsMeta: true,
@@ -698,13 +701,17 @@ export class TerminalSessionView {
     try {
       term.loadAddon(
         new WebLinksAddon((event, uri) => {
-          if (!event.metaKey && !event.ctrlKey) return
-          this.handlers.onOpenExternalLink(uri)
+          this.activateExternalLink(event, uri)
         }),
       )
     } catch (err) {
       console.warn('[terminal] failed to load web links addon', err)
     }
+  }
+
+  private activateExternalLink(event: MouseEvent, uri: string): void {
+    if (!event.metaKey && !event.ctrlKey) return
+    this.handlers.onOpenExternalLink(uri)
   }
 
   private installRelativePathLinkProvider(term: XTermTerminal): void {

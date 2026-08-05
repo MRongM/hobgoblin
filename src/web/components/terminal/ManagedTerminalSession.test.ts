@@ -56,6 +56,10 @@ const xtermMocks = vi.hoisted(() => {
       fontFamily?: string
       fontSize?: number
       lineHeight?: number
+      linkHandler?: {
+        activate: (event: MouseEvent, uri: string) => void
+        allowNonHttpProtocols?: boolean
+      }
       macOptionIsMeta?: boolean
       minimumContrastRatio?: number
       rescaleOverlappingGlyphs?: boolean
@@ -158,6 +162,10 @@ const xtermMocks = vi.hoisted(() => {
       fontFamily?: string
       fontSize?: number
       lineHeight?: number
+      linkHandler?: {
+        activate: (event: MouseEvent, uri: string) => void
+        allowNonHttpProtocols?: boolean
+      }
       macOptionIsMeta?: boolean
       minimumContrastRatio?: number
       rescaleOverlappingGlyphs?: boolean
@@ -177,6 +185,7 @@ const xtermMocks = vi.hoisted(() => {
         fontFamily: options.fontFamily,
         fontSize: options.fontSize,
         lineHeight: options.lineHeight,
+        linkHandler: options.linkHandler,
         macOptionIsMeta: options.macOptionIsMeta,
         minimumContrastRatio: options.minimumContrastRatio,
         rescaleOverlappingGlyphs: options.rescaleOverlappingGlyphs,
@@ -1393,6 +1402,43 @@ describe('ManagedTerminalSession', () => {
     await Promise.resolve()
 
     expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'https://example.com/path', allowHttp: true })
+  })
+
+  test('opens OSC 8 links through the safe shell bridge only with primary click modifier', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const linkHandler = xtermMocks.terminals[0]!.options.linkHandler
+    expect(linkHandler).toBeDefined()
+    expect(linkHandler?.allowNonHttpProtocols).not.toBe(true)
+
+    linkHandler?.activate(new MouseEvent('click'), 'https://example.com/path')
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).not.toHaveBeenCalled()
+
+    linkHandler?.activate(new MouseEvent('click', { ctrlKey: true }), 'https://example.com/path')
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'https://example.com/path', allowHttp: true })
+
+    shellOpenExternalUrl.mockClear()
+    linkHandler?.activate(new MouseEvent('click', { metaKey: true }), 'http://localhost:5173/app')
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).toHaveBeenCalledWith({ url: 'http://localhost:5173/app', allowHttp: true })
+
+    shellOpenExternalUrl.mockClear()
+    linkHandler?.activate(new MouseEvent('click', { ctrlKey: true }), 'javascript:alert(1)')
+    await Promise.resolve()
+
+    expect(shellOpenExternalUrl).not.toHaveBeenCalled()
   })
 
   test('opens protocol-less localhost terminal links through the safe shell bridge', async () => {
