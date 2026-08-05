@@ -26,11 +26,11 @@ Use this doc for UI language and presentation rules.
 ## Responsive workspace presentation
 
 - Desktop workspaces use the fixed left/right split. Do not add a user-selectable top/bottom workspace layout.
-- Desktop Focus always means explicitly maximizing an internal terminal. It hides navigation/file surfaces and must exit when a non-terminal detail tab is selected.
-- Keep project, workspace/repository, branch, branch-workspace, and terminal switching reachable from the desktop Focus topbar. Selecting another destination or deleting the active branch workspace restores the split because Focus is local to the current destination.
-- Keep all Desktop Focus state component-local and temporary. Never restore it from session state; project/context navigation, responsive-mode changes, and relaunch all return to the left/right split.
+- Desktop Focus always means explicitly maximizing an internal terminal. It hides navigation/file surfaces until the user explicitly restores the split.
+- Keep project, workspace/repository, branch, branch-workspace, and terminal switching reachable from the desktop Focus topbar. Switching to another eligible destination keeps Focus active and routes that destination to its terminal without first restoring the split.
+- Keep Desktop Focus as one application-global, restorable preference. Preserve it across project/context navigation and relaunch; if a deleted or unavailable destination has no terminal target, keep the preference latent while rendering the nearest usable fallback.
 - Compact workspaces render one focus surface at a time: detail, scope, or files. Do not mount a resizable split for compact workspace composition.
-- Keep compact surface selection in component-local state. Responsive changes must not persist either compact selection or Desktop Focus; returning to desktop starts in the left/right split.
+- Keep compact surface selection in component-local state. Responsive changes must not mutate the Desktop Focus preference; returning to an eligible desktop destination reapplies it.
 - Preserve terminal-first entry when an internal terminal target exists; otherwise fall back to the nearest navigable scope surface.
 - In a branch workspace, compact member navigation must keep the branch workspace active and reuse the ordinary member file and detail surfaces.
 

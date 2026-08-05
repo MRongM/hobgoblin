@@ -6,6 +6,7 @@ import type {
   TerminalSessionPhase,
 } from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 export type TerminalPhase = TerminalSessionPhase
 
 export interface TerminalDescriptor {
@@ -85,6 +86,17 @@ export interface TerminalSearchResult {
   found: boolean
 }
 
+export interface TerminalTouchScrollInput {
+  lines: number
+  clientX: number
+  clientY: number
+}
+
+export interface TerminalMobileSelectionPoint {
+  clientX: number
+  clientY: number
+}
+
 export interface TerminalSessionBase {
   repoRoot: string
   branch: string
@@ -98,11 +110,13 @@ export type TerminalWorktreeScope = Pick<TerminalSessionBase, 'repoRoot' | 'work
 export interface TerminalSessionAttachHandlers {
   onRevealPath?: (relativePath: string) => void
   onOpenPathInEditor?: (target: FilePathTarget) => void
+  mobileScrollScrubber?: HTMLElement
 }
 
 export interface TerminalRepoSnapshot {
   instanceToken: number
   branchByWorktreePath: Record<string, string>
+  branchWorkspaceIdByWorktreePath?: Record<string, string>
 }
 
 export type TerminalRepoIndex = Record<string, TerminalRepoSnapshot>
@@ -143,6 +157,13 @@ export interface TerminalSessionContextValue {
   scrollToBottom: (key: string) => void
   focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
+  scrollByTouch: (key: string, input: TerminalTouchScrollInput) => void
+  beginMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => boolean
+  extendMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void
+  finishMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void
+  cancelMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void
+  mobileSelectionText: (key: string) => string
+  clearMobileSelection: (key: string) => void
   clearBell: (key: string) => boolean
   closeTerminalAndDismissDetailIfLast: (
     key: string,
@@ -157,6 +178,7 @@ export interface TerminalSessionContextValue {
   findNext: (key: string, term: string, incremental?: boolean) => TerminalSearchResult
   findPrevious: (key: string, term: string) => TerminalSearchResult
   clearSearch: (key: string) => void
+  writeExtraKey: (key: string, input: TerminalExtraKeyInput) => void
   writeInput: (key: string, data: string) => void
   takeover: (key: string) => void
   /** Reorder terminal sessions within a worktree. */
@@ -168,6 +190,9 @@ export interface TerminalSessionContextValue {
 export interface TerminalSessionReadContextValue {
   worktreeSnapshot: (worktreeTerminalKey: string) => WorktreeTerminalSnapshot
   subscribeWorktree: (worktreeTerminalKey: string, listener: () => void) => () => void
+  /** Renderer-known terminal sessions across all synchronized projects. */
+  terminalCatalogSnapshot?: () => readonly TerminalDescriptor[]
+  subscribeTerminalCatalog?: (listener: () => void) => () => void
   repoSyncReady: (repoRoot: string) => boolean
   subscribeRepoSync: (repoRoot: string, listener: () => void) => () => void
   snapshot: (key: string) => TerminalSnapshot

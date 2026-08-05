@@ -23,6 +23,7 @@ import { createSelectionActions } from '#/web/stores/repos/selection.ts'
 import { normalizeRestorableRepoCache } from '#/web/stores/repos/persistence.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
+  DEFAULT_DETAIL_FOCUS_MODE,
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
@@ -113,6 +114,7 @@ export const useReposStore = create<ReposStore>()(
       workspaceRepositoryListHeightByRoot: {},
       projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
       detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
+      detailFocusMode: DEFAULT_DETAIL_FOCUS_MODE,
       workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
       detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
       fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,

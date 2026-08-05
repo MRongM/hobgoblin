@@ -2,11 +2,13 @@ import { resolveLang, setCurrentLang } from '#/main/i18n/index.ts'
 import { buildAppMenu } from '#/main/menu.ts'
 import { applyMenuRuntimeState } from '#/main/menu-state.ts'
 import { syncRecentRepos } from '#/main/recent-repos.ts'
-import { setSettingsGlobalShortcutState } from '#/main/settings-server-client.ts'
-import { syncGlobalShortcuts } from '#/main/shortcuts.ts'
 import { applyThemeSettingsProjection } from '#/main/theme.ts'
 import { applyMainWindowTopbarHeight } from '#/main/window.ts'
-import type { NativeShellProjection, NativeSettingsProjectionPatch, NativeSettingsProjectionState } from '#/shared/rpc.ts'
+import type {
+  NativeShellProjection,
+  NativeSettingsProjectionPatch,
+  NativeSettingsProjectionState,
+} from '#/shared/rpc.ts'
 
 // Native-host application of server-owned settings changes.
 //
@@ -17,9 +19,6 @@ import type { NativeShellProjection, NativeSettingsProjectionPatch, NativeSettin
 //
 // Keep this module narrow: only retain effects that are actually shared across
 // multiple main-side call sites.
-async function persistNativeHostGlobalShortcutState(registered: boolean): Promise<void> {
-  await setSettingsGlobalShortcutState(registered)
-}
 
 function menuStatePatchFromSettingsProjection(input: {
   patch: NativeSettingsProjectionPatch
@@ -27,21 +26,18 @@ function menuStatePatchFromSettingsProjection(input: {
 }): {
   langPref?: NativeSettingsProjectionState['lang']
   shortcutsDisabled?: boolean
-  swapCloseShortcuts?: boolean
 } {
   const menuStatePatch: {
     langPref?: NativeSettingsProjectionState['lang']
     shortcutsDisabled?: boolean
-    swapCloseShortcuts?: boolean
   } = {}
   if (input.patch.lang !== undefined) menuStatePatch.langPref = input.settings.lang
   if (input.patch.shortcutsDisabled !== undefined) menuStatePatch.shortcutsDisabled = input.settings.shortcutsDisabled
-  if (input.patch.swapCloseShortcuts !== undefined) menuStatePatch.swapCloseShortcuts = input.settings.swapCloseShortcuts
   return menuStatePatch
 }
 
 function shouldRebuildMenuFromSettingsProjection(patch: NativeSettingsProjectionPatch): boolean {
-  return patch.lang !== undefined || patch.shortcutsDisabled !== undefined || patch.swapCloseShortcuts !== undefined
+  return patch.lang !== undefined || patch.shortcutsDisabled !== undefined
 }
 
 function applyI18nSettingsProjection(input: {
@@ -68,15 +64,6 @@ function applyTopbarHeightSettingsProjection(input: {
   applyMainWindowTopbarHeight(input.settings.topbarHeightPx)
 }
 
-async function applyGlobalShortcutDisabledProjection(input: {
-  patch: NativeSettingsProjectionPatch
-  settings: NativeSettingsProjectionState
-}): Promise<void> {
-  if (input.patch.globalShortcutDisabled === undefined) return
-  const registered = syncGlobalShortcuts(input.settings.globalShortcutDisabled, input.settings.globalShortcut)
-  await persistNativeHostGlobalShortcutState(registered)
-}
-
 export async function applyNativeHostSettingsPrefsProjection(input: {
   patch: NativeSettingsProjectionPatch
   settings: NativeSettingsProjectionState
@@ -87,7 +74,6 @@ export async function applyNativeHostSettingsPrefsProjection(input: {
   applyThemeSettingsPrefsProjection(input)
   applyTopbarHeightSettingsProjection(input)
   if (Object.keys(menuStatePatch).length > 0) applyMenuRuntimeState(menuStatePatch)
-  await applyGlobalShortcutDisabledProjection(input)
   if (shouldRebuildMenu) buildAppMenu()
 }
 

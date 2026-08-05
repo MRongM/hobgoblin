@@ -7,7 +7,12 @@ import {
   FILE_TREE_TEXT_FILE_MAX_BYTES,
 } from '#/shared/file-tree.ts'
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIXES } from '#/shared/branch-workspaces.ts'
-import { buildTmuxServerName, isHobgoblinTmuxSessionName, isHobgoblinTmuxServerName } from '#/system/tmux-session.ts'
+import {
+  buildTmuxServerName,
+  isHobgoblinTmuxSessionName,
+  isHobgoblinTmuxServerName,
+  isSafeTmuxSessionName,
+} from '#/system/tmux-session.ts'
 import { FIELD_SEP } from '#/system/git/parsers.ts'
 import { BRANCH_CREATED_FROM_CONFIG_PATTERN, branchCreatedFromConfigKey } from '#/system/git/branches.ts'
 import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.ts'
@@ -35,6 +40,7 @@ export type RemoteCommandKind =
   | { type: 'checkGit' }
   | { type: 'tmuxListSessions'; projectRoot: string }
   | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
+  | { type: 'tmuxCancelModeBySessionName'; projectRoot: string; sessionName: string; serverName?: string }
   | { type: 'tmuxListHostSessions' }
   | { type: 'tmuxKillHostSessionByName'; sessionName: string; serverName?: string }
   | { type: 'testDirectory'; path: string }
@@ -258,9 +264,25 @@ function scriptForCommand(command: RemoteCommandKind): string {
         `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
       ].join('\n')
     }
+    case 'tmuxCancelModeBySessionName': {
+      const serverName = buildTmuxServerName(command.projectRoot)
+      if (
+        !serverName ||
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && command.serverName !== serverName)
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} copy-mode -q -t ${shellQuote(`=${command.sessionName}:`)}`,
+      ].join('\n')
+    }
     case 'tmuxKillHostSessionByName': {
       if (
-        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        !(command.serverName === undefined
+          ? isSafeTmuxSessionName(command.sessionName)
+          : isHobgoblinTmuxSessionName(command.sessionName)) ||
         (command.serverName !== undefined && !isHobgoblinTmuxServerName(command.serverName))
       ) {
         throw new TypeError('error.invalid-arguments')

@@ -43,6 +43,7 @@ import {
   TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
 } from '#/shared/telegram-notifications.ts'
+import { createDefaultTerminalCustomButtons } from '#/shared/terminal-custom-button-presets.ts'
 
 export const DEFAULT_FETCH_INTERVAL_SEC = 120
 export const DEFAULT_STATUS_REFRESH_INTERVAL_SEC = 120
@@ -67,7 +68,7 @@ export const DEFAULT_APP_FONT_SIZE = DEFAULT_FILE_TREE_FONT_SIZE
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
-export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = []
+export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = createDefaultTerminalCustomButtons()
 export const DEFAULT_LAN_ENABLED = false
 export const DEFAULT_SERVER_PORT = 32200
 export const DEFAULT_PROJECT_LIST_EXPANDED = false
@@ -117,7 +118,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalCustomButtonsVisible: overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
     terminalCustomButtonSize: overrides.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
-    terminalCustomButtons: overrides.terminalCustomButtons ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS,
+    terminalCustomButtons: overrides.terminalCustomButtons ?? createDefaultTerminalCustomButtons(),
     lanEnabled: overrides.lanEnabled ?? DEFAULT_LAN_ENABLED,
     serverPort: overrides.serverPort ?? DEFAULT_SERVER_PORT,
   }

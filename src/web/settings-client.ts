@@ -1,4 +1,4 @@
-import { canUseGlobalShortcutSettings, canUseNativeRpcBridge } from '#/web/app-shell-client.ts'
+import { canUseNativeRpcBridge } from '#/web/app-shell-client.ts'
 import { invokeNativeRpcPath } from '#/web/native-host-client.ts'
 import { fetchServerJson, postServerJson } from '#/web/lib/server-fetch.ts'
 import type {
@@ -6,7 +6,6 @@ import type {
   EditorPref,
   ExternalAppsSnapshot,
   FontFamilyPref,
-  GlobalShortcutState,
   I18nSnapshot,
   LangPref,
   LanInfo,
@@ -232,25 +231,12 @@ export async function setShortcutsDisabled(disabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ shortcutsDisabled: disabled })
 }
 
-export async function setGlobalShortcutDisabled(disabled: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ globalShortcutDisabled: disabled })
-}
-
-export async function setSwapCloseShortcuts(swapped: boolean): Promise<void> {
-  await updateSettingsPrefsPatch({ swapCloseShortcuts: swapped })
-}
-
 export async function setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalThemeSyncEnabled: enabled })
 }
 
 export async function setTemporaryFilesDirectory(path: string): Promise<void> {
   await updateSettingsPrefsPatch({ temporaryFilesDirectory: path })
-}
-
-export async function setGlobalShortcut(accelerator: string): Promise<GlobalShortcutState> {
-  if (!canUseGlobalShortcutSettings()) throw new Error('Global shortcut unavailable')
-  return await invokeNativeRpcPath<GlobalShortcutState>('settings.setGlobalShortcut', { accelerator })
 }
 
 export async function setPreferredTerminalApp(pref: TerminalPref): Promise<TerminalAppState> {

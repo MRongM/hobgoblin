@@ -53,6 +53,8 @@ Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是�
 
 ## 魔法操作
 
+- **使用 `hob` 打开项目（macOS）：** 在终端运行 `hob .` 或 `hob <目录>`，即可在 Hobgoblin 中打开或导入对应的本地目录。
+- **全局终端切换：** 聚焦内部终端后，在 macOS 使用 `Cmd+Option+↑/↓`，在 Windows/Linux 使用 `Ctrl+Alt+↑/↓`，可在不同项目和工作树的所有已打开内部终端之间切换。
 - **终端二进制粘贴：** 在终端输入框粘贴二进制剪贴板内容，自动生成临时文件，并把生成的文件路径插入输入框。
 - **从文件树拖拽到终端：** 将文件树中的文件拖到终端，直接插入 shell 安全的文件路径，避免手动输入。
 - **双击文件树文件：** 双击文件树中的文件，直接用已配置的编辑器打开该文件。
@@ -87,6 +89,23 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 在 Windows 上，SmartScreen 可能会对未签名安装程序发出警告。只有在信任该 GitHub Release 来源时才继续安装。
 
+### 在 macOS 终端中打开项目
+
+将 `Hobgoblin.app` 移到 `/Applications` 后，安装用户级 `hob` 启动器：
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Hobgoblin.app/Contents/Resources/bin/hob" "$HOME/.local/bin/hob"
+```
+
+确认 `$HOME/.local/bin` 已加入 `PATH`，然后打开或导入当前目录：
+
+```sh
+hob .
+```
+
+该命令接受零个或一个目录参数，未传参数时默认使用当前目录。上面的链接命令不会覆盖已有的 `hob` 命令。
+
 ## 本地构建与安装
 
 环境要求：
@@ -100,7 +119,7 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 bun run install:app
 ```
 
-该命令会构建当前主机架构的 `Hobgoblin.app`，并安装到 `~/Applications`。
+该命令会构建当前主机架构的 `Hobgoblin.app`、安装到 `~/Applications`，并在目标路径可用时安全创建 `$HOME/.local/bin/hob`；已有命令不会被覆盖。
 
 ## 开发
 

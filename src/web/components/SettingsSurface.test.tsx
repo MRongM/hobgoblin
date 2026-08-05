@@ -4,11 +4,14 @@ import { act, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import type { TerminalCustomButton } from '#/shared/settings.ts'
+import { DICTS } from '#/shared/i18n/dictionaries.ts'
 import { SettingsSurface } from '#/web/components/SettingsSurface.tsx'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import { useI18nStore } from '#/web/stores/i18n.ts'
 
 const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -22,6 +25,8 @@ type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 const dndState = vi.hoisted(() => ({
   lastDragEnd: null as ((event: TestDragEndEvent) => void) | null,
 }))
+
+let terminalCustomButtonsFixture: TerminalCustomButton[] = []
 
 function defaultRpcResult(path: string, input?: unknown) {
   if (path === 'settings.get') {
@@ -48,7 +53,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       terminalFontSize: 14,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
-      terminalCustomButtons: [],
+      terminalCustomButtons: terminalCustomButtonsFixture,
       lanEnabled: false,
       session: {
         openRepos: [],
@@ -209,6 +214,8 @@ beforeEach(() => {
   resetReposStore()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   dndState.lastDragEnd = null
+  terminalCustomButtonsFixture = []
+  useI18nStore.setState({ lang: 'en', pref: 'auto', dict: {} })
   sendTestNotification.mockClear()
   toastMocks.success.mockClear()
   toastMocks.info.mockClear()
@@ -316,6 +323,17 @@ afterEach(() => {
 })
 
 describe('SettingsSurface', () => {
+  test('renders only the application shortcut toggle and active shortcut help groups', async () => {
+    await render(<SettingsSurface page="shortcuts" onPageChange={() => {}} />)
+
+    expect(document.body.textContent).toContain('settings.shortcuts-disable-app')
+    expect(document.body.textContent).not.toContain('settings.shortcuts-disable-global')
+    expect(document.body.textContent).not.toContain('settings.global-shortcut')
+    expect(document.body.textContent).not.toContain('help.section.navigation')
+    expect(document.body.textContent).not.toContain('help.section.views')
+    expect(document.body.textContent).not.toContain('help.section.app')
+  })
+
   test('renders and writes scheduled status refresh with the auto-sync interval choices', async () => {
     await render(<SettingsSurface page="sync" onPageChange={() => {}} />)
 
@@ -562,8 +580,8 @@ describe('SettingsSurface', () => {
     expect(proxyUrlInput.compareDocumentPosition(gitProxySwitch) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
   })
 
-  test('configures protected Web access without echoing password fields', async () => {
-    await render(<SettingsSurface page="security" onPageChange={() => {}} />)
+  test('configures protected Web access from LAN settings without echoing password fields', async () => {
+    await render(<SettingsSurface page="lan" onPageChange={() => {}} />)
 
     const usernameInput = document.getElementById('settings-web-access-username')
     const passwordInput = document.getElementById('settings-web-access-password')
@@ -575,6 +593,8 @@ describe('SettingsSurface', () => {
     expect(passwordInput.type).toBe('password')
     expect(passwordInput.value).toBe('')
     expect(confirmInput.value).toBe('')
+    expect(document.getElementById('settings-lan-enabled')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('settings.nav.security')
 
     await act(async () => {
       switchById('settings-web-access-enabled').click()
@@ -600,6 +620,16 @@ describe('SettingsSurface', () => {
       username: 'operator',
       password: 'test-password',
     })
+  })
+
+  test('keeps LAN host controls Electron-only while exposing merged security settings on Web', async () => {
+    delete testWindow.goblinNative
+
+    await render(<SettingsSurface page="lan" onPageChange={() => {}} />)
+
+    expect(document.getElementById('settings-lan-enabled')).toBeNull()
+    expect(document.getElementById('settings-web-access-username')).not.toBeNull()
+    expect(document.body.textContent).not.toContain('settings.nav.security')
   })
 
   test('edits git network proxy settings from proxy settings', async () => {
@@ -703,14 +733,17 @@ describe('SettingsSurface', () => {
     ).toBe(true)
   })
 
-  test('keeps application and terminal font-size controls out of Files settings', async () => {
-    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+  test('merges file-area settings into General and removes the Files destination', async () => {
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
 
-    expect(document.getElementById('settings-app-font-size')).toBeNull()
+    expect(document.getElementById('settings-app-font-size')).not.toBeNull()
+    expect(document.getElementById('settings-file-tree-pane-size')).not.toBeNull()
+    expect(document.getElementById('settings-file-tree-clipboard-max-bytes')).not.toBeNull()
     expect(document.getElementById('settings-file-tree-font-size')).toBeNull()
     expect(document.getElementById('settings-file-tree-topbar-font-size')).toBeNull()
     expect(document.getElementById('settings-terminal-font-size')).toBeNull()
     expect(document.body.textContent).not.toContain('settings.files.font.title')
+    expect(document.body.textContent).not.toContain('settings.nav.files')
   })
 
   test('edits the new project default file area height ratio from settings without changing project overrides', async () => {
@@ -724,7 +757,7 @@ describe('SettingsSurface', () => {
       workspaceLayout: 'left-right',
       fileTreePaneSizes: { 'left-right': 66.7 },
     })
-    await render(<SettingsSurface page="files" onPageChange={() => {}} />)
+    await render(<SettingsSurface page="general" onPageChange={() => {}} />)
 
     const input = document.getElementById('settings-file-tree-pane-size')
     if (!(input instanceof HTMLInputElement)) throw new Error('Missing file tree pane size input')
@@ -974,6 +1007,85 @@ describe('SettingsSurface', () => {
     expect(terminalCustomButtonLabelsFromPayload()).toEqual(['beta', 'gamma', 'alpha'])
   })
 
+  test('shows built-in terminal button presets in the current application language', async () => {
+    terminalCustomButtonsFixture = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ]
+    useI18nStore.setState({ lang: 'zh', pref: 'zh', dict: DICTS.zh })
+
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    const labelInput = await waitForInputValue('terminal-custom-button-label-0', '确认、继续')
+    const valueInput = document.getElementById('terminal-custom-button-value-0')
+
+    expect(labelInput.value).toBe('确认、继续')
+    expect(valueInput).toBeInstanceOf(HTMLTextAreaElement)
+    expect((valueInput as HTMLTextAreaElement).value).toBe('确认、继续')
+  })
+
+  test('preserves a built-in terminal button preset id when reordering', async () => {
+    terminalCustomButtonsFixture = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+      { label: 'Status', value: 'git status', action: 'execute' },
+    ]
+
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    await waitForInputValue('terminal-custom-button-label-0', 'Confirm, continue')
+    await act(async () => {
+      buttonsByLabel('settings.terminal-custom-buttons.move-down')[0]?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(lastTerminalCustomButtonsPayload()).toEqual([
+      { label: 'Status', value: 'git status', action: 'execute' },
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ])
+  })
+
+  test('turns a built-in terminal button preset into a custom button when edited', async () => {
+    terminalCustomButtonsFixture = [
+      {
+        label: 'Confirm, continue',
+        value: 'Confirm and continue',
+        action: 'execute',
+        presetId: 'confirm-continue',
+      },
+    ]
+
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+    const labelInput = await waitForInputValue('terminal-custom-button-label-0', 'Confirm, continue')
+    await act(async () => {
+      setInputValue(labelInput, 'Continue')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByText('settings.terminal-custom-buttons.save').click()
+      await Promise.resolve()
+    })
+
+    expect(lastTerminalCustomButtonsPayload()).toEqual([
+      { label: 'Continue', value: 'Confirm and continue', action: 'execute' },
+    ])
+  })
+
   test('disables terminal custom button move controls at list boundaries', async () => {
     await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
     await addTerminalCustomButton('alpha', 'echo alpha')
@@ -1068,6 +1180,18 @@ async function waitForText(text: string) {
     })
   }
   throw new Error(`Missing text: ${text}`)
+}
+
+async function waitForInputValue(id: string, value: string): Promise<HTMLInputElement> {
+  for (let i = 0; i < 5; i += 1) {
+    const input = document.getElementById(id)
+    if (input instanceof HTMLInputElement && input.value === value) return input
+    await act(async () => {
+      await Promise.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+  throw new Error(`Missing input value: ${id}=${value}`)
 }
 
 function buttonByText(text: string): HTMLButtonElement {

@@ -11,6 +11,7 @@ import { useTerminalSessionContext } from '#/web/components/terminal/terminal-se
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useWorktreeTerminalSnapshot } from '#/web/components/terminal/terminal-session-store.ts'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { TerminalSessionBase, TerminalSessionContextValue } from '#/web/components/terminal/types.ts'
@@ -34,6 +35,7 @@ export function BranchWorkspaceTerminalPanel({
   onExitTerminalFocus,
 }: BranchWorkspaceTerminalPanelProps) {
   const t = useT()
+  const compact = useIsCompactUi()
   const terminalWorktreeKey = worktreeTerminalKey(context.rootId, context.path)
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
@@ -100,6 +102,7 @@ export function BranchWorkspaceTerminalPanel({
           worktreeTerminalKey={terminalWorktreeKey}
           sessions={snapshot.sessions}
           detailId={`branch-workspace-terminal-${context.id}`}
+          responsiveCompact={compact}
           panelActive
           focusMode={terminalFocusMode}
           focusRegistry={terminalTabFocusRegistry}

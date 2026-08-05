@@ -104,6 +104,50 @@ describe('buildManagedRemoteTerminalInvocation', () => {
     ).toBeNull()
   })
 
+  test('attaches an ordinary remote default-server session by its opaque exact name', () => {
+    const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+      useTmux: true,
+      existingTmuxSessionKind: 'default',
+      existingTmuxSessionName: "editor's work",
+    })
+
+    expect(invocation?.args).toEqual(['-tt', '--', 'prod', expect.stringContaining('sh -lc')])
+    expect(invocation?.script).toContain("tmux -L 'default' attach-session -t '=editor'\\''s work'")
+    expect(invocation?.script).not.toContain("cd '/srv/projects/example/worktrees/feature'")
+    expect(invocation?.script).not.toContain('new-session')
+    expect(invocation?.script).not.toContain('set-option')
+    expect(
+      buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+        useTmux: true,
+        existingTmuxSessionKind: 'default',
+        existingTmuxSessionName: 'editor',
+        existingTmuxServerName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+      }),
+    ).toBeNull()
+  })
+
+  test('attaches a remote host-inventory session through its exact named server', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const serverName = 'hobgoblin-project-v1-0123456789abcdef01234567'
+    const invocation = buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+      useTmux: true,
+      existingTmuxSessionKind: 'hobgoblin',
+      existingTmuxSessionName: sessionName,
+      existingTmuxServerName: serverName,
+    })
+
+    expect(invocation?.script).toContain(`tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).not.toContain('new-session')
+    expect(
+      buildManagedRemoteTerminalInvocation(BASE_MANAGED_TARGET, {
+        useTmux: true,
+        existingTmuxSessionKind: 'hobgoblin',
+        existingTmuxSessionName: 'ordinary',
+        existingTmuxServerName: serverName,
+      }),
+    ).toBeNull()
+  })
+
   test('shell-quotes remote paths that contain single quotes', () => {
     const invocation = buildManagedRemoteTerminalInvocation(
       {

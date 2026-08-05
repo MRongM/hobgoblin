@@ -13,6 +13,8 @@ describe('native shell projection helpers', () => {
       pickNativeSettingsProjectionPatch({
         lang: 'ja',
         shortcutsDisabled: true,
+        globalShortcutDisabled: true,
+        swapCloseShortcuts: true,
         topbarHeightPx: 39,
         toolbarHeightPx: 41,
         terminalNotificationsEnabled: true,
@@ -70,9 +72,6 @@ describe('native shell projection helpers', () => {
       theme: 'dark',
       colorTheme: 'github',
       shortcutsDisabled: true,
-      globalShortcutDisabled: true,
-      swapCloseShortcuts: true,
-      globalShortcut: 'Alt+K',
       topbarHeightPx: 39,
     })
   })

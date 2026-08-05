@@ -2,12 +2,8 @@ import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import type { DictKey } from '#/shared/i18n/dictionaries.ts'
 
 export type BranchActionShortcutAction = 'pull' | 'push' | 'externalTerminal' | 'editor' | 'remote'
-export type RendererNavigationShortcutAction = 'next-branch' | 'prev-branch' | 'next-detail-tab' | 'prev-detail-tab'
-export type RendererAppShortcutAction = 'checkout-selected' | 'show-help' | 'dismiss'
-export type RendererKeyboardShortcutAction =
-  | BranchActionShortcutAction
-  | RendererNavigationShortcutAction
-  | RendererAppShortcutAction
+export type RendererSelectionShortcutAction = 'checkout-selected'
+export type RendererKeyboardShortcutAction = BranchActionShortcutAction | RendererSelectionShortcutAction
 export type RendererMenuCommandId =
   | 'app-settings'
   | 'file-open-local-repo'
@@ -37,21 +33,16 @@ export interface AcceleratorShortcutDefinition {
   labelParams?: Record<string, string | number>
 }
 
-export interface IndexedTerminalShortcutDefinition extends AcceleratorShortcutDefinition {
-  index: number
-}
-
-export interface RendererMenuCommandContext {
-  swapCloseShortcuts: boolean
+export interface TerminalCycleShortcutDefinition extends AcceleratorShortcutDefinition {
+  key: 'ArrowUp' | 'ArrowDown'
+  direction: -1 | 1
 }
 
 export interface RendererMenuCommandDefinition {
   id: RendererMenuCommandId
   menuLabelKey: DictKey
   helpLabelKey?: DictKey
-  accelerator?: string | ((context: RendererMenuCommandContext) => string | undefined)
-  enabled?: (context: RendererMenuCommandContext) => boolean
-  intent: RendererEffectIntent | ((context: RendererMenuCommandContext) => RendererEffectIntent)
+  intent: RendererEffectIntent
 }
 
 export interface BranchActionShortcutDefinition {
@@ -70,13 +61,6 @@ export interface RendererKeyboardShortcutDefinition<
   labelKey: DictKey
 }
 
-export const RENDERER_NAVIGATION_SHORTCUTS: RendererKeyboardShortcutDefinition<RendererNavigationShortcutAction>[] = [
-  keyboardShortcut([{ key: 'j' }, { key: 'ArrowDown' }], 'next-branch', [['j'], ['↓']], 'help.row.next-branch'),
-  keyboardShortcut([{ key: 'k' }, { key: 'ArrowUp' }], 'prev-branch', [['k'], ['↑']], 'help.row.prev-branch'),
-  keyboardShortcut([{ key: 'ArrowRight' }], 'next-detail-tab', [['→']], 'help.row.switch-detail-tab'),
-  keyboardShortcut([{ key: 'ArrowLeft' }], 'prev-detail-tab', [['←']], 'help.row.switch-detail-tab'),
-]
-
 export const BRANCH_ACTION_SHORTCUTS: BranchActionShortcutDefinition[] = [
   branchActionShortcut([{ code: 'KeyP', shiftKey: false }], 'pull', [['p']], 'action.pull'),
   branchActionShortcut([{ code: 'KeyP', shiftKey: true }], 'push', [['⇧', 'P']], 'action.push'),
@@ -85,164 +69,64 @@ export const BRANCH_ACTION_SHORTCUTS: BranchActionShortcutDefinition[] = [
   branchActionShortcut([{ code: 'KeyG', shiftKey: true }], 'remote', [['⇧', 'G']], 'action.remote'),
 ]
 
-export const RENDERER_APP_SHORTCUTS: RendererKeyboardShortcutDefinition<RendererAppShortcutAction>[] = [
+export const RENDERER_SELECTION_SHORTCUTS: RendererKeyboardShortcutDefinition<RendererSelectionShortcutAction>[] = [
   keyboardShortcut([{ key: 'Enter' }], 'checkout-selected', [['Enter']], 'help.row.checkout'),
-  keyboardShortcut([{ key: '?' }], 'show-help', [['?']], 'help.row.this-help'),
-  keyboardShortcut([{ key: 'Escape' }], 'dismiss', [['Esc']], 'help.row.dismiss'),
 ]
 
-export const SETTINGS_SHORTCUT_MAC = 'Cmd+,'
-export const SETTINGS_SHORTCUT_NON_MAC = 'Ctrl+,'
-export const CLOSE_TAB_SHORTCUT_DEFAULT = 'CmdOrCtrl+Shift+W'
-export const CLOSE_TAB_SHORTCUT_SWAPPED = 'CmdOrCtrl+W'
-export const CLOSE_WINDOW_SHORTCUT_DEFAULT = 'CmdOrCtrl+W'
-export const CLOSE_WINDOW_SHORTCUT_SWAPPED = 'CmdOrCtrl+Shift+W'
-
 export const RENDERER_MENU_COMMANDS: RendererMenuCommandDefinition[] = [
-  rendererMenuCommand(
-    'app-settings',
-    'menu.app.settings',
-    { type: 'open-settings-requested', page: 'general' },
-    {
-      helpLabelKey: 'help.row.settings',
-      accelerator: () => SETTINGS_SHORTCUT_MAC,
-    },
-  ),
-  rendererMenuCommand(
-    'file-open-local-repo',
-    'menu.file.open-local-repo',
-    { type: 'open-repo-requested' },
-    {
-      helpLabelKey: 'help.row.open-local-repo',
-      accelerator: 'CmdOrCtrl+O',
-    },
-  ),
+  rendererMenuCommand('app-settings', 'menu.app.settings', { type: 'open-settings-requested', page: 'general' }),
+  rendererMenuCommand('file-open-local-repo', 'menu.file.open-local-repo', { type: 'open-repo-requested' }),
   rendererMenuCommand('file-open-local-repo-path', 'menu.file.open-local-repo-path', {
     type: 'open-repo-path-requested',
   }),
-  rendererMenuCommand(
-    'file-clone-repo',
-    'menu.file.clone-repo',
-    { type: 'clone-repo-requested' },
-    {
-      helpLabelKey: 'help.row.clone-repo',
-      accelerator: 'CmdOrCtrl+Shift+O',
-    },
-  ),
-  rendererMenuCommand(
-    'file-open-remote-repo',
-    'menu.file.open-remote-repo',
-    { type: 'open-remote-repo-requested' },
-    {
-      accelerator: 'CmdOrCtrl+Shift+R',
-    },
-  ),
-  rendererMenuCommand(
-    'file-close-tab',
-    'menu.file.close-tab',
-    { type: 'close-repo-requested' },
-    {
-      helpLabelKey: 'help.row.close-repo',
-      accelerator: (context) => closeShortcutAccelerators(context.swapCloseShortcuts).closeTab,
-    },
-  ),
-  rendererMenuCommand(
-    'file-settings',
-    'menu.file.settings',
-    { type: 'open-settings-requested', page: 'general' },
-    {
-      helpLabelKey: 'help.row.settings',
-      accelerator: () => SETTINGS_SHORTCUT_NON_MAC,
-    },
-  ),
-  rendererMenuCommand(
-    'view-status',
-    'menu.view.status',
-    { type: 'show-detail-tab-requested', tab: 'status' },
-    {
-      helpLabelKey: 'help.row.view-status',
-      accelerator: 'CmdOrCtrl+1',
-    },
-  ),
-  rendererMenuCommand(
-    'view-changes',
-    'menu.view.changes',
-    { type: 'show-detail-tab-requested', tab: 'changes' },
-    {
-      helpLabelKey: 'help.row.view-changes',
-      accelerator: 'CmdOrCtrl+2',
-    },
-  ),
-  rendererMenuCommand(
-    'view-terminal',
-    'menu.view.terminal',
-    { type: 'show-detail-tab-requested', tab: 'terminal' },
-    {
-      helpLabelKey: 'help.row.view-terminal',
-    },
-  ),
-  rendererMenuCommand(
-    'view-terminal-primary-action',
-    'menu.view.terminal-primary-action',
-    { type: 'terminal-primary-action-requested' },
-    {
-      helpLabelKey: 'help.row.terminal-primary-action',
-      accelerator: 'CmdOrCtrl+Enter',
-    },
-  ),
-  rendererMenuCommand(
-    'view-refresh',
-    'menu.view.refresh',
-    { type: 'repo-refresh-requested' },
-    {
-      helpLabelKey: 'help.row.refresh',
-      accelerator: 'CmdOrCtrl+U',
-    },
-  ),
-  rendererMenuCommand(
-    'window-next-repo',
-    'menu.window.next-repo',
-    { type: 'cycle-repo-requested', direction: 1 },
-    {
-      helpLabelKey: 'help.row.next-repo',
-      accelerator: 'CmdOrCtrl+]',
-    },
-  ),
-  rendererMenuCommand(
-    'window-prev-repo',
-    'menu.window.prev-repo',
-    { type: 'cycle-repo-requested', direction: -1 },
-    {
-      helpLabelKey: 'help.row.prev-repo',
-      accelerator: 'CmdOrCtrl+[',
-    },
-  ),
+  rendererMenuCommand('file-clone-repo', 'menu.file.clone-repo', { type: 'clone-repo-requested' }),
+  rendererMenuCommand('file-open-remote-repo', 'menu.file.open-remote-repo', {
+    type: 'open-remote-repo-requested',
+  }),
+  rendererMenuCommand('file-close-tab', 'menu.file.close-tab', { type: 'close-repo-requested' }),
+  rendererMenuCommand('file-settings', 'menu.file.settings', {
+    type: 'open-settings-requested',
+    page: 'general',
+  }),
+  rendererMenuCommand('view-status', 'menu.view.status', { type: 'show-detail-tab-requested', tab: 'status' }),
+  rendererMenuCommand('view-changes', 'menu.view.changes', { type: 'show-detail-tab-requested', tab: 'changes' }),
+  rendererMenuCommand('view-terminal', 'menu.view.terminal', {
+    type: 'show-detail-tab-requested',
+    tab: 'terminal',
+  }),
+  rendererMenuCommand('view-terminal-primary-action', 'menu.view.terminal-primary-action', {
+    type: 'terminal-primary-action-requested',
+  }),
+  rendererMenuCommand('view-refresh', 'menu.view.refresh', { type: 'repo-refresh-requested' }),
+  rendererMenuCommand('window-next-repo', 'menu.window.next-repo', {
+    type: 'cycle-repo-requested',
+    direction: 1,
+  }),
+  rendererMenuCommand('window-prev-repo', 'menu.window.prev-repo', {
+    type: 'cycle-repo-requested',
+    direction: -1,
+  }),
   rendererMenuCommand('help-shortcuts', 'menu.help.shortcuts', { type: 'open-settings-requested', page: 'shortcuts' }),
 ]
 
-export const APP_SHORTCUTS: AcceleratorShortcutDefinition[] = rendererMenuAcceleratorShortcuts([
-  'file-open-local-repo',
-  'file-clone-repo',
-  'view-refresh',
-]).concat([{ accelerator: 'CmdOrCtrl+R', labelKey: 'help.row.reload-page' }])
-
-export const WINDOW_REPO_SHORTCUTS: AcceleratorShortcutDefinition[] = rendererMenuAcceleratorShortcuts([
-  'window-next-repo',
-  'window-prev-repo',
-])
-
-export const VIEW_SHORTCUTS: AcceleratorShortcutDefinition[] = rendererMenuAcceleratorShortcuts([
-  'view-status',
-  'view-changes',
-  'view-terminal-primary-action',
-]).concat(terminalSelectionShortcuts())
-
-export const TERMINAL_SELECTION_SHORTCUTS: IndexedTerminalShortcutDefinition[] = terminalSelectionShortcuts()
+export const TERMINAL_CYCLE_SHORTCUTS: TerminalCycleShortcutDefinition[] = [
+  {
+    key: 'ArrowUp',
+    direction: -1,
+    accelerator: 'CmdOrCtrl+Alt+Up',
+    labelKey: 'terminal.command-deck.previous-terminal',
+  },
+  {
+    key: 'ArrowDown',
+    direction: 1,
+    accelerator: 'CmdOrCtrl+Alt+Down',
+    labelKey: 'terminal.command-deck.next-terminal',
+  },
+]
 
 export const RENDERER_KEYBOARD_SHORTCUTS: RendererKeyboardShortcutDefinition[] = [
-  ...RENDERER_NAVIGATION_SHORTCUTS,
   ...BRANCH_ACTION_SHORTCUTS,
-  ...RENDERER_APP_SHORTCUTS,
+  ...RENDERER_SELECTION_SHORTCUTS,
 ]
 
 export function matchBranchActionShortcut(input: {
@@ -260,40 +144,25 @@ export function matchRendererKeyboardShortcut(input: {
   return matchKeyboardShortcut(RENDERER_KEYBOARD_SHORTCUTS, input)
 }
 
-export function closeShortcutAccelerators(swapCloseShortcuts = false): {
-  closeTab: string
-  closeWindow: string
-} {
-  return swapCloseShortcuts
-    ? { closeTab: CLOSE_TAB_SHORTCUT_SWAPPED, closeWindow: CLOSE_WINDOW_SHORTCUT_SWAPPED }
-    : { closeTab: CLOSE_TAB_SHORTCUT_DEFAULT, closeWindow: CLOSE_WINDOW_SHORTCUT_DEFAULT }
+export function matchTerminalCycleShortcut(
+  input: {
+    key: string
+    altKey: boolean
+    ctrlKey: boolean
+    metaKey: boolean
+    shiftKey: boolean
+  },
+  isMac: boolean,
+): -1 | 1 | null {
+  if (!input.altKey || input.shiftKey) return null
+  if (isMac ? !input.metaKey || input.ctrlKey : !input.ctrlKey || input.metaKey) return null
+  return TERMINAL_CYCLE_SHORTCUTS.find((shortcut) => shortcut.key === input.key)?.direction ?? null
 }
 
 export function rendererMenuCommandById(id: RendererMenuCommandId): RendererMenuCommandDefinition {
   const command = RENDERER_MENU_COMMANDS.find((candidate) => candidate.id === id)
   if (!command) throw new Error(`Unknown renderer menu command: ${id}`)
   return command
-}
-
-export function resolveRendererMenuCommandAccelerator(
-  command: Pick<RendererMenuCommandDefinition, 'accelerator'>,
-  context: RendererMenuCommandContext,
-): string | undefined {
-  return typeof command.accelerator === 'function' ? command.accelerator(context) : command.accelerator
-}
-
-export function resolveRendererMenuCommandIntent(
-  command: Pick<RendererMenuCommandDefinition, 'intent'>,
-  context: RendererMenuCommandContext,
-): RendererEffectIntent {
-  return typeof command.intent === 'function' ? command.intent(context) : command.intent
-}
-
-export function resolveRendererMenuCommandEnabled(
-  command: Pick<RendererMenuCommandDefinition, 'enabled'>,
-  context: RendererMenuCommandContext,
-): boolean | undefined {
-  return command.enabled?.(context)
 }
 
 function keyboardShortcut<Action extends RendererKeyboardShortcutAction>(
@@ -318,9 +187,8 @@ function rendererMenuCommand(
   id: RendererMenuCommandId,
   menuLabelKey: DictKey,
   intent: RendererEffectIntent,
-  options: Omit<Partial<RendererMenuCommandDefinition>, 'id' | 'menuLabelKey' | 'intent'> = {},
 ): RendererMenuCommandDefinition {
-  return { id, menuLabelKey, intent, ...options }
+  return { id, menuLabelKey, intent }
 }
 
 function matchKeyboardShortcut<Action extends string>(
@@ -341,25 +209,4 @@ function keyboardShortcutMatch(
   if (match.code !== undefined && input.code !== match.code) return false
   if (match.shiftKey !== undefined && input.shiftKey !== match.shiftKey) return false
   return true
-}
-
-function rendererMenuAcceleratorShortcuts(ids: RendererMenuCommandId[]): AcceleratorShortcutDefinition[] {
-  return ids.map((id) => {
-    const command = rendererMenuCommandById(id)
-    const accelerator = resolveRendererMenuCommandAccelerator(command, {
-      swapCloseShortcuts: false,
-    })
-    if (!accelerator || !command.helpLabelKey)
-      throw new Error(`Renderer menu command ${id} is missing help shortcut metadata`)
-    return { accelerator, labelKey: command.helpLabelKey }
-  })
-}
-
-function terminalSelectionShortcuts(): IndexedTerminalShortcutDefinition[] {
-  return Array.from({ length: 7 }, (_, index) => ({
-    index: index + 1,
-    accelerator: `CmdOrCtrl+${index + 3}`,
-    labelKey: 'help.row.view-terminal-numbered',
-    labelParams: { index: index + 1 },
-  }))
 }

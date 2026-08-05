@@ -1,5 +1,6 @@
 package com.mrongm.hobgoblin.ui.screens.projects
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import com.mrongm.hobgoblin.R
 import com.mrongm.hobgoblin.data.ManualItemOrderPolicy
 import com.mrongm.hobgoblin.domain.ResourceState
@@ -37,6 +39,8 @@ import com.mrongm.hobgoblin.ui.components.ManualReorderState
 import com.mrongm.hobgoblin.ui.components.manualReorderItem
 import com.mrongm.hobgoblin.ui.components.rememberManualReorderState
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
+import com.mrongm.hobgoblin.ui.text.LocalizedText
+import com.mrongm.hobgoblin.ui.text.resolve
 
 @Composable
 fun ProjectsScreen(
@@ -122,6 +126,19 @@ internal fun projectReorderAvailable(hostFilterId: String?): Boolean = hostFilte
 internal fun localProjectReorderIds(projects: List<RemoteRepositoryProfile>): List<String> =
     projects.map(RemoteRepositoryProfile::id)
 
+internal fun projectDisplayOrder(
+    repositories: List<RemoteRepositoryProfile>,
+    savedIds: List<String>,
+): List<RemoteRepositoryProfile> {
+    val currentIds = repositories.mapTo(mutableSetOf(), RemoteRepositoryProfile::id)
+    val hasEffectiveManualOrder = savedIds.any(currentIds::contains)
+    return if (hasEffectiveManualOrder) {
+        ManualItemOrderPolicy.apply(repositories, savedIds, RemoteRepositoryProfile::id)
+    } else {
+        repositories.sortedByDescending { it.createdAt ?: Long.MIN_VALUE }
+    }
+}
+
 internal fun projectKindLabelResource(project: RemoteRepositoryProfile): Int = when (project.kind) {
     RemoteProjectKind.GitRepository -> R.string.projects_git_repository
     RemoteProjectKind.PlainWorkspace -> R.string.projects_plain_workspace
@@ -134,6 +151,13 @@ internal fun projectHostTitle(
 
 internal fun projectSecondaryTitle(repository: RemoteRepositoryProfile): String? =
     repository.alias?.trim()?.takeIf(String::isNotEmpty)
+
+internal fun projectCreatedText(relativeTime: CharSequence?): LocalizedText =
+    if (relativeTime == null) {
+        LocalizedText(R.string.projects_created_unknown)
+    } else {
+        LocalizedText(R.string.projects_created_at, listOf(relativeTime))
+    }
 
 @Composable
 private fun ProjectList(
@@ -155,7 +179,7 @@ private fun ProjectList(
         ?.let(hostById::get)
         ?.title
         ?: stringResource(R.string.projects_selected_host)
-    val allOrderedRepositories = ManualItemOrderPolicy.apply(repositories, manualOrder, RemoteRepositoryProfile::id)
+    val allOrderedRepositories = projectDisplayOrder(repositories, manualOrder)
     val orderedRepositories = projectsForHost(allOrderedRepositories, hostFilterId)
     val reorderState = rememberManualReorderState(
         onMove = { draggedId, targetId ->
@@ -358,6 +382,21 @@ private fun ProjectRow(
                 stringResource(projectKindLabelResource(repository)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val relativeTime = repository.createdAt?.let { createdAt ->
+                DateUtils.getRelativeTimeSpanString(
+                    createdAt,
+                    System.currentTimeMillis(),
+                    DateUtils.MINUTE_IN_MILLIS,
+                )
+            }
+            Text(
+                projectCreatedText(relativeTime).resolve(),
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             rootAddress?.let { address ->
                 Text(address, style = MaterialTheme.typography.labelMedium)

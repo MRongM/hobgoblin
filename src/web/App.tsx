@@ -86,8 +86,6 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
     modalOpen,
     workspaceShortcutsSuppressed,
     toggleSettings,
-    showHelp,
-    exitSettings,
     navigation,
   } = useMainWindowShellState({
     routeSettingsPage,
@@ -118,12 +116,8 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
   })
 
   useKeyboard({
-    navigation,
     currentRepoId: visibleRepoId,
-    onShowHelp: showHelp,
     isWorkspaceShortcutSuppressed: () => workspaceShortcutsSuppressed,
-    isSettingsOpen: () => settingsOpen,
-    onExitSettings: exitSettings,
   })
 
   const shellOverlayActions = useMemo(

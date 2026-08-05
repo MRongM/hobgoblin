@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import {
-  TERMINAL_SELECTION_SHORTCUTS,
-  closeShortcutAccelerators,
+  TERMINAL_CYCLE_SHORTCUTS,
   matchBranchActionShortcut,
   matchRendererKeyboardShortcut,
+  matchTerminalCycleShortcut,
   rendererMenuCommandById,
-  resolveRendererMenuCommandAccelerator,
 } from '#/shared/shortcut-definitions.ts'
 
 describe('shortcut definitions', () => {
@@ -18,47 +17,70 @@ describe('shortcut definitions', () => {
     expect(matchBranchActionShortcut({ code: 'KeyV', shiftKey: true })).toBeNull()
   })
 
-  test('derives close accelerators from the swap preference', () => {
-    expect(closeShortcutAccelerators(false)).toEqual({
-      closeTab: 'CmdOrCtrl+Shift+W',
-      closeWindow: 'CmdOrCtrl+W',
-    })
-    expect(closeShortcutAccelerators(true)).toEqual({
-      closeTab: 'CmdOrCtrl+W',
-      closeWindow: 'CmdOrCtrl+Shift+W',
-    })
-  })
-
-  test('matches renderer navigation and app shortcuts from keyboard input', () => {
-    expect(matchRendererKeyboardShortcut({ key: 'j', code: 'KeyJ', shiftKey: false })).toBe('next-branch')
-    expect(matchRendererKeyboardShortcut({ key: 'ArrowLeft', code: 'ArrowLeft', shiftKey: false })).toBe('prev-detail-tab')
+  test('matches branch selection without reserving removed navigation and app shortcuts', () => {
+    expect(matchRendererKeyboardShortcut({ key: 'j', code: 'KeyJ', shiftKey: false })).toBeNull()
+    expect(matchRendererKeyboardShortcut({ key: 'k', code: 'KeyK', shiftKey: false })).toBeNull()
+    expect(matchRendererKeyboardShortcut({ key: 'ArrowDown', code: 'ArrowDown', shiftKey: false })).toBeNull()
+    expect(matchRendererKeyboardShortcut({ key: 'ArrowUp', code: 'ArrowUp', shiftKey: false })).toBeNull()
+    expect(matchRendererKeyboardShortcut({ key: 'ArrowLeft', code: 'ArrowLeft', shiftKey: false })).toBeNull()
+    expect(matchRendererKeyboardShortcut({ key: 'ArrowRight', code: 'ArrowRight', shiftKey: false })).toBeNull()
     expect(matchRendererKeyboardShortcut({ key: 'Enter', code: 'Enter', shiftKey: false })).toBe('checkout-selected')
-    expect(matchRendererKeyboardShortcut({ key: '?', code: 'Slash', shiftKey: true })).toBe('show-help')
-    expect(matchRendererKeyboardShortcut({ key: 'Escape', code: 'Escape', shiftKey: false })).toBe('dismiss')
+    expect(matchRendererKeyboardShortcut({ key: '?', code: 'Slash', shiftKey: true })).toBeNull()
+    expect(matchRendererKeyboardShortcut({ key: 'Escape', code: 'Escape', shiftKey: false })).toBeNull()
   })
 
-  test('resolves renderer menu command accelerators and enabled state from shared definitions', () => {
-    expect(
-      resolveRendererMenuCommandAccelerator(rendererMenuCommandById('file-close-tab'), {
-        swapCloseShortcuts: false,
-      }),
-    ).toBe('CmdOrCtrl+Shift+W')
-    expect(
-      resolveRendererMenuCommandAccelerator(rendererMenuCommandById('file-close-tab'), {
-        swapCloseShortcuts: true,
-      }),
-    ).toBe('CmdOrCtrl+W')
+  test('removes accelerators owned by the former navigation, views, and app sections', () => {
+    for (const id of [
+      'app-settings',
+      'file-open-local-repo',
+      'file-clone-repo',
+      'file-open-remote-repo',
+      'file-close-tab',
+      'file-settings',
+      'view-status',
+      'view-changes',
+      'view-terminal-primary-action',
+      'view-refresh',
+      'window-next-repo',
+      'window-prev-repo',
+    ] as const) {
+      expect(rendererMenuCommandById(id)).not.toHaveProperty('accelerator')
+    }
   })
 
-  test('defines indexed terminal selection shortcuts in the shared shortcut model', () => {
-    expect(TERMINAL_SELECTION_SHORTCUTS).toEqual([
-      { index: 1, accelerator: 'CmdOrCtrl+3', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 1 } },
-      { index: 2, accelerator: 'CmdOrCtrl+4', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 2 } },
-      { index: 3, accelerator: 'CmdOrCtrl+5', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 3 } },
-      { index: 4, accelerator: 'CmdOrCtrl+6', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 4 } },
-      { index: 5, accelerator: 'CmdOrCtrl+7', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 5 } },
-      { index: 6, accelerator: 'CmdOrCtrl+8', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 6 } },
-      { index: 7, accelerator: 'CmdOrCtrl+9', labelKey: 'help.row.view-terminal-numbered', labelParams: { index: 7 } },
+  test('defines and matches platform-primary terminal cycle shortcuts', () => {
+    expect(TERMINAL_CYCLE_SHORTCUTS).toEqual([
+      {
+        key: 'ArrowUp',
+        direction: -1,
+        accelerator: 'CmdOrCtrl+Alt+Up',
+        labelKey: 'terminal.command-deck.previous-terminal',
+      },
+      {
+        key: 'ArrowDown',
+        direction: 1,
+        accelerator: 'CmdOrCtrl+Alt+Down',
+        labelKey: 'terminal.command-deck.next-terminal',
+      },
     ])
+
+    expect(
+      matchTerminalCycleShortcut(
+        { key: 'ArrowUp', altKey: true, ctrlKey: false, metaKey: true, shiftKey: false },
+        true,
+      ),
+    ).toBe(-1)
+    expect(
+      matchTerminalCycleShortcut(
+        { key: 'ArrowDown', altKey: true, ctrlKey: true, metaKey: false, shiftKey: false },
+        false,
+      ),
+    ).toBe(1)
+    expect(
+      matchTerminalCycleShortcut(
+        { key: 'ArrowDown', altKey: true, ctrlKey: true, metaKey: false, shiftKey: false },
+        true,
+      ),
+    ).toBeNull()
   })
 })

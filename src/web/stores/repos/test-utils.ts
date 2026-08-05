@@ -20,6 +20,7 @@ import type { DetailTab, ExplorerTab, RepoBranchState, RepoState } from '#/web/s
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
+  DEFAULT_DETAIL_FOCUS_MODE,
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
@@ -33,6 +34,7 @@ interface TerminalBridgeTestOutputs {
   'terminal.restart': TerminalAttachResult
   'terminal.write': TerminalMutationResult
   'terminal.resize': TerminalMutationResult
+  'terminal.returnToBottom': TerminalMutationResult
   'terminal.takeover': TerminalTakeoverResult
   'terminal.close': TerminalCloseResult
   'terminal.create': TerminalCatalogMutationResult
@@ -53,6 +55,8 @@ function terminalHandlerNameForSocketAction(action: string): keyof TerminalBridg
       return 'terminal.write'
     case 'resize':
       return 'terminal.resize'
+    case 'return-to-bottom':
+      return 'terminal.returnToBottom'
     case 'takeover':
       return 'terminal.takeover'
     case 'close':
@@ -107,6 +111,7 @@ export function resetReposStore(): void {
     sessionReady: false,
     branchSearchQueries: {},
     detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
+    detailFocusMode: DEFAULT_DETAIL_FOCUS_MODE,
     workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
     detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
     fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,
@@ -200,6 +205,10 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
   function callTerminalHandler(name: 'terminal.write', payload: unknown): TerminalBridgeTestOutputs['terminal.write']
   function callTerminalHandler(name: 'terminal.resize', payload: unknown): TerminalBridgeTestOutputs['terminal.resize']
   function callTerminalHandler(
+    name: 'terminal.returnToBottom',
+    payload: unknown,
+  ): TerminalBridgeTestOutputs['terminal.returnToBottom']
+  function callTerminalHandler(
     name: 'terminal.takeover',
     payload: unknown,
   ): TerminalBridgeTestOutputs['terminal.takeover']
@@ -238,6 +247,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
           return { ok: false, message: `unhandled ${name}` }
         case 'terminal.write':
         case 'terminal.resize':
+        case 'terminal.returnToBottom':
         case 'terminal.reorder':
         case 'terminal.notifyBell':
           return true satisfies TerminalMutationResult
@@ -391,6 +401,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
       restart: async (input) => callTerminalHandler('terminal.restart', input),
       write: async (input) => callTerminalHandler('terminal.write', input),
       resize: async (input) => callTerminalHandler('terminal.resize', input),
+      returnToBottom: async (input) => callTerminalHandler('terminal.returnToBottom', input),
       takeover: async (input) => callTerminalHandler('terminal.takeover', input),
       close: async (input) => callTerminalHandler('terminal.close', input),
       create: async (input) => callTerminalHandler('terminal.create', input),

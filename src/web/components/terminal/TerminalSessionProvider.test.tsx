@@ -542,6 +542,7 @@ beforeEach(() => {
       restart: vi.fn(async () => attachResult()),
       write: vi.fn(async () => true),
       resize: vi.fn(async () => true),
+      returnToBottom: vi.fn(async () => true),
       takeover: vi.fn(async () => ({
         ok: true as const,
         sessionId: 'session-1',
@@ -1224,6 +1225,8 @@ describe('TerminalSessionProvider', () => {
         repoRoot: REPO_ID,
         branch: 'feature/auth',
         worktreePath: branchWorkspacePath,
+        targetKind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
       })
     } finally {
       await unmount()

@@ -12,8 +12,6 @@ export interface NativeSettingsProjectionPatch {
   theme?: SettingsPrefs['theme']
   colorTheme?: SettingsPrefs['colorTheme']
   shortcutsDisabled?: SettingsPrefs['shortcutsDisabled']
-  globalShortcutDisabled?: SettingsPrefs['globalShortcutDisabled']
-  swapCloseShortcuts?: SettingsPrefs['swapCloseShortcuts']
   topbarHeightPx?: SettingsPrefs['topbarHeightPx']
 }
 
@@ -22,9 +20,6 @@ export interface NativeSettingsProjectionState {
   theme: SettingsPrefs['theme']
   colorTheme: SettingsPrefs['colorTheme']
   shortcutsDisabled: SettingsPrefs['shortcutsDisabled']
-  globalShortcutDisabled: SettingsPrefs['globalShortcutDisabled']
-  swapCloseShortcuts: SettingsPrefs['swapCloseShortcuts']
-  globalShortcut: SettingsPrefs['globalShortcut']
   topbarHeightPx: SettingsPrefs['topbarHeightPx']
 }
 
@@ -45,8 +40,6 @@ export const NATIVE_SETTINGS_PROJECTION_KEYS = [
   'theme',
   'colorTheme',
   'shortcutsDisabled',
-  'globalShortcutDisabled',
-  'swapCloseShortcuts',
   'topbarHeightPx',
 ] as const
 
@@ -55,8 +48,6 @@ export const NativeSettingsProjectionPatchSchema = v.object({
   theme: v.optional(v.picklist(THEME_PREF_VALUES)),
   colorTheme: v.optional(v.picklist(COLOR_THEMES)),
   shortcutsDisabled: v.optional(v.boolean()),
-  globalShortcutDisabled: v.optional(v.boolean()),
-  swapCloseShortcuts: v.optional(v.boolean()),
   topbarHeightPx: v.optional(v.number()),
 })
 
@@ -65,9 +56,6 @@ export const NativeSettingsProjectionStateSchema = v.object({
   theme: v.picklist(THEME_PREF_VALUES),
   colorTheme: v.picklist(COLOR_THEMES),
   shortcutsDisabled: v.boolean(),
-  globalShortcutDisabled: v.boolean(),
-  swapCloseShortcuts: v.boolean(),
-  globalShortcut: v.string(),
   topbarHeightPx: v.number(),
 })
 
@@ -85,17 +73,20 @@ export const NativeShellProjectionSchema = v.pipe(
     ),
     recentRepos: v.optional(NativeRecentReposProjectionSchema),
   }),
-  v.check((input) => input.prefs !== undefined || input.recentRepos !== undefined, 'Missing native shell projection payload'),
+  v.check(
+    (input) => input.prefs !== undefined || input.recentRepos !== undefined,
+    'Missing native shell projection payload',
+  ),
 )
 
-export function pickNativeSettingsProjectionPatch(settings: Partial<SettingsPrefs>): NativeSettingsProjectionPatch | null {
+export function pickNativeSettingsProjectionPatch(
+  settings: Partial<SettingsPrefs>,
+): NativeSettingsProjectionPatch | null {
   const patch: NativeSettingsProjectionPatch = {}
   if (settings.lang !== undefined) patch.lang = settings.lang
   if (settings.theme !== undefined) patch.theme = settings.theme
   if (settings.colorTheme !== undefined) patch.colorTheme = settings.colorTheme
   if (settings.shortcutsDisabled !== undefined) patch.shortcutsDisabled = settings.shortcutsDisabled
-  if (settings.globalShortcutDisabled !== undefined) patch.globalShortcutDisabled = settings.globalShortcutDisabled
-  if (settings.swapCloseShortcuts !== undefined) patch.swapCloseShortcuts = settings.swapCloseShortcuts
   if (settings.topbarHeightPx !== undefined) patch.topbarHeightPx = settings.topbarHeightPx
   return NATIVE_SETTINGS_PROJECTION_KEYS.some((key) => patch[key] !== undefined) ? patch : null
 }
@@ -106,9 +97,6 @@ export function nativeSettingsProjectionStateFromSettings(settings: SettingsPref
     theme: settings.theme,
     colorTheme: settings.colorTheme,
     shortcutsDisabled: settings.shortcutsDisabled,
-    globalShortcutDisabled: settings.globalShortcutDisabled,
-    swapCloseShortcuts: settings.swapCloseShortcuts,
-    globalShortcut: settings.globalShortcut,
     topbarHeightPx: settings.topbarHeightPx,
   }
 }

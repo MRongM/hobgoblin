@@ -55,6 +55,32 @@ describe('Ghostty integration', () => {
     expect(command).toContain('hobgoblin-v1-aebf050981ac829e36100020')
   })
 
+  test('opens an existing ordinary default-server session without creating it', async () => {
+    const { openInGhostty } = await import('#/system/ghostty.ts')
+    mocks.execa.mockResolvedValueOnce({ stdout: 'opened' })
+
+    await expect(
+      openInGhostty(
+        {
+          projectRoot: '/srv/editor',
+          workingDirectory: '/srv/editor',
+          terminalNumber: 1,
+        },
+        {
+          useTmux: true,
+          existingTmuxSessionKind: 'default',
+          existingTmuxSessionName: 'editor work',
+        },
+      ),
+    ).resolves.toEqual({ ok: true, message: '/srv/editor' })
+
+    const command = mocks.execa.mock.calls[0]![1][2]
+    expect(command).toContain('tmux -L')
+    expect(command).toContain('attach-session -t')
+    expect(command).toContain('=editor work')
+    expect(command).not.toContain('new-session')
+  })
+
   test('opens a remote command in a running Ghostty window', async () => {
     const { openRemoteInGhostty } = await import('#/system/ghostty.ts')
     mocks.execa.mockResolvedValueOnce({ stdout: 'opened' })

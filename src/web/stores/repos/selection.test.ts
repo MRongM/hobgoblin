@@ -391,6 +391,7 @@ describe('setWorkspaceLayout', () => {
     useReposStore.getState().applySessionLayoutState({
       workspaceLayout: 'left-right',
       detailCollapsed: true,
+      detailFocusMode: false,
       detailPaneSizes: { 'left-right': 45 },
     })
 
@@ -403,10 +404,21 @@ describe('setWorkspaceLayout', () => {
 })
 
 describe('terminal Focus state ownership', () => {
-  test('does not expose global terminal Focus state or actions', () => {
-    expect(useReposStore.getState()).not.toHaveProperty('detailFocusMode')
-    expect(useReposStore.getState()).not.toHaveProperty('setDetailFocusMode')
-    expect(useReposStore.getState()).not.toHaveProperty('toggleDetailFocusMode')
+  test('keeps terminal Focus global while switching projects until explicitly toggled off', () => {
+    seedRepo({ selectedBranch: 'main' })
+    const repoB = emptyRepo(REPO_B_ID, 'repo-b')
+    useReposStore.setState((state) => ({
+      repos: { ...state.repos, [REPO_B_ID]: repoB },
+      order: [REPO_ID, REPO_B_ID],
+    }))
+
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
+    useReposStore.getState().setDetailFocusMode(true)
+    useReposStore.getState().setActive(REPO_B_ID)
+    expect(useReposStore.getState().detailFocusMode).toBe(true)
+
+    useReposStore.getState().toggleDetailFocusMode()
+    expect(useReposStore.getState().detailFocusMode).toBe(false)
   })
 })
 

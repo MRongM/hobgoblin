@@ -183,7 +183,7 @@ describe('main process startup lifecycle', () => {
     expect(mocks.appendSwitch.mock.invocationCallOrder[0]).toBeLessThan(mocks.whenReady.mock.invocationCallOrder[0]!)
   })
 
-  test('flushes settings and shortcut cleanup before exiting', async () => {
+  test('flushes settings before exiting without global shortcut cleanup', async () => {
     await import('#/main/main.ts')
 
     const event = { preventDefault: vi.fn() }
@@ -195,7 +195,7 @@ describe('main process startup lifecycle', () => {
     expect(mocks.broadcastRendererEffectIntent).toHaveBeenCalledWith({ type: 'app-quitting' })
     expect(mocks.closeDetachedFileAreaWindows).toHaveBeenCalledTimes(1)
     expect(mocks.flushWindowState).toHaveBeenCalledTimes(1)
-    expect(mocks.unregisterAppShortcuts).toHaveBeenCalledTimes(1)
+    expect(mocks.unregisterAppShortcuts).not.toHaveBeenCalled()
     expect(mocks.exit).toHaveBeenCalledWith(0)
     expect(mocks.quit).not.toHaveBeenCalled()
     expect(secondPassEvent.preventDefault).not.toHaveBeenCalled()
@@ -245,7 +245,7 @@ describe('main process startup lifecycle', () => {
     expect(mocks.setCurrentLang).toHaveBeenCalledWith('en')
   })
 
-  test('initializes global shortcuts from the embedded server settings snapshot when available', async () => {
+  test('ignores legacy global shortcut settings during startup', async () => {
     const snapshot = defaultSettingsSnapshot()
     mocks.getSettingsSnapshot.mockResolvedValueOnce({
       ...snapshot,
@@ -261,8 +261,10 @@ describe('main process startup lifecycle', () => {
     mocks.resolveReady()
 
     await vi.waitFor(() => {
-      expect(mocks.syncGlobalShortcuts).toHaveBeenCalledWith(true, 'Alt+K')
+      expect(mocks.buildAppMenu).toHaveBeenCalled()
     })
+    expect(mocks.syncGlobalShortcuts).not.toHaveBeenCalled()
+    expect(mocks.setSettingsGlobalShortcutState).not.toHaveBeenCalled()
   })
 
   test('queues open-file paths and defers activation until startup initialization finishes', async () => {

@@ -4,6 +4,12 @@ import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { ReposStore } from '#/web/stores/repos/types.ts'
 import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
 
+function stringRecordEqual(left: Record<string, string> = {}, right: Record<string, string> = {}): boolean {
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key])
+}
+
 export function repoIndexFromRepos(repos: ReposStore['repos']): TerminalRepoIndex {
   const index: TerminalRepoIndex = {}
   for (const [repoRoot, repo] of Object.entries(repos)) {
@@ -35,12 +41,8 @@ export function repoIndexEqual(a: TerminalRepoIndex, b: TerminalRepoIndex): bool
     const next = b[repoRoot]
     if (!current || !next) return false
     if (current.instanceToken !== next.instanceToken) return false
-    const currentPaths = Object.keys(current.branchByWorktreePath)
-    const nextPaths = Object.keys(next.branchByWorktreePath)
-    if (currentPaths.length !== nextPaths.length) return false
-    for (const worktreePath of currentPaths) {
-      if (current.branchByWorktreePath[worktreePath] !== next.branchByWorktreePath[worktreePath]) return false
-    }
+    if (!stringRecordEqual(current.branchByWorktreePath, next.branchByWorktreePath)) return false
+    if (!stringRecordEqual(current.branchWorkspaceIdByWorktreePath, next.branchWorkspaceIdByWorktreePath)) return false
   }
   return true
 }
@@ -60,10 +62,12 @@ export function repoIndexWithBranchWorkspaces(
       next[workspace.rootId] = {
         ...root,
         branchByWorktreePath: { ...root.branchByWorktreePath },
+        branchWorkspaceIdByWorktreePath: { ...root.branchWorkspaceIdByWorktreePath },
       }
       clonedRoots.add(workspace.rootId)
     }
     next[workspace.rootId]!.branchByWorktreePath[workspace.path] = workspace.branch
+    next[workspace.rootId]!.branchWorkspaceIdByWorktreePath![workspace.path] = workspace.id
   }
   return next
 }

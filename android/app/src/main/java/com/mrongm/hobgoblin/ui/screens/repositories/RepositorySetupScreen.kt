@@ -362,12 +362,25 @@ internal fun createProjectFromInspection(
     host: SshHostProfile,
     alias: String,
     inspection: RemoteProjectInspection,
-): RemoteRepositoryProfile = RemoteRepositoryProfile.create(
-    hostProfileId = host.id,
-    alias = alias,
-    remotePath = inspection.resolvedPath,
-    kind = inspection.kind,
-)
+    importKind: RemoteProjectKind? = null,
+): RemoteRepositoryProfile {
+    val targetKind = importKind ?: inspection.kind
+    val targetPath = when (targetKind) {
+        RemoteProjectKind.GitRepository -> {
+            require(inspection.kind == RemoteProjectKind.GitRepository) {
+                "The selected directory is not a Git repository."
+            }
+            inspection.resolvedPath
+        }
+        RemoteProjectKind.PlainWorkspace -> inspection.worktreePath
+    }
+    return RemoteRepositoryProfile.create(
+        hostProfileId = host.id,
+        alias = alias,
+        remotePath = targetPath,
+        kind = targetKind,
+    )
+}
 
 internal fun repositorySnapshotStateAfterRefreshFailure(
     previous: ResourceState<RemoteRepositorySnapshot>,
@@ -562,6 +575,7 @@ fun RepositorySetupScreen(
     repositories: List<RemoteRepositoryProfile>,
     initialHostId: String? = null,
     initialRemotePath: String? = null,
+    initialProjectKind: RemoteProjectKind? = null,
     onBack: () -> Unit,
     onSaveRepository: (RemoteRepositoryProfile) -> Unit,
     onOpenRepository: (String) -> Unit,
@@ -638,7 +652,7 @@ fun RepositorySetupScreen(
             runCatching {
                 withContext(Dispatchers.IO) {
                     val inspection = onInspectProject(host, remotePath)
-                    createProjectFromInspection(host, alias, inspection)
+                    createProjectFromInspection(host, alias, inspection, initialProjectKind)
                 }
             }.onSuccess {
                 onSaveRepository(it)

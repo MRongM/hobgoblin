@@ -53,6 +53,8 @@ Hobgoblin は [Goblin](https://nano-props.github.io/goblin/) から始まりま�
 
 ## マジック操作
 
+- **`hob` でプロジェクトを開く（macOS）:** ターミナルで `hob .` または `hob <directory>` を実行すると、そのローカルディレクトリを Hobgoblin で開くかインポートできます。
+- **グローバルなターミナル切り替え:** 内部ターミナルにフォーカスがある状態で、macOS では `Cmd+Option+Up/Down`、Windows/Linux では `Ctrl+Alt+Up/Down` を使うと、プロジェクトや worktree をまたいですべての開いている内部ターミナルを切り替えられます。
 - **ターミナル入力へのバイナリ貼り付け:** ターミナル入力欄にバイナリのクリップボード内容を貼り付けると、一時ファイルを作成し、生成されたファイルパスを入力します。
 - **ファイルツリーからターミナルへドラッグ:** ファイルツリーのファイルをターミナルへドラッグして、手入力せずに shell-safe なパスを挿入できます。
 - **ファイルツリーのファイルをダブルクリック:** ファイルツリー内のファイルをダブルクリックすると、設定済みのエディタでそのファイルを直接開けます。
@@ -87,6 +89,23 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 Windows では、SmartScreen が未署名インストーラーに警告を出す場合があります。GitHub Release の配布元を信頼できる場合のみ続行してください。
 
+### macOS のターミナルからプロジェクトを開く
+
+`Hobgoblin.app` を `/Applications` に移動した後、ユーザー用の `hob` ランチャーをインストールします:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Hobgoblin.app/Contents/Resources/bin/hob" "$HOME/.local/bin/hob"
+```
+
+`$HOME/.local/bin` が `PATH` に含まれていることを確認し、現在のディレクトリを開くかインポートします:
+
+```sh
+hob .
+```
+
+このコマンドは 0 個または 1 個のディレクトリ引数を受け取り、省略時は現在のディレクトリを使用します。上記のリンクコマンドは既存の `hob` コマンドを上書きしません。
+
 ## ローカルビルドとインストール
 
 要件:
@@ -100,7 +119,7 @@ macOS でデスクトップアプリをビルドしてインストールしま�
 bun run install:app
 ```
 
-このコマンドはホストアーキテクチャ向けの `Hobgoblin.app` をビルドし、`~/Applications` にインストールします。
+このコマンドはホストアーキテクチャ向けの `Hobgoblin.app` をビルドして `~/Applications` にインストールし、パスが空いている場合は `$HOME/.local/bin/hob` を安全に作成します。既存のコマンドは上書きしません。
 
 ## 開発
 

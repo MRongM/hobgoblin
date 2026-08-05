@@ -1,4 +1,5 @@
 import type { ColorTheme } from '#/shared/color-theme.ts'
+import type { TerminalCustomButtonPresetId } from '#/shared/terminal-custom-button-presets.ts'
 
 export type ThemePref = 'auto' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
@@ -40,6 +41,7 @@ export interface TerminalCustomButton {
   label: string
   value: string
   action?: TerminalCustomButtonAction
+  presetId?: TerminalCustomButtonPresetId
 }
 
 export interface SettingsPrefs {

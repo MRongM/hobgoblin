@@ -48,13 +48,14 @@ export function BranchWorkspacePane({
   const t = useT()
   const compact = useIsCompactUi()
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(true)
-  const [terminalFocusMode, setTerminalFocusMode] = useState(false)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>(memberTarget ? 'files' : 'detail')
   const compactNavigationIntent = useRef<CompactWorkspaceSurface | null>(null)
   const [memberRevealRequest, setMemberRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const context = branchWorkspaceFolderContext(rootId, workspace)
   const setExplorerTab = useReposStore((state) => state.setExplorerTab)
   const setDetailTab = useReposStore((state) => state.setDetailTab)
+  const detailFocusMode = useReposStore((state) => state.detailFocusMode)
+  const setDetailFocusMode = useReposStore((state) => state.setDetailFocusMode)
   const memberRepo = useReposStore((state) => (memberTarget ? state.repos[memberTarget.repositoryId] : undefined))
   const memberActiveTab = memberRepo ? explorerTabForRepo(memberRepo) : 'files'
   const memberChangeCount = memberTarget
@@ -88,21 +89,16 @@ export function BranchWorkspacePane({
 
   useEffect(() => {
     setFileAreaCollapsed(!memberTarget)
-    setTerminalFocusMode(false)
     setCompactSurface(compactNavigationIntent.current ?? (memberTarget ? 'files' : 'detail'))
     compactNavigationIntent.current = null
     setMemberRevealRequest(null)
   }, [memberTarget?.repositoryId, memberTarget?.repositoryName, memberTarget?.worktreePath, workspace.id])
 
   useEffect(() => {
-    if (compact) setTerminalFocusMode(false)
-  }, [compact])
-
-  useEffect(() => {
-    if (memberTarget && terminalFocusMode && memberRepo?.ui.detailTab !== 'terminal') {
-      setTerminalFocusMode(false)
+    if (!compact && memberTarget && detailFocusMode && memberRepo?.ui.detailTab !== 'terminal') {
+      setDetailTab(memberTarget.repositoryId, 'terminal')
     }
-  }, [memberRepo?.ui.detailTab, memberTarget, terminalFocusMode])
+  }, [compact, detailFocusMode, memberRepo?.ui.detailTab, memberTarget, setDetailTab])
 
   const showCompactSurface = (surface: CompactWorkspaceSurface) => {
     compactNavigationIntent.current = surface
@@ -126,7 +122,7 @@ export function BranchWorkspacePane({
   }
   const maximizeTerminalFromExplorer = () => {
     if (memberTarget) setDetailTab(memberTarget.repositoryId, 'terminal')
-    setTerminalFocusMode(true)
+    setDetailFocusMode(true)
   }
   const revealMemberPath = (relativePath: string) => {
     if (!memberTarget) return
@@ -242,18 +238,18 @@ export function BranchWorkspacePane({
           repoId={memberTarget.repositoryId}
           layout={layout}
           compactFocusPresentation={compact}
-          terminalFocusMode={!compact && terminalFocusMode}
+          terminalFocusMode={!compact && detailFocusMode}
           onRevealPath={revealMemberPath}
           onShowCompactExplorer={compact ? () => showCompactSurface('scope') : undefined}
           onShowTerminal={() => setDetailTab(memberTarget.repositoryId, 'terminal')}
-          onExitTerminalFocus={compact ? undefined : () => setTerminalFocusMode(false)}
+          onExitTerminalFocus={compact ? undefined : () => setDetailFocusMode(false)}
         />
       ) : (
         <BranchWorkspaceTerminalPanel
           context={context}
           toolbarLeading={compact ? compactScopeButton : undefined}
-          terminalFocusMode={!compact && terminalFocusMode}
-          onExitTerminalFocus={compact ? undefined : () => setTerminalFocusMode(false)}
+          terminalFocusMode={!compact && detailFocusMode}
+          onExitTerminalFocus={compact ? undefined : () => setDetailFocusMode(false)}
         />
       )}
     </RepoWorkspacePane>
@@ -291,7 +287,7 @@ export function BranchWorkspacePane({
     ) : (
       detail
     )
-  ) : terminalFocusMode ? (
+  ) : detailFocusMode ? (
     detail
   ) : (
     <RepoWorkspace

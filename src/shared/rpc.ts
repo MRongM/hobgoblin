@@ -130,11 +130,6 @@ export interface SettingsSnapshot extends RuntimeSettingsSnapshot, RuntimeRecent
   telegramNotifications: TelegramNotificationSettingsSnapshot
 }
 
-export interface GlobalShortcutState {
-  accelerator: string
-  registered: boolean
-}
-
 export interface TerminalAppState {
   pref: TerminalPref
   resolved: ResolvedTerminalApp | null
@@ -210,8 +205,6 @@ export type RpcEvent =
   | { type: 'fetch-interval-changed'; sec: number }
   | { type: 'terminal-notifications-changed'; enabled: boolean }
   | { type: 'shortcuts-disabled-changed'; disabled: boolean }
-  | { type: 'global-shortcut-disabled-changed'; disabled: boolean }
-  | { type: 'swap-close-shortcuts-changed'; swapped: boolean }
   | ({ type: 'terminal-app-changed' } & TerminalAppState)
   | ({ type: 'editor-app-changed' } & EditorAppState)
   | { type: 'settings-write-error'; message: string }
@@ -220,7 +213,6 @@ export type RpcEvent =
 
 export interface NativeRpcHandlers {
   settings: {
-    setGlobalShortcut: (input: { accelerator: string }) => Promise<GlobalShortcutState>
     applyShellProjection: (input: NativeShellProjection) => Promise<void>
   }
 }
@@ -251,7 +243,6 @@ type NativeRpcProcedureSchemas = {
 
 export const RPC_PROCEDURE_SCHEMAS: NativeRpcProcedureSchemas = {
   settings: {
-    setGlobalShortcut: v.object({ accelerator: v.string() }),
     applyShellProjection: NativeShellProjectionSchema,
   },
 }

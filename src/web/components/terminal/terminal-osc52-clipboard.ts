@@ -1,3 +1,5 @@
+import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+
 interface TerminalOscHandlerHost {
   parser: {
     registerOscHandler: (ident: number, callback: (data: string) => boolean) => { dispose: () => void }
@@ -41,36 +43,5 @@ function decodeBase64Utf8(data: string): string | null {
 }
 
 function writeSystemClipboardText(text: string): void {
-  const clipboard = globalThis.navigator?.clipboard
-  if (clipboard?.writeText) {
-    clipboard.writeText(text).catch(() => {
-      copyViaHiddenTextarea(text)
-    })
-    return
-  }
-  // Server mode reached over plain http has no navigator.clipboard (insecure context).
-  copyViaHiddenTextarea(text)
-}
-
-function copyViaHiddenTextarea(text: string): boolean {
-  const doc = globalThis.document
-  if (!doc?.body) return false
-  const previousActive = doc.activeElement
-  const textarea = doc.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', '')
-  textarea.style.position = 'fixed'
-  textarea.style.opacity = '0'
-  textarea.style.pointerEvents = 'none'
-  doc.body.appendChild(textarea)
-  textarea.select()
-  let copied = false
-  try {
-    copied = doc.execCommand('copy')
-  } catch {
-    copied = false
-  }
-  textarea.remove()
-  if (previousActive instanceof HTMLElement) previousActive.focus({ preventScroll: true })
-  return copied
+  void writeTerminalClipboardText(text)
 }

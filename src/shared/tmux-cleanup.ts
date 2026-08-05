@@ -7,20 +7,44 @@ export interface TmuxSessionRecord {
   serverName?: string
 }
 
-export type TmuxHostSessionRecord = TmuxSessionRecord
-
-export interface TmuxSessionIdentity {
-  sessionName: string
-  /** Undefined identifies the compatibility default tmux server. */
-  serverName?: string
+export interface HobgoblinTmuxHostSessionRecord extends TmuxSessionRecord {
+  kind: 'hobgoblin'
 }
+
+export interface DefaultTmuxHostSessionRecord {
+  kind: 'default'
+  sessionName: string
+  initialPath: string
+  attachedClients: number
+  terminalNumber?: never
+  serverName?: never
+}
+
+export type TmuxHostSessionRecord = HobgoblinTmuxHostSessionRecord | DefaultTmuxHostSessionRecord
+
+export type TmuxHostSessionIdentity =
+  | {
+      kind: 'hobgoblin'
+      sessionName: string
+      /** Undefined identifies the compatibility default tmux server. */
+      serverName?: string
+    }
+  | {
+      kind: 'default'
+      sessionName: string
+      serverName?: never
+    }
 
 export interface HostTmuxTargetInput {
   projectRoot: string
 }
 
 export interface HostTmuxCloseInput extends HostTmuxTargetInput {
-  approvedSessions: TmuxSessionIdentity[]
+  approvedSessions: TmuxHostSessionIdentity[]
+}
+
+export interface HostTmuxOpenInput extends HostTmuxTargetInput {
+  session: TmuxHostSessionIdentity
 }
 
 export type HostTmuxInventoryResult = { ok: true; sessions: TmuxHostSessionRecord[] } | { ok: false; message: string }
@@ -34,10 +58,12 @@ export type HostTmuxCloseResult =
   | {
       ok: true
       closed: TmuxHostSessionRecord[]
-      missing: TmuxSessionIdentity[]
+      missing: TmuxHostSessionIdentity[]
       failed: HostTmuxCloseFailure[]
     }
   | { ok: false; message: string }
+
+export type HostTmuxOpenResult = { ok: true; status: 'opened' | 'missing' } | { ok: false; message: string }
 
 export interface AssociatedTmuxTargetInput {
   projectRoot: string

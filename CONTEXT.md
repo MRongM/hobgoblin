@@ -9,8 +9,12 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 ## Language
 
 **Android terminals tab**:
-The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal in stable creation order so an existing session can be reopened quickly. Its item backgrounds distinguish running (green), disconnected (yellow), exited/failed (red), and starting (neutral) states. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
+The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal by descending retained-terminal opened time so the newest item is first and an existing session can be reopened quickly. Each item shows that opened time in localized relative form, and its header status badge distinguishes running (green), disconnected/failed (red), exited (gray), and starting (neutral) states while preserving a text label. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
+
+**Android retained terminal opened time**:
+The immutable device-local time assigned when a retained Android terminal record first enters the terminal list, including a recovered tmux record. It orders the Android terminals tab newest-first and is displayed there as localized relative time. Reconnecting, terminal input or output, status changes, and list navigation never change it. It is distinct from terminal activity time and from the unknown remote creation time of a recovered tmux session.
+_Avoid_: Last activity time, reconnect time, remote tmux creation time
 
 **Android retained terminal close**:
 An explicit, confirmed Android terminal action that stops its active Android controller while retaining the device-local session record and list item for later reconnection. The Terminals-tab item offers it only while the retained session is starting or running, in the same action position later occupied by reconnect. For a tmux-backed terminal it detaches the Android client without ending the remote tmux session. It is distinct from terminal backgrounding, retained terminal deletion, associated tmux session cleanup, or deleting a Host or Project.
@@ -28,8 +32,12 @@ _Avoid_: New terminal, open terminal, automatic retry
 A non-destructive navigation from an Android terminal screen to the Android terminals tab that leaves its retained session running or reconnectable. A rightward terminal-page swipe uses this path even for a Host temporary terminal, while the existing Back path retains its own destination-specific behavior.
 _Avoid_: Application backgrounding, terminal close, terminal disconnect
 
+**Android project created time**:
+The immutable device-local time when one Android Project is first saved to the local Project list. It is distinct from remote directory, repository, or Git history creation time; editing the Project never changes it, and legacy records without trustworthy time data remain explicitly unknown.
+_Avoid_: Repository creation time, directory creation time, project edit time
+
 **Android manual item order**:
-The restorable, device-local order chosen by dragging Android Host, Project, or Project Worktree items from their dedicated drag handles. Host and Project orders are global to their respective lists; Worktree order is scoped to one Project. The Android Terminals tab instead uses stable creation order. Manual order changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
+The restorable, device-local order chosen by dragging Android Host, Project, or Project Worktree items from their dedicated drag handles. Host and Project orders are global to their respective lists; Worktree order is scoped to one Project. Before a Project order exists, Projects use descending Android project created time; the Android Terminals tab instead always uses descending retained-terminal opened time. Manual order changes only Android presentation, never Git worktree enumeration or remote repository state, and newly discovered items append after retained ordered items.
 _Avoid_: Git worktree order, remote sort order, synchronized order
 
 **Android terminal focus mode**:
@@ -49,12 +57,20 @@ The Android main-navigation destination where the user explicitly selects one sa
 _Avoid_: Host-detail tmux tab, Android workspace catalog, remembered Host selection, tmux session creator
 
 **Default tmux session**:
-An ordinary user-created tmux session found on the selected SSH Host's default tmux server that does not carry a valid current-protocol Hobgoblin tmux identity. It keeps its own tmux session name and is distinct from a Hobgoblin session found on either the default or a project-scoped server.
+An ordinary user-created tmux session found on the selected local or SSH host's default tmux server that does not carry a valid current-protocol Hobgoblin tmux identity. It keeps its own opaque tmux session name, may appear in the Android Host catalog or Desktop Host inventory, and is distinct from a Hobgoblin session found on either the default or a project-scoped server.
 _Avoid_: Legacy Hobgoblin tmux session, project-scoped tmux session, native shell
 
 **Android tmux directory project import**:
 An explicit Android action that takes one directory from the current tmux scan into the Project setup flow, where it is validated and saved as a device-local Project. It is distinct from tmux discovery, terminal recovery, and automatic or batch project import.
 _Avoid_: Automatic project discovery, tmux project synchronization, session import
+
+**Android tmux Git repository import**:
+One Android tmux directory import choice that identifies a Git repository by its repository primary worktree, even when the scanned directory belongs to another worktree. Its availability is independent from importing the scanned worktree as a plain workspace.
+_Avoid_: Main-branch import, current-worktree project, automatic repository import
+
+**Android tmux plain workspace import**:
+One Android tmux directory import choice that treats the current Git worktree root as a plain workspace without Git project behavior. It may coexist with an Android tmux Git repository import for the same repository, and its availability is determined independently by project type and current-worktree path.
+_Avoid_: Git repository import, arbitrary tmux child directory, linked repository
 
 **Tmux server target**:
 The exact default or strictly named project-scoped tmux server on which one discovered session was observed and to which Android must later attach it. It is part of host-level recovery identity because a session name may exist on more than one server and a project-root hash cannot be reversed.
@@ -64,12 +80,52 @@ _Avoid_: Project root, socket scan result, tmux session name
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
 
+**Terminal cycle controls**:
+The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
+_Avoid_: Project switcher, terminal tabs, terminal takeover
+
+**Terminal return to bottom**:
+The fixed navigation action that first moves the renderer's normal terminal buffer to its bottom. For a tmux-backed terminal, any connected controller, viewer, or unowned attachment additionally asks the server to leave tmux copy mode with the exact validated project server and session target; it never injects `q`, Escape, or shell input and never takes terminal ownership.
+_Avoid_: Terminal input, takeover, blind key injection, synchronized scroll position
+
+**Desktop/Web terminal command dock**:
+A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling and Return to bottom, followed by a visual divider and any configured custom terminal buttons. It does not provide a free-form command composer and is distinct from the Mobile Web terminal command deck.
+_Avoid_: Mobile Web terminal command deck, terminal topbar, command composer, external input box
+
 **Internal terminal**:
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
 
+**Mobile Web terminal vertical scroll gesture**:
+A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a controller tap retains ordinary terminal focus behavior, while a read-only tap never invokes the input method.
+_Avoid_: Page scroll, terminal input gesture, takeover gesture, history-only gesture
+
+**Mobile Web terminal text selection**:
+A renderer-local interaction that begins when a primary touch remains within terminal touch slop for a long press, selects the xterm word under that touch, and lets continued dragging extend the xterm selection before a local Copy action is offered on release. It is available to controller, viewer, and unowned attachments, never sends terminal input or mouse protocol, never requests takeover, and never synchronizes selected text; ordinary vertical drags remain terminal scrolling and ordinary horizontal drags remain local width panning.
+_Avoid_: Native DOM selection, terminal mouse input, automatic copy, synchronized selection
+
+**Mobile Web terminal edge scrubber**:
+A renderer-local, touch-sized interaction strip at the right edge of a Mobile Web internal terminal that lets controller, viewer, and unowned attachments drag directly to an absolute normal-buffer history position. It has no idle track or thumb; while dragging or keyboard-focused it briefly shows a terminal-style position tick and a 14-pixel percentage readout. It is unavailable when the active buffer has no normal scrollback, cancels gesture inertia when grabbed, and never requests terminal input control or synchronizes viewing position through the server.
+_Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
+
+**Mobile Web terminal command deck**:
+A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. Its action row starts with global terminal cycle controls, followed by the local return-to-bottom action, terminal input, command composition, renderer-local width presentation, and Focus. All keys are 32 pixels high. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+_Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
+
+**Mobile Web terminal focus mode**:
+A temporary, controller-only presentation for the selected Mobile Web internal terminal that hides the complete auxiliary bottom dock, including the command deck, composer, and custom terminal buttons. A small top-right exit handle restores the dock; changing terminal, attachment authority, or mobile presentation resets the mode. It is renderer-local, never persisted or synchronized, and does not hide Web navigation or enter desktop Terminal focus mode.
+_Avoid_: Desktop Terminal focus mode, browser fullscreen, hidden system keyboard, persisted terminal layout
+
+**Mobile Web terminal input latency**:
+The perceived delay between direct virtual-keyboard input or committed input-method text and the corresponding internal terminal response or echo becoming visible. Input-method pre-edit text is not terminal input; candidate UI and system keyboard animation latency are excluded.
+_Avoid_: Keyboard animation lag, composition candidate lag, terminal startup latency
+
+**Built-in terminal button preset**:
+An app-supplied custom terminal button whose label and sent text follow the application language until the user edits it. Reordering preserves the preset, editing turns it into an ordinary custom terminal button, and removing it is a durable user choice.
+_Avoid_: Fixed terminal action, translated shell command, mandatory terminal button
+
 **Terminal focus mode**:
-A temporary desktop presentation that maximizes the selected internal terminal by hiding the workspace navigation and file surfaces until the user exits focus. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
+A restorable, application-global desktop presentation preference that maximizes the selected internal terminal by hiding workspace navigation and file surfaces until the user explicitly exits Focus. It remains active while switching projects, repositories, branches, branch workspaces, and terminals without first restoring the split; on compact viewports or destinations without an eligible terminal it remains latent and reapplies when an eligible desktop terminal destination returns. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
 _Avoid_: Detail focus mode, workspace focus mode
 
 **Selected internal terminal**:
@@ -137,7 +193,7 @@ A current-protocol tmux session found in the selected operating-system user's co
 _Avoid_: Any tmux session, project-verified session, authenticated tmux session
 
 **Host tmux session inventory**:
-An explicit project-menu action that uses the selected project's local or SSH host only as a host locator, enumerates Hobgoblin project-scoped tmux servers plus the compatibility default server for that operating-system user, and lists every host-manageable Hobgoblin tmux session with its fixed directory. The user may select none or several sessions and explicitly close only those selections after the server revalidates their operational metadata and exact server origins.
+An explicit project-menu action that uses the selected project's local or SSH host only as a host locator, enumerates Hobgoblin project-scoped tmux servers plus the default server for that operating-system user, and lists host-manageable Hobgoblin sessions together with safe ordinary default-server sessions. The user may exact-attach one revalidated live row in an external terminal, or select none or several rows and explicitly close only those selections after the server revalidates their kind, name, metadata, and exact server origins.
 _Avoid_: Project tmux sessions, background tmux scan, automatic tmux cleanup
 
 **Recovered Android tmux terminal**:
@@ -149,15 +205,15 @@ The per-launch choice between the native login shell and the compatibility-named
 _Avoid_: Tmux setting, terminal preference, external terminal mode
 
 **Canonical terminal geometry**:
-The server-owned PTY column and row count published by the current controller attachment.
+The server-owned PTY column and row count published by the current controller attachment and used by read-only attachments to parse that terminal's VT stream. A read-only renderer may expose a smaller local presentation viewport, but it never substitutes that viewport's dimensions while parsing controller-sized output.
 _Avoid_: Viewer size, shared viewport size
 
 **Local terminal geometry**:
-The renderer-local xterm column and row count fitted to one client's visible host. It is never synchronized or persisted; only a controller may publish it as new canonical terminal geometry.
-_Avoid_: Canonical size, remote size
+The renderer-local xterm column and row count fitted to one controlling attachment's visible host. It is never synchronized or persisted and only that controller may publish it as new canonical terminal geometry; viewer and unowned attachments instead keep canonical terminal geometry and pan their local presentation viewport without resizing xterm or the PTY.
+_Avoid_: Canonical size, read-only presentation viewport, remote size
 
 **External terminal**:
-An operating-system terminal application opened outside Hobgoblin at the selected worktree path.
+An operating-system terminal application opened outside Hobgoblin at a selected workspace path, or launched with an attach-only command for one revalidated Host tmux inventory session. Host-inventory attach never creates a replacement session and does not require the session's original directory to still exist.
 _Avoid_: Native terminal, system terminal
 
 **Associated Hobgoblin tmux session**:
@@ -183,6 +239,10 @@ _Avoid_: Tmux status, currently enabled terminal, associated tmux cleanup
 **Settings dialog**:
 The modal surface for changing application preferences while keeping the current workspace visible underneath.
 _Avoid_: Settings screen, full-page settings
+
+**Desktop CLI project import**:
+An explicit macOS shell action that sends one local directory to the installed Hobgoblin desktop app, where the ordinary external-open flow validates, opens, and activates the resolved project. It never writes project or recent-project state directly from the command-line process.
+_Avoid_: CLI project registration, server-side import, recent-project insertion
 
 **AI handoff command**:
 A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted directory context. The handoff selects an existing open terminal for that directory or creates one when no open terminal exists before filling the command text.

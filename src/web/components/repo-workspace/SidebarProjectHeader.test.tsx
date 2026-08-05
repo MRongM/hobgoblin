@@ -19,6 +19,8 @@ const navigationState = vi.hoisted(() => ({
   showRepoDetailTab: vi.fn(),
 }))
 
+const responsiveState = vi.hoisted(() => ({ compact: false }))
+
 const repoState = {
   activeId: '/repo-a/api',
   activeProjectId: '/repo-a',
@@ -52,6 +54,10 @@ vi.mock('#/web/shell-overlay-actions.tsx', () => ({
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 36 }),
+}))
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => responsiveState.compact,
 }))
 
 vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', () => ({
@@ -94,6 +100,7 @@ beforeEach(() => {
   repoState.activeId = '/repo-a/api'
   repoState.activeProjectId = '/repo-a'
   repoState.projectListExpanded = false
+  responsiveState.compact = false
   navigationState.showRepoDetailTab.mockReset()
   repoState.toggleProjectListExpanded.mockReset()
   repoState.toggleProjectListExpanded.mockImplementation(() => {
@@ -236,6 +243,7 @@ describe('SidebarProjectHeader', () => {
 
   test('returns to the compact terminal without changing the persisted focus preference', () => {
     const onShowCompactDetail = vi.fn()
+    responsiveState.compact = true
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-a" onShowCompactDetail={onShowCompactDetail} />)
     })
@@ -246,6 +254,35 @@ describe('SidebarProjectHeader', () => {
     act(() => terminalButton?.click())
 
     expect(onShowCompactDetail).toHaveBeenCalledTimes(1)
+  })
+
+  test('prioritizes compact navigation without overflowing the mobile sidebar topbar', () => {
+    responsiveState.compact = true
+    act(() => {
+      root!.render(
+        <SidebarProjectHeader repoId="/repo-a/api" onShowCompactDetail={() => {}} onShowCompactFiles={() => {}} />,
+      )
+    })
+
+    const topbar = container!.querySelector<HTMLElement>('.topbar')
+    const buttons = Array.from(topbar?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+    const projectButton = container!.querySelector<HTMLButtonElement>('button[aria-label="repo-tabs.repos"]')
+
+    expect(buttons[0]?.getAttribute('aria-label')).toBe('mobile.show-terminal')
+    expect(container!.querySelector('button[aria-label="topbar.open"]')).toBeNull()
+    expect(container!.querySelector('button[aria-label="file-tree.title"]')).toBeNull()
+    expect(topbar?.className).toContain('min-w-0')
+    expect(topbar?.className).toContain('overflow-hidden')
+    expect(projectButton?.className).toContain('flex-1')
+    expect(projectButton?.className).toContain('shrink')
+  })
+
+  test('keeps repository import available in the desktop sidebar topbar', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" onMaximizeTerminal={() => {}} />)
+    })
+
+    expect(container!.querySelector('button[aria-label="topbar.open"]')).not.toBeNull()
   })
 
   test('does not expose desktop terminal maximize without an owner callback', () => {

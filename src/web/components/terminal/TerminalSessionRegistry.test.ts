@@ -103,6 +103,9 @@ describe('TerminalSessionRegistry', () => {
           [WORKTREE_PATH]: BRANCH,
           [BRANCH_WORKSPACE_PATH]: 'feature/auth',
         },
+        branchWorkspaceIdByWorktreePath: {
+          [BRANCH_WORKSPACE_PATH]: 'branch-workspace-1',
+        },
       },
     })
 
@@ -125,7 +128,126 @@ describe('TerminalSessionRegistry', () => {
       repoRoot: REPO_ROOT,
       branch: 'feature/auth',
       worktreePath: BRANCH_WORKSPACE_PATH,
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-workspace-1',
     })
+  })
+
+  test('publishes a stable terminal catalog across synchronized projects', () => {
+    const secondRepoRoot = '/repo-b'
+    const secondWorktreePath = '/repo-b'
+    registry.setRepoIndex({
+      ...makeRepoIndex(),
+      [secondRepoRoot]: {
+        instanceToken: 1,
+        branchByWorktreePath: { [secondWorktreePath]: 'feature-b' },
+      },
+    })
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [
+        makeServerSession('session-1', 'terminal-1', { displayOrder: 1 }),
+        makeServerSession('session-2', 'terminal-2', { displayOrder: 0 }),
+      ],
+      'attachment_local',
+      new Map(),
+    )
+    registry.reconcileServerSessions(
+      secondRepoRoot,
+      [
+        {
+          ...makeServerSession('session-b', 'terminal-1'),
+          key: `${secondRepoRoot}\0${secondWorktreePath}\0terminal-1`,
+          cwd: secondWorktreePath,
+        },
+      ],
+      'attachment_local',
+      new Map(),
+    )
+    const catalogRegistry = registry as TerminalSessionRegistry & {
+      terminalCatalogSnapshot?: () => readonly { key: string }[]
+    }
+
+    const first = catalogRegistry.terminalCatalogSnapshot?.() ?? []
+    const second = catalogRegistry.terminalCatalogSnapshot?.() ?? []
+
+    expect(first.map((descriptor) => descriptor.key)).toEqual([
+      `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-2`,
+      `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+      `${secondRepoRoot}\0${secondWorktreePath}\0terminal-1`,
+    ])
+    expect(second).toBe(first)
+  })
+
+  test('notifies terminal catalog subscribers only when catalog data changes', () => {
+    registry.setRepoIndex(makeRepoIndex())
+    const listener = vi.fn()
+    const unsubscribe = registry.subscribeTerminalCatalog(listener)
+
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [makeServerSession('session-1', 'terminal-1')],
+      'attachment_local',
+      new Map(),
+    )
+    expect(listener).toHaveBeenCalled()
+    const snapshot = registry.terminalCatalogSnapshot()
+    listener.mockClear()
+
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [makeServerSession('session-1', 'terminal-1')],
+      'attachment_local',
+      new Map(),
+    )
+    expect(listener).not.toHaveBeenCalled()
+    expect(registry.terminalCatalogSnapshot()).toBe(snapshot)
+
+    registry.reconcileServerSessions(REPO_ROOT, [], 'attachment_local', new Map())
+    expect(listener).toHaveBeenCalled()
+    expect(registry.terminalCatalogSnapshot()).toEqual([])
+    unsubscribe()
+  })
+
+  test('routes renderer-local Mobile Web selection to one terminal session', () => {
+    registry.setRepoIndex(makeRepoIndex())
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [makeServerSession('session-1', 'terminal-1')],
+      'attachment_local',
+      new Map(),
+    )
+    const key = `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`
+    const session = (registry as unknown as { sessions: Map<string, Record<string, unknown>> }).sessions.get(key)!
+    const point = { clientX: 40, clientY: 60 }
+    const beginMobileSelection = vi.fn(() => true)
+    const extendMobileSelection = vi.fn()
+    const finishMobileSelection = vi.fn()
+    const cancelMobileSelection = vi.fn()
+    const mobileSelectionText = vi.fn(() => 'selected')
+    const clearMobileSelection = vi.fn()
+    Object.assign(session, {
+      beginMobileSelection,
+      extendMobileSelection,
+      finishMobileSelection,
+      cancelMobileSelection,
+      mobileSelectionText,
+      clearMobileSelection,
+    })
+
+    expect(registry.beginMobileSelection(key, point)).toBe(true)
+    registry.extendMobileSelection(key, point)
+    registry.finishMobileSelection(key, point)
+    registry.cancelMobileSelection(key, point)
+    expect(registry.mobileSelectionText(key)).toBe('selected')
+    registry.clearMobileSelection(key)
+
+    expect(beginMobileSelection).toHaveBeenCalledWith(point)
+    expect(extendMobileSelection).toHaveBeenCalledWith(point)
+    expect(finishMobileSelection).toHaveBeenCalledWith(point)
+    expect(cancelMobileSelection).toHaveBeenCalledWith(point)
+    expect(mobileSelectionText).toHaveBeenCalledTimes(1)
+    expect(clearMobileSelection).toHaveBeenCalledTimes(1)
   })
 
   afterEach(() => {

@@ -62,6 +62,7 @@ Representative examples:
 - saved session state
 - fixed desktop detail pane size
 - per-workspace desktop repository-list height
+- application-global desktop Terminal Focus preference
 - active repo and open repo set for next launch
 - `restorableRepoCache` for warm restore
 - boot-only `useSessionRestoreStore`
@@ -88,8 +89,8 @@ Notes:
 
 - If the state only matters during one interaction, keep it local.
 - Compact workspace focus surfaces (`detail`, `scope`, and `files`) are local presentation state. Do not persist them or project them into desktop pane state.
-- Desktop terminal Focus is also local presentation state. Own it beside the destination that composes the terminal, and clear it on non-terminal selection, destination changes, responsive-mode changes, deletion fallback, and relaunch.
-- A legacy session `detailFocusMode` field is transport compatibility only. Normalize it to `false`; never project it into renderer Focus state or write an active Focus value back to the session.
+- Desktop Terminal Focus is an application-global, restorable workspace-layout preference. Project it through `RestorableWorkspaceState.detailFocusMode`, preserve it across project, repository, branch, branch-workspace, and terminal changes, and persist explicit enter/exit changes through `SessionState`.
+- When the current destination or compact viewport cannot present Desktop Terminal Focus, keep the preference latent instead of clearing it. Reapply it when an eligible desktop terminal destination is available; clear it only through an explicit exit or session reset.
 - If the state must converge across windows right now, make it runtime-coherent.
 - If the state only needs to come back on next launch, make it restorable.
 - Let the server own runtime-coherent truth for settings, repo data, and terminal state.

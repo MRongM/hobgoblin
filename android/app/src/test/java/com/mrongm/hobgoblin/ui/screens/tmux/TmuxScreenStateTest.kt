@@ -1,6 +1,8 @@
 package com.mrongm.hobgoblin.ui.screens.tmux
 
 import com.mrongm.hobgoblin.domain.ResourceState
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectKind
+import com.mrongm.hobgoblin.domain.ssh.RemoteProjectPathResolution
 import com.mrongm.hobgoblin.navigation.AppRoute
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,6 +10,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TmuxScreenStateTest {
+    @Test
+    fun `tmux catalog snapshot keeps groups and project path identities coherent`() {
+        val resolution = RemoteProjectPathResolution(
+            requestedPath = "/srv/app-feature",
+            kind = RemoteProjectKind.GitRepository,
+            projectPath = "/srv/app",
+            worktreePath = "/srv/app-feature",
+        )
+
+        val snapshot = HostTmuxCatalogSnapshot(
+            groups = emptyList(),
+            projectPathResolutions = mapOf(resolution.requestedPath to resolution),
+        )
+
+        assertTrue(snapshot.groups.isEmpty())
+        assertEquals(resolution, snapshot.projectPathResolutions.getValue("/srv/app-feature"))
+    }
+
     @Test
     fun `entering tmux always starts with an explicit host choice`() {
         assertEquals(AppRoute.Tmux(selectedHostId = null), tmuxRoute())

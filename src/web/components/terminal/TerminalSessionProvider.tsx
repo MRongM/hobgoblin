@@ -244,6 +244,13 @@ export function TerminalSessionProvider({
       scrollToBottom: registry.scrollToBottom,
       focusTerminal: registry.focusTerminal,
       scrollLines: registry.scrollLines,
+      scrollByTouch: registry.scrollByTouch,
+      beginMobileSelection: registry.beginMobileSelection,
+      extendMobileSelection: registry.extendMobileSelection,
+      finishMobileSelection: registry.finishMobileSelection,
+      cancelMobileSelection: registry.cancelMobileSelection,
+      mobileSelectionText: registry.mobileSelectionText,
+      clearMobileSelection: registry.clearMobileSelection,
       clearBell: registry.clearBell,
       closeTerminalAndDismissDetailIfLast: registry.closeTerminalAndDismissDetailIfLast,
       registerWorktreeHost: registry.registerWorktreeHost,
@@ -254,6 +261,7 @@ export function TerminalSessionProvider({
       findNext: registry.findNext,
       findPrevious: registry.findPrevious,
       clearSearch: registry.clearSearch,
+      writeExtraKey: registry.writeExtraKey,
       writeInput: registry.writeInput,
       takeover: registry.takeover,
       reorderSessions: registry.reorderSessions,
@@ -265,6 +273,8 @@ export function TerminalSessionProvider({
     () => ({
       worktreeSnapshot: registry.worktreeSnapshot,
       subscribeWorktree: registry.subscribeWorktree,
+      terminalCatalogSnapshot: registry.terminalCatalogSnapshot,
+      subscribeTerminalCatalog: registry.subscribeTerminalCatalog,
       repoSyncReady: (repoRoot: string) => {
         const instanceToken = repoIndex[repoRoot]?.instanceToken
         return syncTracker.isReady(repoRoot, instanceToken)

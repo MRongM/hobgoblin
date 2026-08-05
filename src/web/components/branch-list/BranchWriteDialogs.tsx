@@ -188,7 +188,7 @@ export function MergeInDialog({
       onOpenChange={(o) => {
         if (!o && !isPending) onClose()
       }}
-      title={t('action.merge-in-title')}
+      title={t('action.merge-in-title', { branch: branch.name })}
     >
       <form
         data-slot="merge-dialog-form"

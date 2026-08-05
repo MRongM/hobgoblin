@@ -190,6 +190,8 @@ export interface RestorableWorkspaceState {
   /** Global sidebar project-list expansion preference restored from SessionState. */
   projectListExpanded: boolean
   detailCollapsed: boolean
+  /** Application-global desktop terminal maximization preference. */
+  detailFocusMode: boolean
   workspaceLayout: RepoWorkspaceLayout
   detailPaneSizes: WorkspaceDetailPaneSizes
   fileTreePaneSizes: WorkspaceDetailPaneSizes
@@ -230,9 +232,14 @@ export interface RestorableWorkspaceActions {
   reorderRepos: (fromId: string, toId: string) => void
   setDetailCollapsed: (collapsed: boolean) => void
   toggleDetailCollapsed: () => void
+  setDetailFocusMode: (focused: boolean) => void
+  toggleDetailFocusMode: () => void
   setWorkspaceLayout: (idOrLayout: string, layout?: RepoWorkspaceLayout) => void
   applySessionLayoutState: (
-    layout: Pick<SessionState, 'workspaceLayout' | 'detailCollapsed' | 'detailPaneSizes' | 'fileTreePaneSizes'>,
+    layout: Pick<
+      SessionState,
+      'workspaceLayout' | 'detailCollapsed' | 'detailFocusMode' | 'detailPaneSizes' | 'fileTreePaneSizes'
+    >,
   ) => void
   applySessionSelectedTerminalState: (selectedTerminalByWorktree: Record<string, string>) => void
   setDetailPaneSize: (layout: RepoWorkspaceLayout, size: number) => void

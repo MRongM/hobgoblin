@@ -51,6 +51,7 @@ describe('useSessionPersistence', () => {
       workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 224 },
       sessionReady: true,
       projectListExpanded: true,
+      detailFocusMode: true,
       selectedTerminalByWorktree: {
         '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
       },
@@ -68,6 +69,7 @@ describe('useSessionPersistence', () => {
         workspaceRepositoryListExpandedByRoot: { '/tmp/workspace': false },
         workspaceRepositoryListHeightByRoot: { '/tmp/workspace': 224 },
         projectListExpanded: true,
+        detailFocusMode: true,
         selectedTerminalByWorktree: {
           '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
         },

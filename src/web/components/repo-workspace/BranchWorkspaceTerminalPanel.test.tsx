@@ -17,8 +17,13 @@ const selectTerminal = vi.fn()
 const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn(async () => true)
 const terminalTabsProps: Array<Record<string, unknown>> = []
+let compactUi = false
 let snapshot = { worktreeTerminalKey: WORKTREE_KEY, sessions: [], selectedDescriptor: null, count: 0 } as any
 let requestedWorktreeKey: string | null = null
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => compactUi,
+}))
 
 vi.mock('#/web/components/terminal/terminal-session-context.ts', () => ({
   useTerminalSessionContext: () => ({
@@ -80,6 +85,7 @@ beforeEach(() => {
   closeTerminalAndDismissDetailIfLast.mockClear()
   reorderSessions.mockClear()
   terminalTabsProps.length = 0
+  compactUi = false
   requestedWorktreeKey = null
   snapshot = { worktreeTerminalKey: WORKTREE_KEY, sessions: [], selectedDescriptor: null, count: 0 }
 })
@@ -174,13 +180,19 @@ describe('BranchWorkspaceTerminalPanel', () => {
     expect(toolbar?.className).toContain('[-webkit-app-region:drag]')
   })
 
+  test('collapses the branch-workspace terminal list in compact UI like a Git workspace', async () => {
+    compactUi = true
+
+    await renderPanel()
+
+    expect(terminalTabsProps.at(-1)?.responsiveCompact).toBe(true)
+  })
+
   test('lets terminal tabs use the available width before the drag spacer', async () => {
     await renderPanel()
 
     const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
-    const dragSpacer = Array.from(toolbar?.children ?? []).find(
-      (child) => child.getAttribute('aria-hidden') === 'true',
-    )
+    const dragSpacer = Array.from(toolbar?.children ?? []).find((child) => child.getAttribute('aria-hidden') === 'true')
 
     expect(dragSpacer?.classList.contains('w-2')).toBe(true)
     expect(dragSpacer?.classList.contains('shrink-0')).toBe(true)

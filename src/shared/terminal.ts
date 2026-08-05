@@ -165,6 +165,11 @@ export interface TerminalResizeInput {
   attachmentId?: string
 }
 
+export interface TerminalReturnToBottomInput {
+  sessionId: string
+  attachmentId?: string
+}
+
 export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
@@ -269,6 +274,7 @@ export interface TerminalSocketRequestInputs {
   restart: TerminalRestartInput
   write: TerminalWriteInput
   resize: TerminalResizeInput
+  'return-to-bottom': TerminalReturnToBottomInput
   takeover: TerminalTakeoverInput
   close: TerminalSessionInput
   'list-sessions': TerminalListSessionsInput
@@ -284,6 +290,7 @@ export interface TerminalSocketResponseOutputs {
   restart: TerminalAttachResult
   write: TerminalMutationResult
   resize: TerminalMutationResult
+  'return-to-bottom': TerminalMutationResult
   takeover: TerminalTakeoverResult
   close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
@@ -339,6 +346,7 @@ const TERMINAL_SOCKET_ACTIONS = [
   'restart',
   'write',
   'resize',
+  'return-to-bottom',
   'takeover',
   'close',
   'list-sessions',
@@ -392,6 +400,10 @@ const TerminalWriteInputSchema = v.object({
   attachmentId: TerminalOptionalAttachmentIdSchema,
 })
 const TerminalResizeInputSchema = TerminalAttachInputSchema
+const TerminalReturnToBottomInputSchema = v.object({
+  sessionId: TerminalSessionIdSchema,
+  attachmentId: TerminalOptionalAttachmentIdSchema,
+})
 const TerminalSessionInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
   closeTmuxSession: v.optional(v.boolean()),
@@ -524,6 +536,12 @@ const TerminalClientMessageSchema = v.variant('type', [
     requestId: TerminalRequestIdSchema,
     action: v.literal('resize'),
     input: TerminalResizeInputSchema,
+  }),
+  v.object({
+    type: v.literal('request'),
+    requestId: TerminalRequestIdSchema,
+    action: v.literal('return-to-bottom'),
+    input: TerminalReturnToBottomInputSchema,
   }),
   v.object({
     type: v.literal('request'),

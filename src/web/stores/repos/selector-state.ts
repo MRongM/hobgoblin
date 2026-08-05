@@ -8,7 +8,13 @@ import type {
 
 export interface MainWindowWorkspaceState extends Pick<
   ReposStore,
-  'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'
+  | 'activeId'
+  | 'activeProjectId'
+  | 'order'
+  | 'detailCollapsed'
+  | 'detailFocusMode'
+  | 'workspaceLayout'
+  | 'sessionReady'
 > {}
 
 export interface MainWindowNavigationState extends Pick<ReposStore, 'activeId' | 'activeProjectId' | 'order'> {}
@@ -21,7 +27,7 @@ export interface KeyboardRuntimeState {
 
 export interface RestorableWorkspaceViewportState extends Pick<
   ReposStore,
-  'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout'
+  'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout'
 > {}
 
 export interface RestorableWorkspaceNavigationState extends Pick<
@@ -52,6 +58,7 @@ export function restorableWorkspaceStateFromStore(
     | 'workspaceRepositoryListHeightByRoot'
     | 'projectListExpanded'
     | 'detailCollapsed'
+    | 'detailFocusMode'
     | 'workspaceLayout'
     | 'detailPaneSizes'
     | 'fileTreePaneSizes'
@@ -70,6 +77,7 @@ export function restorableWorkspaceStateFromStore(
     workspaceRepositoryListHeightByRoot: state.workspaceRepositoryListHeightByRoot,
     projectListExpanded: state.projectListExpanded,
     detailCollapsed: state.detailCollapsed,
+    detailFocusMode: state.detailFocusMode,
     workspaceLayout,
     detailPaneSizes: state.detailPaneSizes,
     fileTreePaneSizes: state.fileTreePaneSizes,
@@ -87,7 +95,10 @@ export function localWorkspaceStateFromStore(
 }
 
 function restorableWorkspaceViewportStateFromStore(
-  state: Pick<ReposStore, 'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout'> & {
+  state: Pick<
+    ReposStore,
+    'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'detailFocusMode' | 'workspaceLayout'
+  > & {
     repos?: ReposStore['repos']
   },
 ): RestorableWorkspaceViewportState {
@@ -99,6 +110,7 @@ function restorableWorkspaceViewportStateFromStore(
     activeProjectId: state.activeProjectId,
     order: state.order,
     detailCollapsed: state.detailCollapsed,
+    detailFocusMode: state.detailFocusMode,
     workspaceLayout,
   }
 }
@@ -132,7 +144,13 @@ export function localWorkspaceSearchStateFromStore(
 export function mainWindowWorkspaceStateFromStore(
   state: Pick<
     ReposStore,
-    'activeId' | 'activeProjectId' | 'order' | 'detailCollapsed' | 'workspaceLayout' | 'sessionReady'
+    | 'activeId'
+    | 'activeProjectId'
+    | 'order'
+    | 'detailCollapsed'
+    | 'detailFocusMode'
+    | 'workspaceLayout'
+    | 'sessionReady'
   > & {
     repos?: ReposStore['repos']
   },
@@ -144,6 +162,7 @@ export function mainWindowWorkspaceStateFromStore(
     activeProjectId: restorable.activeProjectId,
     order: restorable.order,
     detailCollapsed: restorable.detailCollapsed,
+    detailFocusMode: restorable.detailFocusMode,
     workspaceLayout: restorable.workspaceLayout,
     sessionReady: local.sessionReady,
   }
@@ -165,6 +184,7 @@ export function mainWindowWorkspaceStateEqual(a: MainWindowWorkspaceState, b: Ma
     a.activeId === b.activeId &&
     a.activeProjectId === b.activeProjectId &&
     a.detailCollapsed === b.detailCollapsed &&
+    a.detailFocusMode === b.detailFocusMode &&
     a.workspaceLayout === b.workspaceLayout &&
     a.sessionReady === b.sessionReady &&
     arraysEqual(a.order, b.order)
@@ -191,6 +211,7 @@ export function keyboardRuntimeStateFromStore(
     activeProjectId: null,
     order: [],
     detailCollapsed: state.detailCollapsed,
+    detailFocusMode: false,
     workspaceLayout: 'left-right',
   })
   const local = localWorkspaceSearchStateFromStore({ branchSearchQueries: state.branchSearchQueries })

@@ -50,15 +50,12 @@ class TerminalsScreenStateTest {
     }
 
     @Test
-    fun `terminal overview card tone follows connection status`() {
+    fun `terminal overview badge tone follows lifecycle meaning`() {
         assertEquals(TerminalOverviewTone.Neutral, terminalOverviewTone(TerminalSessionStatus.Starting))
         assertEquals(TerminalOverviewTone.Running, terminalOverviewTone(TerminalSessionStatus.Running))
-        assertEquals(TerminalOverviewTone.Exited, terminalOverviewTone(TerminalSessionStatus.Exited))
-        assertEquals(TerminalOverviewTone.Exited, terminalOverviewTone(TerminalSessionStatus.Failed))
-        assertEquals(
-            TerminalOverviewTone.Disconnected,
-            terminalOverviewTone(TerminalSessionStatus.Disconnected),
-        )
+        val alertTone = terminalOverviewTone(TerminalSessionStatus.Disconnected)
+        assertEquals(alertTone, terminalOverviewTone(TerminalSessionStatus.Failed))
+        assertFalse(alertTone == terminalOverviewTone(TerminalSessionStatus.Exited))
     }
 
     @Test
@@ -84,10 +81,31 @@ class TerminalsScreenStateTest {
     }
 
     @Test
-    fun `terminal overview uses state background without manual reordering`() {
+    fun `terminal overview uses a status badge on a neutral card`() {
         val source = terminalsScreenSource()
 
-        assertTrue(source.contains("containerColor = terminalOverviewContainerColor("))
+        assertTrue(source.contains("TerminalOverviewStatusBadge(session)"))
+        assertTrue(source.contains("containerColor = MaterialTheme.colorScheme.surface"))
+        assertFalse(source.contains("terminalOverviewContainerColor("))
+    }
+
+    @Test
+    fun `terminal overview shows opened time on clearly separated cards`() {
+        val source = terminalsScreenSource()
+
+        assertTrue(source.contains("internal fun terminalOverviewOpenedText(relativeTime: CharSequence)"))
+        assertTrue(source.contains("LocalizedText(R.string.terminals_opened_at"))
+        assertTrue(source.contains("DateUtils.getRelativeTimeSpanString("))
+        assertTrue(source.contains("session.openedAt"))
+        assertTrue(source.contains("OutlinedCard("))
+        assertTrue(source.contains("CardDefaults.outlinedCardColors("))
+        assertTrue(source.contains("verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Sm)"))
+    }
+
+    @Test
+    fun `terminal overview does not expose manual reordering`() {
+        val source = terminalsScreenSource()
+
         assertFalse(source.contains("ManualReorderHandle"))
         assertFalse(source.contains("manualReorderItem"))
         assertFalse(source.contains("initialManualOrder"))

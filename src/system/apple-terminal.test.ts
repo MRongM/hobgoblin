@@ -46,6 +46,35 @@ describe('Apple Terminal integration', () => {
     expect(command).not.toContain("-s 'goblin-")
   })
 
+  test('opens an existing ordinary default-server session without creating it', async () => {
+    const { openInAppleTerminal } = await import('#/system/apple-terminal.ts')
+    mocks.statSync.mockImplementationOnce(() => {
+      throw new Error('directory no longer exists')
+    })
+
+    await expect(
+      openInAppleTerminal(
+        {
+          projectRoot: '/srv/editor',
+          workingDirectory: '/srv/editor',
+          terminalNumber: 1,
+        },
+        {
+          useTmux: true,
+          existingTmuxSessionKind: 'default',
+          existingTmuxSessionName: "editor's work",
+        },
+      ),
+    ).resolves.toEqual({ ok: true, message: '/srv/editor' })
+
+    const command = mocks.execa.mock.calls[0]![1][2]
+    expect(command).toContain('tmux -L')
+    expect(command).toContain('attach-session -t')
+    expect(command).toContain('editor')
+    expect(command).toContain('s work')
+    expect(command).not.toContain('new-session')
+  })
+
   test('opens Terminal.app with a prepared ssh command', async () => {
     const { openRemoteInAppleTerminal } = await import('#/system/apple-terminal.ts')
 

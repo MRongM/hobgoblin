@@ -82,6 +82,62 @@ describe('i18n dictionaries', () => {
     expect(ko['action.commit-auto-commit-and-push']).toBe('생성 후 커밋하고 푸시')
   })
 
+  test('localizes every built-in terminal button preset', () => {
+    const ids = [
+      'confirm-continue',
+      'try-if-needed',
+      'show-progress',
+      'autonomous-decisions',
+      'commit-and-push',
+      'ship-release',
+      'batch-operations',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const id of ids) {
+        expect(dict[`terminal.custom-button-presets.${id}.label` as DictKey], `${lang}.${id}.label`).toBeTruthy()
+        expect(dict[`terminal.custom-button-presets.${id}.value` as DictKey], `${lang}.${id}.value`).toBeTruthy()
+      }
+    }
+
+    expect(ids.map((id) => en[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      'Confirm, continue',
+      'Try if needed',
+      'Progress',
+      'Decide autonomously',
+      'Commit, push',
+      'Merge and release',
+      'Batch operations',
+    ])
+    expect(ids.map((id) => zh[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      '确认、继续',
+      '试试、需要',
+      '进度',
+      '自主决策',
+      '提交、推送',
+      '提推合发更',
+      '批量操作',
+    ])
+    expect(ids.map((id) => ja[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      '確認・続行',
+      '必要なら試す',
+      '進捗',
+      '自律判断',
+      'コミット・プッシュ',
+      'マージ・リリース',
+      '一括操作',
+    ])
+    expect(ids.map((id) => ko[`terminal.custom-button-presets.${id}.label` as DictKey])).toEqual([
+      '확인·계속',
+      '필요하면 시도',
+      '진행 상황',
+      '자율 결정',
+      '커밋·푸시',
+      '병합·릴리스',
+      '일괄 작업',
+    ])
+  })
+
   test('uses direction-specific repository merge copy in every locale', () => {
     const keys = [
       'action.merge-in',
@@ -138,6 +194,10 @@ describe('i18n dictionaries', () => {
       'tmux.host-inventory.description',
       'tmux.host-inventory.select-session',
       'tmux.host-inventory.terminal-number',
+      'tmux.host-inventory.default-session',
+      'tmux.host-inventory.open-external',
+      'tmux.host-inventory.open-failed',
+      'tmux.host-inventory.open-missing',
       'tmux.host-inventory.detached',
       'tmux.host-inventory.attached',
       'tmux.host-inventory.warning',
@@ -153,6 +213,7 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['tmux.host-inventory.action']).toBe('扫描主机 tmux 会话')
     expect(zh['tmux.host-inventory.close-selected']).toContain('关闭所选会话')
+    expect(zh['tmux.host-inventory.none']).not.toContain('Hobgoblin')
   })
 
   test('includes invalid worktree cleanup copy in every locale', () => {
@@ -454,6 +515,35 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['terminal.focus']).toBe('最大化终端')
     expect(zh['terminal.exit-focus']).toBe('退出终端最大化')
+  })
+
+  test('localizes the Mobile Web terminal command deck in every dictionary', () => {
+    const keys = [
+      'terminal.command-deck',
+      'terminal.command-deck.scroll-to-bottom',
+      'terminal.command-deck.previous-terminal',
+      'terminal.command-deck.next-terminal',
+      'terminal.command-deck.compose',
+      'terminal.command-deck.hide-compose',
+      'terminal.command-deck.original-width',
+      'terminal.command-deck.fit-width',
+      'terminal.command-deck.focus',
+      'terminal.command-deck.exit-focus',
+      'terminal.command-deck.input-placeholder',
+      'terminal.command-deck.send',
+      'terminal.mobile-scroll-scrubber',
+      'terminal.selection-copy-failed',
+    ] as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['terminal.command-deck.compose' as keyof typeof zh]).toBe('命令输入')
+    expect(zh['terminal.command-deck.scroll-to-bottom' as keyof typeof zh]).toBe('回到底部')
+    expect(zh['terminal.command-deck.fit-width' as keyof typeof zh]).toBe('适应宽度')
+    expect(zh['terminal.command-deck.focus' as keyof typeof zh]).toBe('专注模式')
+    expect(zh['terminal.command-deck.exit-focus' as keyof typeof zh]).toBe('退出专注模式')
+    expect(zh['terminal.mobile-scroll-scrubber' as keyof typeof zh]).toBe('拖动浏览终端历史')
+    expect(zh['terminal.selection-copy-failed' as keyof typeof zh]).toBe('无法复制所选终端文本，请重试')
   })
 
   test('includes discard selected changes copy', () => {

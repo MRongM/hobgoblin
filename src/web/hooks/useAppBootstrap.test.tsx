@@ -72,7 +72,7 @@ describe('useAppBootstrap', () => {
     expect(state.projectListExpanded).toBe(true)
     expect(state.workspaceLayout).toBe('left-right')
     expect(state.detailCollapsed).toBe(false)
-    expect(state).not.toHaveProperty('detailFocusMode')
+    expect(state.detailFocusMode).toBe(true)
     expect(state.detailPaneSizes).toEqual({ 'left-right': 45 })
     expect(state.selectedTerminalByWorktree).toEqual({
       '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',

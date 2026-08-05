@@ -432,7 +432,7 @@ describe('RepoView', () => {
     )
   })
 
-  test('exits desktop terminal focus when the selected Git branch changes', async () => {
+  test('keeps desktop terminal focus when the selected Git branch changes', async () => {
     seedRepoState({
       id: REPO_ID,
       branches: [
@@ -454,10 +454,47 @@ describe('RepoView', () => {
       useReposStore.getState().selectBranch(REPO_ID, 'feature/next')
     })
 
-    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.detailTab).toBe('terminal')
   })
 
-  test('returns to the desktop split after a compact responsive transition', async () => {
+  test('keeps desktop terminal focus while switching projects', async () => {
+    const firstRepo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const nextRepoId = '/tmp/gbl-repo-view-next-project'
+    const nextRepo = seedRepoState({
+      id: nextRepoId,
+      branches: [createRepoBranch('main', { worktree: { path: nextRepoId } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      detailTab: 'status',
+    })
+    useReposStore.setState({
+      repos: { [REPO_ID]: firstRepo, [nextRepoId]: nextRepo },
+      order: [REPO_ID, nextRepoId],
+      activeId: REPO_ID,
+      activeProjectId: REPO_ID,
+    })
+    setCompactUi(false)
+    renderRepoView(REPO_ID)
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="maximize-terminal"]')?.click()
+    })
+    rerenderRepoView(nextRepoId)
+
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="branch-detail"]')?.getAttribute('data-detail-focus-mode')).toBe(
+      'true',
+    )
+    expect(useReposStore.getState().repos[nextRepoId]?.ui.detailTab).toBe('terminal')
+  })
+
+  test('restores global terminal focus after a compact responsive transition', async () => {
     seedRepoWithSelectedWorktree()
     setCompactUi(false)
     renderRepoView()
@@ -471,10 +508,10 @@ describe('RepoView', () => {
     setCompactUi(false)
     rerenderRepoView(REPO_ID)
 
-    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
-  test('does not restore stale focus after an unavailable destination recovers', async () => {
+  test('restores global terminal focus after an unavailable destination recovers', async () => {
     seedRepoWithSelectedWorktree()
     setCompactUi(false)
     renderRepoView()
@@ -496,10 +533,10 @@ describe('RepoView', () => {
       }))
     })
 
-    expect(container?.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
-  test('returns to the workspace overview split after the active branch workspace is deleted', async () => {
+  test('keeps global terminal focus after the active branch workspace is deleted', async () => {
     seedRepoState({ id: REPO_ID, isGitRepo: false, branches: [], currentBranch: '', selectedBranch: null })
     useReposStore.setState({
       workspaceProjects: {
@@ -542,7 +579,7 @@ describe('RepoView', () => {
     expect(useReposStore.getState().workspaceActiveContextByRoot[REPO_ID]).toEqual({ kind: 'overview' })
     expect(
       container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-terminal-focus-mode'),
-    ).toBe('false')
+    ).toBe('true')
   })
 
   test('switches a compact non-git workspace root between terminal focus and overview', async () => {

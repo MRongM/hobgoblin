@@ -214,6 +214,9 @@ export function createServerTerminalBridge(options: {
     resize(input) {
       return requestOverSocket('resize', input).then((result) => result)
     },
+    returnToBottom(input) {
+      return requestOverSocket('return-to-bottom', input)
+    },
     takeover(input) {
       return requestOverSocket('takeover', input)
     },
@@ -341,6 +344,10 @@ export function createServerTerminalBridge(options: {
   async function requestOverSocket(
     action: 'resize',
     input: TerminalSocketRequestInputs['resize'],
+  ): Promise<TerminalMutationResult>
+  async function requestOverSocket(
+    action: 'return-to-bottom',
+    input: TerminalSocketRequestInputs['return-to-bottom'],
   ): Promise<TerminalMutationResult>
   async function requestOverSocket(
     action: 'takeover',

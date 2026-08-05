@@ -1,11 +1,6 @@
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from 'react'
-import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import {
-  STATUS_TONE_CHIP_CLASS,
-  STATUS_TONE_TEXT_CLASS,
-  type StatusTone,
-} from '#/web/components/ui/status-tones.ts'
+import { STATUS_TONE_CHIP_CLASS, STATUS_TONE_TEXT_CLASS, type StatusTone } from '#/web/components/ui/status-tones.ts'
 export type Tone = StatusTone
 export type StatusRowValueLayout = 'inline' | 'fill' | 'chips'
 
@@ -14,7 +9,6 @@ const ROW_ICON_CLASS = 'flex size-5 items-center justify-center'
 const ROW_LABEL_CLASS = 'truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'
 const MONO_VALUE_CLASS = 'font-mono'
 const INLINE_TRUNCATE_CLASS = 'block min-w-0 flex-1 truncate'
-export const STATUS_INLINE_GROUP_CLASS = 'inline-flex max-w-full min-w-0 items-center gap-1.5 align-middle'
 export const STATUS_CHIP_CLASS =
   'inline-flex h-5 shrink-0 cursor-default items-center gap-1 rounded-sm border px-1.5 text-[11px] font-medium leading-none'
 const ROW_VALUE_CLASS: Record<StatusRowValueLayout, string> = {
@@ -31,15 +25,7 @@ export const StatusChip = forwardRef<HTMLSpanElement, StatusChipProps>(function 
   ref,
 ) {
   return (
-    <span
-      ref={ref}
-      {...props}
-      className={cn(
-        STATUS_CHIP_CLASS,
-        STATUS_TONE_CHIP_CLASS[tone],
-        className,
-      )}
-    >
+    <span ref={ref} {...props} className={cn(STATUS_CHIP_CLASS, STATUS_TONE_CHIP_CLASS[tone], className)}>
       {children}
     </span>
   )
@@ -92,26 +78,5 @@ export function MonoValue({
     >
       {children}
     </span>
-  )
-}
-
-export function CopyableValue({
-  value,
-  copyValue = value,
-  copyLabel,
-  copiedLabel,
-}: {
-  value: string
-  copyValue?: string
-  copyLabel: string
-  copiedLabel: string
-}) {
-  return (
-    <div className={STATUS_INLINE_GROUP_CLASS}>
-      <MonoValue title={value} truncate>
-        {value}
-      </MonoValue>
-      <CopyButton value={copyValue} copyLabel={copyLabel} copiedLabel={copiedLabel} className="shrink-0" />
-    </div>
   )
 }

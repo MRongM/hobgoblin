@@ -20,6 +20,7 @@ const EMPTY_WORKTREE_TERMINAL_SNAPSHOT: WorktreeTerminalSnapshot = {
 }
 
 const EMPTY_TERMINAL_SNAPSHOT: TerminalSnapshot = { phase: 'opening', message: null, processName: 'terminal' }
+const EMPTY_TERMINAL_CATALOG: readonly TerminalDescriptor[] = []
 
 function hasTerminalBell(snapshot: WorktreeTerminalSnapshot): boolean {
   return snapshot.sessions.some((session) => session.hasBell)
@@ -82,6 +83,19 @@ export function useWorktreeTerminalSnapshot(worktreeTerminalKey: string | null):
   const getSnapshot = useCallback(
     () => (worktreeTerminalKey ? worktreeSnapshot(worktreeTerminalKey) : EMPTY_WORKTREE_TERMINAL_SNAPSHOT),
     [worktreeTerminalKey, worktreeSnapshot],
+  )
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+export function useTerminalCatalog(): readonly TerminalDescriptor[] {
+  const readContext = useContext(TerminalSessionReadContext)
+  const subscribe = useCallback(
+    (listener: () => void) => readContext?.subscribeTerminalCatalog?.(listener) ?? (() => {}),
+    [readContext],
+  )
+  const getSnapshot = useCallback(
+    () => readContext?.terminalCatalogSnapshot?.() ?? EMPTY_TERMINAL_CATALOG,
+    [readContext],
   )
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

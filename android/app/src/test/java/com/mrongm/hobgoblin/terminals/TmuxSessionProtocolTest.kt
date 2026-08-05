@@ -98,8 +98,42 @@ class TmuxSessionProtocolTest {
         )
         assertTrue(command.orEmpty().contains("elif \"\$hobgoblin_tmux_bin\" has-session"))
         assertTrue(command.orEmpty().contains("\"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d"))
-        assertTrue(command.orEmpty().contains("else \"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d"))
+        assertTrue(
+            command.orEmpty().contains(
+                "else COLORTERM=truecolor \"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d",
+            ),
+        )
         assertFalse(command.orEmpty().contains('\n'))
+    }
+
+    @Test
+    fun `interactive tmux clients preserve truecolor for terminal applications`() {
+        val identity = requireNotNull(TmuxSessionProtocol.identity(descriptor()))
+        val managedCommand = TmuxSessionProtocol.attachOrCreateCommand(
+            identity,
+            1,
+            "/srv/projects/example",
+        ).orEmpty()
+        val ordinaryCommand = TmuxSessionProtocol.attachExistingCommand(
+            TmuxSessionTarget(
+                server = TmuxServerTarget.Default,
+                sessionName = "editor",
+            ),
+        ).orEmpty()
+        val serverName = "hobgoblin-project-v1-bfd9f8d97e0d5a8f0eb819d0"
+
+        assertTrue(
+            managedCommand.contains(
+                "COLORTERM=truecolor \"\$hobgoblin_tmux_bin\" -L '$serverName' new-session -d",
+            ),
+        )
+        assertTrue(
+            managedCommand.contains(
+                "COLORTERM=truecolor \"\$hobgoblin_tmux_bin\" -L '$serverName' attach-session",
+            ),
+        )
+        assertTrue(ordinaryCommand.contains("COLORTERM=truecolor \"\$hobgoblin_tmux_bin\" has-session"))
+        assertTrue(ordinaryCommand.contains("COLORTERM=truecolor \"\$hobgoblin_tmux_bin\" attach-session"))
     }
 
     @Test

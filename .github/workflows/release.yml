@@ -192,30 +192,16 @@ jobs:
             fi
           done
 
-      - name: Write release notes
+      - name: Load release notes
         shell: bash
         run: |
-          cat > release-notes.md <<'NOTES'
-          Unsigned builds.
-
-          macOS: Gatekeeper may block unsigned downloads. After installing, run:
-
-          ```sh
-          xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
-          ```
-
-          Or right-click the app, choose Open, then confirm Open.
-
-          Windows: SmartScreen may warn on unsigned installers. Continue only if you trust this GitHub Release source.
-
-          Android: This APK is unsigned and must be signed before installation.
-
-          Linux: This source deployment archive requires Node.js 24+ and Bun. Extract it, then run:
-
-          ```sh
-          ./scripts/serve-systemd.sh
-          ```
-          NOTES
+          VERSION="${{ steps.version.outputs.version }}"
+          SOURCE="docs/releases/v${VERSION}.md"
+          if [[ ! -s "$SOURCE" ]]; then
+            echo "Missing release notes: $SOURCE" >&2
+            exit 1
+          fi
+          cp "$SOURCE" release-notes.md
 
       - name: Create or update GitHub Release
         env:

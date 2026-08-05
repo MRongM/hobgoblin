@@ -9,7 +9,7 @@ import type {
   TerminalRestartInput,
   TerminalWindowsPty,
 } from '#/shared/terminal.ts'
-import { resolveTerminalOwnership } from '#/shared/terminal.ts'
+import { normalizeTerminalSize, resolveTerminalOwnership } from '#/shared/terminal.ts'
 import { terminalBridge } from '#/web/terminal.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { openExternalUrl } from '#/web/app-shell-client.ts'
@@ -21,6 +21,7 @@ import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bri
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { isTerminalEmulatorInput, type TerminalInput } from '#/web/components/terminal/terminal-input.ts'
+import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalBellEvent,
@@ -28,6 +29,8 @@ import type {
   TerminalOwnershipViewModel,
   TerminalSearchResult,
   TerminalSessionAttachHandlers,
+  TerminalMobileSelectionPoint,
+  TerminalTouchScrollInput,
 } from '#/web/components/terminal/types.ts'
 const RESIZE_DEBOUNCE_MS = 80
 const EMPTY_SEARCH_RESULT: TerminalSearchResult = { resultIndex: -1, resultCount: 0, found: false }
@@ -55,6 +58,8 @@ export class ManagedTerminalSession {
   private pendingOutput: string[] = []
   private pendingWriteBuffer = ''
   private inputFlushScheduled = false
+  // One-shot bypass of Hobgoblin's frame queue for authoritative output after user intent.
+  private prioritizeNextOutput = false
   private hydratedSnapshot: { snapshot: string; snapshotSeq: number } | null = null
   private windowsPty: TerminalWindowsPty | undefined
   private disposed = false
@@ -108,9 +113,12 @@ export class ManagedTerminalSession {
     if (this.disposed) return
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
+    this.view.setMobileScrollScrubber(handlers?.mobileScrollScrubber ?? null)
+    this.view.setAutoFitEnabled(this.runtime.canResize())
     this.view.attach(host)
     if (!this.view.currentTerminal()) this.start()
-    else this.view.fitSoon()
+    else if (this.runtime.canResize()) this.view.fitSoon()
+    else this.applyCanonicalSizeToView()
     this.flushPendingFocus()
   }
 
@@ -118,6 +126,7 @@ export class ManagedTerminalSession {
     this.clearTerminalFocusIfOwned()
     this.view.setRevealPathHandler(null)
     this.view.setOpenPathInEditorHandler(null)
+    this.view.setMobileScrollScrubber(null)
     this.view.detach(host, parkingRoot)
   }
 
@@ -164,11 +173,46 @@ export class ManagedTerminalSession {
     return this.view.isTerminalFocusTarget(target)
   }
 
+  scrollByTouch(input: TerminalTouchScrollInput): void {
+    this.view.scrollByTouch(input)
+  }
+
+  beginMobileSelection(point: TerminalMobileSelectionPoint): boolean {
+    return this.view.beginMobileSelection(point)
+  }
+
+  extendMobileSelection(point: TerminalMobileSelectionPoint): void {
+    this.view.extendMobileSelection(point)
+  }
+
+  finishMobileSelection(point: TerminalMobileSelectionPoint): void {
+    this.view.finishMobileSelection(point)
+  }
+
+  cancelMobileSelection(point: TerminalMobileSelectionPoint): void {
+    this.view.cancelMobileSelection(point)
+  }
+
+  mobileSelectionText(): string {
+    return this.view.mobileSelectionText()
+  }
+
+  clearMobileSelection(): void {
+    this.view.clearMobileSelection()
+  }
+
+  writeExtraKey(input: TerminalExtraKeyInput): void {
+    const data = this.view.inputForExtraKey(input)
+    if (data) this.writeInput(data)
+  }
+
   writeInput(input: string | TerminalInput): void {
-    if (typeof input !== 'string' && isTerminalEmulatorInput(input) && this.runtime.isReplaying()) return
+    const isUserIntentInput = typeof input === 'string' || !isTerminalEmulatorInput(input)
+    if (!isUserIntentInput && this.runtime.isReplaying()) return
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId || !this.runtime.canWrite()) return
+    if (isUserIntentInput && data) this.prioritizeNextOutput = true
     this.onInput?.(this.descriptor)
     this.pendingWriteBuffer += data
     this.scheduleInputFlush()
@@ -211,6 +255,10 @@ export class ManagedTerminalSession {
 
   scrollToBottom(): void {
     this.view.scrollToBottom()
+    const sessionId = this.runtime.currentSessionId()
+    if (!sessionId || !this.descriptor.tmuxBacked) return
+    this.prioritizeNextOutput = true
+    void terminalBridge.returnToBottom({ sessionId }).catch(() => {})
   }
 
   scrollLines(amount: number): void {
@@ -258,10 +306,10 @@ export class ManagedTerminalSession {
       phase: input.phase,
       message: input.message,
     })
-    const isController = this.runtime.canResize()
-    if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
+    this.syncViewForOwnership(wasController)
     if (previousSessionId !== input.sessionId) {
       this.backgroundBellScanner.reset()
+      this.prioritizeNextOutput = false
     }
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify()
@@ -285,7 +333,7 @@ export class ManagedTerminalSession {
     const changed = this.runtime.handleOwnership(event)
     const pendingCleared = this.runtime.clearTakeoverPending()
     if (changed) {
-      this.syncViewAfterOwnershipChange(wasController)
+      this.syncViewForOwnership(wasController)
     }
     if (changed || pendingCleared) {
       this.notify()
@@ -299,6 +347,7 @@ export class ManagedTerminalSession {
   handleExit(event: TerminalExitEvent): boolean {
     if (!this.runtime.handleExit(event)) return false
     this.backgroundBellScanner.reset()
+    this.prioritizeNextOutput = false
     this.flushOutput()
     this.clearTerminalFocusIfOwned()
     this.view.blurIfFocused()
@@ -320,7 +369,7 @@ export class ManagedTerminalSession {
         const wasController = this.runtime.canResize()
         const changed = this.runtime.applyTakeoverResult(result)
         const pendingCleared = this.runtime.clearTakeoverPending()
-        if (changed) this.syncViewAfterOwnershipChange(wasController)
+        if (changed) this.syncViewForOwnership(wasController)
         if (changed || pendingCleared) this.notify()
       })
       .catch(() => {})
@@ -368,13 +417,16 @@ export class ManagedTerminalSession {
 
   private async openPhase(token: number): Promise<{ term: XTermTerminal; preloaded: boolean }> {
     if (this.disposed || this.startToken !== token || this.view.currentTerminal()) throw new StartCancelledError()
-    const geometry = this.view.measureGeometry()
-    if (!geometry) throw new Error('error.terminal-not-measurable')
+    const measuredGeometry = this.view.measureGeometry()
+    if (!measuredGeometry) throw new Error('error.terminal-not-measurable')
+    const isController = this.runtime.canResize()
+    const geometry = isController ? measuredGeometry : (this.canonicalGeometry() ?? measuredGeometry)
+    this.view.setAutoFitEnabled(isController)
     const term = this.view.openTerminal(geometry, (input) => this.writeInput(input), this.windowsPty)
     const preloaded = await this.preloadHydratedSnapshot(token, term)
     await waitForTerminalLayout()
     this.guardStart(token, term)
-    this.view.fitNow()
+    if (isController) this.view.fitNow()
     await waitForTerminalLayout()
     this.guardStart(token, term)
     return { term, preloaded }
@@ -417,7 +469,7 @@ export class ManagedTerminalSession {
     this.windowsPty = result.windowsPty
     this.view.setWindowsPty(this.windowsPty)
     const isController = this.runtime.canResize()
-    if (wasController !== isController) this.syncViewAfterOwnershipChange(wasController)
+    this.syncViewForOwnership(wasController)
     if (isController) {
       const canonicalSize = this.runtime.currentCanonicalSize()
       if (term.cols !== canonicalSize.cols || term.rows !== canonicalSize.rows) {
@@ -584,16 +636,32 @@ export class ManagedTerminalSession {
       .catch(() => {})
   }
 
-  private syncViewAfterOwnershipChange(wasController: boolean): void {
+  private canonicalGeometry(): { cols: number; rows: number } | null {
+    const { cols, rows } = this.runtime.currentCanonicalSize()
+    return normalizeTerminalSize(cols, rows)
+  }
+
+  private applyCanonicalSizeToView(): void {
+    const geometry = this.canonicalGeometry()
+    if (geometry) this.view.resizeTo(geometry.cols, geometry.rows)
+  }
+
+  private syncViewForOwnership(wasController: boolean): void {
     const isController = this.runtime.canResize()
+    this.view.setInputEnabled(this.runtime.canWrite())
+    this.view.setAutoFitEnabled(isController)
     if (!isController) {
       this.cancelResizeFlush()
       this.pendingResize = null
       this.pendingWriteBuffer = ''
+      this.prioritizeNextOutput = false
+      this.applyCanonicalSizeToView()
     }
-    if (wasController === isController) return
-    if (this.view.currentTerminal()) this.view.fitSoon()
-    else if (this.view.isConnected()) this.start()
+    if (!this.view.currentTerminal()) {
+      if (this.view.isConnected()) this.start()
+      return
+    }
+    if (wasController !== isController && isController) this.view.fitSoon()
   }
 
   private cancelResizeFlush(): void {
@@ -605,6 +673,11 @@ export class ManagedTerminalSession {
   private queueOutput(data: string): void {
     if (!this.view.currentTerminal()) return
     this.pendingOutput.push(data)
+    if (this.prioritizeNextOutput) {
+      this.prioritizeNextOutput = false
+      this.flushOutput()
+      return
+    }
     if (this.outputFlushFrame !== null) return
     this.outputFlushFrame = requestAnimationFrame(() => {
       this.outputFlushFrame = null
@@ -642,6 +715,7 @@ export class ManagedTerminalSession {
     this.pendingOutput = []
     this.pendingWriteBuffer = ''
     this.inputFlushScheduled = false
+    this.prioritizeNextOutput = false
     // The xterm view was parsing the stream up to now; scanning resumes from a
     // clean state rather than the middle of whatever sequence it last saw.
     this.backgroundBellScanner.reset()

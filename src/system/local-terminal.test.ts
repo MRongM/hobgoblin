@@ -102,6 +102,54 @@ describe('buildManagedLocalTerminalInvocation', () => {
     ).toBeNull()
   })
 
+  test('attaches an ordinary default-server session by its opaque exact name', () => {
+    const invocation = buildManagedLocalTerminalInvocation(TARGET, {
+      useTmux: true,
+      existingTmuxSessionKind: 'default',
+      existingTmuxSessionName: "editor's work",
+      platform: 'darwin',
+      fallbackShell: '/bin/zsh',
+    })
+
+    expect(invocation?.script).toContain("tmux -L 'default' attach-session -t '=editor'\\''s work'")
+    expect(invocation?.script).not.toContain("cd '/srv/projects/example/worktrees/feature'")
+    expect(invocation?.script).not.toContain('new-session')
+    expect(invocation?.script).not.toContain('set-option')
+    expect(
+      buildManagedLocalTerminalInvocation(TARGET, {
+        useTmux: true,
+        existingTmuxSessionKind: 'default',
+        existingTmuxSessionName: 'editor',
+        existingTmuxServerName: 'hobgoblin-project-v1-0123456789abcdef01234567',
+        platform: 'darwin',
+      }),
+    ).toBeNull()
+  })
+
+  test('attaches a host-inventory Hobgoblin session through its exact named server', () => {
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+    const serverName = 'hobgoblin-project-v1-0123456789abcdef01234567'
+    const invocation = buildManagedLocalTerminalInvocation(TARGET, {
+      useTmux: true,
+      existingTmuxSessionKind: 'hobgoblin',
+      existingTmuxSessionName: sessionName,
+      existingTmuxServerName: serverName,
+      platform: 'darwin',
+    })
+
+    expect(invocation?.script).toContain(`tmux -L '${serverName}' attach-session -t '=${sessionName}'`)
+    expect(invocation?.script).not.toContain('new-session')
+    expect(
+      buildManagedLocalTerminalInvocation(TARGET, {
+        useTmux: true,
+        existingTmuxSessionKind: 'hobgoblin',
+        existingTmuxSessionName: 'ordinary',
+        existingTmuxServerName: serverName,
+        platform: 'darwin',
+      }),
+    ).toBeNull()
+  })
+
   test('quotes apostrophes in working directories and fallback shells', () => {
     const invocation = buildManagedLocalTerminalInvocation(
       { ...TARGET, workingDirectory: "/srv/user's feature" },

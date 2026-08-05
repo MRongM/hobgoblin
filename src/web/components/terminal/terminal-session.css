@@ -13,6 +13,7 @@
   --goblin-terminal-float-radius: var(--goblin-control-radius, 8px);
   --goblin-terminal-control-radius: var(--goblin-control-radius, 6px);
   --goblin-terminal-bottom-dock-height: 44px;
+  --goblin-terminal-visual-viewport-bottom-inset: 0px;
 }
 
 .goblin-terminal-slot__host {
@@ -25,6 +26,149 @@
 
 .goblin-terminal-slot__host--touch-scroll {
   touch-action: pan-x pinch-zoom;
+}
+
+.goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-top: 8px;
+  --goblin-terminal-edge-scrubber-bottom: 8px;
+  --goblin-terminal-scrub-position: 0%;
+  position: absolute;
+  top: var(--goblin-terminal-edge-scrubber-top);
+  right: 0;
+  bottom: var(--goblin-terminal-edge-scrubber-bottom);
+  z-index: 1;
+  width: 32px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.goblin-terminal-edge-scrubber::before {
+  content: attr(data-position);
+  position: absolute;
+  top: clamp(18px, var(--goblin-terminal-scrub-position), calc(100% - 18px));
+  right: 20px;
+  min-width: 52px;
+  transform: translate(4px, -50%);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 46%, var(--color-toolbar-border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-terminal-background) 88%, var(--color-toolbar));
+  padding: 5px 9px;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  color: var(--color-terminal-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  transition:
+    opacity 90ms ease,
+    transform 90ms ease;
+}
+
+.goblin-terminal-edge-scrubber::after {
+  content: '';
+  position: absolute;
+  top: clamp(3px, var(--goblin-terminal-scrub-position), calc(100% - 3px));
+  right: 3px;
+  width: 17px;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 1px 0 0 1px;
+  background: var(--color-brand);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-terminal-background) 78%, transparent),
+    0 0 9px color-mix(in srgb, var(--color-brand) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease;
+}
+
+.goblin-terminal-edge-scrubber[data-active='true']::before,
+.goblin-terminal-edge-scrubber:focus-visible::before,
+.goblin-terminal-edge-scrubber[data-active='true']::after,
+.goblin-terminal-edge-scrubber:focus-visible::after {
+  opacity: 1;
+}
+
+.goblin-terminal-edge-scrubber[data-active='true']::before,
+.goblin-terminal-edge-scrubber:focus-visible::before {
+  transform: translate(0, -50%);
+}
+
+.goblin-terminal-edge-scrubber:focus-visible {
+  box-shadow: inset -2px 0 color-mix(in srgb, var(--color-ring) 72%, transparent);
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-bottom: calc(
+    var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-visual-viewport-bottom-inset) + 8px
+  );
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-slot__viewer-status) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-bottom: 88px;
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-focus-exit) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-top: 50px;
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-slot__search) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-top: 58px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goblin-terminal-edge-scrubber::before,
+  .goblin-terminal-edge-scrubber::after {
+    transition: none;
+  }
+}
+
+.goblin-terminal-slot__host--original-width {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-slot__host--original-width > .goblin-managed-terminal-frame {
+  min-width: 720px;
+}
+
+.goblin-terminal-slot__host--canonical-readonly {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-slot__host--canonical-readonly > .goblin-managed-terminal-frame,
+.goblin-terminal-slot__host--canonical-readonly .goblin-managed-terminal-host,
+.goblin-terminal-slot__host--canonical-readonly .xterm {
+  overflow: visible;
+}
+
+.goblin-terminal-selection-copy {
+  position: fixed;
+  left: clamp(52px, var(--goblin-terminal-selection-copy-x), calc(100vw - 52px));
+  top: clamp(56px, calc(var(--goblin-terminal-selection-copy-y) - 10px), calc(100dvh - 8px));
+  z-index: 4;
+  min-width: 44px;
+  min-height: 44px;
+  transform: translate(-50%, -100%);
+  border: 1px solid var(--color-toolbar-border);
+  background: color-mix(in srgb, var(--color-toolbar) 96%, var(--color-terminal-background));
+  box-shadow: var(--shadow-sm);
+  touch-action: manipulation;
 }
 
 .goblin-terminal-slot__empty {
@@ -149,7 +293,7 @@
 }
 
 .goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-managed-terminal-frame {
-  padding-bottom: var(--goblin-terminal-bottom-dock-height);
+  padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-visual-viewport-bottom-inset));
 }
 
 .goblin-terminal-slot__search {
@@ -173,6 +317,19 @@
   flex-direction: column;
   gap: var(--goblin-terminal-float-offset);
   align-items: flex-end;
+}
+
+.goblin-terminal-focus-exit {
+  height: 32px;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
+  padding-inline: 12px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+  font-size: 12px;
 }
 
 .goblin-terminal-slot__search-input {
@@ -239,13 +396,14 @@
 
 .goblin-terminal-bottom-dock {
   position: absolute;
-  right: var(--goblin-terminal-overlay-offset);
-  bottom: 0;
-  left: var(--goblin-terminal-overlay-offset);
+  right: 0;
+  bottom: var(--goblin-terminal-visual-viewport-bottom-inset);
+  left: 0;
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 5px;
+  padding: 0 6px max(4px, env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
@@ -265,6 +423,35 @@
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   pointer-events: auto;
+}
+
+.goblin-terminal-custom-buttons--desktop {
+  align-items: stretch;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.goblin-terminal-custom-buttons__row {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-custom-buttons__separator {
+  display: inline-flex;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--color-toolbar-border);
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
 }
 
 .goblin-terminal-custom-buttons__button {
@@ -297,7 +484,8 @@
 
 .goblin-terminal-slot__viewer-status {
   position: absolute;
-  right: var(--goblin-terminal-overlay-offset);
+  left: 6px;
+  right: auto;
   bottom: var(--goblin-terminal-overlay-offset);
   z-index: 2;
   display: flex;
@@ -305,7 +493,7 @@
   max-width: calc(100% - var(--goblin-terminal-overlay-offset) - var(--goblin-terminal-overlay-offset));
   align-items: center;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   border: 1px solid var(--color-toolbar-border);
   border-radius: var(--goblin-terminal-float-radius);
@@ -324,8 +512,12 @@
   line-height: 1.35;
 }
 
-.goblin-terminal-slot__viewer-status > button {
+.goblin-terminal-slot__viewer-actions {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
   pointer-events: auto;
 }
 
@@ -341,32 +533,74 @@
   overflow: hidden;
 }
 
-.goblin-terminal-mobile-toolbar {
+.goblin-terminal-command-deck {
   display: flex;
+  width: 100%;
+  min-width: 0;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  overflow: hidden;
   border: 1px solid var(--color-toolbar-border);
-  border-radius: var(--goblin-terminal-float-radius);
-  background: color-mix(in srgb, var(--color-toolbar) 96%, transparent);
-  padding: 6px;
+  border-radius: calc(var(--goblin-terminal-float-radius) + 2px);
+  background: color-mix(in srgb, var(--color-toolbar) 97%, var(--color-terminal-background));
+  padding: 5px;
   box-shadow: var(--shadow-sm);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
 }
 
-.goblin-terminal-mobile-toolbar__row {
+.goblin-terminal-command-deck__row {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  min-width: 0;
+  flex-direction: row;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
 }
 
-.goblin-terminal-mobile-toolbar__btn {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
-  padding: 0;
-  font-size: 14px;
-  font-weight: 500;
-  flex-shrink: 0;
+.goblin-terminal-command-deck__row::-webkit-scrollbar {
+  display: none;
+}
+
+.goblin-terminal-command-deck__row--extra-keys > .goblin-terminal-command-deck__btn {
+  flex: 1 0 44px;
+}
+
+.goblin-terminal-command-deck__btn {
+  height: 32px;
+  min-width: 44px;
+  min-height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--color-toolbar-border) 82%, transparent);
+  padding-inline: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.goblin-terminal-command-deck__btn--action {
+  min-width: max-content;
+}
+
+.goblin-terminal-command-deck__btn.is-active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ring) 70%, transparent);
+}
+
+.goblin-terminal-command-deck__composer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding-top: 1px;
+}
+
+.goblin-terminal-command-deck__composer-input {
+  height: 32px;
+  min-width: 0;
+  border-width: 2px;
+  font-size: 13px;
 }

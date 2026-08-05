@@ -70,16 +70,9 @@ describe('main settings server client', () => {
     )
   })
 
-  test('persists global shortcut registration state through the embedded server runtime', async () => {
-    mocks.postEmbeddedServerJson.mockResolvedValueOnce({ registered: true })
-
+  test('does not expose the removed global shortcut registration writer', async () => {
     const mod = await import('#/main/settings-server-client.ts')
-    await expect(mod.setSettingsGlobalShortcutState(true)).resolves.toBe(true)
-    expect(mocks.postEmbeddedServerJson).toHaveBeenCalledWith(
-      { url: 'http://127.0.0.1:32100/', secret: 'secret', clientId: 'client_sharedterminal' },
-      '/api/settings/global-shortcut-state',
-      { registered: true },
-    )
+    expect(mod).not.toHaveProperty('setSettingsGlobalShortcutState')
   })
 
   test('rejects requests when the embedded server runtime is unavailable', async () => {

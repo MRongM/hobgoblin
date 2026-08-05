@@ -16,6 +16,7 @@ import type {
   TerminalAttachResult,
   TerminalResizeInput,
   TerminalRestartInput,
+  TerminalReturnToBottomInput,
   TerminalSessionInput,
   TerminalTakeoverResult,
   TerminalTakeoverInput,
@@ -67,7 +68,7 @@ const xtermMocks = vi.hoisted(() => {
     modes = {
       applicationCursorKeysMode: false,
       bracketedPasteMode: false,
-      mouseTrackingMode: false,
+      mouseTrackingMode: 'none' as 'none' | 'x10' | 'vt200' | 'drag' | 'any',
     }
     refresh = vi.fn()
     write = vi.fn((_data: string, callback?: () => void) => {
@@ -90,7 +91,13 @@ const xtermMocks = vi.hoisted(() => {
     focus = vi.fn(() => this.textarea?.focus())
     customKeyEventHandler: ((event: KeyboardEvent) => boolean) | null = null
     viewportElement: HTMLDivElement | null = null
+    screenElement: HTMLDivElement | null = null
     textarea: HTMLTextAreaElement | undefined = undefined
+    selectionText = ''
+    getSelection = vi.fn(() => this.selectionText)
+    clearSelection = vi.fn(() => {
+      this.selectionText = ''
+    })
     bufferLines: string[] = []
     linkProviders: Array<{ provideLinks: (line: number, cb: (links: unknown[] | undefined) => void) => void }> = []
     buffer = {
@@ -137,6 +144,7 @@ const xtermMocks = vi.hoisted(() => {
     private keyHandlers: Array<(event: { key: string; domEvent: KeyboardEvent }) => void> = []
     private bellHandlers: Array<() => void> = []
     private scrollHandlers: Array<(position: number) => void> = []
+    private writeParsedHandlers: Array<() => void> = []
     private titleHandlers: Array<(title: string) => void> = []
     private bufferChangeHandlers: Array<(buffer: { type: 'normal' | 'alternate' }) => void> = []
     private themeValue: { background?: string; foreground?: string } | undefined
@@ -205,8 +213,10 @@ const xtermMocks = vi.hoisted(() => {
       this.element.className = 'xterm'
       this.viewportElement = document.createElement('div')
       this.viewportElement.className = 'xterm-viewport'
+      this.screenElement = document.createElement('div')
+      this.screenElement.className = 'xterm-screen'
       this.textarea = document.createElement('textarea')
-      this.element.append(this.viewportElement, this.textarea)
+      this.element.append(this.viewportElement, this.screenElement, this.textarea)
       host.appendChild(this.element)
     }
 
@@ -238,6 +248,13 @@ const xtermMocks = vi.hoisted(() => {
     onScroll(cb: (position: number) => void) {
       this.scrollHandlers.push(cb)
       return { dispose: vi.fn(() => (this.scrollHandlers = this.scrollHandlers.filter((handler) => handler !== cb))) }
+    }
+
+    onWriteParsed(cb: () => void) {
+      this.writeParsedHandlers.push(cb)
+      return {
+        dispose: vi.fn(() => (this.writeParsedHandlers = this.writeParsedHandlers.filter((handler) => handler !== cb))),
+      }
     }
 
     onTitleChange(cb: (title: string) => void) {
@@ -317,6 +334,10 @@ const xtermMocks = vi.hoisted(() => {
       const active = this.buffer.active
       active.viewportY = Math.max(0, Math.min(active.baseY, viewportY))
       this.dispatchTerminalScroll()
+    }
+
+    emitWriteParsed() {
+      for (const handler of this.writeParsedHandlers) handler()
     }
 
     private dispatchViewportScroll() {
@@ -553,6 +574,7 @@ const terminalCalls = {
   restart: vi.fn<(input: TerminalRestartInput) => Promise<TerminalAttachResult>>(),
   write: vi.fn<(input: TerminalWriteInput) => Promise<TerminalMutationResult>>(),
   resize: vi.fn<(input: TerminalResizeInput) => Promise<TerminalMutationResult>>(),
+  returnToBottom: vi.fn<(input: TerminalReturnToBottomInput) => Promise<TerminalMutationResult>>(),
   takeover: vi.fn<(input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>>(),
   close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalCloseResult>>(),
   notifyBell: vi.fn<(input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>>(),
@@ -571,6 +593,17 @@ const descriptor = {
   branch: 'feature',
   worktreePath: '/worktree',
 }
+
+function terminalScrubberPointerEvent(type: 'pointerdown' | 'pointermove' | 'pointerup', clientY: number): Event {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY })
+  Object.defineProperties(event, {
+    pointerId: { value: 1 },
+    pointerType: { value: 'touch' },
+    isPrimary: { value: true },
+  })
+  return event
+}
+
 beforeEach(() => {
   xtermMocks.terminals.length = 0
   xtermMocks.fitAddons.length = 0
@@ -645,6 +678,7 @@ beforeEach(() => {
         restart: terminalCalls.restart.mockResolvedValue(attachResult('session-2')),
         write: terminalCalls.write.mockResolvedValue(true),
         resize: terminalCalls.resize.mockResolvedValue(true),
+        returnToBottom: terminalCalls.returnToBottom.mockResolvedValue(true),
         takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
         close: terminalCalls.close.mockResolvedValue({ ok: true }),
         notifyBell: terminalCalls.notifyBell.mockResolvedValue(true),
@@ -692,6 +726,7 @@ beforeEach(() => {
       restart: terminalCalls.restart.mockResolvedValue(attachResult('session-2')),
       write: terminalCalls.write.mockResolvedValue(true),
       resize: terminalCalls.resize.mockResolvedValue(true),
+      returnToBottom: terminalCalls.returnToBottom.mockResolvedValue(true),
       takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
       close: terminalCalls.close.mockResolvedValue({ ok: true }),
       create: vi.fn(async (input?: { kind?: string }) =>
@@ -747,6 +782,33 @@ beforeEach(() => {
 })
 
 describe('ManagedTerminalSession', () => {
+  test('exits tmux copy mode when the controller returns to bottom', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession({ ...descriptor, tmuxBacked: true }, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+    xtermMocks.terminals[0]?.scrollToBottom.mockClear()
+
+    session.scrollToBottom()
+    await Promise.resolve()
+
+    expect(xtermMocks.terminals[0]?.scrollToBottom).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.returnToBottom).toHaveBeenCalledWith({ sessionId: 'session-1' })
+  })
+
+  test('exits tmux copy mode when a viewer returns to bottom', async () => {
+    const session = new ManagedTerminalSession({ ...descriptor, tmuxBacked: true }, vi.fn())
+    hydrateManagedSession(session, { role: 'viewer' })
+
+    session.scrollToBottom()
+    await Promise.resolve()
+
+    expect(terminalCalls.returnToBottom).toHaveBeenCalledWith({ sessionId: 'session-1' })
+  })
+
   test('keeps render pending until the attached terminal has settled a paint opportunity', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -846,6 +908,129 @@ describe('ManagedTerminalSession', () => {
     expect(fitAddon.fit).toHaveBeenCalledTimes(2)
     expect(term.cols).toBe(100)
     expect(terminalCalls.resize).not.toHaveBeenCalled()
+  })
+
+  test('scrubs Mobile Web normal-buffer history from the terminal edge without a range input', async () => {
+    const host = document.createElement('div')
+    const parking = document.createElement('div')
+    const scrubberHost = document.createElement('div')
+    const scrubber = document.createElement('div')
+    const bubbledPointerDown = vi.fn()
+    const capturedPointers = new Set<number>()
+    const releasePointerCapture = vi.fn((pointerId: number) => capturedPointers.delete(pointerId))
+    Object.defineProperties(scrubber, {
+      setPointerCapture: {
+        value: vi.fn((pointerId: number) => capturedPointers.add(pointerId)),
+      },
+      hasPointerCapture: {
+        value: vi.fn((pointerId: number) => capturedPointers.has(pointerId)),
+      },
+      releasePointerCapture: {
+        value: releasePointerCapture,
+      },
+    })
+    scrubberHost.addEventListener('pointerdown', bubbledPointerDown)
+    scrubberHost.appendChild(scrubber)
+    scrubber.hidden = true
+    document.body.appendChild(host)
+    document.body.appendChild(scrubberHost)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host, { mobileScrollScrubber: scrubber })
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.buffer.active.baseY = 120
+    term.emitTerminalScroll(45)
+
+    expect(scrubber.hidden).toBe(false)
+    expect(scrubber.getAttribute('aria-valuemin')).toBe('0')
+    expect(scrubber.getAttribute('aria-valuemax')).toBe('100')
+    expect(scrubber.getAttribute('aria-valuenow')).toBe('38')
+    expect(scrubber.dataset.position).toBe('38%')
+
+    term.buffer.active.baseY = 140
+    term.emitWriteParsed()
+    expect(scrubber.getAttribute('aria-valuenow')).toBe('32')
+    expect(scrubber.dataset.position).toBe('32%')
+
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerdown', 200))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(70)
+    expect(bubbledPointerDown).toHaveBeenCalledTimes(1)
+    expect(scrubber.dataset.active).toBe('true')
+    expect(scrubber.dataset.position).toBe('50%')
+
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointermove', 400))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(140)
+    expect(scrubber.dataset.position).toBe('100%')
+
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerup', 400))
+    expect(scrubber.dataset.active).toBe('false')
+
+    scrubber.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(0)
+    expect(scrubber.dataset.position).toBe('0%')
+
+    scrubber.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
+    expect(term.scrollToLine).toHaveBeenLastCalledWith(140)
+    expect(scrubber.dataset.position).toBe('100%')
+
+    term.emitBufferChange('alternate')
+    expect(scrubber.hidden).toBe(true)
+
+    term.emitBufferChange('normal')
+    expect(scrubber.hidden).toBe(false)
+    releasePointerCapture.mockClear()
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerdown', 100))
+    session.detach(host, parking)
+    expect(releasePointerCapture).toHaveBeenCalledWith(1)
+    expect(scrubber.hidden).toBe(true)
+    term.scrollToLine.mockClear()
+    scrubber.dispatchEvent(terminalScrubberPointerEvent('pointerdown', 100))
+    expect(term.scrollToLine).not.toHaveBeenCalled()
+    session.dispose({ closeSession: false })
+    scrubberHost.remove()
+    host.remove()
+  })
+
+  test('delegates renderer-local Mobile Web selection without terminal authority calls', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.selectionText = 'copy me'
+    const mouseDown = vi.fn()
+    const mouseMove = vi.fn()
+    const mouseUp = vi.fn()
+    term.element?.addEventListener('mousedown', mouseDown)
+
+    terminalCalls.write.mockClear()
+    terminalCalls.resize.mockClear()
+    terminalCalls.takeover.mockClear()
+
+    expect(session.beginMobileSelection({ clientX: 80, clientY: 60 })).toBe(true)
+    document.addEventListener('mousemove', mouseMove, { once: true })
+    session.extendMobileSelection({ clientX: 120, clientY: 70 })
+    document.addEventListener('mouseup', mouseUp, { once: true })
+    session.finishMobileSelection({ clientX: 130, clientY: 75 })
+
+    expect(mouseDown).toHaveBeenCalledTimes(1)
+    expect(mouseMove).toHaveBeenCalledTimes(1)
+    expect(mouseUp).toHaveBeenCalledTimes(1)
+    expect(session.mobileSelectionText()).toBe('copy me')
+
+    session.clearMobileSelection()
+    expect(term.clearSelection).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.write).not.toHaveBeenCalled()
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
+    expect(terminalCalls.takeover).not.toHaveBeenCalled()
   })
 
   test('keeps scroll position when terminal viewport is already scrolled up during font refit', async () => {
@@ -1454,7 +1639,7 @@ describe('ManagedTerminalSession', () => {
     expect(session.snapshot().phase).toBe('open')
   })
 
-  test('opens xterm for an initially hydrated viewer', async () => {
+  test('opens xterm at canonical geometry for an initially hydrated viewer', async () => {
     terminalCalls.attach.mockResolvedValueOnce(
       attachResult('session-1', {
         controller: { attachmentId: 'attachment_remote', status: 'connected' },
@@ -1476,7 +1661,7 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
 
     expect(xtermMocks.terminals).toHaveLength(1)
-    expect(xtermMocks.terminals[0]).toMatchObject({ cols: 100, rows: 30 })
+    expect(xtermMocks.terminals[0]).toMatchObject({ cols: 120, rows: 40 })
     expect(terminalCalls.attach).toHaveBeenCalled()
     expect(session.snapshot().attachment).toMatchObject({
       role: 'viewer',
@@ -1546,6 +1731,8 @@ describe('ManagedTerminalSession', () => {
       controllerStatus: 'connected',
       canTakeover: true,
     })
+    expect((xtermMocks.terminals[0]!.options as { disableStdin?: boolean }).disableStdin).toBe(true)
+    expect(xtermMocks.terminals[0]!.textarea).toMatchObject({ readOnly: true, inputMode: 'none' })
   })
 
   test('clears a pending controller resize when attach resolves as viewer', async () => {
@@ -1609,6 +1796,71 @@ describe('ManagedTerminalSession', () => {
     expect(term.reset).toHaveBeenCalled()
     expect(term.write).toHaveBeenNthCalledWith(1, 'hydrated-screen', expect.any(Function))
     expect(terminalCalls.attach).toHaveBeenCalled()
+  })
+
+  test('opens a hydrated viewer at canonical geometry before replaying its snapshot', async () => {
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', {
+        controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        canonicalCols: 120,
+        canonicalRows: 40,
+        snapshot: 'hydrated-screen',
+        snapshotSeq: 5,
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session, {
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canonicalCols: 120,
+      canonicalRows: 40,
+      snapshot: 'hydrated-screen',
+      snapshotSeq: 5,
+    })
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    expect(term).toMatchObject({ initialCols: 120, initialRows: 40, cols: 120, rows: 40 })
+    expect(term.write).toHaveBeenNthCalledWith(1, 'hydrated-screen', expect.any(Function))
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
+  })
+
+  test('applies viewer canonical geometry before authoritative attach replay', async () => {
+    const attachRequest = deferred<TerminalAttachResult>()
+    terminalCalls.attach.mockImplementationOnce(() => attachRequest.promise)
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushUntil(() => terminalCalls.attach.mock.calls.length > 0)
+
+    const term = xtermMocks.terminals[0]!
+    let replayGeometry: { cols: number; rows: number } | null = null
+    term.write.mockImplementation((_data: string, callback?: () => void) => {
+      replayGeometry = { cols: term.cols, rows: term.rows }
+      if (callback) queueMicrotask(callback)
+    })
+
+    attachRequest.resolve(
+      attachResult('session-1', {
+        controller: { attachmentId: 'attachment_remote', status: 'connected' },
+        canonicalCols: 120,
+        canonicalRows: 40,
+        snapshot: 'authoritative-screen',
+        snapshotSeq: 6,
+      }),
+    )
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    expect(replayGeometry).toEqual({ cols: 120, rows: 40 })
+    expect(term).toMatchObject({ cols: 120, rows: 40 })
+    expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
   test('does not rewrite the same server snapshot after preloading it', async () => {
@@ -1811,6 +2063,29 @@ describe('ManagedTerminalSession', () => {
     expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: '\x1b[1;1R' })
   })
 
+  test('translates command-deck extra keys through the current cursor mode', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.modes.applicationCursorKeysMode = true
+    session.writeExtraKey({ key: 'arrow-up', ctrlPressed: false, altPressed: false })
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).toHaveBeenLastCalledWith({ sessionId: 'session-1', data: '\x1bOA' })
+
+    term.modes.applicationCursorKeysMode = false
+    session.writeExtraKey({ key: 'arrow-right', ctrlPressed: true, altPressed: false })
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).toHaveBeenLastCalledWith({ sessionId: 'session-1', data: '\x1b[1;5C' })
+  })
+
   test('forwards fallback keyboard-attributed data while replay is being written', async () => {
     xtermMocks.setCoreUserInputEnabled(false)
     terminalCalls.attach.mockResolvedValueOnce(
@@ -1991,6 +2266,10 @@ describe('ManagedTerminalSession', () => {
       controllerStatus: 'connected',
       canTakeover: false,
     })
+    expect((term.options as { disableStdin?: boolean }).disableStdin).toBe(false)
+    expect(term.textarea?.readOnly).toBe(false)
+    expect(term.textarea?.hasAttribute('inputmode')).toBe(false)
+    session.dispose({ closeSession: false })
   })
 
   test('takeover applies authoritative server response instead of optimistic local control', async () => {
@@ -2030,7 +2309,7 @@ describe('ManagedTerminalSession', () => {
     })
   })
 
-  test('preserves the xterm and local geometry when a controller becomes a viewer', async () => {
+  test('preserves the xterm and applies canonical geometry when a controller becomes a viewer', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2050,12 +2329,12 @@ describe('ManagedTerminalSession', () => {
 
     expect(xtermMocks.terminals).toHaveLength(1)
     expect(term.dispose).not.toHaveBeenCalled()
-    expect(term.cols).toBe(100)
-    expect(term.rows).toBe(30)
+    expect(term.cols).toBe(120)
+    expect(term.rows).toBe(40)
     expect(session.snapshot().attachment?.role).toBe('viewer')
   })
 
-  test('fits viewer geometry to the local host without publishing a PTY resize', async () => {
+  test('keeps viewer geometry canonical when local layout changes', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2075,15 +2354,14 @@ describe('ManagedTerminalSession', () => {
     })
     fitAddon.fit.mockClear()
     fitAddon.proposeDimensions.mockReturnValue({ cols: 90, rows: 20 })
-    fitAddon.fit.mockImplementation(() => term.resize(90, 20))
     terminalCalls.resize.mockClear()
 
     const observer = MockResizeObserver.instances.at(-1)!
     observer.cb([], observer as unknown as ResizeObserver)
     await flushResizeDebounce()
 
-    expect(fitAddon.fit).toHaveBeenCalled()
-    expect(term).toMatchObject({ cols: 90, rows: 20 })
+    expect(fitAddon.fit).not.toHaveBeenCalled()
+    expect(term).toMatchObject({ cols: 120, rows: 40 })
     expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 120, canonicalRows: 40 })
     expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
@@ -2114,8 +2392,9 @@ describe('ManagedTerminalSession', () => {
     terminalCalls.resize.mockClear()
 
     fitAddon.proposeDimensions.mockReturnValue({ cols: 90, rows: 20 })
-    fitAddon.fit.mockImplementation(() => term.resize(90, 20))
     term.emitBufferChange('alternate')
+
+    expect(term).toMatchObject({ cols: 120, rows: 40 })
 
     session.handleOwnership({
       sessionId: 'session-1',
@@ -2125,16 +2404,15 @@ describe('ManagedTerminalSession', () => {
       canonicalRows: 15,
     })
 
-    expect(term).toMatchObject({ cols: 90, rows: 20 })
+    expect(term).toMatchObject({ cols: 70, rows: 15 })
     expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 70, canonicalRows: 15 })
 
     fitAddon.proposeDimensions.mockReturnValue({ cols: 80, rows: 18 })
-    fitAddon.fit.mockImplementation(() => term.resize(80, 18))
     mockFonts.emitLoadingDone()
     await flushResizeDebounce()
 
-    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
-    expect(term).toMatchObject({ cols: 80, rows: 18 })
+    expect(fitAddon.fit).not.toHaveBeenCalled()
+    expect(term).toMatchObject({ cols: 70, rows: 15 })
     expect(session.snapshot().attachment).toMatchObject({ canonicalCols: 70, canonicalRows: 15 })
     expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
@@ -2301,6 +2579,140 @@ describe('ManagedTerminalSession', () => {
 
     expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledTimes(1)
     expect(xtermMocks.terminals[0]!.write).toHaveBeenCalledWith('firstsecond')
+  })
+
+  test.each([
+    { name: 'direct keyboard input', data: 'x' },
+    { name: 'committed CJK input', data: '中文' },
+  ])('prioritizes the first authoritative output after $name and then resumes frame batching', async ({ data }) => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.write.mockClear()
+    session.handleOutput({ sessionId: 'session-1', data: 'pending-', seq: 1, processName: 'zsh' })
+    term.emitCoreUserData(data)
+    session.handleOutput({ sessionId: 'session-1', data, seq: 2, processName: 'zsh' })
+
+    expect(term.write).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenCalledWith(`pending-${data}`)
+
+    term.write.mockClear()
+    session.handleOutput({ sessionId: 'session-1', data: 'later', seq: 3, processName: 'zsh' })
+
+    expect(term.write).not.toHaveBeenCalled()
+    await flushTerminalStart()
+    expect(term.write).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenCalledWith('later')
+  })
+
+  test('does not prioritize output after terminal-emulator protocol input', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.write.mockClear()
+    term.emitData('\x1b[0n')
+    session.handleOutput({ sessionId: 'session-1', data: 'ordinary', seq: 1, processName: 'zsh' })
+
+    expect(term.write).not.toHaveBeenCalled()
+    await flushTerminalStart()
+    expect(term.write).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenCalledWith('ordinary')
+  })
+
+  test('clears user-input output priority when the attachment loses control', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.write.mockClear()
+    term.emitCoreUserData('x')
+    session.handleOwnership({
+      sessionId: 'session-1',
+      role: 'viewer',
+      controllerStatus: 'connected',
+      canonicalCols: 100,
+      canonicalRows: 30,
+    })
+    session.handleOutput({ sessionId: 'session-1', data: 'ordinary', seq: 1, processName: 'zsh' })
+
+    expect(term.write).not.toHaveBeenCalled()
+    await flushTerminalStart()
+    expect(term.write).toHaveBeenCalledTimes(1)
+    expect(term.write).toHaveBeenCalledWith('ordinary')
+  })
+
+  test('scrolls normal terminal history directly for mobile touch drags', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.scrollLines.mockClear()
+
+    session.scrollByTouch({ lines: -3, clientX: 40, clientY: 80 })
+
+    expect(term.scrollLines).toHaveBeenCalledTimes(1)
+    expect(term.scrollLines).toHaveBeenCalledWith(-3)
+  })
+
+  test.each([
+    {
+      name: 'alternate screen',
+      configure: (term: any) => term.emitBufferChange('alternate'),
+    },
+    {
+      name: 'mouse-tracking application',
+      configure: (term: any) => {
+        term.modes.mouseTrackingMode = 'vt200'
+      },
+    },
+  ])('routes mobile touch drags through xterm wheel handling for a $name', async ({ configure }) => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const wheelEvents: WheelEvent[] = []
+    term.element?.addEventListener('wheel', (event: Event) => wheelEvents.push(event as WheelEvent))
+    term.scrollLines.mockClear()
+    configure(term)
+
+    session.scrollByTouch({ lines: 2, clientX: 40, clientY: 80 })
+
+    expect(term.scrollLines).not.toHaveBeenCalled()
+    expect(wheelEvents).toHaveLength(2)
+    expect(wheelEvents[0]).toMatchObject({
+      deltaY: 1,
+      deltaMode: WheelEvent.DOM_DELTA_LINE,
+      clientX: 40,
+      clientY: 80,
+    })
+    expect(wheelEvents[1]).toMatchObject({ deltaY: 1 })
   })
 
   test('flushes pending user input before rebuilding the front-end terminal view', async () => {

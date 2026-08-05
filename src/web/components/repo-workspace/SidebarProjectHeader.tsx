@@ -27,6 +27,7 @@ import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useShellOverlayActions } from '#/web/shell-overlay-actions.tsx'
 import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { ProjectTerminalStatus, useProjectSummaries } from '#/web/components/repo-workspace/project-switcher-model.tsx'
 import { SidebarProjectList } from '#/web/components/repo-workspace/SidebarProjectList.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -67,6 +68,7 @@ export function SidebarProjectHeader({
   const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
   const reorderRepos = useReposStore((s) => s.reorderRepos)
   const { topbarHeightPx } = useRuntimeChromeSettings()
+  const compact = useIsCompactUi()
   const activeProjectId = useReposStore(selectActiveProjectId) ?? repoId
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
@@ -102,12 +104,27 @@ export function SidebarProjectHeader({
 
   return (
     <div data-testid="sidebar-project-header" className="flex shrink-0 flex-col bg-topbar text-topbar-foreground">
-      <div className="topbar flex shrink-0 items-center gap-0.5" style={{ height: topbarHeightPx }}>
+      <div
+        className="topbar flex min-w-0 shrink-0 items-center gap-0.5 overflow-hidden"
+        style={{ height: topbarHeightPx }}
+      >
+        {onShowCompactDetail && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onShowCompactDetail}
+            aria-label={t('mobile.show-terminal')}
+            title={t('mobile.show-terminal')}
+          >
+            <PanelRightOpen />
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="min-w-0 gap-1.5 px-1.5"
+          className={cn('min-w-0 gap-1.5 px-1.5', compact && 'flex-1 shrink overflow-hidden')}
           onClick={toggleProjectListExpanded}
           data-project-kind={activeProjectKind}
           aria-expanded={listExpanded}
@@ -132,8 +149,8 @@ export function SidebarProjectHeader({
           />
         </Button>
         {onShowCompactDetail && <WorkspaceRepositorySwitcher repoId={repoId} compact />}
-        <div className="min-w-0 flex-1" aria-hidden="true" />
-        {shellActions && (
+        <div className={cn('min-w-0 flex-1', compact && 'hidden')} aria-hidden="true" />
+        {shellActions && !compact && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -167,7 +184,7 @@ export function SidebarProjectHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {onShowCompactFiles && (
+        {!compact && onShowCompactFiles && (
           <Button
             type="button"
             variant="ghost"
@@ -177,18 +194,6 @@ export function SidebarProjectHeader({
             title={t('file-tree.title')}
           >
             <FolderTree />
-          </Button>
-        )}
-        {onShowCompactDetail && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={onShowCompactDetail}
-            aria-label={t('mobile.show-terminal')}
-            title={t('mobile.show-terminal')}
-          >
-            <PanelRightOpen />
           </Button>
         )}
         {!onShowCompactDetail && onMaximizeTerminal && (

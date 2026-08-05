@@ -11,8 +11,8 @@ android {
         applicationId = "com.mrongm.hobgoblin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "2.2.2"
+        versionCode = 5
+        versionName = "2.2.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -60,12 +60,9 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.sshj)
     implementation(libs.termux.terminal.emulator)
     implementation(libs.termux.terminal.view)
-
-    debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)

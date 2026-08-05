@@ -59,6 +59,9 @@ const settingsGeneralRoute = createRoute({
 const settingsFilesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/files',
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/general' })
+  },
 })
 
 const settingsTerminalRoute = createRoute({
@@ -99,16 +102,14 @@ const settingsAppsRoute = createRoute({
 const settingsSecurityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/security',
+  beforeLoad: () => {
+    throw redirect({ to: '/settings/lan' })
+  },
 })
 
 const settingsLanRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/lan',
-  beforeLoad: () => {
-    if (getInitialBootstrap().runtime.kind !== 'electron') {
-      throw redirect({ to: '/settings/general' })
-    }
-  },
 })
 
 const settingsAboutRoute = createRoute({

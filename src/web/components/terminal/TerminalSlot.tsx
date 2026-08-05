@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -9,6 +10,7 @@ import {
   type DragEvent,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { toast } from 'sonner'
@@ -16,6 +18,7 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
@@ -29,16 +32,91 @@ import { useT } from '#/web/stores/i18n.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import {
-  useWorktreeTerminalSelectedDescriptor,
-  useWorktreeTerminalCount,
+  useTerminalCatalog,
+  useWorktreeTerminalSnapshot,
   useTerminalSnapshot,
 } from '#/web/components/terminal/terminal-session-store.ts'
-import { MobileTerminalToolbar } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
+import { MobileTerminalCommandDeck } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
 import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
+import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
+import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
+import { DesktopTerminalDock } from '#/web/components/terminal/DesktopTerminalDock.tsx'
+import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
+import { isMacNavigatorPlatform } from '#/web/components/terminal/terminal-keyboard.ts'
+import { getRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
+import { matchTerminalCycleShortcut } from '#/shared/shortcut-definitions.ts'
+const MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX = 8
+const MOBILE_TERMINAL_LONG_PRESS_MS = 500
+const MOBILE_TERMINAL_INERTIA_FRAME_MS = 1000 / 60
+const MOBILE_TERMINAL_INERTIA_DECAY_PER_FRAME = 0.92
+const MOBILE_TERMINAL_INERTIA_MIN_VELOCITY_PX_PER_MS = 0.05
+const MOBILE_TERMINAL_INERTIA_MAX_VELOCITY_PX_PER_MS = 3
+const MOBILE_TERMINAL_INERTIA_MAX_FRAME_MS = 32
+const MOBILE_TERMINAL_INERTIA_RELEASE_WINDOW_MS = 80
+const MOBILE_TERMINAL_TOUCH_VELOCITY_SAMPLE_WEIGHT = 0.35
+
+function terminalCatalogInProjectOrder(catalog: readonly TerminalDescriptor[]): readonly TerminalDescriptor[] {
+  const state = useReposStore.getState()
+  if (state.order.length === 0) return catalog
+  const projectRank = new Map(state.order.map((projectId, index) => [projectId, index]))
+  const rankedCatalog = catalog.map((descriptor, index) => ({
+    descriptor,
+    index,
+    rank: projectRank.get(state.repos[descriptor.repoRoot]?.workspaceRootId ?? descriptor.repoRoot),
+  }))
+  const openProjectCatalog = rankedCatalog.filter(({ rank }) => rank !== undefined)
+  return (openProjectCatalog.length > 0 ? openProjectCatalog : rankedCatalog)
+    .sort(
+      (left, right) =>
+        (left.rank ?? state.order.length) - (right.rank ?? state.order.length) || left.index - right.index,
+    )
+    .map(({ descriptor }) => descriptor)
+}
+
+function clampTouchVelocity(velocityPxPerMs: number): number {
+  return Math.max(
+    -MOBILE_TERMINAL_INERTIA_MAX_VELOCITY_PX_PER_MS,
+    Math.min(MOBILE_TERMINAL_INERTIA_MAX_VELOCITY_PX_PER_MS, velocityPxPerMs),
+  )
+}
+
+interface MobileTerminalTouchGesture {
+  host: HTMLDivElement
+  pointerId: number
+  startX: number
+  startY: number
+  lastX: number
+  lastY: number
+  candidateX: number
+  candidateY: number
+  lastTimestamp: number
+  velocityPxPerMs: number
+  remainder: number
+  mode: 'pending' | 'scrolling' | 'selecting'
+  longPressTimer: number | null
+}
+
+interface MobileTerminalTouchInertia {
+  velocityPxPerMs: number
+  remainder: number
+  clientX: number
+  clientY: number
+  lastTimestamp: number
+}
+
+interface MobileTerminalSelectionCopyAction {
+  key: string
+  clientX: number
+  clientY: number
+}
+
 interface TerminalSlotProps {
   repoRoot: string
   worktreePath: string
@@ -47,36 +125,61 @@ interface TerminalSlotProps {
 
 export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
+  const navigation = useMainWindowNavigation()
+  const terminalHostId = useId()
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const mobileScrollScrubberRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const bottomDockRef = useRef<HTMLDivElement | null>(null)
-  const touchScrollRef = useRef<{ pointerId: number; lastY: number; remainder: number } | null>(null)
+  const touchScrollRef = useRef<MobileTerminalTouchGesture | null>(null)
+  const touchInertiaRef = useRef<MobileTerminalTouchInertia | null>(null)
+  const touchInertiaFrameRef = useRef<number | null>(null)
   const onRevealPathRef = useRef(onRevealPath)
   onRevealPathRef.current = onRevealPath
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [fitToWidth, setFitToWidth] = useState(true)
+  const [mobileFocusMode, setMobileFocusMode] = useState(false)
   const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
+  const [visualViewportBottomInset, setVisualViewportBottomInset] = useState(0)
+  const [mobileSelectionCopyAction, setMobileSelectionCopyAction] = useState<MobileTerminalSelectionCopyAction | null>(
+    null,
+  )
   const context = useTerminalSessionContext()
   const {
     clearBell,
     registerWorktreeHost,
     attach,
     detach,
-    scrollLines,
+    selectTerminal,
     focusTerminal,
     isTerminalFocusTarget,
     findNext,
     findPrevious,
     clearSearch,
+    writeExtraKey,
     writeInput,
+    scrollToBottom,
+    scrollByTouch,
+    beginMobileSelection,
+    extendMobileSelection,
+    finishMobileSelection,
+    cancelMobileSelection,
+    mobileSelectionText,
+    clearMobileSelection,
     takeover,
     restart,
   } = context
   const terminalWorktreeKey = worktreeTerminalKey(repoRoot, worktreePath)
-  const descriptor = useWorktreeTerminalSelectedDescriptor(terminalWorktreeKey)
+  const worktreeSnapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
+  const terminalCatalog = useTerminalCatalog()
+  const switchableTerminalCatalog = terminalCatalogInProjectOrder(terminalCatalog)
+  const descriptor = worktreeSnapshot.selectedDescriptor
   const key = descriptor?.key ?? null
   const snapshot = useTerminalSnapshot(key)
-  const terminalCount = useWorktreeTerminalCount(terminalWorktreeKey)
+  const terminalCount = worktreeSnapshot.count
+  const switchableTerminalCount =
+    switchableTerminalCatalog.length > 0 ? switchableTerminalCatalog.length : terminalCount
   const hasSessions = terminalCount > 0
   const renderPending = hasSessions && snapshot.renderPending === true
   const {
@@ -92,47 +195,318 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
-  const isMobileReadonly = isMobile && isReadonly && !!key
+  const isMacPlatform = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
+  const isMobileTerminal = isMobile && (isController || isReadonly) && !!key
+  const isMobileFocusMode = isMobile && isController && !!key && mobileFocusMode
 
   useEffect(() => {
-    if (!isMobileReadonly) touchScrollRef.current = null
-  }, [isMobileReadonly, key])
+    setMobileFocusMode(false)
+  }, [attachment?.role, isMobile, key])
+
+  const cancelTouchInertia = useCallback(() => {
+    if (touchInertiaFrameRef.current !== null) window.cancelAnimationFrame(touchInertiaFrameRef.current)
+    touchInertiaFrameRef.current = null
+    touchInertiaRef.current = null
+  }, [])
+  const cancelLongPressTimer = useCallback((gesture: MobileTerminalTouchGesture | null) => {
+    if (!gesture || gesture.longPressTimer === null) return
+    window.clearTimeout(gesture.longPressTimer)
+    gesture.longPressTimer = null
+  }, [])
+  const releaseGesturePointerCapture = useCallback((gesture: MobileTerminalTouchGesture | null) => {
+    if (!gesture?.host.hasPointerCapture?.(gesture.pointerId)) return
+    gesture.host.releasePointerCapture(gesture.pointerId)
+  }, [])
+  const stopTouchMotion = useCallback(() => {
+    const gesture = touchScrollRef.current
+    cancelLongPressTimer(gesture)
+    releaseGesturePointerCapture(gesture)
+    if (key) {
+      if (gesture?.mode === 'selecting') {
+        cancelMobileSelection(key, { clientX: gesture.lastX, clientY: gesture.lastY })
+      } else {
+        clearMobileSelection(key)
+      }
+    }
+    touchScrollRef.current = null
+    cancelTouchInertia()
+    setMobileSelectionCopyAction(null)
+  }, [
+    cancelLongPressTimer,
+    cancelMobileSelection,
+    cancelTouchInertia,
+    clearMobileSelection,
+    key,
+    releaseGesturePointerCapture,
+  ])
+  const initializeMobileScrollScrubber = useCallback((scrubber: HTMLDivElement | null) => {
+    mobileScrollScrubberRef.current = scrubber
+    if (!scrubber) return
+    scrubber.dataset.active = 'false'
+    scrubber.dataset.position = '0%'
+    scrubber.style.setProperty('--goblin-terminal-scrub-position', '0%')
+    scrubber.setAttribute('aria-valuemin', '0')
+    scrubber.setAttribute('aria-valuemax', '100')
+    scrubber.setAttribute('aria-valuenow', '0')
+    scrubber.setAttribute('aria-valuetext', '0%')
+    scrubber.hidden = true
+  }, [])
+
+  useEffect(() => {
+    stopTouchMotion()
+    return stopTouchMotion
+  }, [attachment?.role, isMobileTerminal, key, snapshot.phase, stopTouchMotion])
+
+  useLayoutEffect(() => {
+    if (fitToWidth && hostRef.current) hostRef.current.scrollLeft = 0
+  }, [fitToWidth, key])
 
   const handleTouchScrollStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!isMobileReadonly || event.pointerType !== 'touch' || event.isPrimary === false) return
-      touchScrollRef.current = { pointerId: event.pointerId, lastY: event.clientY, remainder: 0 }
-      event.currentTarget.setPointerCapture?.(event.pointerId)
+      if (!isMobileTerminal || !key || event.pointerType !== 'touch' || event.isPrimary === false) return
+      cancelTouchInertia()
+      const existingGesture = touchScrollRef.current
+      cancelLongPressTimer(existingGesture)
+      releaseGesturePointerCapture(existingGesture)
+      if (existingGesture?.mode === 'selecting') {
+        cancelMobileSelection(key, { clientX: existingGesture.lastX, clientY: existingGesture.lastY })
+      } else {
+        clearMobileSelection(key)
+      }
+      setMobileSelectionCopyAction(null)
+
+      const gesture: MobileTerminalTouchGesture = {
+        host: event.currentTarget,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        candidateX: event.clientX,
+        candidateY: event.clientY,
+        lastTimestamp: event.timeStamp,
+        velocityPxPerMs: 0,
+        remainder: 0,
+        mode: 'pending',
+        longPressTimer: null,
+      }
+      touchScrollRef.current = gesture
+      gesture.longPressTimer = window.setTimeout(() => {
+        if (touchScrollRef.current !== gesture || gesture.mode !== 'pending') return
+        gesture.longPressTimer = null
+        const point = { clientX: gesture.candidateX, clientY: gesture.candidateY }
+        if (!beginMobileSelection(key, point)) {
+          touchScrollRef.current = null
+          return
+        }
+        cancelTouchInertia()
+        gesture.mode = 'selecting'
+        gesture.host.setPointerCapture?.(gesture.pointerId)
+      }, MOBILE_TERMINAL_LONG_PRESS_MS)
     },
-    [isMobileReadonly],
+    [
+      beginMobileSelection,
+      cancelLongPressTimer,
+      cancelMobileSelection,
+      cancelTouchInertia,
+      clearMobileSelection,
+      isMobileTerminal,
+      key,
+      releaseGesturePointerCapture,
+    ],
   )
   const handleTouchScrollMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const gesture = touchScrollRef.current
-      if (!isMobileReadonly || !key || !gesture || event.pointerId !== gesture.pointerId) return
+      if (!isMobileTerminal || !key || !gesture || event.pointerId !== gesture.pointerId) return
+
+      if (gesture.mode === 'selecting') {
+        event.preventDefault()
+        event.stopPropagation()
+        gesture.lastX = event.clientX
+        gesture.lastY = event.clientY
+        gesture.candidateX = event.clientX
+        gesture.candidateY = event.clientY
+        gesture.lastTimestamp = event.timeStamp
+        extendMobileSelection(key, { clientX: event.clientX, clientY: event.clientY })
+        return
+      }
+
+      if (gesture.mode === 'pending') {
+        const horizontalDistance = Math.abs(event.clientX - gesture.startX)
+        const verticalDistance = Math.abs(event.clientY - gesture.startY)
+        gesture.candidateX = event.clientX
+        gesture.candidateY = event.clientY
+        if (Math.max(horizontalDistance, verticalDistance) < MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX) return
+        cancelLongPressTimer(gesture)
+        if (horizontalDistance > verticalDistance) {
+          releaseGesturePointerCapture(gesture)
+          touchScrollRef.current = null
+          return
+        }
+        gesture.mode = 'scrolling'
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const deltaPixels = gesture.lastY - event.clientY
+      const elapsedSinceMove = event.timeStamp - gesture.lastTimestamp
+      if (elapsedSinceMove > 0 && elapsedSinceMove <= MOBILE_TERMINAL_INERTIA_RELEASE_WINDOW_MS) {
+        const sampleVelocity = clampTouchVelocity(deltaPixels / elapsedSinceMove)
+        gesture.velocityPxPerMs =
+          gesture.velocityPxPerMs === 0
+            ? sampleVelocity
+            : gesture.velocityPxPerMs * (1 - MOBILE_TERMINAL_TOUCH_VELOCITY_SAMPLE_WEIGHT) +
+              sampleVelocity * MOBILE_TERMINAL_TOUCH_VELOCITY_SAMPLE_WEIGHT
+      } else {
+        gesture.velocityPxPerMs = 0
+      }
 
       const pixelsPerLine = Math.max(1, terminalFontSize)
-      const accumulatedPixels = gesture.remainder + gesture.lastY - event.clientY
-      const lineDelta =
-        accumulatedPixels < 0
-          ? Math.ceil(accumulatedPixels / pixelsPerLine)
-          : Math.floor(accumulatedPixels / pixelsPerLine)
+      const accumulatedPixels = gesture.remainder + deltaPixels
+      const lineDelta = Math.trunc(accumulatedPixels / pixelsPerLine)
+      gesture.lastX = event.clientX
       gesture.lastY = event.clientY
+      gesture.lastTimestamp = event.timeStamp
       gesture.remainder = accumulatedPixels - lineDelta * pixelsPerLine
       if (lineDelta === 0) return
 
-      event.preventDefault()
-      scrollLines(key, lineDelta)
+      scrollByTouch(key, {
+        lines: lineDelta,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
     },
-    [isMobileReadonly, key, scrollLines, terminalFontSize],
+    [
+      cancelLongPressTimer,
+      extendMobileSelection,
+      isMobileTerminal,
+      key,
+      releaseGesturePointerCapture,
+      scrollByTouch,
+      terminalFontSize,
+    ],
   )
-  const handleTouchScrollEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (touchScrollRef.current?.pointerId !== event.pointerId) return
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    touchScrollRef.current = null
+  const startTouchInertia = useCallback(
+    (gesture: MobileTerminalTouchGesture, releaseTimestamp: number) => {
+      if (!key || releaseTimestamp - gesture.lastTimestamp > MOBILE_TERMINAL_INERTIA_RELEASE_WINDOW_MS) return
+      if (Math.abs(gesture.velocityPxPerMs) < MOBILE_TERMINAL_INERTIA_MIN_VELOCITY_PX_PER_MS) return
+
+      const inertia: MobileTerminalTouchInertia = {
+        velocityPxPerMs: clampTouchVelocity(gesture.velocityPxPerMs),
+        remainder: gesture.remainder,
+        clientX: gesture.lastX,
+        clientY: gesture.lastY,
+        lastTimestamp: releaseTimestamp,
+      }
+      touchInertiaRef.current = inertia
+
+      const runFrame = (timestamp: number) => {
+        touchInertiaFrameRef.current = null
+        if (touchInertiaRef.current !== inertia) return
+
+        const rawElapsed = timestamp - inertia.lastTimestamp
+        const elapsed = Math.min(
+          MOBILE_TERMINAL_INERTIA_MAX_FRAME_MS,
+          rawElapsed > 0 ? rawElapsed : MOBILE_TERMINAL_INERTIA_FRAME_MS,
+        )
+        inertia.lastTimestamp = timestamp
+        const pixelsPerLine = Math.max(1, terminalFontSize)
+        const accumulatedPixels = inertia.remainder + inertia.velocityPxPerMs * elapsed
+        const lineDelta = Math.trunc(accumulatedPixels / pixelsPerLine)
+        inertia.remainder = accumulatedPixels - lineDelta * pixelsPerLine
+        if (lineDelta !== 0) {
+          scrollByTouch(key, {
+            lines: lineDelta,
+            clientX: inertia.clientX,
+            clientY: inertia.clientY,
+          })
+        }
+
+        inertia.velocityPxPerMs *= Math.pow(
+          MOBILE_TERMINAL_INERTIA_DECAY_PER_FRAME,
+          elapsed / MOBILE_TERMINAL_INERTIA_FRAME_MS,
+        )
+        if (Math.abs(inertia.velocityPxPerMs) < MOBILE_TERMINAL_INERTIA_MIN_VELOCITY_PX_PER_MS) {
+          touchInertiaRef.current = null
+          return
+        }
+        touchInertiaFrameRef.current = window.requestAnimationFrame(runFrame)
+      }
+
+      touchInertiaFrameRef.current = window.requestAnimationFrame(runFrame)
+    },
+    [key, scrollByTouch, terminalFontSize],
+  )
+  const finishTouchScroll = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>, allowInertia: boolean) => {
+      const gesture = touchScrollRef.current
+      if (gesture?.pointerId !== event.pointerId) return
+      cancelLongPressTimer(gesture)
+      if (gesture.mode === 'scrolling' || gesture.mode === 'selecting') {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      releaseGesturePointerCapture(gesture)
+      touchScrollRef.current = null
+      if (gesture.mode === 'selecting') {
+        const point = { clientX: event.clientX, clientY: event.clientY }
+        if (allowInertia && key) {
+          finishMobileSelection(key, point)
+          const selectedText = mobileSelectionText(key)
+          setMobileSelectionCopyAction(selectedText ? { key, ...point } : null)
+        } else if (key) {
+          cancelMobileSelection(key, point)
+          setMobileSelectionCopyAction(null)
+        }
+        cancelTouchInertia()
+        return
+      }
+      if (allowInertia && gesture.mode === 'scrolling') startTouchInertia(gesture, event.timeStamp)
+      else cancelTouchInertia()
+    },
+    [
+      cancelLongPressTimer,
+      cancelMobileSelection,
+      cancelTouchInertia,
+      finishMobileSelection,
+      key,
+      mobileSelectionText,
+      releaseGesturePointerCapture,
+      startTouchInertia,
+    ],
+  )
+  const handleTouchScrollEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => finishTouchScroll(event, true),
+    [finishTouchScroll],
+  )
+  const handleTouchScrollCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => finishTouchScroll(event, false),
+    [finishTouchScroll],
+  )
+  const handleTouchContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (touchScrollRef.current?.mode !== 'selecting') return
+    event.preventDefault()
+    event.stopPropagation()
   }, [])
+
+  const copyMobileTerminalSelection = useCallback(async () => {
+    const action = mobileSelectionCopyAction
+    if (!action) return
+    const text = mobileSelectionText(action.key)
+    if (!text) {
+      setMobileSelectionCopyAction(null)
+      return
+    }
+    if (!(await writeTerminalClipboardText(text))) {
+      toast.error(t('terminal.selection-copy-failed'))
+      return
+    }
+    clearMobileSelection(action.key)
+    setMobileSelectionCopyAction((current) => (current === action ? null : current))
+  }, [clearMobileSelection, mobileSelectionCopyAction, mobileSelectionText, t])
 
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
@@ -173,9 +547,15 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host || !descriptor) return
-    attach(descriptor, host, { onRevealPath: handleRevealPath, onOpenPathInEditor: handleOpenPathInEditor })
+    attach(descriptor, host, {
+      onRevealPath: handleRevealPath,
+      onOpenPathInEditor: handleOpenPathInEditor,
+      ...(isMobileTerminal && mobileScrollScrubberRef.current
+        ? { mobileScrollScrubber: mobileScrollScrubberRef.current }
+        : {}),
+    })
     return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath])
+  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath, isMobileTerminal])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return
@@ -330,9 +710,96 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   }, [isController])
   const visibleCustomButtons =
     isController && terminalCustomButtonsVisible
-      ? terminalCustomButtons.filter((button) => button.label.trim() && button.value.trim())
+      ? terminalCustomButtons
+          .map((button) => resolveTerminalCustomButtonPreset(button, t))
+          .filter((button) => button.label.trim() && button.value.trim())
       : []
-  const hasBottomDock = visibleCustomButtons.length > 0
+  const hasMobileCommandDeck = isMobile && isController && !!key
+  const hasDesktopCycleButtons = !isMobile && isController && !!key
+  const hasBottomDock =
+    !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileCommandDeck || hasDesktopCycleButtons)
+
+  useLayoutEffect(() => {
+    if (!hasBottomDock || !hasMobileCommandDeck) {
+      setVisualViewportBottomInset(0)
+      return
+    }
+
+    const visualViewport = window.visualViewport
+    if (!visualViewport) {
+      setVisualViewportBottomInset(0)
+      return
+    }
+
+    const updateBottomInset = () => {
+      const next = Math.max(0, Math.ceil(window.innerHeight - visualViewport.offsetTop - visualViewport.height))
+      setVisualViewportBottomInset((current) => (current === next ? current : next))
+    }
+
+    updateBottomInset()
+    visualViewport.addEventListener('resize', updateBottomInset)
+    visualViewport.addEventListener('scroll', updateBottomInset)
+    window.addEventListener('resize', updateBottomInset)
+    return () => {
+      visualViewport.removeEventListener('resize', updateBottomInset)
+      visualViewport.removeEventListener('scroll', updateBottomInset)
+      window.removeEventListener('resize', updateBottomInset)
+    }
+  }, [hasBottomDock, hasMobileCommandDeck])
+
+  const cycleTerminal = useCallback(
+    (direction: -1 | 1) => {
+      if (!key) return
+      const orderedCatalog = terminalCatalogInProjectOrder(terminalCatalog)
+      if (orderedCatalog.length > 1) {
+        const currentIndex = orderedCatalog.findIndex((session) => session.key === key)
+        if (currentIndex >= 0) {
+          const target = orderedCatalog[(currentIndex + direction + orderedCatalog.length) % orderedCatalog.length]
+          if (!target) return
+          selectTerminal(target.worktreeTerminalKey, target.key)
+          if (target.worktreeTerminalKey !== terminalWorktreeKey) {
+            const state = useReposStore.getState()
+            if (target.targetKind === 'branch-workspace' && target.branchWorkspaceId) {
+              state.activateBranchWorkspace(target.repoRoot, target.branchWorkspaceId)
+            } else if (target.branch === NON_GIT_WORKSPACE_TERMINAL_BRANCH) {
+              navigation.showRepoDetailTab(target.repoRoot, 'terminal')
+            } else {
+              navigation.showRepoBranchDetailTab(target.repoRoot, target.branch, 'terminal')
+            }
+            state.setDetailCollapsed(false)
+          }
+          return
+        }
+      }
+      if (worktreeSnapshot.sessions.length <= 1) return
+      const currentIndex = worktreeSnapshot.sessions.findIndex((session) => session.key === key)
+      const safeCurrentIndex = currentIndex < 0 ? 0 : currentIndex
+      const nextIndex =
+        (safeCurrentIndex + direction + worktreeSnapshot.sessions.length) % worktreeSnapshot.sessions.length
+      const next = worktreeSnapshot.sessions[nextIndex]
+      if (next) selectTerminal(terminalWorktreeKey, next.key)
+    },
+    [key, navigation, selectTerminal, terminalCatalog, terminalWorktreeKey, worktreeSnapshot.sessions],
+  )
+  const handleTerminalKeyDownCapture = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      handleKeyDownCapture(event)
+      if (event.defaultPrevented || !key || switchableTerminalCount <= 1) return
+      const direction = matchTerminalCycleShortcut(event, isMacPlatform)
+      if (direction === null) return
+      if (getRuntimeShortcutSettings().shortcutsDisabled) return
+      if (!isTerminalFocusTarget(key, event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      cycleTerminal(direction)
+    },
+    [cycleTerminal, handleKeyDownCapture, isMacPlatform, isTerminalFocusTarget, key, switchableTerminalCount],
+  )
+  const handleScrollToBottom = useCallback(() => {
+    if (!key) return
+    stopTouchMotion()
+    scrollToBottom(key)
+  }, [key, scrollToBottom, stopTouchMotion])
 
   useLayoutEffect(() => {
     if (!hasBottomDock) {
@@ -354,15 +821,57 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     const observer = new ResizeObserver(updateDockHeight)
     observer.observe(dock)
     return () => observer.disconnect()
-  }, [hasBottomDock, visibleCustomButtons.length])
+  }, [hasBottomDock, hasMobileCommandDeck, visibleCustomButtons.length])
 
   const readonlyMessage = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
   const slotStyle =
-    bottomDockHeight === null
+    bottomDockHeight === null && !hasMobileCommandDeck
       ? undefined
-      : ({ '--goblin-terminal-bottom-dock-height': `${bottomDockHeight}px` } as CSSProperties)
+      : ({
+          ...(bottomDockHeight === null ? {} : { '--goblin-terminal-bottom-dock-height': `${bottomDockHeight}px` }),
+          ...(hasMobileCommandDeck
+            ? { '--goblin-terminal-visual-viewport-bottom-inset': `${visualViewportBottomInset}px` }
+            : {}),
+        } as CSSProperties)
+  const customButtonElements = visibleCustomButtons.map((button, index) => {
+    const action = button.action === 'input' ? 'input' : 'execute'
+    return (
+      <Button
+        key={`${index}:${button.presetId ?? `${button.label}:${button.value}`}:${action}`}
+        type="button"
+        size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
+        variant="secondary"
+        className={cn(
+          'goblin-terminal-custom-buttons__button',
+          `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
+        )}
+        title={button.value}
+        onClick={() => {
+          if (!key) return
+          if (action === 'input') writeInput(key, button.value)
+          else writeInput(key, `${button.value}\r`)
+          focusTerminal(key)
+        }}
+      >
+        {button.label}
+      </Button>
+    )
+  })
+  const customButtonsDock = hasDesktopCycleButtons ? (
+    <DesktopTerminalDock
+      key={key}
+      terminalCount={switchableTerminalCount}
+      onCycleTerminal={cycleTerminal}
+      onScrollToBottom={handleScrollToBottom}
+      quickInputButtons={customButtonElements}
+    />
+  ) : visibleCustomButtons.length > 0 ? (
+    <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
+      {customButtonElements}
+    </div>
+  ) : null
 
   return (
     <div
@@ -371,7 +880,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       style={slotStyle}
       onFocusCapture={handleFocus}
       onBlurCapture={handleBlur}
-      onKeyDownCapture={handleKeyDownCapture}
+      onKeyDownCapture={handleTerminalKeyDownCapture}
       onPasteCapture={handlePasteCapture}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
@@ -394,15 +903,67 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         </div>
       )}
       <div
+        id={terminalHostId}
         ref={hostRef}
-        className={cn('goblin-terminal-slot__host', isMobileReadonly && 'goblin-terminal-slot__host--touch-scroll')}
+        className={cn(
+          'goblin-terminal-slot__host',
+          isReadonly && 'goblin-terminal-slot__host--canonical-readonly',
+          isMobileTerminal && 'goblin-terminal-slot__host--touch-scroll',
+          isMobileTerminal && !fitToWidth && 'goblin-terminal-slot__host--original-width',
+        )}
         aria-readonly={(!isController && hasSessions) || undefined}
-        onPointerDown={isMobileReadonly ? handleTouchScrollStart : undefined}
-        onPointerMove={isMobileReadonly ? handleTouchScrollMove : undefined}
-        onPointerUp={isMobileReadonly ? handleTouchScrollEnd : undefined}
-        onPointerCancel={isMobileReadonly ? handleTouchScrollEnd : undefined}
+        onPointerDown={isMobileTerminal ? handleTouchScrollStart : undefined}
+        onPointerMove={isMobileTerminal ? handleTouchScrollMove : undefined}
+        onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
+        onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
+        onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
       />
+      {mobileSelectionCopyAction && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="goblin-terminal-selection-copy"
+          style={
+            {
+              '--goblin-terminal-selection-copy-x': `${mobileSelectionCopyAction.clientX}px`,
+              '--goblin-terminal-selection-copy-y': `${mobileSelectionCopyAction.clientY}px`,
+            } as CSSProperties
+          }
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={() => void copyMobileTerminalSelection()}
+        >
+          {t('menu.edit.copy')}
+        </Button>
+      )}
+      {isMobileTerminal && (
+        <div
+          ref={initializeMobileScrollScrubber}
+          className="goblin-terminal-edge-scrubber"
+          role="scrollbar"
+          tabIndex={0}
+          aria-controls={terminalHostId}
+          aria-label={t('terminal.mobile-scroll-scrubber')}
+          aria-orientation="vertical"
+          onPointerDown={stopTouchMotion}
+        />
+      )}
       <div className="goblin-terminal-float-group">
+        {isMobileFocusMode && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="goblin-terminal-focus-exit"
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => setMobileFocusMode(false)}
+          >
+            {t('terminal.command-deck.exit-focus')}
+          </Button>
+        )}
         {searchOpen && (
           <div className="goblin-terminal-slot__search">
             <input
@@ -428,49 +989,36 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
             </Button>
           </div>
         )}
-        {isMobile && isController && key && (
-          <MobileTerminalToolbar
-            onInput={(data) => writeInput(key, data)}
-            onScrollLines={(amount) => scrollLines(key, amount)}
-          />
-        )}
       </div>
       {key && hasBottomDock && (
         <div ref={bottomDockRef} className="goblin-terminal-bottom-dock">
-          <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
-            {visibleCustomButtons.map((button, index) => {
-              const action = button.action === 'input' ? 'input' : 'execute'
-              return (
-                <Button
-                  key={`${index}:${button.label}:${button.value}:${action}`}
-                  type="button"
-                  size={terminalCustomButtonSize === 'large' ? 'default' : 'sm'}
-                  variant="secondary"
-                  className={cn(
-                    'goblin-terminal-custom-buttons__button',
-                    `goblin-terminal-custom-buttons__button--${terminalCustomButtonSize}`,
-                  )}
-                  title={button.value}
-                  onClick={() => {
-                    if (action === 'input') writeInput(key, button.value)
-                    else writeInput(key, `${button.value}\r`)
-                    focusTerminal(key)
-                  }}
-                >
-                  {button.label}
-                </Button>
-              )
-            })}
-          </div>
+          {customButtonsDock}
+          {hasMobileCommandDeck && (
+            <MobileTerminalCommandDeck
+              key={key}
+              terminalCount={switchableTerminalCount}
+              fitToWidth={fitToWidth}
+              onExtraKey={(input) => writeExtraKey(key, input)}
+              onInput={(data) => writeInput(key, data)}
+              onScrollToBottom={handleScrollToBottom}
+              onCycleTerminal={cycleTerminal}
+              onFitToWidthChange={setFitToWidth}
+              onEnterFocus={() => setMobileFocusMode(true)}
+            />
+          )}
         </div>
       )}
       {isReadonly && (
         <ViewerStatus
           message={readonlyMessage}
+          scrollToBottomLabel={t('terminal.command-deck.scroll-to-bottom')}
           takeoverLabel={t('terminal.takeover')}
           takeoverKey={key}
+          onScrollToBottom={handleScrollToBottom}
           onTakeover={takeover}
           takeoverPending={snapshot.takeoverPending}
+          terminalCount={switchableTerminalCount}
+          onCycleTerminal={cycleTerminal}
         />
       )}
       {hasSessions && snapshot.phase === 'error' && snapshot.message !== 'terminal.empty' && (
@@ -494,27 +1042,47 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
 interface ViewerStatusProps {
   message: string
+  scrollToBottomLabel: string
   takeoverLabel: string
   takeoverKey: string | null
+  onScrollToBottom: () => void
   onTakeover: (key: string) => void
   takeoverPending?: boolean
+  terminalCount: number
+  onCycleTerminal: (direction: -1 | 1) => void
 }
 
-function ViewerStatus({ message, takeoverLabel, takeoverKey, onTakeover, takeoverPending }: ViewerStatusProps) {
+function ViewerStatus({
+  message,
+  scrollToBottomLabel,
+  takeoverLabel,
+  takeoverKey,
+  onScrollToBottom,
+  onTakeover,
+  takeoverPending,
+  terminalCount,
+  onCycleTerminal,
+}: ViewerStatusProps) {
   return (
     <div className="goblin-terminal-slot__viewer-status">
+      <div className="goblin-terminal-slot__viewer-actions">
+        <TerminalCycleButtons terminalCount={terminalCount} onCycleTerminal={onCycleTerminal} />
+        <Button type="button" size="sm" variant="secondary" onClick={onScrollToBottom} disabled={!takeoverKey}>
+          {scrollToBottomLabel}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => takeoverKey && onTakeover(takeoverKey)}
+          disabled={!takeoverKey || takeoverPending}
+        >
+          {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
+        </Button>
+      </div>
       <span className="goblin-terminal-slot__viewer-message" role="status" aria-live="polite" aria-atomic="true">
         {message}
       </span>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        onClick={() => takeoverKey && onTakeover(takeoverKey)}
-        disabled={!takeoverKey || takeoverPending}
-      >
-        {takeoverPending ? `${takeoverLabel}…` : takeoverLabel}
-      </Button>
     </div>
   )
 }

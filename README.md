@@ -53,6 +53,8 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 
 ## Magic Operations
 
+- **Open a project with `hob` (macOS):** Run `hob .` or `hob <directory>` from a terminal to open or import that local directory in Hobgoblin.
+- **Global terminal switching:** While an internal terminal is focused, use `Cmd+Option+Up/Down` on macOS or `Ctrl+Alt+Up/Down` on Windows/Linux to move through all open internal terminals across projects and worktrees.
 - **Binary paste into terminal input:** Paste binary clipboard content into the terminal input to create temporary files and insert the generated file paths.
 - **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
 - **Double-click file tree files:** Double-click a file in the file tree to open that exact file in the configured editor.
@@ -87,6 +89,23 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 On Windows, SmartScreen may warn about the unsigned installer. Continue only if you trust the GitHub Release source.
 
+### Open Projects from the Terminal on macOS
+
+After moving `Hobgoblin.app` to `/Applications`, install the user-scoped `hob` launcher:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Hobgoblin.app/Contents/Resources/bin/hob" "$HOME/.local/bin/hob"
+```
+
+Make sure `$HOME/.local/bin` is in `PATH`, then open or import the current directory:
+
+```sh
+hob .
+```
+
+The command accepts zero or one directory argument and defaults to the current directory. The link command intentionally does not overwrite an existing `hob` command.
+
 ## Build and Install Locally
 
 Requirements:
@@ -100,7 +119,7 @@ Build and install the desktop app on macOS:
 bun run install:app
 ```
 
-This builds a host-architecture `Hobgoblin.app` and installs it to `~/Applications`.
+This builds a host-architecture `Hobgoblin.app`, installs it to `~/Applications`, and safely creates `$HOME/.local/bin/hob` when that path is available. It never overwrites an existing command.
 
 ## Develop
 

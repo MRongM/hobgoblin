@@ -26,6 +26,7 @@ import type {
   TerminalOutputEvent,
   TerminalReorderInput,
   TerminalResizeInput,
+  TerminalReturnToBottomInput,
   TerminalRestartInput,
   TerminalSessionSnapshot,
   TerminalSessionSnapshotInput,
@@ -44,6 +45,7 @@ export interface RendererTerminalBridge {
   restart: (input: TerminalRestartInput) => Promise<TerminalAttachResult>
   write: (input: TerminalWriteInput) => Promise<TerminalMutationResult>
   resize: (input: TerminalResizeInput) => Promise<TerminalMutationResult>
+  returnToBottom: (input: TerminalReturnToBottomInput) => Promise<TerminalMutationResult>
   takeover: (input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>
   close: (input: TerminalSessionInput) => Promise<TerminalCloseResult>
   create: (input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>

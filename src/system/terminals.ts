@@ -15,13 +15,20 @@ import type { ResolvedTerminalApp, TerminalAppAvailability, TerminalPref } from 
 import { isGhosttyInstalled, openInGhostty, openRemoteInGhostty } from '#/system/ghostty.ts'
 import { isAppleTerminalInstalled, openInAppleTerminal, openRemoteInAppleTerminal } from '#/system/apple-terminal.ts'
 import type { ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
-import { normalizeTmuxSessionDescriptor, type TmuxSessionDescriptor } from '#/system/tmux-session.ts'
+import {
+  normalizeTmuxSessionDescriptor,
+  type ExistingTmuxSessionKind,
+  type TmuxSessionDescriptor,
+} from '#/system/tmux-session.ts'
 import { isWindowsTerminalAvailable, openInWindowsTerminal } from '#/system/windows-terminal.ts'
 
 export type ExternalLocalTerminalTarget = TmuxSessionDescriptor
 
 export interface TerminalOpenOptions {
   useTmux?: boolean
+  existingTmuxSessionKind?: ExistingTmuxSessionKind
+  existingTmuxSessionName?: string
+  existingTmuxServerName?: string
 }
 
 export interface TerminalBackend {
@@ -117,6 +124,9 @@ export async function openInPreferredTerminal(
       keyTarget.workingDirectory,
       keyTarget.terminalNumber,
       options.useTmux === true,
+      options.existingTmuxSessionKind ?? '',
+      options.existingTmuxServerName ?? '',
+      options.existingTmuxSessionName ?? '',
     ],
     () => backends[resolved].open(target, options),
   )
@@ -150,6 +160,9 @@ export async function openRemoteInPreferredTerminal(
       keyTarget.workingDirectory,
       keyTarget.terminalNumber,
       options.useTmux === true,
+      options.existingTmuxSessionKind ?? '',
+      options.existingTmuxServerName ?? '',
+      options.existingTmuxSessionName ?? '',
     ],
     () => openRemoteInTerminalBackend(backends[resolved], target, options),
   )

@@ -12,10 +12,9 @@ import { wireRpcIpc } from '#/main/rpc.ts'
 import { wireShellBridgeIpc } from '#/main/shell-bridge.ts'
 import { wireTerminalIpc } from '#/main/terminal.ts'
 import { closeDetachedFileAreaWindows, wireDetachedFileAreaWindowIpc } from '#/main/detached-file-area-window.ts'
-import { syncGlobalShortcuts, unregisterAppShortcuts } from '#/main/shortcuts.ts'
 import { enqueueExternalOpenPath } from '#/main/external-open.ts'
 import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts'
-import { getSettingsSnapshot, setSettingsGlobalShortcutState } from '#/main/settings-server-client.ts'
+import { getSettingsSnapshot } from '#/main/settings-server-client.ts'
 import { startEmbeddedServer, stopEmbeddedServer } from '#/main/server-manager.ts'
 import { createStartupDiagnostics } from '#/main/startup-diagnostics.ts'
 import { configureChromiumKeychainPolicy } from '#/main/chromium-keychain-policy.ts'
@@ -91,15 +90,10 @@ async function main(): Promise<void> {
     if (process.platform !== 'darwin') app.quit()
   })
 
-  app.on('will-quit', () => {
-    unregisterAppShortcuts()
-  })
-
   // Drain debounced settings writes before exit so the last theme pick,
   // window resize, or session change isn't lost. We exit explicitly
   // after the flush: re-entering app.quit from before-quit is not
-  // reliable across Electron quit paths, and app.exit skips will-quit,
-  // so do will-quit cleanup here too.
+  // reliable across Electron quit paths.
   app.on('before-quit', async (event) => {
     if (isQuitting) return
     event.preventDefault()
@@ -122,7 +116,6 @@ async function finalizeMainProcessExit(): Promise<void> {
     if (!windowStateFlushed) console.error('[window-state] final flush failed before quit')
     await stopEmbeddedServer()
   } finally {
-    unregisterAppShortcuts()
     app.exit(0)
   }
 }
@@ -135,7 +128,6 @@ async function initializeMainProcess(): Promise<void> {
   await initTheme({ theme: settingsSnapshot.theme, colorTheme: settingsSnapshot.colorTheme })
   await initializeRuntimeState(settingsSnapshot)
   wireMainProcessIpc()
-  await syncInitialGlobalShortcutState(settingsSnapshot)
 }
 
 async function startEmbeddedServerForMainProcess(): Promise<void> {
@@ -156,7 +148,6 @@ async function initializeRuntimeState(settingsSnapshot: SettingsSnapshot): Promi
   assertDictionaryParity(!app.isPackaged)
   initializeMenuRuntimeState({
     shortcutsDisabled: settingsSnapshot.shortcutsDisabled,
-    swapCloseShortcuts: settingsSnapshot.swapCloseShortcuts,
     langPref: settingsSnapshot.lang,
   })
   setCurrentLang(resolveLang(settingsSnapshot.lang))
@@ -169,14 +160,6 @@ function wireMainProcessIpc(): void {
   wireShellBridgeIpc()
   wireTerminalIpc()
   wireDetachedFileAreaWindowIpc()
-}
-
-async function syncInitialGlobalShortcutState(settingsSnapshot: SettingsSnapshot): Promise<void> {
-  const globalShortcutRegistered = syncGlobalShortcuts(
-    settingsSnapshot.globalShortcutDisabled,
-    settingsSnapshot.globalShortcut,
-  )
-  await setSettingsGlobalShortcutState(globalShortcutRegistered)
 }
 
 void main()

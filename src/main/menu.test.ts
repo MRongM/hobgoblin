@@ -4,7 +4,6 @@ import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 interface MockMenuRuntimeState {
   recentRepos: RepoSessionEntry[]
   shortcutsDisabled: boolean
-  swapCloseShortcuts: boolean
   langPref: 'auto' | 'en' | 'zh' | 'ko' | 'ja'
 }
 
@@ -12,7 +11,6 @@ function defaultMenuRuntimeState(): MockMenuRuntimeState {
   return {
     recentRepos: [],
     shortcutsDisabled: false,
-    swapCloseShortcuts: false,
     langPref: 'auto',
   }
 }
@@ -225,36 +223,38 @@ describe('app menu actions', () => {
     })
   })
 
-  test('wires the remote open accelerator from the file menu', async () => {
+  test('keeps file and app commands available without the removed app accelerators', async () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
 
     const fileMenu = mocks.template.find((entry) => entry.label === 'menu.file')
+    const appMenu = mocks.template.find((entry) => entry.label === 'Hobgoblin')
+    const openItem = fileMenu?.submenu?.find((entry: any) => entry.label === 'menu.file.open-local-repo')
+    const cloneItem = fileMenu?.submenu?.find((entry: any) => entry.label === 'menu.file.clone-repo')
     const remoteItem = fileMenu?.submenu?.find((entry: any) => entry.label === 'menu.file.open-remote-repo')
-    expect(remoteItem?.accelerator).toBe('CmdOrCtrl+Shift+R')
-  })
-
-  test('keeps the intentional default close shortcut mapping', async () => {
-    const { buildAppMenu } = await import('#/main/menu.ts')
-
-    buildAppMenu()
-
-    const fileMenu = mocks.template.find((entry) => entry.label === 'menu.file')
     const closeTabItem = fileMenu?.submenu?.find((entry: any) => entry.label === 'menu.file.close-tab')
     const closeWindowItem = fileMenu?.submenu?.find((entry: any) => entry.label === 'menu.file.close-window')
-    expect(closeTabItem?.accelerator).toBe('CmdOrCtrl+Shift+W')
-    expect(closeWindowItem?.accelerator).toBe('CmdOrCtrl+W')
+    const settingsItem = appMenu?.submenu?.find((entry: any) => entry.label === 'menu.app.settings')
+
+    expect(openItem?.accelerator).toBeUndefined()
+    expect(cloneItem?.accelerator).toBeUndefined()
+    expect(remoteItem?.accelerator).toBeUndefined()
+    expect(closeTabItem?.accelerator).toBeUndefined()
+    expect(closeWindowItem?.accelerator).toBeUndefined()
+    expect(settingsItem?.accelerator).toBeUndefined()
   })
 
-  test('wires the terminal primary action accelerator from the view menu', async () => {
+  test('keeps the terminal primary action menu item without the removed view accelerator', async () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
 
     const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
-    const terminalPrimaryItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.terminal-primary-action')
-    expect(terminalPrimaryItem?.accelerator).toBe('CmdOrCtrl+Enter')
+    const terminalPrimaryItem = viewMenu?.submenu?.find(
+      (entry: any) => entry.label === 'menu.view.terminal-primary-action',
+    )
+    expect(terminalPrimaryItem?.accelerator).toBeUndefined()
 
     terminalPrimaryItem.click()
     await Promise.resolve()
@@ -264,7 +264,7 @@ describe('app menu actions', () => {
     })
   })
 
-  test('wires status, changes, and numbered terminal accelerators from the view menu', async () => {
+  test('removes view accelerators and obsolete numbered terminal menu items', async () => {
     const { buildAppMenu } = await import('#/main/menu.ts')
 
     buildAppMenu()
@@ -276,19 +276,16 @@ describe('app menu actions', () => {
     const firstTerminalItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.terminal 1')
     const lastTerminalItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.terminal 7')
 
-    expect(statusItem?.accelerator).toBe('CmdOrCtrl+1')
-    expect(changesItem?.accelerator).toBe('CmdOrCtrl+2')
+    expect(statusItem?.accelerator).toBeUndefined()
+    expect(changesItem?.accelerator).toBeUndefined()
     expect(terminalItem?.accelerator).toBeUndefined()
-    expect(firstTerminalItem?.accelerator).toBe('CmdOrCtrl+3')
-    expect(lastTerminalItem?.accelerator).toBe('CmdOrCtrl+9')
+    expect(firstTerminalItem).toBeUndefined()
+    expect(lastTerminalItem).toBeUndefined()
 
-    firstTerminalItem.click()
-    await Promise.resolve()
-
-    expect(mocks.sendRendererEffectIntent).toHaveBeenCalledWith(mocks.win, {
-      type: 'select-terminal-requested',
-      index: 1,
-    })
+    const refreshItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.refresh')
+    const reloadItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.reload-page')
+    expect(refreshItem?.accelerator).toBeUndefined()
+    expect(reloadItem?.accelerator).toBeUndefined()
   })
 
   test('omits obsolete workspace layout and desktop detail toggle commands', async () => {
@@ -347,6 +344,10 @@ describe('app menu actions', () => {
       'menu.window.zoom',
       undefined,
     ])
+    const nextRepoItem = windowMenu?.submenu?.find((entry: any) => entry.label === 'menu.window.next-repo')
+    const previousRepoItem = windowMenu?.submenu?.find((entry: any) => entry.label === 'menu.window.prev-repo')
+    expect(nextRepoItem?.accelerator).toBeUndefined()
+    expect(previousRepoItem?.accelerator).toBeUndefined()
   })
 
   test('routes clear recent through renderer intent', async () => {

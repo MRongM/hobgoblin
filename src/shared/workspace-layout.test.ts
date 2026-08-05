@@ -17,7 +17,7 @@ describe('normalizeWorkspaceSessionLayoutState', () => {
     expect(DEFAULT_FILE_TREE_PANE_SIZES).toEqual({ 'left-right': 66.7 })
   })
 
-  test('normalizes legacy top-bottom layout state to left-right without restoring terminal focus', () => {
+  test('normalizes legacy top-bottom layout state to left-right while preserving terminal focus', () => {
     expect(normalizeWorkspaceLayout('top-bottom')).toBe('left-right')
     expect(normalizeDetailPaneSizes({ 'top-bottom': 55, 'left-right': 45 })).toEqual({ 'left-right': 45 })
     expect(normalizeFileTreePaneSizes({ 'top-bottom': 44, 'left-right': 36 })).toEqual({ 'left-right': 36 })
@@ -32,7 +32,7 @@ describe('normalizeWorkspaceSessionLayoutState', () => {
     ).toEqual({
       workspaceLayout: 'left-right',
       detailCollapsed: false,
-      detailFocusMode: false,
+      detailFocusMode: true,
       detailPaneSizes: { 'left-right': 45 },
       fileTreePaneSizes: { 'left-right': 36 },
     })

@@ -24,6 +24,7 @@ const config: Configuration = {
     '!src/**/*.test.ts',
     '!**/*.map',
   ],
+  extraResources: [{ from: 'bin/hob', to: 'bin/hob' }],
   asarUnpack: ['node_modules/node-pty/prebuilds/**/*', 'node_modules/sharp/**/*', 'node_modules/@img/**/*'],
   mac: {
     category: 'public.app-category.developer-tools',

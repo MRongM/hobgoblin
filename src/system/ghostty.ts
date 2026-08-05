@@ -2,8 +2,12 @@ import { execa } from 'execa'
 import { existsSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
-import { buildExternalRemoteTerminalInvocation, type ExternalRemoteTerminalTarget } from '#/system/remote-terminal.ts'
+import { buildManagedLocalTerminalInvocation, type LocalTerminalInvocationOptions } from '#/system/local-terminal.ts'
+import {
+  buildExternalRemoteTerminalInvocation,
+  type ExternalRemoteTerminalTarget,
+  type RemoteTerminalInvocationOptions,
+} from '#/system/remote-terminal.ts'
 import { normalizeTmuxSessionDescriptor, type TmuxSessionDescriptor } from '#/system/tmux-session.ts'
 
 const GHOSTTY_BUNDLE_ID = 'com.mitchellh.ghostty'
@@ -77,10 +81,11 @@ function openInRunningGhostty(dir: string): Promise<boolean> {
 // bring the terminal down with it.
 export async function openInGhostty(
   target: TmuxSessionDescriptor,
-  options: { useTmux?: boolean } = {},
+  options: LocalTerminalInvocationOptions = {},
 ): Promise<{ ok: boolean; message: string }> {
   const descriptor = normalizeTmuxSessionDescriptor(target)
-  if (!descriptor || !isUsableDirectory(descriptor.workingDirectory)) {
+  const attachesExistingSession = options.existingTmuxSessionKind !== undefined
+  if (!descriptor || (!attachesExistingSession && !isUsableDirectory(descriptor.workingDirectory))) {
     return { ok: false, message: 'error.invalid-path' }
   }
   if (!isGhosttyInstalled()) return { ok: false, message: 'error.ghostty-not-installed' }
@@ -145,7 +150,7 @@ function openCommandInRunningGhostty(commandText: string): Promise<boolean> {
 
 export async function openRemoteInGhostty(
   target: ExternalRemoteTerminalTarget,
-  options: { useTmux?: boolean } = {},
+  options: RemoteTerminalInvocationOptions = {},
 ): Promise<{ ok: boolean; message: string }> {
   const invocation = buildExternalRemoteTerminalInvocation(target, options)
   if (!invocation) return { ok: false, message: 'error.invalid-arguments' }

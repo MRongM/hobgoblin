@@ -28,6 +28,7 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -743,6 +744,75 @@ class RepositorySetupStateTest {
         assertEquals("App", repository.alias)
         assertEquals("/srv/app", repository.remotePath)
         assertEquals(RemoteProjectKind.GitRepository, repository.kind)
+    }
+
+    @Test
+    fun `explicit plain import uses the current worktree instead of the primary worktree`() {
+        val host = host(id = "host-1", identityRefId = "identity-1")
+        val inspection = RemoteProjectInspection(
+            requestedPath = "/srv/app-feature/subdir",
+            resolvedPath = "/srv/app",
+            kind = RemoteProjectKind.GitRepository,
+            currentRef = "feature/android",
+            defaultBranch = "main",
+            worktreePath = "/srv/app-feature",
+        )
+
+        val workspace = createProjectFromInspection(
+            host = host,
+            alias = "Feature",
+            inspection = inspection,
+            importKind = RemoteProjectKind.PlainWorkspace,
+        )
+
+        assertEquals("/srv/app-feature", workspace.remotePath)
+        assertEquals(RemoteProjectKind.PlainWorkspace, workspace.kind)
+    }
+
+    @Test
+    fun `explicit git import keeps the primary worktree`() {
+        val host = host(id = "host-1", identityRefId = "identity-1")
+        val inspection = RemoteProjectInspection(
+            requestedPath = "/srv/app-feature",
+            resolvedPath = "/srv/app",
+            kind = RemoteProjectKind.GitRepository,
+            currentRef = "feature/android",
+            defaultBranch = "main",
+            worktreePath = "/srv/app-feature",
+        )
+
+        val repository = createProjectFromInspection(
+            host = host,
+            alias = "App",
+            inspection = inspection,
+            importKind = RemoteProjectKind.GitRepository,
+        )
+
+        assertEquals("/srv/app", repository.remotePath)
+        assertEquals(RemoteProjectKind.GitRepository, repository.kind)
+    }
+
+    @Test
+    fun `explicit git import rejects a non git directory`() {
+        val host = host(id = "host-1", identityRefId = "identity-1")
+        val inspection = RemoteProjectInspection(
+            requestedPath = "/srv/scripts",
+            resolvedPath = "/srv/scripts",
+            kind = RemoteProjectKind.PlainWorkspace,
+            currentRef = null,
+            defaultBranch = null,
+        )
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            createProjectFromInspection(
+                host = host,
+                alias = "Scripts",
+                inspection = inspection,
+                importKind = RemoteProjectKind.GitRepository,
+            )
+        }
+
+        assertEquals("The selected directory is not a Git repository.", error.message)
     }
 
     @Test
