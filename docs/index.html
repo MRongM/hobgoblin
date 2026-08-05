@@ -811,7 +811,7 @@
               <path d="M2 17l10 5 10-5" />
               <path d="M2 12l10 5 10-5" />
             </svg>
-            <span data-i18n="hero_badge">AI CLI-ready Desktop Workspace</span>
+            <span data-i18n="hero_badge">v2.2.3 · AI CLI-ready Desktop Workspace</span>
           </div>
           <h1 data-i18n-html="hero_title">
             Git-aware high-productivity workspace,<br /><span>not just branch management</span>
@@ -940,8 +940,8 @@
             </div>
             <h3 data-i18n="f3_title">AI CLI-ready terminals</h3>
             <p data-i18n="f3_desc">
-              Run coding agents and shell tasks at the Branch workspace root or inside one member without losing their
-              Git and directory context.
+              Run coding agents in context, then switch across every open terminal with Cmd+Option+Up/Down on macOS or
+              Ctrl+Alt+Up/Down on Windows and Linux.
             </p>
           </div>
           <!-- f4: Commit Log & Status -->
@@ -962,8 +962,8 @@
             </div>
             <h3 data-i18n="f4_title">Android mobile client</h3>
             <p data-i18n="f4_desc">
-              Use saved SSH Hosts, remote Projects and Worktrees, retained terminals, and port forwards when working
-              away from the desktop.
+              Use retained terminals with recency and status, mobile touch controls, tmux directory imports, and port
+              forwards when working away from the desktop.
             </p>
           </div>
           <!-- f5: Visual workflow controls -->
@@ -985,8 +985,8 @@
             </div>
             <h3 data-i18n="f5_title">Project-scoped tmux</h3>
             <p data-i18n="f5_desc">
-              Explicitly create or reconnect deterministic Hobgoblin sessions and recover Hobgoblin or default tmux
-              sessions from Android.
+              Create deterministic project sessions, manage default-host sessions from desktop, and recover or import
+              discovered sessions from Android.
             </p>
           </div>
           <!-- f6: Local, SSH, themes, and languages -->
@@ -1089,6 +1089,10 @@
         </div>
         <pre class="install-code"><code>bun install
 bun run dev</code></pre>
+        <p class="install-note" data-i18n="install_hob_command_label">
+          Open the current project from a macOS terminal:
+        </p>
+        <pre class="install-code"><code>hob .</code></pre>
         <p class="install-note" data-i18n="install_linux_command_label">Linux systemd deployment:</p>
         <pre class="install-code"><code>tar -xzf Hobgoblin-&lt;version&gt;-linux-source.tar.gz
 cd Hobgoblin-&lt;version&gt;
@@ -1216,7 +1220,7 @@ cd Hobgoblin-&lt;version&gt;
           nav_features: 'Features',
           nav_install: 'Install',
           nav_how: 'How It Works',
-          hero_badge: 'AI CLI-ready Desktop Workspace',
+          hero_badge: 'v2.2.3 · AI CLI-ready Desktop Workspace',
           hero_title: 'Git-aware high-productivity workspace,<br/><span>not just branch management</span>',
           hero_sub:
             'Hobgoblin connects repositories, multi-repository workspaces, Branch workspaces, terminals, Android, and tmux so parallel development stays visible and controllable.',
@@ -1235,13 +1239,13 @@ cd Hobgoblin-&lt;version&gt;
             'Build one feature across selected same-named repository worktrees, with an explorable root and independent member contexts.',
           f3_title: 'AI CLI-ready terminals',
           f3_desc:
-            'Run coding agents and shell tasks at the Branch workspace root or inside one member without losing their Git and directory context.',
+            'Run coding agents in context, then switch across every open terminal with Cmd+Option+Up/Down on macOS or Ctrl+Alt+Up/Down on Windows and Linux.',
           f4_title: 'Android mobile client',
           f4_desc:
-            'Use saved SSH Hosts, remote Projects and Worktrees, retained terminals, and port forwards when working away from the desktop.',
+            'Use retained terminals with recency and status, mobile touch controls, tmux directory imports, and port forwards when working away from the desktop.',
           f5_title: 'Project-scoped tmux',
           f5_desc:
-            'Explicitly create or reconnect deterministic Hobgoblin sessions and recover Hobgoblin or default tmux sessions from Android.',
+            'Create deterministic project sessions, manage default-host sessions from desktop, and recover or import discovered sessions from Android.',
           f6_title: 'Git coordination with clear boundaries',
           f6_desc:
             'Inspect local or SSH repository state individually, then run ordered workspace commit, pull, push, and merge flows that stop visibly on failure.',
@@ -1267,6 +1271,7 @@ cd Hobgoblin-&lt;version&gt;
           install_linux_desc: 'Download the deployment-focused source archive for a Node.js 24+ and Bun host.',
           install_source_title: 'Develop from source',
           install_source_desc: 'Install dependencies with Bun and start the development app locally.',
+          install_hob_command_label: 'Open the current project from a macOS terminal:',
           install_linux_command_label: 'Linux systemd deployment:',
           install_note:
             'Current desktop builds and the Android APK are unsigned. The Android APK must be signed before installation.',
@@ -1291,7 +1296,7 @@ cd Hobgoblin-&lt;version&gt;
           nav_features: '功能',
           nav_install: '安装',
           nav_how: '使用方式',
-          hero_badge: '面向 AI CLI 的桌面工作区',
+          hero_badge: 'v2.2.3 · 面向 AI CLI 的桌面工作区',
           hero_title: '基于 Git 感知的高生产力工作区，<br/><span>不只是分支管理</span>',
           hero_sub:
             'Hobgoblin 把仓库、多仓库工作区、Branch workspace、终端、Android 与 tmux 连接起来，让并行开发始终可见、可控。',
@@ -1307,11 +1312,12 @@ cd Hobgoblin-&lt;version&gt;
           f2_title: 'Branch workspace',
           f2_desc: '在选定的同名仓库 worktree 中开发一个功能，同时获得可浏览的根目录和相互独立的成员上下文。',
           f3_title: 'AI CLI 就绪的终端',
-          f3_desc: '在 Branch workspace 根目录或单个成员中运行编码代理与 shell 任务，不丢失对应 Git 和目录上下文。',
+          f3_desc:
+            '在上下文中运行编码代理，并使用 macOS 的 Cmd+Option+Up/Down 或 Windows/Linux 的 Ctrl+Alt+Up/Down 切换所有已打开终端。',
           f4_title: 'Android 移动端',
-          f4_desc: '离开桌面时仍可使用已保存的 SSH Host、远程 Project 与 Worktree、保留终端和端口转发。',
+          f4_desc: '离开桌面时仍可使用带时间与状态的保留终端、移动触控、tmux 目录导入和端口转发。',
           f5_title: '项目级 tmux',
-          f5_desc: '显式创建或重连确定性的 Hobgoblin 会话，并从 Android 恢复 Hobgoblin 或默认 tmux 会话。',
+          f5_desc: '创建确定性的项目会话，从桌面管理默认 Host 会话，并从 Android 恢复或导入发现的会话。',
           f6_title: '边界清晰的 Git 协作',
           f6_desc: '分别检查本地或 SSH 仓库状态，再执行按序运行、失败时明确停止的工作区提交、拉取、推送和合并流程。',
           origin_label: '起源',
@@ -1336,6 +1342,7 @@ cd Hobgoblin-&lt;version&gt;
           install_linux_desc: '为安装了 Node.js 24+ 与 Bun 的主机下载面向部署的源码包。',
           install_source_title: '从源码开发',
           install_source_desc: '使用 Bun 安装依赖，并在本地启动开发应用。',
+          install_hob_command_label: '从 macOS 终端打开当前项目：',
           install_linux_command_label: 'Linux systemd 部署：',
           install_note: '当前桌面构建与 Android APK 均未签名；Android APK 必须先签名才能安装。',
           how_label: '使用方式',
@@ -1355,7 +1362,7 @@ cd Hobgoblin-&lt;version&gt;
           nav_features: '기능',
           nav_install: '설치',
           nav_how: '사용 방법',
-          hero_badge: 'AI CLI-ready 데스크톱 워크스페이스',
+          hero_badge: 'v2.2.3 · AI CLI-ready 데스크톱 워크스페이스',
           hero_title: 'Git 인식 기반 고생산성 워크스페이스,<br/><span>단순한 브랜치 관리가 아닙니다</span>',
           hero_sub:
             'Hobgoblin은 리포지토리, 멀티 리포지토리 워크스페이스, Branch workspace, 터미널, Android, tmux를 연결해 병렬 개발을 계속 보이고 제어 가능하게 유지합니다.',
@@ -1374,12 +1381,13 @@ cd Hobgoblin-&lt;version&gt;
             '선택한 같은 이름의 리포지토리 worktree를 가로질러 하나의 기능을 개발하며 탐색 가능한 루트와 독립 멤버 컨텍스트를 제공합니다.',
           f3_title: 'AI CLI-ready 터미널',
           f3_desc:
-            'Branch workspace 루트 또는 한 멤버에서 코딩 에이전트와 셸 작업을 실행해 Git 및 디렉터리 컨텍스트를 잃지 않습니다.',
+            '컨텍스트에서 코딩 에이전트를 실행하고 macOS의 Cmd+Option+Up/Down 또는 Windows/Linux의 Ctrl+Alt+Up/Down으로 열린 모든 터미널을 전환합니다.',
           f4_title: 'Android 모바일 클라이언트',
-          f4_desc: '데스크톱 밖에서도 저장된 SSH Host, 원격 Project와 Worktree, 유지 터미널, 포트 포워드를 사용합니다.',
+          f4_desc:
+            '데스크톱 밖에서도 시간과 상태가 표시되는 유지 터미널, 모바일 터치 제어, tmux 디렉터리 가져오기, 포트 포워드를 사용합니다.',
           f5_title: '프로젝트별 tmux',
           f5_desc:
-            '결정적인 Hobgoblin 세션을 명시적으로 만들거나 다시 연결하고 Android에서 Hobgoblin 또는 기본 tmux 세션을 복구합니다.',
+            '결정적인 프로젝트 세션을 만들고 데스크톱에서 기본 Host 세션을 관리하며 Android에서 발견한 세션을 복구하거나 가져옵니다.',
           f6_title: '경계가 분명한 Git 조정',
           f6_desc:
             '로컬 또는 SSH 리포지토리 상태를 개별 확인한 뒤 실패 시 명확히 중단되는 순차 워크스페이스 커밋, 풀, 푸시, 머지 흐름을 실행합니다.',
@@ -1405,6 +1413,7 @@ cd Hobgoblin-&lt;version&gt;
           install_linux_desc: 'Node.js 24+와 Bun이 설치된 호스트용 배포 소스 아카이브를 다운로드하세요.',
           install_source_title: '소스에서 개발',
           install_source_desc: 'Bun으로 의존성을 설치하고 로컬 개발 앱을 시작하세요.',
+          install_hob_command_label: 'macOS 터미널에서 현재 프로젝트 열기:',
           install_linux_command_label: 'Linux systemd 배포:',
           install_note:
             '현재 데스크톱 빌드와 Android APK는 서명되지 않았습니다. Android APK는 설치 전에 서명해야 합니다.',
@@ -1428,7 +1437,7 @@ cd Hobgoblin-&lt;version&gt;
           nav_features: '機能',
           nav_install: 'インストール',
           nav_how: '使い方',
-          hero_badge: 'AI CLI-ready デスクトップワークスペース',
+          hero_badge: 'v2.2.3 · AI CLI-ready デスクトップワークスペース',
           hero_title: 'Git 認識に基づく高生産性ワークスペース、<br/><span>単なるブランチ管理ではありません</span>',
           hero_sub:
             'Hobgoblin はリポジトリ、マルチリポジトリワークスペース、Branch workspace、ターミナル、Android、tmux をつなぎ、並行開発を常に見える状態で制御できます。',
@@ -1447,13 +1456,13 @@ cd Hobgoblin-&lt;version&gt;
             '選択した同名のリポジトリ worktree を横断して一つの機能を開発し、探索可能なルートと独立したメンバーコンテキストを利用できます。',
           f3_title: 'AI CLI-ready ターミナル',
           f3_desc:
-            'Branch workspace ルートまたは一つのメンバーでコーディングエージェントとシェルタスクを実行し、Git とディレクトリのコンテキストを失いません。',
+            'コンテキスト内でコーディングエージェントを実行し、macOS の Cmd+Option+Up/Down または Windows/Linux の Ctrl+Alt+Up/Down ですべての開いているターミナルを切り替えます。',
           f4_title: 'Android モバイルクライアント',
           f4_desc:
-            'デスクトップを離れても、保存済み SSH Host、リモート Project と Worktree、保持ターミナル、ポートフォワードを利用できます。',
+            'デスクトップを離れても、時刻と状態付きの保持ターミナル、モバイルタッチ操作、tmux ディレクトリのインポート、ポートフォワードを利用できます。',
           f5_title: 'プロジェクト単位の tmux',
           f5_desc:
-            '決定的な Hobgoblin セッションを明示的に作成・再接続し、Android から Hobgoblin またはデフォルト tmux セッションを復元します。',
+            '決定的なプロジェクトセッションを作成し、デスクトップでデフォルト Host セッションを管理し、Android で検出したセッションを復元またはインポートします。',
           f6_title: '境界が明確な Git 連携',
           f6_desc:
             'ローカルまたは SSH リポジトリの状態を個別に確認し、失敗時に明確に停止する順序付きワークスペースのコミット、プル、プッシュ、マージを実行します。',
@@ -1479,6 +1488,7 @@ cd Hobgoblin-&lt;version&gt;
           install_linux_desc: 'Node.js 24+ と Bun を備えたホスト向けのデプロイ用ソースアーカイブをダウンロードします。',
           install_source_title: 'ソースから開発',
           install_source_desc: 'Bun で依存関係をインストールし、ローカルで開発アプリを起動します。',
+          install_hob_command_label: 'macOS ターミナルから現在のプロジェクトを開く:',
           install_linux_command_label: 'Linux systemd デプロイ:',
           install_note:
             '現在のデスクトップビルドと Android APK は未署名です。Android APK はインストール前に署名が必要です。',

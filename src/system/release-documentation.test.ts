@@ -31,20 +31,34 @@ describe('release documentation', () => {
     expect(page).toContain('Hobgoblin-&lt;version&gt;-linux-source.tar.gz')
   })
 
-  test('v2.2.2 English release notes enumerate every published asset', () => {
-    const relativePath = 'docs/releases/v2.2.2.md'
+  test('Pages highlights the v2.2.3 terminal and project-opening workflows', () => {
+    const page = readText('docs/index.html')
+
+    expect(page).toContain('v2.2.3')
+    expect(page).toContain('hob .')
+    expect(page).toContain('Cmd+Option+Up/Down')
+    expect(page).toContain('Ctrl+Alt+Up/Down')
+  })
+
+  test('v2.2.3 release identity and English notes cover every published asset', () => {
+    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.2.3' })
+    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 5')
+    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.2.3"')
+
+    const relativePath = 'docs/releases/v2.2.3.md'
     expect(existsSync(path.join(repoRoot, relativePath))).toBe(true)
     if (!existsSync(path.join(repoRoot, relativePath))) return
 
     const notes = readText(relativePath)
     for (const asset of [
-      'Hobgoblin-2.2.2-arm64.dmg',
-      'Hobgoblin-2.2.2-x64.dmg',
-      'Hobgoblin-2.2.2-x64.exe',
-      'Hobgoblin-2.2.2-android.apk',
-      'Hobgoblin-2.2.2-linux-source.tar.gz',
+      'Hobgoblin-2.2.3-arm64.dmg',
+      'Hobgoblin-2.2.3-x64.dmg',
+      'Hobgoblin-2.2.3-x64.exe',
+      'Hobgoblin-2.2.3-android.apk',
+      'Hobgoblin-2.2.3-linux-source.tar.gz',
     ]) {
       expect(notes).toContain(asset)
     }
+    expect(notes).toContain('compare/v2.2.2...v2.2.3')
   })
 })

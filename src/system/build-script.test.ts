@@ -186,8 +186,8 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.exe')
     expect(workflow).toContain('Hobgoblin-${VERSION}-android.apk')
     expect(workflow).toContain('Hobgoblin-${VERSION}-linux-source.tar.gz')
-    expect(workflow).toContain('Android: This APK is unsigned and must be signed before installation.')
-    expect(workflow).toContain('Linux: This source deployment archive requires Node.js 24+ and Bun.')
+    expect(workflow).toContain('SOURCE="docs/releases/v${VERSION}.md"')
+    expect(workflow).toContain('cp "$SOURCE" release-notes.md')
   })
 
   test('builds a deployment-only Linux source archive', () => {
