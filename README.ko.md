@@ -189,7 +189,3 @@ cd Hobgoblin-<version>
 - [GitHub Pages](https://mrongm.github.io/hobgoblin/)
 - [소스 코드](https://github.com/MRongM/hobgoblin)
 - [Releases](https://github.com/MRongM/hobgoblin/releases)
-
-## 라이선스
-
-Hobgoblin은 MIT 라이선스를 사용합니다.
