@@ -53,6 +53,8 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 
 ## Magic Operations
 
+- **Open a project with `hob` (macOS):** Run `hob .` or `hob <directory>` from a terminal to open or import that local directory in Hobgoblin.
+- **Global terminal switching:** While an internal terminal is focused, use `Cmd+Option+Up/Down` on macOS or `Ctrl+Alt+Up/Down` on Windows/Linux to move through all open internal terminals across projects and worktrees.
 - **Binary paste into terminal input:** Paste binary clipboard content into the terminal input to create temporary files and insert the generated file paths.
 - **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
 - **Double-click file tree files:** Double-click a file in the file tree to open that exact file in the configured editor.
