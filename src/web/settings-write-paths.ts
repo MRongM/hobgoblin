@@ -3,7 +3,6 @@ import type {
   EditorAppState,
   EditorPref,
   FontFamilyPref,
-  GlobalShortcutState,
   SessionState,
   TerminalCustomButton,
   TerminalCustomButtonSize,
@@ -22,8 +21,6 @@ import {
   setFileTreeClipboardMaxBytesMb,
   setFontFamily,
   setFileTreeFontSize,
-  setGlobalShortcut,
-  setGlobalShortcutDisabled,
   setGitNetworkProxyEnabled,
   setGitNetworkProxyUrl,
   setGitNetworkTimeoutSec,
@@ -35,7 +32,6 @@ import {
   setSettingsFetchInterval,
   setStatusRefreshInterval,
   setShortcutsDisabled,
-  setSwapCloseShortcuts,
   setTemporaryFilesDirectory,
   setTerminalCustomButtons,
   setTerminalCustomButtonSize,
@@ -115,19 +111,6 @@ export async function setShortcutsDisabledPreference(disabled: boolean): Promise
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, shortcutsDisabled: disabled }))
 }
 
-export async function setGlobalShortcutDisabledPreference(disabled: boolean): Promise<void> {
-  await setGlobalShortcutDisabled(disabled)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    globalShortcutDisabled: disabled,
-  }))
-}
-
-export async function setSwapCloseShortcutsPreference(swapped: boolean): Promise<void> {
-  await setSwapCloseShortcuts(swapped)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, swapCloseShortcuts: swapped }))
-}
-
 export async function setTerminalThemeSyncEnabledPreference(enabled: boolean): Promise<void> {
   await setTerminalThemeSyncEnabled(enabled)
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
@@ -142,16 +125,6 @@ export async function setTemporaryFilesDirectoryPreference(path: string): Promis
     ...current,
     temporaryFilesDirectory: path,
   }))
-}
-
-export async function setGlobalShortcutPreference(accelerator: string): Promise<GlobalShortcutState> {
-  const state = await setGlobalShortcut(accelerator)
-  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
-    ...current,
-    globalShortcut: state.accelerator,
-    globalShortcutRegistered: state.registered,
-  }))
-  return state
 }
 
 export async function setTerminalAppPreference(pref: TerminalPref): Promise<TerminalAppState> {

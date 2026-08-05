@@ -87,6 +87,23 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 在 Windows 上，SmartScreen 可能会对未签名安装程序发出警告。只有在信任该 GitHub Release 来源时才继续安装。
 
+### 在 macOS 终端中打开项目
+
+将 `Hobgoblin.app` 移到 `/Applications` 后，安装用户级 `hob` 启动器：
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Hobgoblin.app/Contents/Resources/bin/hob" "$HOME/.local/bin/hob"
+```
+
+确认 `$HOME/.local/bin` 已加入 `PATH`，然后打开或导入当前目录：
+
+```sh
+hob .
+```
+
+该命令接受零个或一个目录参数，未传参数时默认使用当前目录。上面的链接命令不会覆盖已有的 `hob` 命令。
+
 ## 本地构建与安装
 
 环境要求：
@@ -100,7 +117,7 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 bun run install:app
 ```
 
-该命令会构建当前主机架构的 `Hobgoblin.app`，并安装到 `~/Applications`。
+该命令会构建当前主机架构的 `Hobgoblin.app`、安装到 `~/Applications`，并在目标路径可用时安全创建 `$HOME/.local/bin/hob`；已有命令不会被覆盖。
 
 ## 开发
 

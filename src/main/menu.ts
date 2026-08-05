@@ -1,7 +1,5 @@
-// Application menu. Two purposes:
-//   1) Provide native macOS menu bar entries (File / View / Window / Help)
-//   2) Wire global keyboard shortcuts that should work regardless of
-//      which element has focus — e.g. ⌘O always opens a repo.
+// Application menu. Provides native macOS menu bar entries and dispatches
+// renderer-owned commands from those entries.
 //
 // Renderer-driven actions (Open / Close Tab / Switch Tab / Refresh /
 // Toggle View) are dispatched as typed RPC events so the
@@ -26,14 +24,7 @@ import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RendererEffectIntent } from '#/shared/renderer-effect-intents.ts'
 import { focusedRegisteredSurface } from '#/main/window-registry.ts'
 import { readMenuRuntimeState } from '#/main/menu-state.ts'
-import {
-  TERMINAL_SELECTION_SHORTCUTS,
-  closeShortcutAccelerators,
-  rendererMenuCommandById,
-  resolveRendererMenuCommandAccelerator,
-  resolveRendererMenuCommandEnabled,
-  resolveRendererMenuCommandIntent,
-} from '#/shared/shortcut-definitions.ts'
+import { rendererMenuCommandById } from '#/shared/shortcut-definitions.ts'
 import {
   openDataFolder as runOpenDataFolder,
   openWebVersionFromMenu as runOpenWebVersionFromMenu,
@@ -44,12 +35,9 @@ interface AppMenuState {
   name: string
   recentRepos: RepoSessionEntry[]
   shortcutsDisabled: boolean
-  swapCloseShortcuts: boolean
   themePref: ThemePref
   langPref: LangPref
 }
-
-type AppMenuCommandContext = Pick<AppMenuState, 'swapCloseShortcuts'>
 
 const APPEARANCE_MENU_OPTIONS = [
   { pref: 'auto', labelKey: 'settings.appearance.auto' },
@@ -99,7 +87,6 @@ function readMenuState(): AppMenuState {
     name: app.name,
     recentRepos: runtimeState.recentRepos,
     shortcutsDisabled: runtimeState.shortcutsDisabled,
-    swapCloseShortcuts: runtimeState.swapCloseShortcuts,
     themePref: getTheme().pref,
     langPref: runtimeState.langPref,
   }
@@ -120,7 +107,10 @@ function createMacAppMenu(state: AppMenuState): MenuItemConstructorOptions {
   return {
     label: state.name,
     submenu: [
-      { label: t('menu.app.about', { name: state.name }), click: () => send({ type: 'open-settings-requested', page: 'about' }) },
+      {
+        label: t('menu.app.about', { name: state.name }),
+        click: () => send({ type: 'open-settings-requested', page: 'about' }),
+      },
       separator(),
       createRendererCommandMenuItem(state, 'app-settings'),
       createAppearanceMenu(state.themePref),
@@ -148,15 +138,7 @@ function createFileMenu(state: AppMenuState): MenuItemConstructorOptions {
       { label: t('menu.file.open-recent'), submenu: createRecentReposMenu(state.recentRepos) },
       separator(),
       createRendererCommandMenuItem(state, 'file-close-tab'),
-      // Close-window uses Electron's `role: 'close'` so it still works
-      // even if the renderer is hung.
-      state.shortcutsDisabled
-        ? { label: t('menu.file.close-window'), click: () => focusedRegisteredSurface()?.window.close() }
-        : {
-            role: 'close',
-            label: t('menu.file.close-window'),
-            accelerator: closeWindowAccelerator(state),
-          },
+      { label: t('menu.file.close-window'), click: () => focusedRegisteredSurface()?.window.close() },
       separator(),
       { label: t('menu.file.open-in-browser'), click: () => void openWebVersionFromMenu() },
       { label: t('menu.file.open-data-folder'), click: () => void openDataFolder() },
@@ -213,18 +195,12 @@ function createViewMenu(state: AppMenuState): MenuItemConstructorOptions {
       createRendererCommandMenuItem(state, 'view-status'),
       createRendererCommandMenuItem(state, 'view-changes'),
       createRendererCommandMenuItem(state, 'view-terminal'),
-      ...TERMINAL_SELECTION_SHORTCUTS.map(({ index, accelerator: shortcut }) => ({
-        label: `${t('menu.view.terminal')} ${index}`,
-        accelerator: accelerator(state, shortcut),
-        click: () => send({ type: 'select-terminal-requested', index }),
-      })),
       createRendererCommandMenuItem(state, 'view-terminal-primary-action'),
       ...(state.isMac ? [] : [separator(), createAppearanceMenu(state.themePref), createLanguageMenu(state.langPref)]),
       separator(),
       createRendererCommandMenuItem(state, 'view-refresh'),
       {
         label: t('menu.view.reload-page'),
-        accelerator: accelerator(state, 'CmdOrCtrl+R'),
         click: () => focusedRegisteredSurface()?.window.webContents.reload(),
       },
       { role: 'togglefullscreen', label: t('menu.view.toggle-full-screen') },
@@ -292,26 +268,14 @@ function accelerator(state: AppMenuState, value: string): string | undefined {
   return state.shortcutsDisabled ? undefined : value
 }
 
-function createRendererCommandMenuItem(state: AppMenuState, id: Parameters<typeof rendererMenuCommandById>[0]): MenuItemConstructorOptions {
+function createRendererCommandMenuItem(
+  state: AppMenuState,
+  id: Parameters<typeof rendererMenuCommandById>[0],
+): MenuItemConstructorOptions {
   const command = rendererMenuCommandById(id)
-  const context = menuCommandContext(state)
-  const resolvedAccelerator = resolveRendererMenuCommandAccelerator(command, context)
-  const resolvedEnabled = resolveRendererMenuCommandEnabled(command, context)
   return {
     label: t(command.menuLabelKey),
-    ...(resolvedAccelerator ? { accelerator: accelerator(state, resolvedAccelerator) } : {}),
-    ...(resolvedEnabled !== undefined ? { enabled: resolvedEnabled } : {}),
-    click: () => send(resolveRendererMenuCommandIntent(command, context)),
-  }
-}
-
-function closeWindowAccelerator(state: AppMenuState): string {
-  return closeShortcutAccelerators(state.swapCloseShortcuts).closeWindow
-}
-
-function menuCommandContext(state: AppMenuState): AppMenuCommandContext {
-  return {
-    swapCloseShortcuts: state.swapCloseShortcuts,
+    click: () => send(command.intent),
   }
 }
 

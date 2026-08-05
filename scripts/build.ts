@@ -12,6 +12,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { closeRunningApp } from './close-app.ts'
+import { installHobCli } from './install-hob-cli.ts'
 
 const repoRoot = path.resolve(import.meta.dirname, '..')
 process.chdir(repoRoot)
@@ -137,9 +138,13 @@ async function main(): Promise<void> {
   if (needsBunInstall) {
     await timeStep('bun install', () => $`bun install`)
   } else {
-    await timeStep('bun install', () => {
-      console.log('Skipping bun install (node_modules is up to date).')
-    }, { skipped: true })
+    await timeStep(
+      'bun install',
+      () => {
+        console.log('Skipping bun install (node_modules is up to date).')
+      },
+      { skipped: true },
+    )
   }
 
   await timeStep('node-pty helper check', () => {
@@ -161,9 +166,13 @@ async function main(): Promise<void> {
   if (shouldRunTypecheck) {
     await timeStep('typecheck', () => $`bun run typecheck`)
   } else {
-    await timeStep('typecheck', () => {
-      console.log('Skipping typecheck for fast install.')
-    }, { skipped: true })
+    await timeStep(
+      'typecheck',
+      () => {
+        console.log('Skipping typecheck for fast install.')
+      },
+      { skipped: true },
+    )
   }
 
   // Renderer bundle MUST exist before electron-builder packs it (the
@@ -231,6 +240,23 @@ async function main(): Promise<void> {
   console.log('Re-signing with correct bundle identifier...')
   await timeStep('codesign', () => $`codesign --force --deep --sign - --identifier ${APP_ID} ${destApp}`)
   console.log('Re-signed.')
+
+  await timeStep('install hob CLI', () => {
+    const result = installHobCli(destApp)
+    if (result.status === 'installed') {
+      console.log(`Installed CLI: ${result.targetPath}`)
+    } else if (result.status === 'already-installed') {
+      console.log(`CLI already installed: ${result.targetPath}`)
+    } else if (result.status === 'conflict') {
+      console.warn(`Skipped CLI install: ${result.targetPath} already exists.`)
+    } else {
+      console.warn(`Skipped CLI install: packaged launcher is missing at ${result.sourcePath}.`)
+    }
+
+    if (!result.pathConfigured) {
+      console.warn(`Add ${path.dirname(result.targetPath)} to PATH to use \`hob\` from a terminal.`)
+    }
+  })
 
   await timeStep('cleanup release', () => {
     rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })

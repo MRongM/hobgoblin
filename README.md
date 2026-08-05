@@ -87,6 +87,23 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 On Windows, SmartScreen may warn about the unsigned installer. Continue only if you trust the GitHub Release source.
 
+### Open Projects from the Terminal on macOS
+
+After moving `Hobgoblin.app` to `/Applications`, install the user-scoped `hob` launcher:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Hobgoblin.app/Contents/Resources/bin/hob" "$HOME/.local/bin/hob"
+```
+
+Make sure `$HOME/.local/bin` is in `PATH`, then open or import the current directory:
+
+```sh
+hob .
+```
+
+The command accepts zero or one directory argument and defaults to the current directory. The link command intentionally does not overwrite an existing `hob` command.
+
 ## Build and Install Locally
 
 Requirements:
@@ -100,7 +117,7 @@ Build and install the desktop app on macOS:
 bun run install:app
 ```
 
-This builds a host-architecture `Hobgoblin.app` and installs it to `~/Applications`.
+This builds a host-architecture `Hobgoblin.app`, installs it to `~/Applications`, and safely creates `$HOME/.local/bin/hob` when that path is available. It never overwrites an existing command.
 
 ## Develop
 

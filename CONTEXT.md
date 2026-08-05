@@ -240,6 +240,10 @@ _Avoid_: Tmux status, currently enabled terminal, associated tmux cleanup
 The modal surface for changing application preferences while keeping the current workspace visible underneath.
 _Avoid_: Settings screen, full-page settings
 
+**Desktop CLI project import**:
+An explicit macOS shell action that sends one local directory to the installed Hobgoblin desktop app, where the ordinary external-open flow validates, opens, and activates the resolved project. It never writes project or recent-project state directly from the command-line process.
+_Avoid_: CLI project registration, server-side import, recent-project insertion
+
 **AI handoff command**:
 A provider-specific CLI command placed into an internal terminal for review, without being executed, so the user can start an AI task in the targeted directory context. The handoff selects an existing open terminal for that directory or creates one when no open terminal exists before filling the command text.
 _Avoid_: AI command, automatic AI action

@@ -5,7 +5,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { useKeyboard } from '#/web/hooks/useKeyboard.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
-import type { MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -27,20 +26,25 @@ afterEach(() => {
 })
 
 describe('useKeyboard', () => {
-  test('esc exits the settings route', async () => {
-    const onExitSettings = vi.fn()
-    await renderHookHost({
-      isWorkspaceShortcutSuppressed: () => true,
-      isSettingsOpen: () => true,
-      onExitSettings,
-    })
+  test('does not reserve the removed navigation and app shortcuts', async () => {
+    await renderHookHost()
 
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    const help = new KeyboardEvent('keydown', {
+      key: '?',
+      code: 'Slash',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      window.dispatchEvent(escape)
+      window.dispatchEvent(help)
       await Promise.resolve()
     })
 
-    expect(onExitSettings).toHaveBeenCalledTimes(1)
+    expect(escape.defaultPrevented).toBe(false)
+    expect(help.defaultPrevented).toBe(false)
   })
 })
 
@@ -48,8 +52,6 @@ async function renderHookHost(
   overrides: Partial<{
     currentRepoId: string | null
     isWorkspaceShortcutSuppressed: () => boolean
-    isSettingsOpen: () => boolean
-    onExitSettings: () => void
   }> = {},
 ) {
   container = document.createElement('div')
@@ -65,29 +67,11 @@ function HookHost(
   overrides: Partial<{
     currentRepoId: string | null
     isWorkspaceShortcutSuppressed: () => boolean
-    isSettingsOpen: () => boolean
-    onExitSettings: () => void
   }>,
 ) {
   useKeyboard({
-    navigation: navigationWith(),
     currentRepoId: overrides.currentRepoId ?? null,
-    onShowHelp: () => {},
     isWorkspaceShortcutSuppressed: overrides.isWorkspaceShortcutSuppressed ?? (() => false),
-    isSettingsOpen: overrides.isSettingsOpen ?? (() => false),
-    onExitSettings: overrides.onExitSettings ?? (() => {}),
   })
   return null
-}
-
-function navigationWith(): MainWindowNavigationActions {
-  return {
-    activateRepo: () => {},
-    closeRepo: () => {},
-    cycleRepo: () => {},
-    selectRepoBranch: () => {},
-    showRepoDetailTab: () => {},
-    showRepoBranchDetailTab: () => {},
-    openSettings: () => {},
-  }
 }

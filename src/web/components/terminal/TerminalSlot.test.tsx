@@ -87,6 +87,10 @@ const runtimeSettingsMocks = vi.hoisted(() => ({
   terminalCustomButtons: [] as TerminalCustomButton[],
 }))
 
+const runtimeShortcutSettingsMocks = vi.hoisted(() => ({
+  shortcutsDisabled: false,
+}))
+
 vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
     temporaryFilesDirectory: runtimeSettingsMocks.temporaryFilesDirectory,
@@ -95,6 +99,10 @@ vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
     terminalCustomButtonSize: runtimeSettingsMocks.terminalCustomButtonSize,
     terminalCustomButtons: runtimeSettingsMocks.terminalCustomButtons,
   }),
+}))
+
+vi.mock('#/web/runtime-settings-shortcuts.ts', () => ({
+  getRuntimeShortcutSettings: () => ({ shortcutsDisabled: runtimeShortcutSettingsMocks.shortcutsDisabled }),
 }))
 
 afterEach(() => {
@@ -114,6 +122,7 @@ afterEach(() => {
   clipboardMocks.writeTerminalClipboardText.mockResolvedValue(true)
   toastMocks.error.mockReset()
   mobileDetectionMocks.isMobileDevice = false
+  runtimeShortcutSettingsMocks.shortcutsDisabled = false
   document.body.innerHTML = ''
   vi.useRealTimers()
 })
@@ -1344,6 +1353,55 @@ describe('TerminalSlot', () => {
     } finally {
       await act(async () => root.unmount())
       container.remove()
+    }
+  })
+
+  test.each([
+    { platform: 'MacIntel', modifiers: { metaKey: true, altKey: true }, label: 'macOS' },
+    { platform: 'Linux x86_64', modifiers: { ctrlKey: true, altKey: true }, label: 'non-macOS' },
+  ])('cycles to the next terminal with the $label primary modifier plus Alt+Down', async ({ platform, modifiers }) => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
+    const fixture = await renderCrossProjectCycleFixture('controller', false)
+
+    try {
+      const host = fixture.container.querySelector('.goblin-terminal-slot__host')
+      const event = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        ...modifiers,
+        bubbles: true,
+        cancelable: true,
+      })
+      await act(async () => host?.dispatchEvent(event))
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(fixture.selectTerminal).toHaveBeenCalledWith(fixture.target.worktreeTerminalKey, fixture.target.key)
+    } finally {
+      platformSpy.mockRestore()
+      await fixture.cleanup()
+    }
+  })
+
+  test('leaves terminal cycle key sequences untouched when app shortcuts are disabled', async () => {
+    runtimeShortcutSettingsMocks.shortcutsDisabled = true
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const fixture = await renderCrossProjectCycleFixture('controller', false)
+
+    try {
+      const host = fixture.container.querySelector('.goblin-terminal-slot__host')
+      const event = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        metaKey: true,
+        altKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+      await act(async () => host?.dispatchEvent(event))
+
+      expect(event.defaultPrevented).toBe(false)
+      expect(fixture.selectTerminal).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await fixture.cleanup()
     }
   })
 
@@ -2591,7 +2649,12 @@ async function renderCrossProjectCycleFixture(role: 'controller' | 'viewer', mob
   }
   const selectTerminal = vi.fn()
   const showRepoBranchDetailTab = vi.fn()
-  const context = terminalContext({ selectTerminal })
+  const context = terminalContext({
+    selectTerminal,
+    isTerminalFocusTarget: vi.fn(
+      (_key, target) => target instanceof Element && target.closest('.goblin-terminal-slot__host') !== null,
+    ),
+  })
   const terminalCatalog = [descriptor, target]
   const readContext = {
     worktreeSnapshot: () => worktreeSnapshot,

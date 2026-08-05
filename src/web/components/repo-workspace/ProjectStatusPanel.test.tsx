@@ -98,8 +98,9 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('develop')
     expect(container?.textContent).toContain('2026')
     const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
-    const statusRowLabels = Array.from(statusRows?.querySelectorAll('[role="listitem"]') ?? [], (row) =>
-      row.children.item(1)?.textContent,
+    const statusRowLabels = Array.from(
+      statusRows?.querySelectorAll('[role="listitem"]') ?? [],
+      (row) => row.children.item(1)?.textContent,
     )
     expect(statusRowLabels.slice(0, 5)).toEqual([
       'branch-status.signal.folder',
@@ -118,25 +119,26 @@ describe('ProjectStatusPanel', () => {
       container?.querySelector('[data-testid="project-status-left-actions"]')?.contains(copyAllButton ?? null),
     ).toBe(true)
     expect(copyAllButton?.textContent).toBe('')
-
-    await act(async () => {
-      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-project-name"]')?.click()
-      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-hash"]')?.click()
-      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-message"]')?.click()
-      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-author"]')?.click()
-      container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-commit-time"]')?.click()
-    })
-
-    expect(writeText).toHaveBeenCalledWith('Status Project')
-    expect(writeText).toHaveBeenCalledWith('abcdef1234567890')
-    expect(writeText).toHaveBeenCalledWith('feat: expose commit metadata')
-    expect(writeText).toHaveBeenCalledWith('Test Author')
-    expect(writeText).toHaveBeenCalledWith('2026-06-26T09:30:00.000Z')
+    expect(container?.querySelectorAll('button[aria-label^="branch-status.copy-"]')).toHaveLength(1)
+    for (const label of [
+      'branch-status.copy-folder-name',
+      'branch-status.copy-project-name',
+      'branch-status.copy-branch-name',
+      'branch-status.copy-worktree-path',
+      'branch-status.copy-commit-hash',
+      'branch-status.copy-commit-message',
+      'branch-status.copy-commit-author',
+      'branch-status.copy-commit-time',
+    ]) {
+      expect(container?.querySelector(`button[aria-label="${label}"]`)).toBeNull()
+    }
+    expect(writeText).not.toHaveBeenCalled()
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>('button[aria-label="branch-status.copy-all"]')?.click()
     })
 
+    expect(writeText).toHaveBeenCalledTimes(1)
     expect(writeText).toHaveBeenCalledWith(
       [
         'branch-status.signal.folder: gbl-project-status-repo',

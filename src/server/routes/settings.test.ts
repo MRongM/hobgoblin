@@ -99,6 +99,19 @@ describe('settings routes', () => {
     )
   })
 
+  test('does not expose the removed global shortcut registration route', async () => {
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState())
+    const response = await app.request('/global-shortcut-state', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ registered: true }),
+    })
+
+    expect(response.status).toBe(404)
+    expect(mocks.applyServerGlobalShortcutRegistrationWrite).not.toHaveBeenCalled()
+  })
+
   test('delegates session writes to the settings write-path application layer', async () => {
     const session = {
       openRepos: [],

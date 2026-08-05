@@ -16,16 +16,7 @@ import {
 } from 'lucide-react'
 import { useT } from '#/web/stores/i18n.ts'
 import { EmptyState } from '#/web/components/Layout.tsx'
-import { CopyButton } from '#/web/components/CopyButton.tsx'
-import {
-  CopyableValue,
-  MonoValue,
-  StatusChip,
-  StatusRow,
-  StatusRows,
-  STATUS_INLINE_GROUP_CLASS,
-  type Tone,
-} from '#/web/components/branch-detail/status-ui.tsx'
+import { MonoValue, StatusChip, StatusRow, StatusRows, type Tone } from '#/web/components/branch-detail/status-ui.tsx'
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -117,7 +108,12 @@ function emptyClipboardValue(value: string): string {
   return value.trim().length > 0 ? value : '—'
 }
 
-export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName: string, repoId: string, t: TFn): string {
+export function branchStatusClipboardText(
+  detail: SelectedBranchDetail,
+  repoName: string,
+  repoId: string,
+  t: TFn,
+): string {
   const { branch } = detail
   if (!branch) return ''
 
@@ -149,33 +145,17 @@ export function branchStatusClipboardText(detail: SelectedBranchDetail, repoName
 function CommitMetadataValue({
   value,
   displayValue = value,
-  copyLabel,
-  copiedLabel,
   mono = false,
 }: {
   value: string
   displayValue?: string
-  copyLabel: string
-  copiedLabel: string
   mono?: boolean
 }) {
   const hasValue = value.trim().length > 0
   return (
-    <div className={STATUS_INLINE_GROUP_CLASS}>
-      <span
-        className={cn('block min-w-0 flex-1 truncate', mono && 'font-mono')}
-        title={hasValue ? value : undefined}
-      >
-        {hasValue ? displayValue : '—'}
-      </span>
-      <CopyButton
-        value={value}
-        copyLabel={copyLabel}
-        copiedLabel={copiedLabel}
-        disabled={!hasValue}
-        className="shrink-0"
-      />
-    </div>
+    <span className={cn('block min-w-0 flex-1 truncate', mono && 'font-mono')} title={hasValue ? value : undefined}>
+      {hasValue ? displayValue : '—'}
+    </span>
   )
 }
 
@@ -199,11 +179,9 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
   const worktreeTone: Tone =
     worktreeLocked || hasWorktreeChanges ? 'attention' : branch.worktree?.path ? 'brand' : 'neutral'
   const worktreeValue = branch.worktree?.path ? (
-    <CopyableValue
-      value={worktreePath}
-      copyLabel={t('branch-status.copy-worktree-path')}
-      copiedLabel={t('branch-status.copied')}
-    />
+    <MonoValue title={worktreePath} truncate>
+      {worktreePath}
+    </MonoValue>
   ) : (
     <StatusChip>{t('branch-status.worktree.none')}</StatusChip>
   )
@@ -237,26 +215,14 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
       <StatusRow
         icon={<FolderOpen size={14} />}
         label={t('branch-status.signal.folder')}
-        value={
-          <CommitMetadataValue
-            value={folderName}
-            copyLabel={t('branch-status.copy-folder-name')}
-            copiedLabel={t('branch-status.copied')}
-          />
-        }
+        value={<CommitMetadataValue value={folderName} />}
         valueLayout="fill"
         tone="neutral"
       />
       <StatusRow
         icon={<FolderGit2 size={14} />}
         label={t('branch-status.signal.project')}
-        value={
-          <CommitMetadataValue
-            value={repoName}
-            copyLabel={t('branch-status.copy-project-name')}
-            copiedLabel={t('branch-status.copied')}
-          />
-        }
+        value={<CommitMetadataValue value={repoName} />}
         valueLayout="fill"
         tone="brand"
       />
@@ -264,11 +230,9 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
         icon={<GitBranch size={15} />}
         label={t('branch-status.signal.branch')}
         value={
-          <CopyableValue
-            value={branch.name}
-            copyLabel={t('branch-status.copy-branch-name')}
-            copiedLabel={t('branch-status.copied')}
-          />
+          <MonoValue title={branch.name} truncate>
+            {branch.name}
+          </MonoValue>
         }
         after={roleChips}
         valueLayout="inline"
@@ -326,51 +290,25 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
       <StatusRow
         icon={<Hash size={14} />}
         label={t('branch-status.signal.commit-hash')}
-        value={
-          <CommitMetadataValue
-            value={branch.lastCommitHash}
-            copyLabel={t('branch-status.copy-commit-hash')}
-            copiedLabel={t('branch-status.copied')}
-            mono
-          />
-        }
+        value={<CommitMetadataValue value={branch.lastCommitHash} mono />}
         valueLayout="fill"
       />
       <StatusRow
         icon={<MessageSquare size={14} />}
         label={t('branch-status.signal.commit-message')}
-        value={
-          <CommitMetadataValue
-            value={branch.lastCommitMessage}
-            copyLabel={t('branch-status.copy-commit-message')}
-            copiedLabel={t('branch-status.copied')}
-          />
-        }
+        value={<CommitMetadataValue value={branch.lastCommitMessage} />}
         valueLayout="fill"
       />
       <StatusRow
         icon={<User size={14} />}
         label={t('branch-status.signal.commit-author')}
-        value={
-          <CommitMetadataValue
-            value={branch.lastCommitAuthor}
-            copyLabel={t('branch-status.copy-commit-author')}
-            copiedLabel={t('branch-status.copied')}
-          />
-        }
+        value={<CommitMetadataValue value={branch.lastCommitAuthor} />}
         valueLayout="fill"
       />
       <StatusRow
         icon={<Clock size={14} />}
         label={t('branch-status.signal.commit-time')}
-        value={
-          <CommitMetadataValue
-            value={branch.lastCommitDate}
-            displayValue={commitTime}
-            copyLabel={t('branch-status.copy-commit-time')}
-            copiedLabel={t('branch-status.copied')}
-          />
-        }
+        value={<CommitMetadataValue value={branch.lastCommitDate} displayValue={commitTime} />}
         valueLayout="fill"
       />
     </StatusRows>

@@ -102,15 +102,12 @@ describe('runtime settings hooks', () => {
       },
       shortcuts: {
         shortcutsDisabled: true,
-        globalShortcutDisabled: true,
-        swapCloseShortcuts: true,
-        globalShortcut: 'CommandOrControl+Shift+K',
-        globalShortcutRegistered: true,
       },
       lan: {
         lanEnabled: true,
       },
     })
+    expect(result?.shortcuts).toEqual({ shortcutsDisabled: true })
   })
 
   test('reads general runtime settings from the settings snapshot', async () => {

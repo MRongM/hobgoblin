@@ -46,10 +46,6 @@ export function hasNativeFilePicker(): boolean {
   }
 }
 
-export function canUseGlobalShortcutSettings(): boolean {
-  return canUseNativeRpcBridge()
-}
-
 export function canOpenDetachedFileAreaWindow(): boolean {
   try {
     const bridge = getRendererBridge()

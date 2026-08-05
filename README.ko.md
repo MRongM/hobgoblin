@@ -87,6 +87,23 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 Windows에서는 SmartScreen이 서명되지 않은 설치 파일에 대해 경고할 수 있습니다. GitHub Release 출처를 신뢰하는 경우에만 계속하세요.
 
+### macOS 터미널에서 프로젝트 열기
+
+`Hobgoblin.app`을 `/Applications`로 이동한 뒤 사용자 범위의 `hob` 런처를 설치합니다:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Hobgoblin.app/Contents/Resources/bin/hob" "$HOME/.local/bin/hob"
+```
+
+`$HOME/.local/bin`이 `PATH`에 포함되어 있는지 확인한 다음 현재 디렉터리를 열거나 가져옵니다:
+
+```sh
+hob .
+```
+
+이 명령은 디렉터리 인수를 0개 또는 1개 받으며, 생략하면 현재 디렉터리를 사용합니다. 위 링크 명령은 기존 `hob` 명령을 덮어쓰지 않습니다.
+
 ## 로컬 빌드 및 설치
 
 요구 사항:
@@ -100,7 +117,7 @@ macOS에서 데스크톱 앱을 빌드하고 설치합니다:
 bun run install:app
 ```
 
-이 명령은 현재 호스트 아키텍처의 `Hobgoblin.app`을 빌드하고 `~/Applications`에 설치합니다.
+이 명령은 현재 호스트 아키텍처의 `Hobgoblin.app`을 빌드해 `~/Applications`에 설치하고, 대상 경로가 비어 있으면 `$HOME/.local/bin/hob`을 안전하게 만듭니다. 기존 명령은 덮어쓰지 않습니다.
 
 ## 개발
 

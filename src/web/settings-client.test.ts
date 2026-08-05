@@ -180,51 +180,6 @@ describe('settings-client', () => {
     )
   })
 
-  test('sets the global shortcut through the native bridge even when the embedded server is available', async () => {
-    const invokeRpc = vi.fn(async () => ({ accelerator: 'CommandOrControl+Shift+K', registered: true }))
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: {
-        __GOBLIN_BOOTSTRAP__: electronBootstrap({
-          initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' },
-        }),
-        goblinNative: {
-          runtime: {
-            kind: 'electron',
-            bridgeVersion: RENDERER_BRIDGE_VERSION,
-            capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
-          },
-          homeDir: '/Users/test',
-          invokeRpc,
-          abortRpc: async () => true,
-          onEvent: () => () => {},
-          pathForFile: () => '',
-        },
-        location: {
-          href: 'http://127.0.0.1:32100/',
-          origin: 'http://127.0.0.1:32100',
-          search: '',
-        },
-        matchMedia: vi.fn(() => ({ matches: true })),
-      },
-    })
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-
-    const { setGlobalShortcut } = await import('#/web/settings-client.ts')
-    await expect(setGlobalShortcut('CommandOrControl+Shift+K')).resolves.toEqual({
-      accelerator: 'CommandOrControl+Shift+K',
-      registered: true,
-    })
-    expect(invokeRpc).toHaveBeenCalledWith(
-      expect.objectContaining({
-        path: 'settings.setGlobalShortcut',
-        input: { accelerator: 'CommandOrControl+Shift+K' },
-      }),
-    )
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
   test('projects native prefs after updating language through the embedded server', async () => {
     const invokeRpc = vi.fn(async () => undefined)
     Object.defineProperty(globalThis, 'window', {
@@ -294,9 +249,7 @@ describe('settings-client', () => {
               theme: 'auto',
               colorTheme: 'macos',
               shortcutsDisabled: false,
-              globalShortcutDisabled: false,
-              swapCloseShortcuts: false,
-              globalShortcut: 'CommandOrControl+Shift+G',
+              topbarHeightPx: undefined,
             },
           },
         },

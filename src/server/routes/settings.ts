@@ -6,7 +6,6 @@ import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import type { ServerSettingsState } from '#/server/modules/settings-state.ts'
 import {
   applyServerFetchIntervalWrite,
-  applyServerGlobalShortcutRegistrationWrite,
   applyServerRecentRepoAddWrite,
   applyServerRecentRepoClearWrite,
   applyServerRepoThemeWrite,
@@ -89,10 +88,6 @@ export function createSettingsRoutes(
       if (!code) throw error
       return c.json({ ok: false as const, error: { code } })
     }
-  })
-  app.post('/global-shortcut-state', async (c) => {
-    const body = await c.req.json().catch(() => null)
-    return c.json(applyServerGlobalShortcutRegistrationWrite(body, settingsState))
   })
   app.post('/session', async (c) => {
     const body = await c.req.json().catch(() => null)

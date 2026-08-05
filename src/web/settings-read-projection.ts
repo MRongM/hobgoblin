@@ -64,10 +64,6 @@ export function readRuntimeShortcutSettings(data: RuntimeSettingsSnapshot | unde
   const fallback = fallbackInitialSettings()
   return {
     shortcutsDisabled: data?.shortcutsDisabled ?? fallback?.shortcutsDisabled ?? false,
-    swapCloseShortcuts: data?.swapCloseShortcuts ?? fallback?.swapCloseShortcuts ?? false,
-    globalShortcutDisabled: data?.globalShortcutDisabled ?? fallback?.globalShortcutDisabled ?? false,
-    globalShortcut: data?.globalShortcut ?? fallback?.globalShortcut ?? 'CommandOrControl+Shift+G',
-    globalShortcutRegistered: data?.globalShortcutRegistered ?? fallback?.globalShortcutRegistered ?? false,
   }
 }
 
@@ -76,9 +72,7 @@ export function readRuntimeFetchSettings(data: RuntimeSettingsSnapshot | undefin
   return {
     fetchIntervalSec: data?.fetchIntervalSec ?? fallback?.fetchIntervalSec ?? 120,
     statusRefreshIntervalSec:
-      data?.statusRefreshIntervalSec ??
-      fallback?.statusRefreshIntervalSec ??
-      DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
+      data?.statusRefreshIntervalSec ?? fallback?.statusRefreshIntervalSec ?? DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
     terminalNotificationsEnabled:
       data?.terminalNotificationsEnabled ??
       fallback?.terminalNotificationsEnabled ??

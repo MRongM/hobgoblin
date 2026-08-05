@@ -49,6 +49,9 @@ import { DesktopTerminalDock } from '#/web/components/terminal/DesktopTerminalDo
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
+import { isMacNavigatorPlatform } from '#/web/components/terminal/terminal-keyboard.ts'
+import { getRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
+import { matchTerminalCycleShortcut } from '#/shared/shortcut-definitions.ts'
 const MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX = 8
 const MOBILE_TERMINAL_LONG_PRESS_MS = 500
 const MOBILE_TERMINAL_INERTIA_FRAME_MS = 1000 / 60
@@ -192,6 +195,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
+  const isMacPlatform = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
   const isMobileTerminal = isMobile && (isController || isReadonly) && !!key
   const isMobileFocusMode = isMobile && isController && !!key && mobileFocusMode
 
@@ -777,6 +781,20 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     },
     [key, navigation, selectTerminal, terminalCatalog, terminalWorktreeKey, worktreeSnapshot.sessions],
   )
+  const handleTerminalKeyDownCapture = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      handleKeyDownCapture(event)
+      if (event.defaultPrevented || !key || switchableTerminalCount <= 1) return
+      const direction = matchTerminalCycleShortcut(event, isMacPlatform)
+      if (direction === null) return
+      if (getRuntimeShortcutSettings().shortcutsDisabled) return
+      if (!isTerminalFocusTarget(key, event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      cycleTerminal(direction)
+    },
+    [cycleTerminal, handleKeyDownCapture, isMacPlatform, isTerminalFocusTarget, key, switchableTerminalCount],
+  )
   const handleScrollToBottom = useCallback(() => {
     if (!key) return
     stopTouchMotion()
@@ -862,7 +880,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       style={slotStyle}
       onFocusCapture={handleFocus}
       onBlurCapture={handleBlur}
-      onKeyDownCapture={handleKeyDownCapture}
+      onKeyDownCapture={handleTerminalKeyDownCapture}
       onPasteCapture={handlePasteCapture}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}

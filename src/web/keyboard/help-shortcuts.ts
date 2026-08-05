@@ -1,15 +1,8 @@
-import { acceleratorToKeyLabels } from '#/shared/accelerator.ts'
 import type { DictKey } from '#/shared/i18n/dictionaries.ts'
 import {
-  APP_SHORTCUTS,
   BRANCH_ACTION_SHORTCUTS,
-  RENDERER_APP_SHORTCUTS,
-  RENDERER_NAVIGATION_SHORTCUTS,
-  SETTINGS_SHORTCUT_MAC,
-  SETTINGS_SHORTCUT_NON_MAC,
-  VIEW_SHORTCUTS,
-  WINDOW_REPO_SHORTCUTS,
-  closeShortcutAccelerators,
+  RENDERER_SELECTION_SHORTCUTS,
+  TERMINAL_CYCLE_SHORTCUTS,
 } from '#/shared/shortcut-definitions.ts'
 export interface HelpShortcutRow {
   combos: string[][]
@@ -22,34 +15,20 @@ export interface HelpShortcutSection {
   rows: HelpShortcutRow[]
 }
 
-export function helpShortcutSections(globalShortcut: string, swapCloseShortcuts = false, isMac = inferIsMacPlatform()): HelpShortcutSection[] {
-  const { closeTab, closeWindow } = closeShortcutAccelerators(swapCloseShortcuts)
+export function helpShortcutSections(isMac = inferIsMacPlatform()): HelpShortcutSection[] {
   return [
-    {
-      titleKey: 'help.section.nav',
-      rows: [...RENDERER_NAVIGATION_SHORTCUTS.map(helpRowFromKeyboardDefinition), ...WINDOW_REPO_SHORTCUTS.map((shortcut) => helpRowFromAccelerator(shortcut, isMac))],
-    },
     {
       titleKey: 'help.section.branch-actions',
       rows: [
-        helpRowFromKeyboardDefinition(RENDERER_APP_SHORTCUTS.find((shortcut) => shortcut.action === 'checkout-selected')!),
+        helpRowFromKeyboardDefinition(
+          RENDERER_SELECTION_SHORTCUTS.find((shortcut) => shortcut.action === 'checkout-selected')!,
+        ),
         ...BRANCH_ACTION_SHORTCUTS.map(helpRowFromKeyboardDefinition),
       ],
     },
     {
-      titleKey: 'help.section.views',
-      rows: VIEW_SHORTCUTS.map((shortcut) => helpRowFromAccelerator(shortcut, isMac)),
-    },
-    {
-      titleKey: 'help.section.app',
-      rows: [
-        ...APP_SHORTCUTS.map((shortcut) => helpRowFromAccelerator(shortcut, isMac)),
-        { combos: [acceleratorToKeyLabels(globalShortcut)], labelKey: 'help.row.activate-window' },
-        { combos: [acceleratorToKeyLabelsForHelp(closeTab, isMac)], labelKey: 'help.row.close-repo' },
-        { combos: [acceleratorToKeyLabelsForHelp(closeWindow, isMac)], labelKey: 'help.row.close-window' },
-        { combos: [acceleratorToKeyLabelsForHelp(isMac ? SETTINGS_SHORTCUT_MAC : SETTINGS_SHORTCUT_NON_MAC, isMac)], labelKey: 'help.row.settings' },
-        ...RENDERER_APP_SHORTCUTS.filter((shortcut) => shortcut.action !== 'checkout-selected').map(helpRowFromKeyboardDefinition),
-      ],
+      titleKey: 'help.section.terminal',
+      rows: TERMINAL_CYCLE_SHORTCUTS.map((shortcut) => helpRowFromAccelerator(shortcut, isMac)),
     },
   ]
 }
@@ -77,6 +56,8 @@ function acceleratorToKeyLabelsForHelp(accelerator: string, isMac: boolean): str
     if (token === 'Alt' || token === 'Option') return '⌥'
     if (token === 'Shift') return '⇧'
     if (token === 'Enter') return '↩'
+    if (token === 'Up') return '↑'
+    if (token === 'Down') return '↓'
     return token
   })
 }

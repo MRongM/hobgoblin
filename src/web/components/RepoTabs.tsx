@@ -15,7 +15,6 @@ import { repoTabSummariesEqual } from '#/web/components/repo-tabs/summary-equali
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
-import { useRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { repoTabStoreActionsEqual, repoTabStoreActionsFromStore } from '#/web/stores/repos/selector-actions.ts'
 import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
@@ -30,7 +29,6 @@ interface RepoTabsProps {
 
 export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, onClone }: RepoTabsProps) {
   const t = useT()
-  const { shortcutsDisabled } = useRuntimeShortcutSettings()
   // Build the summary array inside the selector but compare with our
   // explicit equality fn so re-derivations with identical contents
   // don't trigger a re-render. Zustand v5's primary `useReposStore`
@@ -87,11 +85,11 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
         dragToReorder: t('repo-tabs.drag-to-reorder'),
         open: t('topbar.open'),
         openLocal: t('repo-tabs.open-local'),
-        openLocalShortcut: shortcutsDisabled ? null : '⌘O',
+        openLocalShortcut: null,
         openRemote: t('repo-tabs.open-remote'),
-        openRemoteShortcut: shortcutsDisabled ? null : '⌘⇧R',
+        openRemoteShortcut: null,
         clone: t('repo-tabs.clone'),
-        cloneShortcut: shortcutsDisabled ? null : '⌘⇧O',
+        cloneShortcut: null,
         clearCache: t('error.clear-cache'),
         clearCacheConfirmTitle: t('repo-tabs.clear-cache-confirm-title'),
         clearCacheConfirmMessage: t('repo-tabs.clear-cache-confirm-message'),

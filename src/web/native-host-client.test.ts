@@ -46,18 +46,15 @@ describe('native host client', () => {
     installBridge(calls)
     const { invokeNativeRpcPath } = await import('#/web/native-host-client.ts')
     const ctrl = new AbortController()
-    const promise = invokeNativeRpcPath(
-      'settings.setGlobalShortcut',
-      { accelerator: 'CommandOrControl+Shift+K' },
-      ctrl.signal,
-    )
+    const input = { recentRepos: { recentRepos: [] } }
+    const promise = invokeNativeRpcPath('settings.applyShellProjection', input, ctrl.signal)
 
     ctrl.abort()
     await expect(promise).rejects.toThrow('Request aborted')
 
     expect(calls).toContainEqual({
-      path: 'settings.setGlobalShortcut',
-      input: { accelerator: 'CommandOrControl+Shift+K' },
+      path: 'settings.applyShellProjection',
+      input,
     })
     expect(calls).toContainEqual({ path: 'goblin:rpc-abort', input: { requestId: expect.any(String) } })
   })

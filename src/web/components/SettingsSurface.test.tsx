@@ -323,6 +323,17 @@ afterEach(() => {
 })
 
 describe('SettingsSurface', () => {
+  test('renders only the application shortcut toggle and active shortcut help groups', async () => {
+    await render(<SettingsSurface page="shortcuts" onPageChange={() => {}} />)
+
+    expect(document.body.textContent).toContain('settings.shortcuts-disable-app')
+    expect(document.body.textContent).not.toContain('settings.shortcuts-disable-global')
+    expect(document.body.textContent).not.toContain('settings.global-shortcut')
+    expect(document.body.textContent).not.toContain('help.section.navigation')
+    expect(document.body.textContent).not.toContain('help.section.views')
+    expect(document.body.textContent).not.toContain('help.section.app')
+  })
+
   test('renders and writes scheduled status refresh with the auto-sync interval choices', async () => {
     await render(<SettingsSurface page="sync" onPageChange={() => {}} />)
 

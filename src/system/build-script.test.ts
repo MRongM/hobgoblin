@@ -14,6 +14,7 @@ function readText(relativePath: string): string {
 
 interface DesktopBuilderConfig {
   files?: string[]
+  extraResources?: Array<{ from: string; to: string }>
   win?: {
     target?: unknown
     artifactName?: string
@@ -112,10 +113,10 @@ describe('desktop build scripts', () => {
     expect(buildScript).toContain("await timeStep('prepare output'")
     expect(buildScript).toContain("await timeStep('bun install check'")
     expect(buildScript).toContain("await timeStep('bun install', () => $`bun install`)")
-    expect(buildScript).toContain("await timeStep('bun install', () => {")
+    expect(buildScript).toMatch(/await timeStep\(\s*'bun install',\s*\(\) => \{/)
     expect(buildScript).toContain("await timeStep('node-pty helper check'")
     expect(buildScript).toContain("await timeStep('typecheck', () => $`bun run typecheck`)")
-    expect(buildScript).toContain("await timeStep('typecheck', () => {")
+    expect(buildScript).toMatch(/await timeStep\(\s*'typecheck',\s*\(\) => \{/)
     expect(buildScript).toContain("await timeStep('build:web', () => $`bun run build:web`)")
     expect(buildScript).toContain("await timeStep('build:server', () => $`bun run build:server`)")
     expect(buildScript).toContain("await timeStep('artifact check'")
@@ -127,7 +128,19 @@ describe('desktop build scripts', () => {
     expect(buildScript).toContain(
       "await timeStep('codesign', () => $`codesign --force --deep --sign - --identifier ${APP_ID} ${destApp}`)",
     )
+    expect(buildScript).toContain("await timeStep('install hob CLI'")
+    expect(buildScript).toContain('installHobCli(destApp)')
     expect(buildScript).toContain("await timeStep('cleanup release'")
+  })
+
+  test('documents the macOS hob launcher in every README language', () => {
+    for (const readmePath of ['README.md', 'README.zh-CN.md', 'README.ja.md', 'README.ko.md']) {
+      const readme = readText(readmePath)
+
+      expect(readme).toContain('hob .')
+      expect(readme).toContain('$HOME/.local/bin/hob')
+      expect(readme).toContain('/Applications/Hobgoblin.app/Contents/Resources/bin/hob')
+    }
   })
 
   test('manual release workflow builds macOS, Windows, Android, and Linux artifacts then publishes release assets', () => {
@@ -236,6 +249,13 @@ describe('desktop build scripts', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
     expect(config.files).toEqual(expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']))
+  })
+
+  test('desktop packaging includes the executable hob launcher outside asar', () => {
+    const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+
+    expect(config.extraResources).toContainEqual({ from: 'bin/hob', to: 'bin/hob' })
+    expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
   test('desktop release packaging config includes Windows x64 NSIS output', () => {

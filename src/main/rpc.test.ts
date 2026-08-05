@@ -152,12 +152,6 @@ vi.mock('#/main/theme.ts', () => ({
   }),
 }))
 
-vi.mock('#/main/shortcuts.ts', () => ({
-  isGlobalShortcutRegistered: vi.fn(() => false),
-  replaceGlobalShortcut: vi.fn(() => true),
-  syncGlobalShortcuts: vi.fn(),
-}))
-
 vi.mock('#/main/menu.ts', () => ({
   buildAppMenu: vi.fn(),
 }))
@@ -296,8 +290,8 @@ describe('main repo rpc cancellation', () => {
 
   test('rejects RPC calls from untrusted senders', async () => {
     const result = await invokeRpc(
-      'settings.setGlobalShortcut',
-      { accelerator: 'Alt+K' },
+      'settings.applyShellProjection',
+      { recentRepos: { recentRepos: [] } },
       {
         sender: { id: 99 },
         senderFrame: { url: 'https://example.com/' },
@@ -312,8 +306,8 @@ describe('main repo rpc cancellation', () => {
 
   test('rejects RPC calls without a sender frame', async () => {
     const result = await invokeRpc(
-      'settings.setGlobalShortcut',
-      { accelerator: 'Alt+K' },
+      'settings.applyShellProjection',
+      { recentRepos: { recentRepos: [] } },
       {
         sender: trustedSender,
         senderFrame: null,
@@ -456,8 +450,6 @@ describe('main repo rpc cancellation', () => {
           theme: 'dark',
           colorTheme: 'github',
           shortcutsDisabled: true,
-          globalShortcutDisabled: true,
-          swapCloseShortcuts: true,
           topbarHeightPx: 39,
         },
         settings: {
@@ -465,9 +457,6 @@ describe('main repo rpc cancellation', () => {
           theme: 'dark',
           colorTheme: 'github',
           shortcutsDisabled: true,
-          globalShortcutDisabled: true,
-          swapCloseShortcuts: true,
-          globalShortcut: 'Alt+K',
           topbarHeightPx: 39,
         },
       },
@@ -484,9 +473,7 @@ describe('main repo rpc cancellation', () => {
     expect((await import('#/main/menu-state.ts')).applyMenuRuntimeState).toHaveBeenCalledWith({
       langPref: 'ja',
       shortcutsDisabled: true,
-      swapCloseShortcuts: true,
     })
-    expect((await import('#/main/shortcuts.ts')).syncGlobalShortcuts).toHaveBeenCalledWith(true, 'Alt+K')
     expect((await import('#/main/menu.ts')).buildAppMenu).toHaveBeenCalled()
   })
 
@@ -536,20 +523,12 @@ describe('main repo rpc cancellation', () => {
     })
   })
 
-  test('prefers embedded server prefs when validating a global shortcut change', async () => {
-    vi.mocked(getSettingsPrefs).mockResolvedValueOnce(
-      settingsPrefs({
-        globalShortcut: 'Alt+G',
-        globalShortcutDisabled: false,
-      }),
-    )
-    vi.mocked((await import('#/main/shortcuts.ts')).replaceGlobalShortcut).mockReturnValueOnce(false)
-
+  test('returns NOT_FOUND for the removed global shortcut mutation', async () => {
     const result = await invokeRpc('settings.setGlobalShortcut', { accelerator: 'Alt+K' })
 
     expect(result).toEqual({
-      ok: true,
-      data: { accelerator: 'Alt+G', registered: false },
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: settings.setGlobalShortcut' },
     })
   })
 
