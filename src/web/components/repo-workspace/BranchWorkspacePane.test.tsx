@@ -526,7 +526,7 @@ describe('BranchWorkspacePane', () => {
     expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
   })
 
-  test('exits terminal focus when the active branch workspace changes', () => {
+  test('keeps global terminal focus when the active branch workspace changes', () => {
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="header-maximize-terminal"]')?.click())
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
@@ -538,10 +538,10 @@ describe('BranchWorkspacePane', () => {
     nextWorkspace.path = '/workspace/goblin-feature-other'
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={nextWorkspace} layout="left-right" />))
 
-    expect(container.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
-  test('returns to the desktop split after a compact responsive transition', () => {
+  test('restores global terminal focus after a compact responsive transition', () => {
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="header-maximize-terminal"]')?.click())
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
@@ -551,7 +551,7 @@ describe('BranchWorkspacePane', () => {
     compactUi = false
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
 
-    expect(container.querySelector('[data-testid="split-pane"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
   test('keeps compact files as a standalone surface without a collapse control', () => {

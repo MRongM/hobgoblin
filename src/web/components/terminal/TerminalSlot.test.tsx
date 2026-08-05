@@ -1427,7 +1427,6 @@ describe('TerminalSlot', () => {
         'T↑',
         'T↓',
         'terminal.command-deck.scroll-to-bottom',
-        'terminal.command-deck.compose',
         '|',
         'status',
       ])
@@ -1457,7 +1456,6 @@ describe('TerminalSlot', () => {
         'T↑',
         'T↓',
         'terminal.command-deck.scroll-to-bottom',
-        'terminal.command-deck.compose',
       ])
       expect(customDock?.querySelector('.goblin-terminal-custom-buttons__separator')).toBeNull()
     } finally {
@@ -1466,7 +1464,7 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('opens the desktop command input, scrolls locally, and submits the command', async () => {
+  test('scrolls locally without exposing a desktop command input', async () => {
     const writeInput = vi.fn()
     const scrollToBottom = vi.fn()
     const { container, root } = await renderTerminalSlotFixture('controller', { writeInput, scrollToBottom })
@@ -1480,19 +1478,9 @@ describe('TerminalSlot', () => {
 
       await act(async () => button('terminal.command-deck.scroll-to-bottom')?.click())
       expect(scrollToBottom).toHaveBeenCalledWith('terminal-1')
-
-      await act(async () => button('terminal.command-deck.compose')?.click())
-      const input = dock?.querySelector<HTMLInputElement>('.goblin-terminal-custom-buttons__composer-input')
-      expect(input?.placeholder).toBe('terminal.command-deck.input-placeholder')
-      expect(document.activeElement).toBe(input)
-
-      await act(async () => setTerminalInputValue(input, 'printf test'))
-      await act(async () => button('terminal.command-deck.send')?.click())
-      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'printf test\r')
-      expect(input?.value).toBe('')
-
-      await act(async () => button('terminal.command-deck.hide-compose')?.click())
+      expect(button('terminal.command-deck.compose')).toBeUndefined()
       expect(dock?.querySelector('.goblin-terminal-custom-buttons__composer-input')).toBeNull()
+      expect(writeInput).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -2674,13 +2662,6 @@ function terminalPointerEvent(
     ...(options.timeStamp === undefined ? {} : { timeStamp: { value: options.timeStamp } }),
   })
   return event
-}
-
-function setTerminalInputValue(input: HTMLInputElement | null | undefined, value: string): void {
-  if (!input) throw new Error('missing terminal command input')
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-  setter?.call(input, value)
-  input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 function installAnimationFrameHarness() {

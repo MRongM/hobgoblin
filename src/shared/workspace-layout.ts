@@ -88,7 +88,8 @@ export function normalizeWorkspaceSessionLayoutState(value: {
     workspaceLayout,
     typeof value.detailCollapsed === 'boolean' ? value.detailCollapsed : DEFAULT_DETAIL_COLLAPSED,
   )
-  const detailFocusMode = DEFAULT_DETAIL_FOCUS_MODE
+  const detailFocusMode =
+    typeof value.detailFocusMode === 'boolean' ? value.detailFocusMode : DEFAULT_DETAIL_FOCUS_MODE
   return {
     workspaceLayout,
     detailCollapsed,

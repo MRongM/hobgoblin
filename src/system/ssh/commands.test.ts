@@ -40,11 +40,17 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
-  test('builds tmux list and kill commands without session ids', () => {
+  test('builds tmux list, kill, and copy-mode cancellation commands without session ids', () => {
     const serverName = 'hobgoblin-project-v1-44159cd9e973adba7b472e6f'
     const list = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListSessions', projectRoot: '/srv/repo' })
     const killByName = buildRemoteCommandInvocation(TARGET, {
       type: 'tmuxKillSessionByName',
+      projectRoot: '/srv/repo',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
+    })
+    const cancelModeByName = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxCancelModeBySessionName',
       projectRoot: '/srv/repo',
       sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       serverName,
@@ -56,6 +62,9 @@ describe('remote command scripts', () => {
     expect(list.script).toContain('#{session_name}\tlegacy-default')
     expect(killByName.script).toBe(
       "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' kill-session -t '=hobgoblin-v1-aebf050981ac829e36100020'",
+    )
+    expect(cancelModeByName.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -q -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
     )
   })
 

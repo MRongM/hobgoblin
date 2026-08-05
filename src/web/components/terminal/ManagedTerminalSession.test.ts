@@ -16,6 +16,7 @@ import type {
   TerminalAttachResult,
   TerminalResizeInput,
   TerminalRestartInput,
+  TerminalReturnToBottomInput,
   TerminalSessionInput,
   TerminalTakeoverResult,
   TerminalTakeoverInput,
@@ -573,6 +574,7 @@ const terminalCalls = {
   restart: vi.fn<(input: TerminalRestartInput) => Promise<TerminalAttachResult>>(),
   write: vi.fn<(input: TerminalWriteInput) => Promise<TerminalMutationResult>>(),
   resize: vi.fn<(input: TerminalResizeInput) => Promise<TerminalMutationResult>>(),
+  returnToBottom: vi.fn<(input: TerminalReturnToBottomInput) => Promise<TerminalMutationResult>>(),
   takeover: vi.fn<(input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>>(),
   close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalCloseResult>>(),
   notifyBell: vi.fn<(input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>>(),
@@ -676,6 +678,7 @@ beforeEach(() => {
         restart: terminalCalls.restart.mockResolvedValue(attachResult('session-2')),
         write: terminalCalls.write.mockResolvedValue(true),
         resize: terminalCalls.resize.mockResolvedValue(true),
+        returnToBottom: terminalCalls.returnToBottom.mockResolvedValue(true),
         takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
         close: terminalCalls.close.mockResolvedValue({ ok: true }),
         notifyBell: terminalCalls.notifyBell.mockResolvedValue(true),
@@ -723,6 +726,7 @@ beforeEach(() => {
       restart: terminalCalls.restart.mockResolvedValue(attachResult('session-2')),
       write: terminalCalls.write.mockResolvedValue(true),
       resize: terminalCalls.resize.mockResolvedValue(true),
+      returnToBottom: terminalCalls.returnToBottom.mockResolvedValue(true),
       takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
       close: terminalCalls.close.mockResolvedValue({ ok: true }),
       create: vi.fn(async (input?: { kind?: string }) =>
@@ -778,6 +782,33 @@ beforeEach(() => {
 })
 
 describe('ManagedTerminalSession', () => {
+  test('exits tmux copy mode when the controller returns to bottom', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession({ ...descriptor, tmuxBacked: true }, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+    xtermMocks.terminals[0]?.scrollToBottom.mockClear()
+
+    session.scrollToBottom()
+    await Promise.resolve()
+
+    expect(xtermMocks.terminals[0]?.scrollToBottom).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.returnToBottom).toHaveBeenCalledWith({ sessionId: 'session-1' })
+  })
+
+  test('exits tmux copy mode when a viewer returns to bottom', async () => {
+    const session = new ManagedTerminalSession({ ...descriptor, tmuxBacked: true }, vi.fn())
+    hydrateManagedSession(session, { role: 'viewer' })
+
+    session.scrollToBottom()
+    await Promise.resolve()
+
+    expect(terminalCalls.returnToBottom).toHaveBeenCalledWith({ sessionId: 'session-1' })
+  })
+
   test('keeps render pending until the attached terminal has settled a paint opportunity', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)

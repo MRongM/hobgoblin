@@ -255,6 +255,10 @@ export class ManagedTerminalSession {
 
   scrollToBottom(): void {
     this.view.scrollToBottom()
+    const sessionId = this.runtime.currentSessionId()
+    if (!sessionId || !this.descriptor.tmuxBacked) return
+    this.prioritizeNextOutput = true
+    void terminalBridge.returnToBottom({ sessionId }).catch(() => {})
   }
 
   scrollLines(amount: number): void {

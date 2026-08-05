@@ -39,8 +39,9 @@ import {
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
 describe('repo selectors', () => {
-  test('keeps terminal Focus out of the restorable workspace projection', () => {
-    expect(restorableWorkspaceStateFromStore(useReposStore.getState())).not.toHaveProperty('detailFocusMode')
+  test('includes global terminal Focus in the restorable workspace projection', () => {
+    useReposStore.setState({ detailFocusMode: true } as never)
+    expect(restorableWorkspaceStateFromStore(useReposStore.getState())).toMatchObject({ detailFocusMode: true })
   })
 
   test('builds explicit runtime-coherent and local state slices from store fields', () => {
@@ -95,6 +96,7 @@ describe('repo selectors', () => {
         workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
         projectListExpanded: true,
         detailCollapsed: false,
+        detailFocusMode: true,
         workspaceLayout: 'left-right',
         detailPaneSizes: { 'left-right': 50 },
         fileTreePaneSizes: { 'left-right': 36 },
@@ -113,6 +115,7 @@ describe('repo selectors', () => {
       workspaceRepositoryListHeightByRoot: { '/tmp/repo': 224 },
       projectListExpanded: true,
       detailCollapsed: false,
+      detailFocusMode: true,
       workspaceLayout: 'left-right',
       detailPaneSizes: { 'left-right': 50 },
       fileTreePaneSizes: { 'left-right': 36 },
@@ -144,6 +147,7 @@ describe('repo selectors', () => {
           activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
           detailCollapsed: false,
+          detailFocusMode: true,
           workspaceLayout: 'left-right',
           sessionReady: true,
         }),
@@ -152,6 +156,7 @@ describe('repo selectors', () => {
           activeProjectId: '/tmp/repo-a',
           order: ['/tmp/repo-a', '/tmp/repo-b'],
           detailCollapsed: false,
+          detailFocusMode: true,
           workspaceLayout: 'left-right',
           sessionReady: true,
         }),

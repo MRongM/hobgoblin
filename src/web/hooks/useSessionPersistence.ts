@@ -14,6 +14,7 @@ export function useSessionPersistence() {
   const workspaceRepositoryListHeightByRoot = useReposStore((s) => s.workspaceRepositoryListHeightByRoot)
   const projectListExpanded = useReposStore((s) => s.projectListExpanded)
   const detailCollapsed = useReposStore((s) => s.detailCollapsed)
+  const detailFocusMode = useReposStore((s) => s.detailFocusMode)
   const workspaceLayout = useReposStore((s) =>
     s.activeId ? (s.repos[s.activeId]?.ui.workspaceLayout ?? s.workspaceLayout) : s.workspaceLayout,
   )
@@ -40,6 +41,7 @@ export function useSessionPersistence() {
       workspaceRepositoryListHeightByRoot,
       projectListExpanded,
       detailCollapsed,
+      detailFocusMode,
       workspaceLayout,
       detailPaneSizes,
       fileTreePaneSizes,
@@ -58,6 +60,7 @@ export function useSessionPersistence() {
       workspaceRepositoryListExpandedByRoot: session.workspaceRepositoryListExpandedByRoot,
       projectListExpanded,
       detailCollapsed,
+      detailFocusMode,
       workspaceLayout: restorableWorkspaceState.workspaceLayout,
       selectedTerminalByWorktree: session.selectedTerminalByWorktree,
     })
@@ -87,6 +90,7 @@ export function useSessionPersistence() {
     workspaceRepositoryListHeightByRoot,
     projectListExpanded,
     detailCollapsed,
+    detailFocusMode,
     detailPaneSizes,
     fileTreePaneSizes,
     selectedTerminalByWorktree,

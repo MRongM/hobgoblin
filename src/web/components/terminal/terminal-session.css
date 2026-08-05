@@ -454,21 +454,6 @@
   user-select: none;
 }
 
-.goblin-terminal-custom-buttons__composer {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 5px;
-}
-
-.goblin-terminal-custom-buttons__composer-input {
-  width: clamp(160px, 32vw, 360px);
-  min-width: 0;
-  height: 24px;
-  flex: 1;
-  font-size: 12px;
-}
-
 .goblin-terminal-custom-buttons__button {
   max-width: 180px;
   min-width: 0;

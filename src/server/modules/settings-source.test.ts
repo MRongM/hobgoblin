@@ -1007,7 +1007,7 @@ test('persists and normalizes workspace-specific repository list heights', async
   ).resolves.toMatchObject({ workspaceRepositoryListHeightByRoot: {} })
 })
 
-test('normalizes legacy top-bottom sessions to left-right without restoring terminal focus', async () => {
+test('normalizes legacy top-bottom sessions to left-right while preserving terminal focus', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
 
@@ -1023,7 +1023,7 @@ test('normalizes legacy top-bottom sessions to left-right without restoring term
   expect(saved).toMatchObject({
     workspaceLayout: 'left-right',
     detailCollapsed: false,
-    detailFocusMode: false,
+    detailFocusMode: true,
     detailPaneSizes: { 'left-right': 72 },
     fileTreePaneSizes: { 'left-right': 64 },
   })

@@ -39,7 +39,7 @@ describe('terminal session CSS layout contract', () => {
     )
     expect(css).toMatch(/\.goblin-terminal-custom-buttons__row\s*\{[^}]*display:\s*flex;[^}]*overflow-x:\s*auto;/)
     expect(css).toMatch(/\.goblin-terminal-custom-buttons__separator\s*\{[^}]*flex:\s*0 0 auto;/)
-    expect(css).toMatch(/\.goblin-terminal-custom-buttons__composer\s*\{[^}]*display:\s*flex;/)
+    expect(css).not.toContain('.goblin-terminal-custom-buttons__composer')
   })
 
   test('keeps the xterm scrollbar blended with the terminal background', () => {

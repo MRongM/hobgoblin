@@ -251,6 +251,34 @@ describe('terminal web host bridge', () => {
     dispose()
   })
 
+  test('returns a tmux terminal to bottom through the terminal websocket', async () => {
+    const { terminalBridge } = await import('#/web/terminal.ts')
+    const dispose = terminalBridge.onOutput(() => {})
+    const socket = MockWebSocket.instances[0]
+    const resultPromise = terminalBridge.returnToBottom({ sessionId: 'term_1234567890123456' })
+
+    socket?.emitOpen()
+    await Promise.resolve()
+    const request = socket?.sent.map((payload) => JSON.parse(payload)).find((message) => message.action === 'return-to-bottom')
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'return-to-bottom',
+      input: { sessionId: 'term_1234567890123456' },
+    })
+    socket?.emitMessage(
+      JSON.stringify({
+        type: 'response',
+        requestId: request?.requestId,
+        ok: true,
+        action: 'return-to-bottom',
+        payload: true,
+      }),
+    )
+
+    await expect(resultPromise).resolves.toBe(true)
+    dispose()
+  })
+
   test('includes the current attachment id when creating a terminal in web host mode', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

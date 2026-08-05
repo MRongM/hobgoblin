@@ -20,6 +20,7 @@ import { resolveRemoteRepoTarget } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { runRemoteCommand, type RemoteCommandResult } from '#/system/ssh/commands.ts'
 import {
+  cancelLocalTmuxModeBySessionName,
   isTmuxSessionMissingMessage,
   killLocalHostTmuxSessionByName,
   killLocalTmuxSessionByName,
@@ -47,6 +48,7 @@ export interface TmuxCleanupDependencies {
   platform?: NodeJS.Platform
   listLocal?: typeof listLocalTmuxSessions
   killLocalByName?: typeof killLocalTmuxSessionByName
+  cancelLocalModeByName?: typeof cancelLocalTmuxModeBySessionName
   listLocalHost?: typeof listLocalHostTmuxSessions
   killLocalHostByName?: typeof killLocalHostTmuxSessionByName
   resolveRemote?: (repoId: string) => Promise<RemoteRepoTarget>
@@ -61,6 +63,7 @@ interface TmuxRuntime {
   targetPath: string
   list: () => Promise<TmuxListResult>
   kill: (session: TmuxSessionRecord) => Promise<TmuxCommandResult>
+  cancelMode: (session: TmuxSessionRecord) => Promise<TmuxCommandResult>
 }
 
 type RuntimeResult = { ok: true; runtime: TmuxRuntime } | { ok: false; message: string }
@@ -78,6 +81,9 @@ export interface AssociatedTmuxSessionNameInput extends AssociatedTmuxTargetInpu
 }
 
 export type TerminalTmuxCloseResult = { ok: true; status: 'closed' | 'missing' } | { ok: false; message: string }
+export type TerminalTmuxReturnToBottomResult =
+  | { ok: true; status: 'returned' | 'missing' }
+  | { ok: false; message: string }
 
 export async function closeAssociatedTmuxSessionByName(
   input: AssociatedTmuxSessionNameInput,
@@ -101,6 +107,33 @@ export async function closeAssociatedTmuxSessionByName(
     return isTmuxSessionMissingMessage(killed.message)
       ? { ok: true, status: 'missing' }
       : { ok: false, message: killed.message }
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) }
+  }
+}
+
+export async function returnAssociatedTmuxSessionToBottom(
+  input: AssociatedTmuxSessionNameInput,
+  dependencies: TmuxCleanupDependencies = {},
+  signal?: AbortSignal,
+): Promise<TerminalTmuxReturnToBottomResult> {
+  if (!isHobgoblinTmuxSessionName(input?.sessionName)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const resolved = await resolveTmuxRuntime(input, dependencies, signal)
+  if (!resolved.ok) return resolved
+  const listed = await safelyList(resolved.runtime)
+  if (!listed.ok) return listed
+  const session = associatedSessions(listed.sessions, resolved.runtime.projectRoot, resolved.runtime.targetPath).find(
+    (candidate) => candidate.sessionName === input.sessionName,
+  )
+  if (!session) return { ok: true, status: 'missing' }
+  try {
+    const cancelled = await resolved.runtime.cancelMode(session)
+    if (cancelled.ok) return { ok: true, status: 'returned' }
+    return isTmuxSessionMissingMessage(cancelled.message)
+      ? { ok: true, status: 'missing' }
+      : { ok: false, message: cancelled.message }
   } catch (error) {
     return { ok: false, message: errorMessage(error) }
   }
@@ -251,6 +284,7 @@ async function resolveTmuxRuntime(
   if (!remote) {
     const listLocal = dependencies.listLocal ?? listLocalTmuxSessions
     const killLocalByName = dependencies.killLocalByName ?? killLocalTmuxSessionByName
+    const cancelLocalModeByName = dependencies.cancelLocalModeByName ?? cancelLocalTmuxModeBySessionName
     return {
       ok: true,
       runtime: {
@@ -259,6 +293,12 @@ async function resolveTmuxRuntime(
         list: async () => await listLocal({ projectRoot: input.projectRoot, signal }),
         kill: async (session) =>
           await killLocalByName(session.sessionName, {
+            projectRoot: input.projectRoot,
+            serverName: session.serverName,
+            signal,
+          }),
+        cancelMode: async (session) =>
+          await cancelLocalModeByName(session.sessionName, {
             projectRoot: input.projectRoot,
             serverName: session.serverName,
             signal,
@@ -285,6 +325,19 @@ async function resolveTmuxRuntime(
             target,
             {
               type: 'tmuxKillSessionByName',
+              projectRoot: target.remotePath,
+              sessionName: session.sessionName,
+              serverName: session.serverName,
+            },
+            { signal },
+          )
+          return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
+        },
+        cancelMode: async (session) => {
+          const result = await runRemote(
+            target,
+            {
+              type: 'tmuxCancelModeBySessionName',
               projectRoot: target.remotePath,
               sessionName: session.sessionName,
               serverName: session.serverName,

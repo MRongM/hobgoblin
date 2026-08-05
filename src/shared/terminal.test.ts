@@ -157,6 +157,26 @@ describe('terminal protocol normalization', () => {
     ).toMatchObject({ action: 'open-tmux-sessions' })
   })
 
+  test('accepts only a valid tmux return-to-bottom request', () => {
+    const request = {
+      type: 'request' as const,
+      requestId: 'request_return_bottom',
+      action: 'return-to-bottom' as const,
+      input: {
+        sessionId: 'term_abcdefghijklmnop',
+        attachmentId: 'attachment_a',
+      },
+    }
+
+    expect(normalizeTerminalClientMessage(request)).toMatchObject({
+      action: 'return-to-bottom',
+      input: request.input,
+    })
+    expect(
+      normalizeTerminalClientMessage({ ...request, input: { ...request.input, sessionId: '../unsafe' } }),
+    ).toBeNull()
+  })
+
   test('accepts only a boolean tmux close intent', () => {
     const base = {
       type: 'request' as const,

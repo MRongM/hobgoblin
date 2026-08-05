@@ -847,9 +847,6 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       terminalCount={switchableTerminalCount}
       onCycleTerminal={cycleTerminal}
       onScrollToBottom={handleScrollToBottom}
-      onInput={(data) => {
-        if (key) writeInput(key, data)
-      }}
       quickInputButtons={customButtonElements}
     />
   ) : visibleCustomButtons.length > 0 ? (

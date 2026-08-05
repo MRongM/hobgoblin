@@ -153,6 +153,15 @@ describe('useMainWindowShellState', () => {
     expect(text('#workspace-layout')).toBe('left-right')
     expect(text('#workspace-mode')).toBe('split')
   })
+
+  test('projects the global terminal Focus preference into the main workspace shell', async () => {
+    useReposStore.getState().setDetailFocusMode(true)
+
+    await render(<Harness />)
+
+    expect(text('#workspace-layout')).toBe('left-right')
+    expect(text('#workspace-mode')).toBe('focus')
+  })
 })
 
 async function render(element: React.ReactNode) {

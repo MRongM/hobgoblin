@@ -21,7 +21,7 @@ export function useMainWindowShellState({
   onRouteSettingsPageChange,
 }: UseMainWindowShellStateOptions) {
   const [closeRepoCandidateId, setCloseRepoCandidateId] = useState<string | null>(null)
-  const { activeId, sessionReady, detailCollapsed, workspaceLayout } = useStoreWithEqualityFn(
+  const { activeId, sessionReady, detailCollapsed, detailFocusMode, workspaceLayout } = useStoreWithEqualityFn(
     useReposStore,
     mainWindowWorkspaceStateFromStore,
     mainWindowWorkspaceStateEqual,
@@ -35,7 +35,7 @@ export function useMainWindowShellState({
     mainWindowNavigationStoreActionsEqual,
   )
   const overlays = useAppOverlays()
-  const workspaceBehavior = repoWorkspaceBehavior(workspaceLayout, detailCollapsed)
+  const workspaceBehavior = repoWorkspaceBehavior(workspaceLayout, detailCollapsed, detailFocusMode)
   const visibleRepoId = activeId
   const settingsOpen = routeSettingsPage !== null
   const closeRepoConfirmationOpen = closeRepoCandidateId !== null

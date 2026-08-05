@@ -19,7 +19,7 @@ export interface TerminalOwnershipEffect {
   emitOwnership: boolean
 }
 
-export type TerminalAuthorityAction = 'write' | 'resize' | 'restart' | 'takeover'
+export type TerminalAuthorityAction = 'write' | 'resize' | 'restart' | 'takeover' | 'navigate'
 export type TerminalAuthorityReason = 'not-controller' | 'session-unowned' | 'unknown-attachment'
 
 export type TerminalAuthorityResult = { ok: true } | { ok: false; reason: TerminalAuthorityReason }
@@ -96,7 +96,7 @@ export function authorizeTerminalAttachment(
 ): TerminalAuthorityResult {
   const attachment = state.attachments.get(attachmentId)
   if (!attachment?.connected) return { ok: false, reason: 'unknown-attachment' }
-  if (action === 'takeover') return { ok: true }
+  if (action === 'takeover' || action === 'navigate') return { ok: true }
   if (!state.controller) return { ok: false, reason: 'session-unowned' }
   if (state.controller.attachmentId !== attachmentId) return { ok: false, reason: 'not-controller' }
   return { ok: true }

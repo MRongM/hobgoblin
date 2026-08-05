@@ -2,8 +2,10 @@ import { isValidRepoLocator } from '#/shared/input-validation.ts'
 import {
   closeAssociatedTmuxSessionByName,
   previewAssociatedTmuxSessions,
+  returnAssociatedTmuxSessionToBottom,
   type AssociatedTmuxSessionNameInput,
   type TerminalTmuxCloseResult,
+  type TerminalTmuxReturnToBottomResult,
 } from '#/server/modules/tmux-cleanup.ts'
 import {
   TerminalSessionManager,
@@ -13,6 +15,7 @@ import {
 import { createTerminalCatalog } from '#/server/terminal/terminal-catalog.ts'
 import { TerminalConnectionState } from '#/server/terminal/terminal-connection-state.ts'
 import { TerminalRealtimeBroker, type TerminalRealtimeSocket } from '#/server/terminal/terminal-realtime-broker.ts'
+import { authorizeTerminalAttachment } from '#/server/terminal/terminal-ownership.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
   type TerminalCatalogMutationResult,
@@ -39,6 +42,7 @@ import {
   type TerminalScreenSnapshotInput,
   type TerminalReorderInput,
   type TerminalResizeInput,
+  type TerminalReturnToBottomInput,
   type TerminalRestartInput,
   type TerminalSessionSnapshot,
   type TerminalSessionSnapshotInput,
@@ -145,6 +149,9 @@ const realtimeRequestHandlers = {
   },
   resize(clientId, attachmentId, input) {
     return resizeServerTerminal(clientId, { ...input, attachmentId })
+  },
+  'return-to-bottom'(clientId, attachmentId, input) {
+    return returnServerTerminalToBottom(clientId, { ...input, attachmentId })
   },
   takeover(clientId, attachmentId, input) {
     return takeoverServerTerminal(clientId, { ...input, attachmentId })
@@ -289,6 +296,41 @@ export function resizeServerTerminal(clientId: string, input: TerminalResizeInpu
     input.attachmentId,
     broker.attachmentIsConnected(clientId, input.attachmentId),
   )
+}
+
+export interface TerminalReturnToBottomDependencies {
+  returnTmuxSessionToBottom?: (
+    input: AssociatedTmuxSessionNameInput,
+  ) => Promise<TerminalTmuxReturnToBottomResult>
+}
+
+export async function returnServerTerminalToBottom(
+  clientId: string,
+  input: TerminalReturnToBottomInput,
+  dependencies: TerminalReturnToBottomDependencies = {},
+): Promise<TerminalMutationResult> {
+  if (
+    !isValidTerminalClientId(clientId) ||
+    !isValidTerminalSessionId(input?.sessionId) ||
+    !isValidTerminalAttachmentId(input?.attachmentId) ||
+    !input.attachmentId
+  ) {
+    return false
+  }
+  const session = manager.getSession(clientId, input.sessionId)
+  if (
+    !session?.tmuxSessionName ||
+    !session.tmuxWorkingDirectory ||
+    !authorizeTerminalAttachment(session, input.attachmentId, 'navigate').ok
+  ) {
+    return false
+  }
+  const result = await (dependencies.returnTmuxSessionToBottom ?? returnAssociatedTmuxSessionToBottom)({
+    projectRoot: session.scope,
+    itemPath: session.tmuxWorkingDirectory,
+    sessionName: session.tmuxSessionName,
+  })
+  return result.ok
 }
 
 export interface TerminalCloseDependencies {

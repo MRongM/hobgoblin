@@ -37,6 +37,7 @@ export function RepoView({ repoId }: Props) {
         exists: presentation.exists,
         initialLoading: presentation.initialLoading,
         detailPaneSizes: s.detailPaneSizes,
+        detailFocusMode: s.detailFocusMode,
         branchWorkspaceId:
           s.workspaceActiveContextByRoot[repoId]?.kind === 'branch-workspace'
             ? s.workspaceActiveContextByRoot[repoId].branchWorkspaceId
@@ -50,17 +51,18 @@ export function RepoView({ repoId }: Props) {
     (a, b) =>
       a.exists === b.exists &&
       a.initialLoading === b.initialLoading &&
+      a.detailFocusMode === b.detailFocusMode &&
       a.branchWorkspaceId === b.branchWorkspaceId &&
       a.branchWorkspaceMemberRepositoryName === b.branchWorkspaceMemberRepositoryName &&
       a.detailPaneSizes['left-right'] === b.detailPaneSizes['left-right'],
   )
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
   const setDetailTab = useReposStore((s) => s.setDetailTab)
+  const setDetailFocusMode = useReposStore((s) => s.setDetailFocusMode)
   const repo = useReposStore((s) => s.repos[repoId])
   const multiRepositoryWorkspace = useReposStore((s) => !!s.workspaceProjects[repoId])
   useRepoToasts(repoId)
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
-  const [desktopTerminalFocusMode, setDesktopTerminalFocusMode] = useState(false)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>('detail')
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const toggleFileArea = useCallback(() => setFileAreaCollapsed((collapsed) => !collapsed), [])
@@ -68,8 +70,8 @@ export function RepoView({ repoId }: Props) {
   const collapseFileArea = useCallback(() => setFileAreaCollapsed(true), [])
   const maximizeDesktopTerminal = useCallback(() => {
     setDetailTab(repoId, 'terminal')
-    setDesktopTerminalFocusMode(true)
-  }, [repoId, setDetailTab])
+    setDetailFocusMode(true)
+  }, [repoId, setDetailFocusMode, setDetailTab])
   const showCompactScope = useCallback(() => {
     setTerminalRevealRequest(null)
     setCompactSurface('scope')
@@ -94,27 +96,38 @@ export function RepoView({ repoId }: Props) {
     setCompactSurface('detail')
     setTerminalRevealRequest(null)
   }, [repoId])
-  useEffect(() => {
-    setDesktopTerminalFocusMode(false)
-  }, [
-    repoId,
-    repo?.ui.selectedBranch,
-    repo?.availability.phase,
-    view.branchWorkspaceId,
-    view.branchWorkspaceMemberRepositoryName,
-    uiMode,
-  ])
-  useEffect(() => {
-    if (repo?.ui.detailTab !== 'terminal') setDesktopTerminalFocusMode(false)
-  }, [repo?.ui.detailTab])
-
   const detailPaneSize = view.detailPaneSizes[layout]
   const isPlainWorkspace = repoIsPlainWorkspace(repo)
+  const repoUnavailable = repo?.availability.phase === 'unavailable'
+  const selectedBranch = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
+  const desktopTerminalFocusMode =
+    uiMode !== 'compact' &&
+    view.detailFocusMode &&
+    !!repo &&
+    !repoUnavailable &&
+    (isPlainWorkspace || !!selectedBranch?.worktree?.path)
+
+  useEffect(() => {
+    if (
+      !desktopTerminalFocusMode ||
+      isPlainWorkspace ||
+      view.branchWorkspaceId ||
+      repo?.ui.detailTab === 'terminal'
+    ) {
+      return
+    }
+    setDetailTab(repoId, 'terminal')
+  }, [desktopTerminalFocusMode, isPlainWorkspace, repo?.ui.detailTab, repoId, setDetailTab, view.branchWorkspaceId])
 
   if (!view.exists || !repo) return <div />
-  const repoUnavailable = repo.availability.phase === 'unavailable'
   if (view.initialLoading && !repoUnavailable) {
-    return <RepoWorkspaceSkeleton layout={layout} detailFocusMode={false} compact={uiMode === 'compact'} />
+    return (
+      <RepoWorkspaceSkeleton
+        layout={layout}
+        detailFocusMode={desktopTerminalFocusMode}
+        compact={uiMode === 'compact'}
+      />
+    )
   }
   if (multiRepositoryWorkspace && view.branchWorkspaceId) {
     return (
@@ -172,20 +185,14 @@ export function RepoView({ repoId }: Props) {
             onCollapseFileArea={collapseFileArea}
             terminalFocusMode={desktopTerminalFocusMode}
             onMaximizeTerminal={maximizeDesktopTerminal}
-            onExitTerminalFocus={() => setDesktopTerminalFocusMode(false)}
+            onExitTerminalFocus={() => setDetailFocusMode(false)}
           />
         </RepoWorkspacePane>
       </section>
     )
   }
 
-  const selectedBranch = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
-  const terminalFocusMode =
-    uiMode !== 'compact' &&
-    !repoUnavailable &&
-    desktopTerminalFocusMode &&
-    repo.ui.detailTab === 'terminal' &&
-    !!selectedBranch?.worktree?.path
+  const terminalFocusMode = desktopTerminalFocusMode
   const compactDetailAvailable = !!selectedBranch?.worktree?.path
   const effectiveCompactSurface: CompactWorkspaceSurface =
     compactSurface === 'detail' && !compactDetailAvailable ? 'scope' : compactSurface
@@ -234,7 +241,7 @@ export function RepoView({ repoId }: Props) {
           layout={layout}
           detailFocusMode={terminalFocusMode}
           onRevealPath={handleTerminalRevealPath}
-          onExitTerminalFocus={() => setDesktopTerminalFocusMode(false)}
+          onExitTerminalFocus={() => setDetailFocusMode(false)}
         />
       )}
     </RepoWorkspacePane>

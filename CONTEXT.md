@@ -84,9 +84,13 @@ _Avoid_: Terminal toolbar, detail toolbar
 The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
 _Avoid_: Project switcher, terminal tabs, terminal takeover
 
+**Terminal return to bottom**:
+The fixed navigation action that first moves the renderer's normal terminal buffer to its bottom. For a tmux-backed terminal, any connected controller, viewer, or unowned attachment additionally asks the server to leave tmux copy mode with the exact validated project server and session target; it never injects `q`, Escape, or shell input and never takes terminal ownership.
+_Avoid_: Terminal input, takeover, blind key injection, synchronized scroll position
+
 **Desktop/Web terminal command dock**:
-A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling, local Return to bottom, and renderer-local command composition, followed by a visual divider and any configured custom terminal buttons. The command draft is ephemeral to the selected terminal and is never persisted or synchronized. It is distinct from the Mobile Web terminal command deck and the removed persistent external input box.
-_Avoid_: Mobile Web terminal command deck, terminal topbar, external input box
+A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling and Return to bottom, followed by a visual divider and any configured custom terminal buttons. It does not provide a free-form command composer and is distinct from the Mobile Web terminal command deck.
+_Avoid_: Mobile Web terminal command deck, terminal topbar, command composer, external input box
 
 **Internal terminal**:
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
@@ -121,7 +125,7 @@ An app-supplied custom terminal button whose label and sent text follow the appl
 _Avoid_: Fixed terminal action, translated shell command, mandatory terminal button
 
 **Terminal focus mode**:
-A temporary desktop presentation that maximizes the selected internal terminal by hiding the workspace navigation and file surfaces until the user exits focus. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
+A restorable, application-global desktop presentation preference that maximizes the selected internal terminal by hiding workspace navigation and file surfaces until the user explicitly exits Focus. It remains active while switching projects, repositories, branches, branch workspaces, and terminals without first restoring the split; on compact viewports or destinations without an eligible terminal it remains latent and reapplies when an eligible desktop terminal destination returns. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
 _Avoid_: Detail focus mode, workspace focus mode
 
 **Selected internal terminal**:

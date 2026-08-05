@@ -601,7 +601,8 @@ function normalizeSession(value: unknown): SessionState {
     projectListExpanded:
       typeof partial.projectListExpanded === 'boolean' ? partial.projectListExpanded : DEFAULT_PROJECT_LIST_EXPANDED,
     detailCollapsed: effectiveDetailCollapsed(workspaceLayout, detailCollapsed),
-    detailFocusMode: DEFAULT_SESSION_DETAIL_FOCUS_MODE,
+    detailFocusMode:
+      typeof partial.detailFocusMode === 'boolean' ? partial.detailFocusMode : DEFAULT_SESSION_DETAIL_FOCUS_MODE,
     workspaceLayout,
     detailPaneSizes: normalizeDetailPaneSizes(partial.detailPaneSizes),
     fileTreePaneSizes: normalizeFileTreePaneSizes(partial.fileTreePaneSizes),

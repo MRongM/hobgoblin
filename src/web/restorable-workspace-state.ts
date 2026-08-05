@@ -23,7 +23,7 @@ export function sessionStateFromRestorableWorkspaceState(input: {
     workspaceRepositoryListHeightByRoot: restorableWorkspaceState.workspaceRepositoryListHeightByRoot,
     projectListExpanded: restorableWorkspaceState.projectListExpanded,
     detailCollapsed: restorableWorkspaceState.detailCollapsed,
-    detailFocusMode: false,
+    detailFocusMode: restorableWorkspaceState.detailFocusMode,
     workspaceLayout: restorableWorkspaceState.workspaceLayout,
     detailPaneSizes: restorableWorkspaceState.detailPaneSizes,
     fileTreePaneSizes: restorableWorkspaceState.fileTreePaneSizes,
@@ -49,6 +49,7 @@ export function restoreRestorableWorkspaceStateFromSession(
   | 'workspaceRepositoryListHeightByRoot'
   | 'projectListExpanded'
   | 'detailCollapsed'
+  | 'detailFocusMode'
   | 'workspaceLayout'
   | 'detailPaneSizes'
   | 'fileTreePaneSizes'
@@ -64,6 +65,7 @@ export function restoreRestorableWorkspaceStateFromSession(
     workspaceRepositoryListHeightByRoot: session.workspaceRepositoryListHeightByRoot ?? {},
     projectListExpanded: session.projectListExpanded,
     detailCollapsed: session.detailCollapsed,
+    detailFocusMode: session.detailFocusMode,
     workspaceLayout: session.workspaceLayout,
     detailPaneSizes: session.detailPaneSizes,
     fileTreePaneSizes: session.fileTreePaneSizes ?? DEFAULT_FILE_TREE_PANE_SIZES,

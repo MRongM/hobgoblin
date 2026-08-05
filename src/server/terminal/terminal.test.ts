@@ -18,6 +18,7 @@ import {
   attachServerTerminal,
   registerTerminalSocket,
   restartServerTerminal,
+  returnServerTerminalToBottom,
   resizeServerTerminal,
   takeoverServerTerminal,
   unregisterTerminalSocket,
@@ -159,6 +160,57 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
+  test('returns a controlled tmux session to bottom without injecting terminal input', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socket)
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      launchMode: 'tmux-if-available',
+      attachmentId: 'attachment_a',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const returnTmuxSessionToBottom = vi.fn(async () => ({ ok: true as const, status: 'returned' as const }))
+
+    await expect(
+      returnServerTerminalToBottom(
+        'client_1',
+        { sessionId: created.sessionId, attachmentId: 'attachment_a' },
+        { returnTmuxSessionToBottom },
+      ),
+    ).resolves.toBe(true)
+    expect(returnTmuxSessionToBottom).toHaveBeenCalledWith({
+      projectRoot: '/repo',
+      itemPath: '/repo-linked',
+      sessionName: expect.stringMatching(/^hobgoblin-v1-/u),
+    })
+    expect(mockPtys[0]?.write).not.toHaveBeenCalled()
+
+    const viewerSocket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_b', viewerSocket)
+    await attachServerTerminal('client_1', {
+      sessionId: created.sessionId,
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_b',
+    })
+    returnTmuxSessionToBottom.mockClear()
+    await expect(
+      returnServerTerminalToBottom(
+        'client_1',
+        { sessionId: created.sessionId, attachmentId: 'attachment_b' },
+        { returnTmuxSessionToBottom },
+      ),
+    ).resolves.toBe(true)
+    expect(returnTmuxSessionToBottom).toHaveBeenCalledTimes(1)
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socket)
+    unregisterTerminalSocket('client_1', 'attachment_b', viewerSocket)
+  })
+
   test('opens only detached associated tmux sessions in original terminal-number order with one discovery', async () => {
     const serverName = buildTmuxServerName('/repo')!
     const terminalOne = buildTmuxSessionName({

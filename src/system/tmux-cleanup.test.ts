@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 import * as tmuxCleanup from '#/system/tmux-cleanup.ts'
 import {
+  cancelLocalTmuxModeBySessionName,
   isTmuxSessionMissingMessage,
   killLocalTmuxSessionByName,
   listLocalTmuxSessions,
@@ -404,6 +405,23 @@ describe('local tmux commands', () => {
       }),
     ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
     expect(run).toHaveBeenCalledTimes(1)
+  })
+
+  test('cancels copy mode for an exact current-protocol session name', async () => {
+    const run = vi.fn<TmuxProcessRunner>(async () => ({ ok: true, stdout: '', stderr: '' }))
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+
+    await expect(
+      cancelLocalTmuxModeBySessionName(sessionName, {
+        projectRoot: PROJECT_ROOT,
+        serverName: PROJECT_SERVER_NAME,
+        run,
+      }),
+    ).resolves.toEqual({ ok: true, message: '' })
+    expect(run).toHaveBeenCalledWith(
+      ['-L', PROJECT_SERVER_NAME, 'copy-mode', '-q', '-t', `=${sessionName}:`],
+      undefined,
+    )
   })
 
   test('recognizes tmux responses that mean an exact session is already missing', () => {

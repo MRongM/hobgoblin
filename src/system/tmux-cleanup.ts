@@ -302,14 +302,29 @@ export async function killLocalTmuxSessionByName(
   sessionName: string,
   options: LocalTmuxKillOptions,
 ): Promise<TmuxCommandResult> {
-  if (!isHobgoblinTmuxSessionName(sessionName)) return { ok: false, message: 'error.invalid-arguments' }
-  const expectedServerName = buildTmuxServerName(options.projectRoot)
-  if (!expectedServerName || (options.serverName !== undefined && options.serverName !== expectedServerName)) {
-    return { ok: false, message: 'error.invalid-arguments' }
-  }
-  const args = [...(options.serverName ? ['-L', options.serverName] : []), 'kill-session', '-t', `=${sessionName}`]
+  const targetArgs = localProjectTmuxTargetArgs(sessionName, options)
+  if (!targetArgs) return { ok: false, message: 'error.invalid-arguments' }
+  const args = [...targetArgs, 'kill-session', '-t', `=${sessionName}`]
   const result = await (options.run ?? runLocalTmuxCommand)(args, options.signal)
   return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
+}
+
+export async function cancelLocalTmuxModeBySessionName(
+  sessionName: string,
+  options: LocalTmuxKillOptions,
+): Promise<TmuxCommandResult> {
+  const targetArgs = localProjectTmuxTargetArgs(sessionName, options)
+  if (!targetArgs) return { ok: false, message: 'error.invalid-arguments' }
+  const args = [...targetArgs, 'copy-mode', '-q', '-t', `=${sessionName}:`]
+  const result = await (options.run ?? runLocalTmuxCommand)(args, options.signal)
+  return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
+}
+
+function localProjectTmuxTargetArgs(sessionName: string, options: LocalTmuxKillOptions): string[] | null {
+  if (!isHobgoblinTmuxSessionName(sessionName)) return null
+  const expectedServerName = buildTmuxServerName(options.projectRoot)
+  if (!expectedServerName || (options.serverName !== undefined && options.serverName !== expectedServerName)) return null
+  return options.serverName ? ['-L', options.serverName] : []
 }
 
 export async function killLocalHostTmuxSessionByName(

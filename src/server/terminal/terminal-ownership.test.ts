@@ -198,12 +198,25 @@ describe('authorizeTerminalAttachment', () => {
     expect(authorizeTerminalAttachment(state, 'a2', 'takeover')).toEqual({ ok: true })
   })
 
+  test('allows connected viewers to request terminal navigation', () => {
+    const state = createState({ controller: { attachmentId: 'a1', status: 'connected' }, claimedByOwner: true })
+
+    registerTerminalAttachment(state, 'a1', 80, 24, true)
+    registerTerminalAttachment(state, 'a2', 80, 24, true)
+
+    expect(authorizeTerminalAttachment(state, 'a2', 'navigate')).toEqual({ ok: true })
+  })
+
   test('denies unknown attachments', () => {
     const state = createState({ controller: { attachmentId: 'a1', status: 'connected' }, claimedByOwner: true })
 
     registerTerminalAttachment(state, 'a1', 80, 24, true)
 
     expect(authorizeTerminalAttachment(state, 'missing', 'write')).toEqual({
+      ok: false,
+      reason: 'unknown-attachment',
+    })
+    expect(authorizeTerminalAttachment(state, 'missing', 'navigate')).toEqual({
       ok: false,
       reason: 'unknown-attachment',
     })

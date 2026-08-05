@@ -8,6 +8,7 @@ import {
 import { persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
+  DEFAULT_DETAIL_FOCUS_MODE,
   DEFAULT_DETAIL_PANE_SIZES,
   DEFAULT_FILE_TREE_PANE_SIZES,
   DEFAULT_WORKSPACE_LAYOUT,
@@ -90,6 +91,8 @@ type RestorableWorkspaceSelectionActions = Pick<
   | 'cycleActive'
   | 'setDetailCollapsed'
   | 'toggleDetailCollapsed'
+  | 'setDetailFocusMode'
+  | 'toggleDetailFocusMode'
   | 'setWorkspaceLayout'
   | 'applySessionLayoutState'
   | 'applySessionSelectedTerminalState'
@@ -271,6 +274,22 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
       })
     },
 
+    setDetailFocusMode(focused: boolean) {
+      set((s) => {
+        const detailCollapsed = focused ? false : s.detailCollapsed
+        return s.detailFocusMode === focused && s.detailCollapsed === detailCollapsed
+          ? s
+          : { detailFocusMode: focused, detailCollapsed }
+      })
+    },
+
+    toggleDetailFocusMode() {
+      set((s) => ({
+        detailFocusMode: !s.detailFocusMode,
+        detailCollapsed: s.detailFocusMode ? s.detailCollapsed : false,
+      }))
+    },
+
     setWorkspaceLayout(idOrLayout: string, explicitLayout?: RepoWorkspaceLayout) {
       const id = explicitLayout ? idOrLayout : get().activeId
       const layout = explicitLayout ?? (idOrLayout as RepoWorkspaceLayout)
@@ -318,6 +337,7 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
         if (
           s.workspaceLayout === next.workspaceLayout &&
           s.detailCollapsed === next.detailCollapsed &&
+          s.detailFocusMode === next.detailFocusMode &&
           s.detailPaneSizes['left-right'] === next.detailPaneSizes['left-right'] &&
           s.fileTreePaneSizes['left-right'] === next.fileTreePaneSizes['left-right']
         ) {
@@ -326,6 +346,7 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
         return {
           workspaceLayout: next.workspaceLayout,
           detailCollapsed: next.detailCollapsed,
+          detailFocusMode: next.detailFocusMode,
           detailPaneSizes: next.detailPaneSizes,
           fileTreePaneSizes: next.fileTreePaneSizes,
         }
@@ -430,6 +451,7 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
         if (
           s.workspaceLayout === DEFAULT_WORKSPACE_LAYOUT &&
           s.detailCollapsed === detailCollapsed &&
+          s.detailFocusMode === DEFAULT_DETAIL_FOCUS_MODE &&
           s.detailPaneSizes['left-right'] === DEFAULT_DETAIL_PANE_SIZES['left-right'] &&
           s.fileTreePaneSizes['left-right'] === DEFAULT_FILE_TREE_PANE_SIZES['left-right']
         ) {
@@ -438,6 +460,7 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
         return {
           workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
           detailCollapsed,
+          detailFocusMode: DEFAULT_DETAIL_FOCUS_MODE,
           detailPaneSizes: DEFAULT_DETAIL_PANE_SIZES,
           fileTreePaneSizes: DEFAULT_FILE_TREE_PANE_SIZES,
         }

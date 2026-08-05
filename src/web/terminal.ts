@@ -17,6 +17,7 @@ export const terminalBridge: RendererTerminalBridge = {
   restart: bindTerminalMethod('restart'),
   write: bindTerminalMethod('write'),
   resize: bindTerminalMethod('resize'),
+  returnToBottom: bindTerminalMethod('returnToBottom'),
   takeover: bindTerminalMethod('takeover'),
   close: bindTerminalMethod('close'),
   create: bindTerminalMethod('create'),

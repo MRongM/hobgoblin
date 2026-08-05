@@ -4,6 +4,7 @@ import {
   cleanupAssociatedTmuxSessions,
   closeAssociatedTmuxSessionByName,
   previewAssociatedTmuxSessions,
+  returnAssociatedTmuxSessionToBottom,
   type TmuxCleanupDependencies,
 } from '#/server/modules/tmux-cleanup.ts'
 import { buildTmuxServerName, buildTmuxSessionName } from '#/system/tmux-session.ts'
@@ -72,6 +73,64 @@ describe('associated tmux cleanup', () => {
       serverName: LOCAL_SERVER_NAME,
       signal: undefined,
     })
+  })
+
+  test('returns only the exact associated local session to the live pane bottom', async () => {
+    const listLocal = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        {
+          sessionName: FIRST_NAME,
+          initialPath: '/work/feature/',
+          terminalNumber: 1,
+          attachedClients: 1,
+          serverName: LOCAL_SERVER_NAME,
+        },
+      ],
+    }))
+    const cancelLocalModeByName = vi.fn(async () => ({ ok: true, message: '' }))
+
+    await expect(
+      returnAssociatedTmuxSessionToBottom(
+        { projectRoot: LOCAL_PROJECT_ROOT, itemPath: '/work/feature/.', sessionName: FIRST_NAME },
+        { platform: 'linux', listLocal, cancelLocalModeByName },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'returned' })
+    expect(cancelLocalModeByName).toHaveBeenCalledWith(FIRST_NAME, {
+      projectRoot: LOCAL_PROJECT_ROOT,
+      serverName: LOCAL_SERVER_NAME,
+      signal: undefined,
+    })
+  })
+
+  test('returns an exact associated SSH session through its project tmux server', async () => {
+    const resolveRemote = vi.fn(async () => REMOTE_TARGET)
+    const runRemote = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: `/srv/feature\t1\t1\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
+
+    await expect(
+      returnAssociatedTmuxSessionToBottom(
+        { projectRoot: REMOTE_REPO, itemPath: '/srv/feature', sessionName: REMOTE_FIRST_NAME },
+        dependencies({ resolveRemote, runRemote }),
+      ),
+    ).resolves.toEqual({ ok: true, status: 'returned' })
+    expect(runRemote).toHaveBeenNthCalledWith(
+      2,
+      REMOTE_TARGET,
+      {
+        type: 'tmuxCancelModeBySessionName',
+        projectRoot: REMOTE_TARGET.remotePath,
+        sessionName: REMOTE_FIRST_NAME,
+        serverName: REMOTE_SERVER_NAME,
+      },
+      { signal: undefined },
+    )
   })
 
   test('does not close an exact name reported at a different path', async () => {
