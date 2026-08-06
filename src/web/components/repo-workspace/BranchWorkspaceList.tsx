@@ -85,6 +85,7 @@ export interface BranchWorkspaceListProps {
   activeId: string | null
   activeMemberRepositoryName?: string | null
   disabled?: boolean
+  fileAreaCollapsed?: boolean
   changeCountById?: Readonly<Record<string, number>>
   onActivate: (id: string) => void
   onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
@@ -118,6 +119,7 @@ export function BranchWorkspaceList({
   activeId,
   activeMemberRepositoryName = null,
   disabled = false,
+  fileAreaCollapsed,
   changeCountById = {},
   onActivate,
   onToggleFileArea,
@@ -185,6 +187,7 @@ export function BranchWorkspaceList({
               activeMemberRepositoryName={item.id === activeId ? activeMemberRepositoryName : null}
               expanded={expandedIds.has(item.id)}
               disabled={disabled}
+              fileAreaCollapsed={fileAreaCollapsed}
               changeCountById={changeCountById}
               onActivate={selectRoot}
               onToggleFileArea={onToggleFileArea}
@@ -222,6 +225,7 @@ function BranchWorkspaceRow({
   activeMemberRepositoryName,
   expanded,
   disabled,
+  fileAreaCollapsed,
   changeCountById,
   onActivate,
   onToggleFileArea,
@@ -538,7 +542,9 @@ function BranchWorkspaceRow({
                 navigable: false,
               }
             }
+            fileAreaCollapsed={fileAreaCollapsed}
             onOpenRepositoryMember={onOpenRepositoryMember}
+            onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
             onRemoveMember={
               isRepairableDrift(item) &&

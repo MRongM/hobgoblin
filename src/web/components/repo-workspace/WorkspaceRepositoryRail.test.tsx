@@ -200,6 +200,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     items: BranchWorkspaceSnapshot[]
     activeId: string | null
     activeMemberRepositoryName?: string | null
+    fileAreaCollapsed?: boolean
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
     changeCountById?: Readonly<Record<string, number>>
     getMemberPresentation?: (
@@ -1260,6 +1261,14 @@ describe('WorkspaceRepositoryRail', () => {
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
+  test('forwards the owning pane file area state to branch workspace members', () => {
+    renderRail({ currentRepoId: ROOT, fileAreaCollapsed: true })
+    expect(branchWorkspaceListState.props?.fileAreaCollapsed).toBe(true)
+
+    renderRail({ currentRepoId: ROOT, fileAreaCollapsed: false })
+    expect(branchWorkspaceListState.props?.fileAreaCollapsed).toBe(false)
+  })
+
   test('forwards repository item file area toggles to the owning pane', () => {
     const onToggleFileArea = vi.fn()
     renderRail({ currentRepoId: API, onToggleFileArea })
@@ -1886,6 +1895,7 @@ function renderRail({
   currentRepoId = API,
   onOpenFileArea,
   onCollapseFileArea,
+  fileAreaCollapsed,
   onToggleFileArea,
   onOpenDetailArea,
 }: {
@@ -1896,6 +1906,7 @@ function renderRail({
   currentRepoId?: string
   onOpenFileArea?: () => void
   onCollapseFileArea?: () => void
+  fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
 } = {}) {
@@ -1937,6 +1948,7 @@ function renderRail({
           currentRepoId={currentRepoId}
           onOpenFileArea={onOpenFileArea}
           onCollapseFileArea={onCollapseFileArea}
+          fileAreaCollapsed={fileAreaCollapsed}
           onToggleFileArea={onToggleFileArea}
           onOpenDetailArea={onOpenDetailArea}
         />

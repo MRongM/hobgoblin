@@ -208,6 +208,7 @@ export function BranchWorkspacePane({
                 workspaceRootId={rootId}
                 currentRepoId={rootId}
                 fill
+                fileAreaCollapsed={desktopFileAreaCollapsed}
                 onOpenFileArea={openFileArea}
                 onCollapseFileArea={collapseFileArea}
                 onToggleFileArea={toggleFileAreaFromWorkspaceItem}
@@ -269,6 +270,7 @@ export function BranchWorkspacePane({
             workspaceRootId={rootId}
             currentRepoId={rootId}
             fill
+            fileAreaCollapsed={desktopFileAreaCollapsed}
             onOpenFileArea={() => showCompactSurface('files')}
             onCollapseFileArea={collapseFileArea}
             onToggleFileArea={toggleFileAreaFromWorkspaceItem}
