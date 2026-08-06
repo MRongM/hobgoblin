@@ -17,6 +17,7 @@ import type {
   TerminalResizeInput,
   TerminalRestartInput,
   TerminalReturnToBottomInput,
+  TerminalTmuxPageInput,
   TerminalSessionInput,
   TerminalTakeoverResult,
   TerminalTakeoverInput,
@@ -584,6 +585,7 @@ const terminalCalls = {
   write: vi.fn<(input: TerminalWriteInput) => Promise<TerminalMutationResult>>(),
   resize: vi.fn<(input: TerminalResizeInput) => Promise<TerminalMutationResult>>(),
   returnToBottom: vi.fn<(input: TerminalReturnToBottomInput) => Promise<TerminalMutationResult>>(),
+  pageTmux: vi.fn<(input: TerminalTmuxPageInput) => Promise<TerminalMutationResult>>(),
   takeover: vi.fn<(input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>>(),
   close: vi.fn<(input: TerminalSessionInput) => Promise<TerminalCloseResult>>(),
   notifyBell: vi.fn<(input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>>(),
@@ -688,6 +690,7 @@ beforeEach(() => {
         write: terminalCalls.write.mockResolvedValue(true),
         resize: terminalCalls.resize.mockResolvedValue(true),
         returnToBottom: terminalCalls.returnToBottom.mockResolvedValue(true),
+        pageTmux: terminalCalls.pageTmux.mockResolvedValue(true),
         takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
         close: terminalCalls.close.mockResolvedValue({ ok: true }),
         notifyBell: terminalCalls.notifyBell.mockResolvedValue(true),
@@ -736,6 +739,7 @@ beforeEach(() => {
       write: terminalCalls.write.mockResolvedValue(true),
       resize: terminalCalls.resize.mockResolvedValue(true),
       returnToBottom: terminalCalls.returnToBottom.mockResolvedValue(true),
+      pageTmux: terminalCalls.pageTmux.mockResolvedValue(true),
       takeover: terminalCalls.takeover.mockResolvedValue(takeoverResult('session-1')),
       close: terminalCalls.close.mockResolvedValue({ ok: true }),
       create: vi.fn(async (input?: { kind?: string }) =>
@@ -815,6 +819,34 @@ describe('ManagedTerminalSession', () => {
     session.scrollToBottom()
     await Promise.resolve()
 
+    expect(terminalCalls.returnToBottom).toHaveBeenCalledWith({ sessionId: 'session-1' })
+  })
+
+  test('serializes tmux page and return-to-bottom requests without letting rejection block later actions', async () => {
+    const firstPage = deferred<TerminalMutationResult>()
+    const secondPage = deferred<TerminalMutationResult>()
+    terminalCalls.pageTmux.mockReset()
+    terminalCalls.pageTmux.mockReturnValueOnce(firstPage.promise).mockReturnValueOnce(secondPage.promise)
+    terminalCalls.returnToBottom.mockReset()
+    terminalCalls.returnToBottom.mockResolvedValue(true)
+    const session = new ManagedTerminalSession({ ...descriptor, tmuxBacked: true }, vi.fn())
+    hydrateManagedSession(session, { role: 'viewer' })
+
+    session.pageTmux('up')
+    session.pageTmux('down')
+    session.scrollToBottom()
+    await Promise.resolve()
+
+    expect(terminalCalls.pageTmux.mock.calls).toEqual([[{ sessionId: 'session-1', direction: 'up' }]])
+    expect(terminalCalls.returnToBottom).not.toHaveBeenCalled()
+
+    firstPage.reject(new Error('page failed'))
+    await flushUntil(() => terminalCalls.pageTmux.mock.calls.length === 2)
+    expect(terminalCalls.pageTmux.mock.calls[1]).toEqual([{ sessionId: 'session-1', direction: 'down' }])
+    expect(terminalCalls.returnToBottom).not.toHaveBeenCalled()
+
+    secondPage.resolve(true)
+    await flushUntil(() => terminalCalls.returnToBottom.mock.calls.length === 1)
     expect(terminalCalls.returnToBottom).toHaveBeenCalledWith({ sessionId: 'session-1' })
   })
 

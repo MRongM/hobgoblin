@@ -242,6 +242,7 @@ export function TerminalSessionProvider({
       restoreTmuxSessions: registry.restoreTmuxSessions,
       selectTerminal: registry.selectTerminal,
       scrollToBottom: registry.scrollToBottom,
+      pageTmux: registry.pageTmux,
       focusTerminal: registry.focusTerminal,
       scrollLines: registry.scrollLines,
       scrollByTouch: registry.scrollByTouch,

@@ -64,7 +64,6 @@ const hostTmuxInventoryState = vi.hoisted(() => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
-  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
 }))
 
 const rescanWorkspace = vi.fn(async (_rootId: string) => {})
@@ -212,7 +211,6 @@ vi.mock('#/web/repo-client.ts', async () => {
   return {
     ...actual,
     getRepositoryRemoteBranches: repoClientMocks.getRepositoryRemoteBranches,
-    getRepositoryWorktreeBootstrapPreflight: repoClientMocks.getRepositoryWorktreeBootstrapPreflight,
   }
 })
 
@@ -298,11 +296,6 @@ beforeEach(() => {
   hostTmuxInventoryState.visible = true
   repoClientMocks.getRepositoryRemoteBranches.mockReset()
   repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
-  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockReset()
-  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
-    ok: true,
-    preflight: { kind: 'candidates', candidates: [] },
-  })
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -864,6 +857,7 @@ function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessi
     restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),

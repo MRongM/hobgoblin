@@ -123,6 +123,7 @@ describe('repo web transport helpers', () => {
     const { createRepositoryWorktree } = await import('#/web/repo-client.ts')
     const decision = {
       kind: 'materialize' as const,
+      sourceWorktreePath: '/tmp/repo',
       selections: [
         { path: '.env', mode: 'copy' as const },
         { path: 'node_modules', mode: 'symlink' as const },

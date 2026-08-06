@@ -7,12 +7,12 @@ import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWor
 import type { BranchWorkspacePlan, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 
 const mocks = vi.hoisted(() => ({
-  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
+  getRepositoryFileTree: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
-  getRepositoryWorktreeBootstrapPreflight: mocks.getRepositoryWorktreeBootstrapPreflight,
+  getRepositoryFileTree: mocks.getRepositoryFileTree,
   getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
 }))
 
@@ -34,9 +34,11 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+  mocks.getRepositoryFileTree.mockResolvedValue({
     ok: true,
-    preflight: { kind: 'candidates', candidates: [] },
+    worktreePath: '/workspace/api-main',
+    dirPath: '/workspace/api-main',
+    entries: [],
   })
   mocks.getRepositoryRemoteBranches.mockResolvedValue([])
 })
@@ -296,7 +298,6 @@ describe('BranchWorkspaceDialog', () => {
     await flushAsyncWork()
     changeSelect('workspace.branch-workspace.base-named', 'develop')
     await flushAsyncWork()
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
     clickSelector('[data-materialization-item="docs"] [data-materialization-choice="copy"]')
     await clickAction('preview')
 
@@ -490,19 +491,12 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('keeps repository dependencies disabled until explicitly enabled', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
-      ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [{ path: 'node_modules', kind: 'directory' }],
-      },
-    })
     renderDialog({})
 
     click('workspace.branch-workspace.repository-named')
     await flushAsyncWork()
 
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
+    expect(mocks.getRepositoryFileTree).not.toHaveBeenCalled()
     const dependencySwitch = document.querySelector<HTMLElement>(
       '[aria-label="workspace.branch-workspace.repository-dependencies-toggle-named"]',
     )
@@ -514,22 +508,95 @@ describe('BranchWorkspaceDialog', () => {
     act(() => dependencySwitch?.click())
     await flushAsyncWork()
 
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+    expect(mocks.getRepositoryFileTree).toHaveBeenCalledWith(
       '/workspace/api',
-      expect.any(AbortSignal),
-      'all-untracked',
       '/workspace/api-main',
+      '/workspace/api-main',
+      expect.any(AbortSignal),
     )
-    expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
+    expect(document.querySelector('[data-worktree-bootstrap-source-select]')).not.toBeNull()
+  })
+
+  test('selects a nested dependency from the source worktree tree and submits its exact source', async () => {
+    mocks.getRepositoryFileTree.mockImplementation(
+      async (_repoId: string, worktreePath: string, dirPath: string) =>
+        dirPath === worktreePath
+          ? {
+              ok: true,
+              worktreePath,
+              dirPath,
+              entries: [
+                {
+                  name: 'backend',
+                  absolutePath: `${worktreePath}/backend`,
+                  relativePath: 'backend',
+                  kind: 'directory',
+                },
+              ],
+            }
+          : {
+              ok: true,
+              worktreePath,
+              dirPath,
+              entries: [
+                {
+                  name: '.venv',
+                  absolutePath: `${worktreePath}/backend/.venv`,
+                  relativePath: 'backend/.venv',
+                  kind: 'directory',
+                },
+              ],
+            },
+    )
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ onPreview })
+    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-worktree-dependency-expand="backend"]')).not.toBeNull(),
+    )
+
+    clickSelector('[data-worktree-dependency-expand="backend"]')
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-worktree-dependency-path="backend/.venv"]')).not.toBeNull(),
+    )
+    clickSelector('[data-worktree-dependency-path="backend/.venv"]')
+    changeSelect('worktree-dependency-tree.mode', 'copy')
+    await clickAction('preview')
+
+    expect(onPreview).toHaveBeenCalledWith({
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
+          worktreeBootstrap: {
+            kind: 'materialize',
+            sourceWorktreePath: '/workspace/api-main',
+            selections: [{ path: 'backend/.venv', mode: 'copy' }],
+          },
+        },
+      ],
+      auxiliaryEntries: [],
+    })
   })
 
   test('clears repository dependency choices when disabled', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+    mocks.getRepositoryFileTree.mockResolvedValue({
       ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [{ path: 'node_modules', kind: 'directory' }],
-      },
+      worktreePath: '/workspace/api-main',
+      dirPath: '/workspace/api-main',
+      entries: [
+        {
+          name: 'node_modules',
+          absolutePath: '/workspace/api-main/node_modules',
+          relativePath: 'node_modules',
+          kind: 'directory',
+        },
+      ],
     })
     const onPreview = vi.fn(async () => true)
     renderDialog({ onPreview })
@@ -537,15 +604,16 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
-    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+    clickSelector('[data-worktree-dependency-path="node_modules"]')
 
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
-    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
+    expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).toBeNull()
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2)
-    expect(choiceState('node_modules', 'skip')).toBe('on')
+    expect(document.querySelector<HTMLInputElement>('[data-worktree-dependency-path="node_modules"]')?.checked).toBe(
+      false,
+    )
     await clickAction('preview')
     expect(onPreview).toHaveBeenCalledWith({
       operation: 'create',
@@ -562,8 +630,10 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('aborts an in-flight repository dependency read when disabled', async () => {
-    let finishRead: ((result: { ok: true; preflight: { kind: 'candidates'; candidates: [] } }) => void) | undefined
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockReturnValueOnce(
+    let finishRead:
+      | ((result: { ok: true; worktreePath: string; dirPath: string; entries: [] }) => void)
+      | undefined
+    mocks.getRepositoryFileTree.mockReturnValueOnce(
       new Promise((resolve) => {
         finishRead = resolve
       }),
@@ -572,24 +642,28 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
 
-    const signal = mocks.getRepositoryWorktreeBootstrapPreflight.mock.calls[0]?.[1] as AbortSignal | undefined
+    const signal = mocks.getRepositoryFileTree.mock.calls[0]?.[3] as AbortSignal | undefined
     expect(signal?.aborted).toBe(false)
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     expect(signal?.aborted).toBe(true)
 
     await act(async () => {
-      finishRead?.({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
+      finishRead?.({
+        ok: true,
+        worktreePath: '/workspace/api-main',
+        dirPath: '/workspace/api-main',
+        entries: [],
+      })
       await Promise.resolve()
     })
   })
 
   test('resets repository dependencies when the repository is deselected', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+    mocks.getRepositoryFileTree.mockResolvedValue({
       ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [{ path: 'node_modules', kind: 'directory' }],
-      },
+      worktreePath: '/workspace/api-main',
+      dirPath: '/workspace/api-main',
+      entries: [],
     })
     renderDialog({})
     click('workspace.branch-workspace.repository-named')
@@ -603,20 +677,26 @@ describe('BranchWorkspaceDialog', () => {
     )
     expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
     expect(dependencySwitch?.getAttribute('data-disabled')).not.toBeNull()
-    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
+    expect(document.querySelector('[data-worktree-bootstrap-source-select]')).toBeNull()
 
     click('workspace.branch-workspace.repository-named')
     expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(1)
+    expect(mocks.getRepositoryFileTree).toHaveBeenCalledTimes(1)
   })
 
-  test('loads and submits untracked repository dependencies from the selected base worktree', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+  test('loads and submits repository dependencies from the selected base worktree', async () => {
+    mocks.getRepositoryFileTree.mockResolvedValueOnce({
       ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [{ path: 'node_modules', kind: 'directory' }],
-      },
+      worktreePath: '/workspace/api-main',
+      dirPath: '/workspace/api-main',
+      entries: [
+        {
+          name: 'node_modules',
+          absolutePath: '/workspace/api-main/node_modules',
+          relativePath: 'node_modules',
+          kind: 'directory',
+        },
+      ],
     })
     const onPreview = vi.fn(async () => true)
     renderDialog({ onPreview })
@@ -625,13 +705,13 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+    expect(mocks.getRepositoryFileTree).toHaveBeenCalledWith(
       '/workspace/api',
-      expect.any(AbortSignal),
-      'all-untracked',
       '/workspace/api-main',
+      '/workspace/api-main',
+      expect.any(AbortSignal),
     )
-    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+    clickSelector('[data-worktree-dependency-path="node_modules"]')
     await clickAction('preview')
 
     expect(onPreview).toHaveBeenCalledWith({
@@ -644,7 +724,7 @@ describe('BranchWorkspaceDialog', () => {
           syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
-            candidateScope: 'all-untracked',
+            sourceWorktreePath: '/workspace/api-main',
             selections: [{ path: 'node_modules', mode: 'symlink' }],
           },
         },
@@ -654,62 +734,41 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('reloads repository dependencies when the selected base worktree changes', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
-      ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [{ path: 'node_modules', kind: 'directory' }],
-      },
-    })
     renderDialog({})
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+    expect(mocks.getRepositoryFileTree).toHaveBeenLastCalledWith(
       '/workspace/api',
-      expect.any(AbortSignal),
-      'all-untracked',
       '/workspace/api-main',
+      '/workspace/api-main',
+      expect.any(AbortSignal),
     )
 
     changeSelect('workspace.branch-workspace.base-named', 'develop')
     await flushAsyncWork()
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+    expect(mocks.getRepositoryFileTree).toHaveBeenLastCalledWith(
       '/workspace/api',
-      expect.any(AbortSignal),
-      'all-untracked',
       '/workspace/api-develop',
+      '/workspace/api-develop',
+      expect.any(AbortSignal),
     )
   })
 
-  test('falls back to the primary worktree when the selected base has no dependency candidates', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: { kind: 'candidates', candidates: [] },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: {
-          kind: 'candidates',
-          candidates: [{ path: 'node_modules', kind: 'directory' }],
-        },
-      })
+  test('keeps an empty selected-base source instead of falling back', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
 
-    await vi.waitFor(() => expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(mocks.getRepositoryFileTree).toHaveBeenCalledTimes(1))
 
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight.mock.calls).toEqual([
-      ['/workspace/api', expect.any(AbortSignal), 'all-untracked', '/workspace/api-develop'],
-      ['/workspace/api', expect.any(AbortSignal), 'all-untracked', undefined],
-    ])
-    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
-    expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
-    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
+    const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
+    expect(sourceSelect?.value).toBe('worktree:/workspace/api-develop')
+    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain(
+      'worktree:/workspace/api-main',
+    )
     await clickAction('preview')
     expect(onPreview).toHaveBeenCalledWith({
       operation: 'create',
@@ -719,100 +778,104 @@ describe('BranchWorkspaceDialog', () => {
           repositoryName: 'api',
           creationBase: { kind: 'localBranch', branch: 'develop' },
           syncBeforeCreate: false,
-          worktreeBootstrap: {
-            kind: 'materialize',
-            candidateScope: 'all-untracked',
-            selections: [{ path: 'node_modules', mode: 'symlink' }],
-          },
         },
       ],
       auxiliaryEntries: [],
     })
   })
 
-  test('offers the primary worktree even when the selected base immediately has dependency candidates', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: {
-          kind: 'candidates',
-          candidates: [{ path: 'node_modules', kind: 'directory' }],
-        },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: {
-          kind: 'candidates',
-          candidates: [{ path: '.env', kind: 'file' }],
-        },
-      })
+  test('offers every existing worktree and clears selections when the source changes', async () => {
+    mocks.getRepositoryFileTree.mockImplementation(
+      async (_repoId: string, worktreePath: string, dirPath: string) => {
+        const name = worktreePath === '/workspace/api-main' ? '.env' : 'node_modules'
+        return {
+          ok: true,
+          worktreePath,
+          dirPath,
+          entries: [
+            {
+              name,
+              absolutePath: `${worktreePath}/${name}`,
+              relativePath: name,
+              kind: name === 'node_modules' ? 'directory' : 'file',
+            },
+          ],
+        }
+      },
+    )
     renderDialog({ repositories: [repositoryWithDependencySources()] })
     act(() => repositoryCheckbox('api').click())
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
-    await vi.waitFor(() => expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull())
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).not.toBeNull(),
+    )
 
     const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
     expect(document.body.textContent).toContain('worktree-bootstrap.source-branch')
-    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('primary')
-    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
-    changeSelect('worktree-bootstrap.source-select', 'primary')
-    await vi.waitFor(() => expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull())
-
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
-      '/workspace/api',
-      expect.any(AbortSignal),
-      'all-untracked',
-      undefined,
+    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toEqual([
+      'worktree:/workspace/api-main',
+      'worktree:/workspace/api-develop',
+      'worktree:/workspace/api-feature',
+      'worktree:/workspace/api-detached',
+    ])
+    clickSelector('[data-worktree-dependency-path="node_modules"]')
+    changeSelect('worktree-bootstrap.source-select', 'worktree:/workspace/api-main')
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull(),
     )
-    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
-    expect(choiceState('.env', 'skip')).toBe('on')
+
+    expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).toBeNull()
+    expect(document.querySelector<HTMLInputElement>('[data-worktree-dependency-path=".env"]')?.checked).toBe(false)
   })
 
   test('loads a non-base dependency source, clears old choices, and submits its exact path', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: { kind: 'candidates', candidates: [] },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: {
-          kind: 'candidates',
-          candidates: [{ path: 'node_modules', kind: 'directory' }],
-        },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: {
-          kind: 'candidates',
-          candidates: [{ path: '.env', kind: 'file' }],
-        },
-      })
+    mocks.getRepositoryFileTree.mockImplementation(
+      async (_repoId: string, worktreePath: string, dirPath: string) => {
+        const name = worktreePath === '/workspace/api-feature' ? '.env' : 'node_modules'
+        return {
+          ok: true,
+          worktreePath,
+          dirPath,
+          entries: [
+            {
+              name,
+              absolutePath: `${worktreePath}/${name}`,
+              relativePath: name,
+              kind: name === 'node_modules' ? 'directory' : 'file',
+            },
+          ],
+        }
+      },
+    )
     const onPreview = vi.fn(async () => true)
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
-    await vi.waitFor(() => expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(2))
-
-    clickSelector('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
-    const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
-    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
-    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('branch:develop')
-    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain('branch:feature/source')
-
-    changeSelect('worktree-bootstrap.source-select', 'branch:feature/source')
-    await vi.waitFor(() => expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull())
-
-    expect(mocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
-      '/workspace/api',
-      expect.any(AbortSignal),
-      'all-untracked',
-      '/workspace/api-feature',
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).not.toBeNull(),
     )
-    expect(document.querySelector('[data-materialization-item="node_modules"]')).toBeNull()
-    expect(choiceState('.env', 'skip')).toBe('on')
-    clickSelector('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+
+    clickSelector('[data-worktree-dependency-path="node_modules"]')
+    const sourceSelect = document.querySelector<HTMLSelectElement>('[aria-label="worktree-bootstrap.source-select"]')
+    expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain(
+      'worktree:/workspace/api-feature',
+    )
+
+    changeSelect('worktree-bootstrap.source-select', 'worktree:/workspace/api-feature')
+    await vi.waitFor(() =>
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull(),
+    )
+
+    expect(mocks.getRepositoryFileTree).toHaveBeenLastCalledWith(
+      '/workspace/api',
+      '/workspace/api-feature',
+      '/workspace/api-feature',
+      expect.any(AbortSignal),
+    )
+    expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).toBeNull()
+    clickSelector('[data-worktree-dependency-path=".env"]')
+    changeSelect('worktree-dependency-tree.mode', 'copy')
     await clickAction('preview')
 
     expect(onPreview).toHaveBeenCalledWith({
@@ -825,7 +888,6 @@ describe('BranchWorkspaceDialog', () => {
           syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
-            candidateScope: 'all-untracked',
             selections: [{ path: '.env', mode: 'copy' }],
             sourceWorktreePath: '/workspace/api-feature',
           },
@@ -835,16 +897,25 @@ describe('BranchWorkspaceDialog', () => {
     })
   })
 
-  test('applies bulk choices independently to repository dependencies and auxiliary entries', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
+  test('keeps per-item repository choices independent from auxiliary bulk choices', async () => {
+    mocks.getRepositoryFileTree.mockResolvedValueOnce({
       ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [
-          { path: 'node_modules', kind: 'directory' },
-          { path: '.env', kind: 'file' },
-        ],
-      },
+      worktreePath: '/workspace/api-main',
+      dirPath: '/workspace/api-main',
+      entries: [
+        {
+          name: 'node_modules',
+          absolutePath: '/workspace/api-main/node_modules',
+          relativePath: 'node_modules',
+          kind: 'directory',
+        },
+        {
+          name: '.env',
+          absolutePath: '/workspace/api-main/.env',
+          relativePath: '.env',
+          kind: 'file',
+        },
+      ],
     })
     const onPreview = vi.fn(async () => true)
     renderDialog({
@@ -859,9 +930,15 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
-    const repositoryList = '[aria-labelledby="branch-workspace-repository-dependencies-api"]'
-    clickSelector(`${repositoryList} [data-materialization-select-all]`)
-    clickSelector(`${repositoryList} [data-materialization-bulk-choice="copy"]`)
+    clickSelector('[data-worktree-dependency-path="node_modules"]')
+    changeSelect('worktree-dependency-tree.mode', 'copy')
+    clickSelector('[data-worktree-dependency-path=".env"]')
+    const modeSelects = document.querySelectorAll<HTMLSelectElement>('[aria-label="worktree-dependency-tree.mode"]')
+    act(() => {
+      const select = modeSelects[1]
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, 'copy')
+      select?.dispatchEvent(new Event('change', { bubbles: true }))
+    })
     const auxiliaryList = '[aria-labelledby="branch-workspace-auxiliary-candidates"]'
     clickSelector(`${auxiliaryList} [data-materialization-select-all]`)
     clickSelector(`${auxiliaryList} [data-materialization-bulk-choice="symlink"]`)
@@ -877,7 +954,7 @@ describe('BranchWorkspaceDialog', () => {
           syncBeforeCreate: false,
           worktreeBootstrap: {
             kind: 'materialize',
-            candidateScope: 'all-untracked',
+            sourceWorktreePath: '/workspace/api-main',
             selections: [
               { path: 'node_modules', mode: 'copy' },
               { path: '.env', mode: 'copy' },
@@ -1019,16 +1096,16 @@ describe('BranchWorkspaceDialog', () => {
     expect(refresh?.disabled).toBe(false)
   })
 
-  test('blocks preview when repository dependencies cannot be loaded', async () => {
-    mocks.getRepositoryWorktreeBootstrapPreflight.mockRejectedValueOnce(new Error('offline'))
+  test('keeps preview enabled when repository dependencies cannot be loaded', async () => {
+    mocks.getRepositoryFileTree.mockRejectedValueOnce(new Error('offline'))
     renderDialog({})
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
 
-    expect(document.body.textContent).toContain('workspace.branch-workspace.repository-dependencies-error')
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(true)
+    expect(document.querySelector('[data-worktree-dependency-error="/workspace/api-main"]')).not.toBeNull()
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
   })
 
   test('defaults every server-required approval and allows confirming the create plan', async () => {
@@ -1342,11 +1419,16 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
             available: true,
             branches: ['main', 'develop'],
             defaultBranch: 'main',
-            primaryWorktreePath: '/workspace/api-main',
-            sourceWorktreeByBranch: {
-              main: '/workspace/api-main',
-              develop: '/workspace/api-develop',
-            },
+            worktrees: [
+              { path: '/workspace/api-main', branch: 'main', isMain: true },
+              { path: '/workspace/api-develop', branch: 'develop', isMain: false },
+              {
+                path: '/workspace/api-detached',
+                head: 'abcdef123456',
+                isDetached: true,
+                isMain: false,
+              },
+            ],
           },
           { id: '/workspace/web', name: 'web', available: true, branches: ['trunk'], defaultBranch: 'trunk' },
         ]}
@@ -1381,12 +1463,17 @@ function repositoryWithDependencySources() {
     available: true,
     branches: ['develop', 'main', 'feature/source'],
     defaultBranch: 'develop',
-    primaryWorktreePath: '/workspace/api-main',
-    sourceWorktreeByBranch: {
-      develop: '/workspace/api-develop',
-      main: '/workspace/api-main',
-      'feature/source': '/workspace/api-feature',
-    },
+    worktrees: [
+      { path: '/workspace/api-main', branch: 'main', isMain: true },
+      { path: '/workspace/api-develop', branch: 'develop', isMain: false },
+      { path: '/workspace/api-feature', branch: 'feature/source', isMain: false },
+      {
+        path: '/workspace/api-detached',
+        head: 'abcdef123456',
+        isDetached: true,
+        isMain: false,
+      },
+    ],
   }
 }
 

@@ -17,14 +17,19 @@ const ipcHandlers = new Map<string, (_event: unknown, input: any) => unknown>()
 // vi.hoisted() ensures this is evaluated before vi.mock() factory functions,
 // which are hoisted to the top of the file by vitest's transformer.
 const { mockNotificationEmitting } = vi.hoisted(() => ({
-  mockNotificationEmitting(emitEvent: 'show' | 'failed') {
-    return function MockNotification(this: { show: ReturnType<typeof vi.fn>; once: ReturnType<typeof vi.fn> }) {
+  mockNotificationEmitting(emitEvent: 'show' | 'failed' | 'click' | null) {
+    return function MockNotification(this: {
+      id: string
+      show: ReturnType<typeof vi.fn>
+      once: ReturnType<typeof vi.fn>
+    }) {
       const listeners = new Map<string, () => void>()
+      this.id = 'native-notification-id'
       this.once = vi.fn((event: string, cb: () => void) => {
         listeners.set(event, cb)
       })
       this.show = vi.fn(() => {
-        listeners.get(emitEvent)?.()
+        if (emitEvent) listeners.get(emitEvent)?.()
       })
     }
   },
@@ -43,7 +48,10 @@ vi.mock('electron', () => ({
     getAllWindows: () => [],
     fromWebContents: vi.fn(() => ({ isDestroyed: () => false, isFocused: () => false, flashFrame: vi.fn() })),
   },
-  Notification: Object.assign(vi.fn(mockNotificationEmitting('show')), { isSupported: vi.fn(() => true) }),
+  Notification: Object.assign(vi.fn(mockNotificationEmitting('show')), {
+    getHistory: vi.fn(async () => []),
+    isSupported: vi.fn(() => true),
+  }),
   app: { on: vi.fn(), getAppPath: vi.fn(() => '/app'), dock: { bounce: vi.fn(), setBadge: vi.fn() } },
 }))
 
@@ -127,6 +135,38 @@ describe('terminal IPC', () => {
         repoRoot: '/tmp/repo',
       }),
     ).resolves.toBe(false)
+  })
+
+  test('treats interaction with the native test notification as successful delivery', async () => {
+    const { Notification } = await import('electron')
+    vi.useFakeTimers()
+    try {
+      vi.mocked(Notification).mockImplementationOnce(mockNotificationEmitting('click') as any)
+
+      const result = invoke(TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL, undefined)
+      await vi.advanceTimersByTimeAsync(5000)
+
+      await expect(result).resolves.toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('does not treat a notification history entry as visible without a native presentation event', async () => {
+    const { Notification } = await import('electron')
+    vi.useFakeTimers()
+    try {
+      vi.mocked(Notification).mockImplementationOnce(mockNotificationEmitting(null) as any)
+      vi.mocked(Notification.getHistory).mockResolvedValueOnce([{ id: 'native-notification-id' }] as any)
+
+      const result = invoke(TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL, undefined)
+      await vi.advanceTimersByTimeAsync(5000)
+
+      await expect(result).resolves.toBe(false)
+      expect(Notification.getHistory).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('returns true when Notification.isSupported() is false (flashFrame/bounce already fired)', async () => {

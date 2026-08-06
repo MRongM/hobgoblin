@@ -146,7 +146,6 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     Object.assign(current.repositories[0]!, {
       worktreeBootstrap: {
         kind: 'materialize',
-        candidateScope: 'ignored-only',
         selections: [{ path: 'node_modules', mode: 'symlink' }],
       },
       bootstrapProgress: 'failed',

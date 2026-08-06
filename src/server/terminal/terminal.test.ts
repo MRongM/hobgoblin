@@ -13,6 +13,7 @@ import {
   handleRealtimeServerMessage,
   listServerTerminalSessions,
   openServerTmuxSessions,
+  pageServerTerminal,
   pruneServerTerminals,
   reorderServerTerminals,
   attachServerTerminal,
@@ -208,6 +209,57 @@ describe('server terminal sessions', () => {
     expect(returnTmuxSessionToBottom).toHaveBeenCalledTimes(1)
 
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
+    unregisterTerminalSocket('client_1', 'attachment_b', viewerSocket)
+  })
+
+  test('lets a connected viewer page a tmux session without input authority', async () => {
+    const controllerSocket = { send: vi.fn(), close: vi.fn() }
+    const viewerSocket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', controllerSocket)
+    registerTerminalSocket('client_1', 'attachment_b', viewerSocket)
+    const created = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      launchMode: 'tmux-if-available',
+      attachmentId: 'attachment_a',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    await attachServerTerminal('client_1', {
+      sessionId: created.sessionId,
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_b',
+    })
+    const pageTmuxSession = vi.fn(async () => ({ ok: true as const, status: 'paged' as const }))
+
+    await expect(
+      pageServerTerminal(
+        'client_1',
+        { sessionId: created.sessionId, attachmentId: 'attachment_b', direction: 'up' },
+        { pageTmuxSession },
+      ),
+    ).resolves.toBe(true)
+    expect(pageTmuxSession).toHaveBeenCalledWith({
+      projectRoot: '/repo',
+      itemPath: '/repo-linked',
+      sessionName: expect.stringMatching(/^hobgoblin-v1-/u),
+      direction: 'up',
+    })
+    expect(mockPtys[0]?.write).not.toHaveBeenCalled()
+
+    await expect(
+      pageServerTerminal(
+        'client_1',
+        { sessionId: created.sessionId, attachmentId: 'attachment_b', direction: 'sideways' as 'up' },
+        { pageTmuxSession },
+      ),
+    ).resolves.toBe(false)
+    expect(pageTmuxSession).toHaveBeenCalledTimes(1)
+
+    unregisterTerminalSocket('client_1', 'attachment_a', controllerSocket)
     unregisterTerminalSocket('client_1', 'attachment_b', viewerSocket)
   })
 

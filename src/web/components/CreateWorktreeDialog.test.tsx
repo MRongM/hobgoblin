@@ -10,6 +10,15 @@ import type { RepoState } from '#/web/stores/repos/types.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
+const repoClientMocks = vi.hoisted(() => ({
+  getRepositoryFileTree: vi.fn(),
+}))
+
+vi.mock('#/web/repo-client.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/web/repo-client.ts')>('#/web/repo-client.ts')
+  return { ...actual, getRepositoryFileTree: repoClientMocks.getRepositoryFileTree }
+})
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -36,6 +45,20 @@ beforeEach(() => {
     abortRpc: async () => true,
     onEvent: () => () => {},
   }
+  repoClientMocks.getRepositoryFileTree.mockReset()
+  repoClientMocks.getRepositoryFileTree.mockResolvedValue({
+    ok: true,
+    worktreePath: '/tmp/repo-base',
+    dirPath: '/tmp/repo-base',
+    entries: [
+      {
+        name: '.env',
+        absolutePath: '/tmp/repo-base/.env',
+        relativePath: '.env',
+        kind: 'file',
+      },
+    ],
+  })
 })
 
 afterEach(() => {
@@ -386,15 +409,15 @@ describe('CreateWorktreeDialog', () => {
 
   test('keeps worktree dependencies hidden until explicitly enabled', () => {
     const onBootstrapEnabledChange = vi.fn()
+    const source = branchSource('feature/base', '/tmp/repo-base')
     render(
       <CreateWorktreeDialog
         open
         repo={createRepo()}
         bootstrapEnabled={false}
         worktreeBootstrap={{
-          loading: false,
-          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
-          error: false,
+          source,
+          sourceOptions: [source],
         }}
         onBootstrapEnabledChange={onBootstrapEnabledChange}
         onClose={vi.fn()}
@@ -405,22 +428,19 @@ describe('CreateWorktreeDialog', () => {
     expect(button('[aria-label="action.create-worktree-bootstrap-toggle"]').getAttribute('data-state')).toBe(
       'unchecked',
     )
-    expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
+    expect(document.querySelector('[data-worktree-dependency-path=".env"]')).toBeNull()
 
     click('[aria-label="action.create-worktree-bootstrap-toggle"]')
 
     expect(onBootstrapEnabledChange).toHaveBeenCalledWith(true)
   })
 
-  test('does not submit stale dependency choices after dependencies are disabled', () => {
+  test('does not submit stale dependency choices after dependencies are disabled', async () => {
     const onCreate = vi.fn(async () => {})
+    const source = branchSource('feature/base', '/tmp/repo-base')
     const worktreeBootstrap = {
-      loading: false,
-      preflight: {
-        kind: 'candidates' as const,
-        candidates: [{ path: '.env', kind: 'file' as const }],
-      },
-      error: false,
+      source,
+      sourceOptions: [source],
     }
     const dialog = (bootstrapEnabled: boolean) => (
       <CreateWorktreeDialog
@@ -434,10 +454,13 @@ describe('CreateWorktreeDialog', () => {
       />
     )
     render(dialog(true))
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull()
+    })
 
-    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    click('[data-worktree-dependency-path=".env"]')
     act(() => root!.render(dialog(false)))
-    expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
+    expect(document.querySelector('[data-worktree-dependency-path=".env"]')).toBeNull()
     setInputValue('#cwt-branch', 'feature/new')
     click('button[type="submit"]')
 
@@ -455,16 +478,17 @@ describe('CreateWorktreeDialog', () => {
     })
   })
 
-  test('disables submit while worktree bootstrap preflight is loading', () => {
+  test('keeps submit enabled while the dependency tree is loading', () => {
+    repoClientMocks.getRepositoryFileTree.mockReturnValue(new Promise<never>(() => {}))
+    const source = branchSource('feature/base', '/tmp/repo-base')
     render(
       <CreateWorktreeDialog
         open
         repo={createRepo()}
         bootstrapEnabled
         worktreeBootstrap={{
-          loading: true,
-          preflight: null,
-          error: false,
+          source,
+          sourceOptions: [source],
         }}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
@@ -472,36 +496,65 @@ describe('CreateWorktreeDialog', () => {
     )
 
     setInputValue('#cwt-branch', 'feature/new')
-    expect(button('button[type="submit"]').disabled).toBe(true)
+    expect(button('button[type="submit"]').disabled).toBe(false)
   })
 
-  test('defaults candidates to skip and submits only independent copy or symlink choices', () => {
+  test('submits a selected nested dependency with its exact source and mode', async () => {
     const onCreate = vi.fn(async () => {})
+    const source = branchSource('feature/base', '/tmp/repo-base')
+    repoClientMocks.getRepositoryFileTree.mockImplementation(
+      async (_repoId: string, _worktreePath: string, dirPath: string) =>
+        dirPath === '/tmp/repo-base'
+          ? {
+              ok: true,
+              worktreePath: '/tmp/repo-base',
+              dirPath,
+              entries: [
+                {
+                  name: 'backend',
+                  absolutePath: '/tmp/repo-base/backend',
+                  relativePath: 'backend',
+                  kind: 'directory',
+                },
+              ],
+            }
+          : {
+              ok: true,
+              worktreePath: '/tmp/repo-base',
+              dirPath,
+              entries: [
+                {
+                  name: '.venv',
+                  absolutePath: '/tmp/repo-base/backend/.venv',
+                  relativePath: 'backend/.venv',
+                  kind: 'directory',
+                },
+              ],
+            },
+    )
     render(
       <CreateWorktreeDialog
         open
         repo={createRepo()}
         bootstrapEnabled
         worktreeBootstrap={{
-          loading: false,
-          preflight: {
-            kind: 'candidates',
-            candidates: [
-              { path: 'node_modules', kind: 'directory' },
-              { path: '.env', kind: 'file' },
-            ],
-          },
-          error: false,
+          source,
+          sourceOptions: [source],
         }}
         onClose={vi.fn()}
         onCreate={onCreate}
       />,
     )
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-expand="backend"]')).not.toBeNull()
+    })
 
-    expect(document.querySelectorAll('[data-materialization-item]').length).toBe(2)
-    expect(document.querySelectorAll('[data-materialization-choice="skip"][data-state="on"]').length).toBe(2)
-    click('[data-materialization-item="node_modules"] [data-materialization-choice="symlink"]')
-    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    click('[data-worktree-dependency-expand="backend"]')
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path="backend/.venv"]')).not.toBeNull()
+    })
+    click('[data-worktree-dependency-path="backend/.venv"]')
+    changeNativeSelect('[data-worktree-dependency-mode="backend/.venv"]', 'copy')
     setInputValue('#cwt-branch', 'feature/new')
     click('button[type="submit"]')
 
@@ -515,66 +568,16 @@ describe('CreateWorktreeDialog', () => {
         },
         syncBeforeCreate: false,
       },
-      selections: [
-        { path: 'node_modules', mode: 'symlink' },
-        { path: '.env', mode: 'copy' },
-      ],
+      selections: [{ path: 'backend/.venv', mode: 'copy' }],
+      sourceWorktreePath: '/tmp/repo-base',
     })
   })
 
-  test('applies one materialization mode to every batch-selected candidate', () => {
-    const onCreate = vi.fn(async () => {})
-    render(
-      <CreateWorktreeDialog
-        open
-        repo={createRepo()}
-        bootstrapEnabled
-        worktreeBootstrap={{
-          loading: false,
-          preflight: {
-            kind: 'candidates',
-            candidates: [
-              { path: 'node_modules', kind: 'directory' },
-              { path: '.env', kind: 'file' },
-            ],
-          },
-          error: false,
-        }}
-        onClose={vi.fn()}
-        onCreate={onCreate}
-      />,
-    )
-
-    click('[data-materialization-select-all]')
-    click('[data-materialization-bulk-choice="symlink"]')
-    setInputValue('#cwt-branch', 'feature/new')
-    click('button[type="submit"]')
-
-    expect(onCreate).toHaveBeenCalledWith({
-      input: {
-        worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: {
-          kind: 'newBranch',
-          newBranch: 'feature/new',
-          creationBase: { kind: 'localBranch', branch: 'main' },
-        },
-        syncBeforeCreate: false,
-      },
-      selections: [
-        { path: 'node_modules', mode: 'symlink' },
-        { path: '.env', mode: 'symlink' },
-      ],
-    })
-  })
-
-  test('resets candidate choices when the dialog is reopened', () => {
+  test('resets dependency selections when the dialog is reopened', async () => {
+    const source = branchSource('feature/base', '/tmp/repo-base')
     const worktreeBootstrap = {
-      loading: false,
-      preflight: {
-        kind: 'candidates' as const,
-        candidates: [{ path: '.env', kind: 'file' as const }],
-      },
-      error: false,
+      source,
+      sourceOptions: [source],
     }
     const dialog = (open: boolean) => (
       <CreateWorktreeDialog
@@ -587,14 +590,20 @@ describe('CreateWorktreeDialog', () => {
       />
     )
     render(dialog(true))
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull()
+    })
 
-    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
-    expect(document.querySelector('[data-materialization-choice="copy"][data-state="on"]')).not.toBeNull()
+    click('[data-worktree-dependency-path=".env"]')
+    expect(input('[data-worktree-dependency-path=".env"]').checked).toBe(true)
 
     act(() => root!.render(dialog(false)))
     act(() => root!.render(dialog(true)))
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull()
+    })
 
-    expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
+    expect(input('[data-worktree-dependency-path=".env"]').checked).toBe(false)
   })
 
   test('reports the active local branch context for dependency source resolution', () => {
@@ -621,7 +630,7 @@ describe('CreateWorktreeDialog', () => {
     expect(onBootstrapContextBranchChange).toHaveBeenLastCalledWith('main')
   })
 
-  test('resets candidate choices when the dependency source changes', () => {
+  test('resets dependency selections when the dependency source changes', async () => {
     const base = branchSource('feature/base', '/tmp/repo-base')
     const alternative = branchSource('feature/other', '/tmp/repo-other')
     const dialog = (source: RepositoryDependencySource) => (
@@ -630,11 +639,8 @@ describe('CreateWorktreeDialog', () => {
         repo={createRepo()}
         bootstrapEnabled
         worktreeBootstrap={{
-          loading: false,
-          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
-          error: false,
           source,
-          sourceOptions: [alternative],
+          sourceOptions: [base, alternative],
         }}
         onBootstrapSourceChange={vi.fn()}
         onClose={vi.fn()}
@@ -642,17 +648,23 @@ describe('CreateWorktreeDialog', () => {
       />
     )
     render(dialog(base))
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull()
+    })
 
-    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
-    expect(document.querySelector('[data-materialization-choice="copy"][data-state="on"]')).not.toBeNull()
+    click('[data-worktree-dependency-path=".env"]')
+    expect(input('[data-worktree-dependency-path=".env"]').checked).toBe(true)
 
     act(() => root!.render(dialog(alternative)))
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull()
+    })
 
-    expect(document.querySelector('[data-materialization-choice="skip"][data-state="on"]')).not.toBeNull()
+    expect(input('[data-worktree-dependency-path=".env"]').checked).toBe(false)
   })
 
-  test('submits the exact branch worktree source used for dependency candidates', () => {
-    const onCreate = vi.fn(async () => {})
+  test('keeps dependency tree errors nonblocking', async () => {
+    repoClientMocks.getRepositoryFileTree.mockResolvedValueOnce({ ok: false, message: 'offline' })
     const source = branchSource('feature/base', '/tmp/repo-base')
     render(
       <CreateWorktreeDialog
@@ -660,55 +672,17 @@ describe('CreateWorktreeDialog', () => {
         repo={createRepo()}
         bootstrapEnabled
         worktreeBootstrap={{
-          loading: false,
-          preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
-          error: false,
           source,
-          sourceOptions: [{ id: 'primary', kind: 'primary' }],
-        }}
-        onBootstrapSourceChange={vi.fn()}
-        onClose={vi.fn()}
-        onCreate={onCreate}
-      />,
-    )
-
-    click('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
-    setInputValue('#cwt-branch', 'feature/new')
-    click('button[type="submit"]')
-
-    expect(onCreate).toHaveBeenCalledWith({
-      input: {
-        worktreePath: '/tmp/goblin-repo-feature-new',
-        mode: {
-          kind: 'newBranch',
-          newBranch: 'feature/new',
-          creationBase: { kind: 'localBranch', branch: 'main' },
-        },
-        syncBeforeCreate: false,
-      },
-      selections: [{ path: '.env', mode: 'copy' }],
-      sourceWorktreePath: '/tmp/repo-base',
-    })
-  })
-
-  test('hides empty candidates and keeps preflight errors nonblocking', () => {
-    render(
-      <CreateWorktreeDialog
-        open
-        repo={createRepo()}
-        bootstrapEnabled
-        worktreeBootstrap={{
-          loading: false,
-          preflight: { kind: 'candidates', candidates: [] },
-          error: true,
+          sourceOptions: [source],
         }}
         onClose={vi.fn()}
         onCreate={vi.fn(async () => {})}
       />,
     )
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-error="/tmp/repo-base"]')).not.toBeNull()
+    })
 
-    expect(document.body.textContent).not.toContain('action.create-worktree-bootstrap-candidates-label')
-    expect(document.body.textContent).toContain('action.create-worktree-bootstrap-preflight-error')
     setInputValue('#cwt-branch', 'feature/new')
     expect(button('button[type="submit"]').disabled).toBe(false)
   })
@@ -758,7 +732,7 @@ function createRemoteRepo(): RepoState {
 }
 
 function branchSource(branch: string, worktreePath: string): RepositoryDependencySource {
-  return { id: `branch:${branch}`, kind: 'branch', branch, worktreePath }
+  return { id: `worktree:${worktreePath}`, kind: 'branch', branch, worktreePath }
 }
 
 function render(element: ReactNode) {
@@ -801,10 +775,19 @@ function setInputValue(selector: string, value: string) {
 }
 
 function click(selector: string) {
-  const element = button(selector)
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLElement)) throw new Error(`Missing element: ${selector}`)
   act(() => {
-    element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    element.click()
   })
+}
+
+function changeNativeSelect(selector: string, value: string) {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLSelectElement)) throw new Error(`Missing select: ${selector}`)
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => element.dispatchEvent(new Event('change', { bubbles: true })))
 }
 
 function openSelect(selector: string) {

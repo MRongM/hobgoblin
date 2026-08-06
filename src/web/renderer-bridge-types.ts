@@ -34,6 +34,7 @@ import type {
   TerminalSessionInput,
   TerminalTakeoverInput,
   TerminalTakeoverResult,
+  TerminalTmuxPageInput,
   TerminalTitleEvent,
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
@@ -46,6 +47,7 @@ export interface RendererTerminalBridge {
   write: (input: TerminalWriteInput) => Promise<TerminalMutationResult>
   resize: (input: TerminalResizeInput) => Promise<TerminalMutationResult>
   returnToBottom: (input: TerminalReturnToBottomInput) => Promise<TerminalMutationResult>
+  pageTmux: (input: TerminalTmuxPageInput) => Promise<TerminalMutationResult>
   takeover: (input: TerminalTakeoverInput) => Promise<TerminalTakeoverResult>
   close: (input: TerminalSessionInput) => Promise<TerminalCloseResult>
   create: (input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useRef, type ReactNode } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -67,7 +67,9 @@ interface BranchWorkspaceMemberRowProps {
   selected: boolean
   disabled: boolean
   presentation: BranchWorkspaceMemberPresentation
+  fileAreaCollapsed?: boolean
   onOpenRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onToggleFileArea?: () => void
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onRemoveMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
 }
@@ -113,11 +115,14 @@ function BranchWorkspaceMemberRowFrame({
   disabled,
   presentation,
   actions,
+  fileAreaCollapsed,
   onOpenRepositoryMember,
+  onToggleFileArea,
   onOpenInternalTerminal,
   onRemoveMember,
 }: BranchWorkspaceMemberRowProps & { actions: BranchActionItemGroups }) {
   const t = useT()
+  const fileAreaCollapsedAtInteractionStart = useRef<boolean | undefined>(undefined)
   const terminalKey =
     presentation.repositoryId && presentation.worktreePath
       ? worktreeTerminalKey(presentation.repositoryId, presentation.worktreePath)
@@ -193,7 +198,15 @@ function BranchWorkspaceMemberRowFrame({
           ? (warningLabel ?? t('workspace.branch-workspace.member.open-worktree'))
           : (unavailableLabel ?? undefined),
         className: presentation.navigable && !disabled ? undefined : 'cursor-default',
+        onMouseDown: (event) => {
+          if (event.detail <= 1) fileAreaCollapsedAtInteractionStart.current = fileAreaCollapsed
+        },
         onClick: () => onOpenRepositoryMember?.(item, member),
+        onDoubleClick: () => {
+          const startedCollapsed = fileAreaCollapsedAtInteractionStart.current ?? fileAreaCollapsed
+          fileAreaCollapsedAtInteractionStart.current = undefined
+          if (startedCollapsed !== true) onToggleFileArea?.()
+        },
       }}
       actions={
         <WorkspaceListItemActionDock

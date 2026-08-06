@@ -55,6 +55,20 @@ describe('remote command scripts', () => {
       sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       serverName,
     })
+    const pageUpByName = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxPageBySessionName',
+      projectRoot: '/srv/repo',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
+      direction: 'up',
+    } as Parameters<typeof buildRemoteCommandInvocation>[1])
+    const pageDownByName = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxPageBySessionName',
+      projectRoot: '/srv/repo',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
+      direction: 'down',
+    } as Parameters<typeof buildRemoteCommandInvocation>[1])
 
     expect(list.script).toContain(`tmux -L '${serverName}' -u list-sessions`)
     expect(list.script).toContain(`#{session_name}\t${serverName}`)
@@ -66,6 +80,23 @@ describe('remote command scripts', () => {
     expect(cancelModeByName.script).toBe(
       "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -q -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
     )
+    expect(pageUpByName.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -eu -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
+    )
+    expect(pageDownByName.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -ed -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
+    )
+  })
+
+  test('rejects an invalid tmux copy-mode page direction', () => {
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxPageBySessionName',
+        projectRoot: '/srv/repo',
+        sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        direction: 'sideways',
+      } as unknown as Parameters<typeof buildRemoteCommandInvocation>[1]),
+    ).toThrow('error.invalid-arguments')
   })
 
   test('builds a fixed host-wide tmux inventory and exact-origin kill command', () => {
@@ -257,18 +288,6 @@ describe('remote command scripts', () => {
     expect(safe.script).not.toContain('worktree remove --force')
     expect(forced.script).toContain("worktree remove --force -- '/srv/repo-feature'")
     expect(forced.script).not.toContain('worktree remove --force --force')
-  })
-
-  test('builds safely quoted worktree bootstrap candidate discovery', () => {
-    const invocation = buildRemoteCommandInvocation(TARGET, {
-      type: 'worktreeBootstrapCandidates',
-      sourceRoot: "/srv/user's repo",
-    })
-
-    expect(invocation.script).toContain('root = "/srv/user\'s repo"')
-    expect(invocation.script).toContain('git", "-C", root, "ls-files", "-z"')
-    expect(invocation.script).toContain('os.listdir(root)')
-    expect(invocation.script).toContain('os.lstat(os.path.join(root, name))')
   })
 
   test('builds fixed branch workspace inspect and list commands with JSON encoded paths', () => {
@@ -906,6 +925,85 @@ describe('remote command scripts', () => {
     expect(readFileSync(path.join(targetRoot, 'config dir', 'app.json'), 'utf8')).toBe('ok\n')
     expect(existsSync(path.join(targetRoot, 'config dir', 'debug.log'))).toBe(false)
     expect(existsSync(path.join(targetRoot, 'config dir', '.git', 'config'))).toBe(false)
+  })
+
+  testPosix('remote best-effort bootstrap materializes deep untracked paths and skips invalid items', async () => {
+    const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-best-effort-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const sourceRoot = path.join(dir, 'repo')
+    const targetRoot = path.join(dir, 'worktree')
+    mkdirSync(path.join(sourceRoot, 'backend', '.venv'), { recursive: true })
+    mkdirSync(path.join(sourceRoot, 'frontend', 'node_modules'), { recursive: true })
+    mkdirSync(targetRoot, { recursive: true })
+    writeFileSync(path.join(sourceRoot, 'backend', '.venv', 'pyvenv.cfg'), 'placeholder\n')
+    writeFileSync(path.join(sourceRoot, 'frontend', 'node_modules', 'package.json'), '{}\n')
+    writeFileSync(path.join(sourceRoot, 'tracked.env'), 'tracked\n')
+    writeFileSync(path.join(sourceRoot, 'existing.env'), 'source\n')
+    writeFileSync(path.join(targetRoot, 'existing.env'), 'target\n')
+    await execa('git', ['init', '--quiet'], { cwd: sourceRoot })
+    await execa('git', ['add', '--', 'tracked.env'], { cwd: sourceRoot })
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot,
+      targetRoot,
+      bestEffort: true,
+      literalPaths: true,
+      copy: ['backend/.venv', 'tracked.env', 'existing.env'],
+      symlink: ['frontend/node_modules'],
+      hardlink: [],
+      exclude: [],
+    })
+    const result = await execa('bash', ['-lc', invocation.script], { reject: false })
+
+    expect(invocation.script).toContain('ls-files -z --')
+    expect(invocation.script).toContain('backend/.venv')
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe(
+      'GOBLIN_BOOTSTRAP_COPY\0backend/.venv\0GOBLIN_BOOTSTRAP_SYMLINK\0frontend/node_modules\0',
+    )
+    expect(readFileSync(path.join(targetRoot, 'backend', '.venv', 'pyvenv.cfg'), 'utf8')).toBe('placeholder\n')
+    expect(readlinkSync(path.join(targetRoot, 'frontend', 'node_modules'))).toBe(
+      path.join(sourceRoot, 'frontend', 'node_modules'),
+    )
+    expect(existsSync(path.join(targetRoot, 'tracked.env'))).toBe(false)
+    expect(readFileSync(path.join(targetRoot, 'existing.env'), 'utf8')).toBe('target\n')
+  })
+
+  testPosix('remote best-effort bootstrap isolates one item failure from later items', async () => {
+    const dir = path.join(os.tmpdir(), `goblin-remote-bootstrap-best-effort-failure-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    const sourceRoot = path.join(dir, 'repo')
+    const targetRoot = path.join(dir, 'worktree')
+    const fakeBin = path.join(dir, 'bin')
+    mkdirSync(path.join(sourceRoot, 'later'), { recursive: true })
+    mkdirSync(targetRoot, { recursive: true })
+    mkdirSync(fakeBin)
+    writeFileSync(path.join(sourceRoot, 'copy-fails.env'), 'copy\n')
+    writeFileSync(path.join(fakeBin, 'cp'), '#!/bin/sh\nexit 1\n')
+    chmodSync(path.join(fakeBin, 'cp'), 0o700)
+    await execa('git', ['init', '--quiet'], { cwd: sourceRoot })
+
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'bootstrapRemoteWorktree',
+      sourceRoot,
+      targetRoot,
+      bestEffort: true,
+      literalPaths: true,
+      copy: ['copy-fails.env'],
+      symlink: ['later'],
+      hardlink: [],
+      exclude: [],
+    })
+    const result = await execa('bash', ['-c', invocation.script], {
+      reject: false,
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? ''}` },
+    })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toBe('GOBLIN_BOOTSTRAP_SYMLINK\0later\0')
+    expect(existsSync(path.join(targetRoot, 'copy-fails.env'))).toBe(false)
+    expect(readlinkSync(path.join(targetRoot, 'later'))).toBe(path.join(sourceRoot, 'later'))
   })
 
   testPosix('remote bootstrap inspection classifies exact links and conflicts without writing', async () => {

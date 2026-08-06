@@ -189,6 +189,7 @@ describe('renderer bootstrap', () => {
         write: async () => false,
         resize: async () => false,
         returnToBottom: async () => false,
+        pageTmux: async () => false,
         takeover: async () => ({ ok: false as const, message: 'error.invalid-arguments' }),
         close: async () => ({ ok: true }),
         create: async (input?: { kind?: string }) =>

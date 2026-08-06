@@ -211,6 +211,127 @@ describe('TerminalSlot', () => {
     container.remove()
   })
 
+  test('renders invariant Mobile Web dock while attachment authority loads', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const currentSnapshot: TerminalSnapshot = { ...snapshot, phase: 'opening', attachment: null }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => currentSnapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={terminalContext()}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const bottomDock = container.querySelector('.goblin-terminal-bottom-dock')
+      const actionRow = bottomDock?.querySelector('.goblin-terminal-command-deck__row--actions')
+      const buttons = [...(actionRow?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+
+      expect(bottomDock).toBeInstanceOf(HTMLDivElement)
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        'T↑',
+        'T↓',
+        'terminal.command-deck.scroll-to-bottom',
+      ])
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
+      expect(container.textContent).not.toContain('ENTER')
+      expect(container.textContent).not.toContain('terminal.takeover')
+      expect(container.textContent).not.toContain('terminal.mirror-controlled')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps invariant Mobile Web actions on the current terminal', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mobileDetectionMocks.isMobileDevice = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const secondDescriptor = {
+      ...descriptor,
+      key: 'terminal-2',
+      terminalId: 'terminal-2',
+      index: 2,
+    }
+    const firstSummary = worktreeSnapshot.sessions[0]!
+    const secondSummary = {
+      ...firstSummary,
+      ...secondDescriptor,
+      title: 'zsh 2',
+      selected: false,
+    }
+    let currentWorktreeSnapshot = {
+      ...worktreeSnapshot,
+      sessions: [firstSummary, secondSummary],
+      count: 2,
+    }
+    const scrollToBottom = vi.fn()
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => currentWorktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    const renderSlot = () =>
+      root.render(
+        <TerminalSessionContext.Provider value={terminalContext({ scrollToBottom })}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    const button = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => candidate.textContent === label)
+
+    await act(async () => renderSlot())
+    const previousBefore = button('T↑')
+    const nextBefore = button('T↓')
+    const returnBefore = button('terminal.command-deck.scroll-to-bottom')
+    await act(async () => returnBefore?.click())
+
+    currentWorktreeSnapshot = {
+      ...currentWorktreeSnapshot,
+      selectedDescriptor: secondDescriptor,
+      sessions: [
+        { ...firstSummary, selected: false },
+        { ...secondSummary, selected: true },
+      ],
+    }
+    await act(async () => renderSlot())
+
+    try {
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('terminal.command-deck.scroll-to-bottom')).toBe(returnBefore)
+      await act(async () => button('terminal.command-deck.scroll-to-bottom')?.click())
+      expect(scrollToBottom.mock.calls).toEqual([['terminal-1'], ['terminal-2']])
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('defers desktop autofocus until ready without showing loading, and avoids mobile autofocus', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
@@ -371,6 +492,7 @@ describe('TerminalSlot', () => {
       restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
+      pageTmux: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
@@ -527,6 +649,7 @@ describe('TerminalSlot', () => {
       restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom,
+      pageTmux: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
@@ -1148,23 +1271,45 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('tracks the obscured bottom edge of the Mobile Web visual viewport for the command deck', async () => {
+  test('shows extra-key rows only while the Mobile Web input method obscures the visual viewport', async () => {
     mobileDetectionMocks.isMobileDevice = true
     const visualViewport = installVisualViewportHarness({
       layoutHeight: 844,
-      height: 524,
+      height: 844,
       offsetTop: 0,
     })
     const { container, root } = await renderTerminalSlotFixture('controller')
 
     try {
       const slot = container.querySelector<HTMLElement>('.goblin-terminal-slot')
-      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('320px')
+      const button = (label: string) =>
+        [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+          (candidate) => candidate.textContent === label,
+        )
+      const previousBefore = button('T↑')
+      const nextBefore = button('T↓')
+      const returnBefore = button('terminal.command-deck.scroll-to-bottom')
+
+      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('0px')
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
 
       await act(async () => {
-        visualViewport.update({ height: 500, offsetTop: 44 })
+        visualViewport.update({ height: 524, offsetTop: 0 })
       })
-      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('300px')
+      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('320px')
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(2)
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('terminal.command-deck.scroll-to-bottom')).toBe(returnBefore)
+
+      await act(async () => {
+        visualViewport.update({ height: 844, offsetTop: 0 })
+      })
+      expect(slot?.style.getPropertyValue('--goblin-terminal-visual-viewport-bottom-inset')).toBe('0px')
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('terminal.command-deck.scroll-to-bottom')).toBe(returnBefore)
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -1286,12 +1431,52 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('does not expose the Mobile Web command deck without controller input authority', async () => {
+  test('does not expose Mobile Web command-deck input controls without controller authority', async () => {
     mobileDetectionMocks.isMobileDevice = true
     const { container, root } = await renderTerminalSlotFixture('viewer')
 
     try {
-      expect(container.querySelector('.goblin-terminal-command-deck')).toBeNull()
+      expect(container.querySelector('.goblin-terminal-command-deck')).toBeInstanceOf(HTMLDivElement)
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
+      expect(container.textContent).not.toContain('ENTER')
+      expect(container.textContent).not.toContain('terminal.command-deck.compose')
+      expect(container.textContent).toContain('terminal.takeover')
+      expect(container.textContent).not.toContain('terminal.mirror-controlled')
+      expect(container.querySelector('.goblin-terminal-slot__viewer-message')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('shows read-only tmux page controls and dispatches their directions without takeover', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    const pageTmux = vi.fn()
+    const takeover = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', { pageTmux, takeover }, { tmuxBacked: true })
+
+    try {
+      const actionRow = container.querySelector('.goblin-terminal-command-deck__row--actions')
+      const buttons = [...(actionRow?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+      expect(buttons.map((button) => button.textContent)).toEqual([
+        'T↑',
+        'T↓',
+        'terminal.command-deck.scroll-to-bottom',
+        '⇈',
+        '⇊',
+        'terminal.takeover',
+      ])
+
+      await act(async () => {
+        buttons[3]?.click()
+        buttons[4]?.click()
+      })
+
+      expect(pageTmux.mock.calls).toEqual([
+        ['terminal-1', 'up'],
+        ['terminal-1', 'down'],
+      ])
+      expect(takeover).not.toHaveBeenCalled()
     } finally {
       await act(async () => root.unmount())
       container.remove()
@@ -1545,22 +1730,23 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('places global terminal cycle buttons first and the read-only message last', async () => {
+  test('places global terminal cycle buttons first without Mobile Web read-only status copy', async () => {
     const fixture = await renderCrossProjectCycleFixture('viewer', true)
 
     try {
-      const viewerStatus = fixture.container.querySelector('.goblin-terminal-slot__viewer-status')
-      const viewerActions = fixture.container.querySelector('.goblin-terminal-slot__viewer-actions')
-      const viewerMessage = fixture.container.querySelector('.goblin-terminal-slot__viewer-message')
-      expect(viewerStatus?.firstElementChild).toBe(viewerActions)
-      expect(viewerStatus?.lastElementChild).toBe(viewerMessage)
-      const buttons = [...(viewerActions?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
-      expect(buttons.map((button) => button.textContent)).toEqual([
+      const dock = fixture.container.querySelector('.goblin-terminal-bottom-dock')
+      const actionRow = dock?.querySelector('.goblin-terminal-command-deck__row--actions')
+      expect(dock).toBeInstanceOf(HTMLDivElement)
+      expect(fixture.container.querySelector('.goblin-terminal-slot__viewer-status')).toBeNull()
+      expect([...(actionRow?.children ?? [])].map((child) => child.textContent)).toEqual([
         'T↑',
         'T↓',
         'terminal.command-deck.scroll-to-bottom',
         'terminal.takeover',
       ])
+      expect(actionRow?.querySelector('.goblin-terminal-slot__viewer-message')).toBeNull()
+
+      const buttons = [...(actionRow?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
 
       await act(async () => buttons[1]?.click())
 
@@ -1876,6 +2062,7 @@ describe('TerminalSlot', () => {
       restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
+      pageTmux: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
@@ -1995,6 +2182,7 @@ describe('TerminalSlot', () => {
       restoreTmuxSessions: vi.fn(async () => 0),
       selectTerminal: vi.fn(),
       scrollToBottom: vi.fn(),
+      pageTmux: vi.fn(),
       focusTerminal: vi.fn(),
       scrollLines: vi.fn(),
       scrollByTouch: vi.fn(),
@@ -2564,7 +2752,7 @@ describe('TerminalSlot', () => {
 
 function controllerFixture(
   role: 'controller' | 'viewer' | 'unowned' = 'controller',
-  options: { repoRoot?: string; worktreePath?: string; branch?: string } = {},
+  options: { repoRoot?: string; worktreePath?: string; branch?: string; tmuxBacked?: boolean } = {},
 ) {
   const repoRoot = options.repoRoot ?? '/repo'
   const worktreePath = options.worktreePath ?? '/worktree'
@@ -2577,6 +2765,7 @@ function controllerFixture(
     repoRoot,
     branch,
     worktreePath,
+    tmuxBacked: options.tmuxBacked,
   }
   const worktreeSnapshot = {
     worktreeTerminalKey: `${repoRoot}\0${worktreePath}`,
@@ -2603,12 +2792,13 @@ function controllerFixture(
 async function renderTerminalSlotFixture(
   role: 'controller' | 'viewer' | 'unowned',
   contextOverrides: Partial<TerminalSessionContextValue> = {},
+  fixtureOptions: { tmuxBacked?: boolean } = {},
 ): Promise<{ container: HTMLDivElement; root: Root }> {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
-  const { worktreeSnapshot, snapshot } = controllerFixture(role)
+  const { worktreeSnapshot, snapshot } = controllerFixture(role, fixtureOptions)
   const context = terminalContext(contextOverrides)
   const readContext: TerminalSessionReadContextValue = {
     worktreeSnapshot: () => worktreeSnapshot,
@@ -2801,6 +2991,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     createTerminal: vi.fn(async () => 'terminal-1'),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),

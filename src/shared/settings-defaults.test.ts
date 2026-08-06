@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  DEFAULT_APP_FONT_SIZE,
   DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
   DEFAULT_FONT_FAMILY,
   DEFAULT_GIT_NETWORK_PROXY_ENABLED,
@@ -10,6 +11,7 @@ import {
   DEFAULT_TOOLBAR_HEIGHT_PX,
   DEFAULT_FILE_TREE_FONT_SIZE,
   DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
+  DEFAULT_TERMINAL_FONT_SIZE,
   DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
   MAX_CHROME_HEIGHT_PX,
   MIN_CHROME_HEIGHT_PX,
@@ -29,9 +31,18 @@ describe('settings defaults', () => {
     expect(defaultSessionState()).not.toHaveProperty('workspaceActiveRepoByRoot')
   })
 
-  test('defaults file tree font size to 14', () => {
-    expect(DEFAULT_FILE_TREE_FONT_SIZE).toBe(14)
-    expect(defaultSettingsPrefs().fileTreeFontSize).toBe(14)
+  test('defaults application UI font size to 13 and terminal font size to 14', () => {
+    expect(DEFAULT_APP_FONT_SIZE).toBe(13)
+    expect(DEFAULT_FILE_TREE_FONT_SIZE).toBe(13)
+    expect(DEFAULT_TERMINAL_FONT_SIZE).toBe(14)
+    expect(defaultSettingsPrefs()).toMatchObject({
+      fileTreeFontSize: 13,
+      terminalFontSize: 14,
+    })
+    expect(defaultSettingsPrefs({ fileTreeFontSize: 16, terminalFontSize: 17 })).toMatchObject({
+      fileTreeFontSize: 16,
+      terminalFontSize: 17,
+    })
   })
 
   test('defaults file tree clipboard max bytes to 30 MB', () => {

@@ -75,7 +75,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     editorApp: 'auto',
     topbarHeightPx: 34,
     toolbarHeightPx: 34,
-    fileTreeFontSize: 14,
+    fileTreeFontSize: 13,
     terminalFontSize: 14,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',

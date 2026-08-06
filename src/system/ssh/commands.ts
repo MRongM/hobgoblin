@@ -19,10 +19,7 @@ import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.t
 import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
-import type {
-  WorktreeBootstrapCandidateScope,
-  WorktreeBootstrapTargetEntry,
-} from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapTargetEntry } from '#/shared/worktree-bootstrap-summary.ts'
 
 const SSH_COMMAND_TIMEOUT_MS = 15_000
 const SSH_CONNECT_TIMEOUT_SEC = 10
@@ -41,6 +38,13 @@ export type RemoteCommandKind =
   | { type: 'tmuxListSessions'; projectRoot: string }
   | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
   | { type: 'tmuxCancelModeBySessionName'; projectRoot: string; sessionName: string; serverName?: string }
+  | {
+      type: 'tmuxPageBySessionName'
+      projectRoot: string
+      sessionName: string
+      serverName?: string
+      direction: 'up' | 'down'
+    }
   | { type: 'tmuxListHostSessions' }
   | { type: 'tmuxKillHostSessionByName'; sessionName: string; serverName?: string }
   | { type: 'testDirectory'; path: string }
@@ -117,11 +121,11 @@ export type RemoteCommandKind =
   | { type: 'gitIsAncestor'; path: string; ancestor: string; descendant: string }
   | { type: 'gitRemoteVerbose'; path: string }
   | { type: 'gitRemoteGetUrl'; path: string }
-  | { type: 'worktreeBootstrapCandidates'; sourceRoot: string; candidateScope?: WorktreeBootstrapCandidateScope }
   | {
       type: 'bootstrapRemoteWorktree'
       sourceRoot: string
       targetRoot: string
+      bestEffort?: boolean
       literalPaths?: boolean
       inspectOnly?: boolean
       replaceExisting?: WorktreeBootstrapTargetEntry[]
@@ -276,6 +280,22 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return [
         'command -v tmux >/dev/null 2>&1 || exit 127',
         `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} copy-mode -q -t ${shellQuote(`=${command.sessionName}:`)}`,
+      ].join('\n')
+    }
+    case 'tmuxPageBySessionName': {
+      const serverName = buildTmuxServerName(command.projectRoot)
+      if (
+        !serverName ||
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && command.serverName !== serverName) ||
+        (command.direction !== 'up' && command.direction !== 'down')
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
+      const copyModeFlag = command.direction === 'up' ? '-eu' : '-ed'
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} copy-mode ${copyModeFlag} -t ${shellQuote(`=${command.sessionName}:`)}`,
       ].join('\n')
     }
     case 'tmuxKillHostSessionByName': {
@@ -587,8 +607,6 @@ function scriptForCommand(command: RemoteCommandKind): string {
       }
       return createScript
     }
-    case 'worktreeBootstrapCandidates':
-      return remoteWorktreeBootstrapCandidatesScript(command)
     case 'bootstrapRemoteWorktree':
       return remoteBootstrapScript(command)
     case 'gitWorktreeRemove':
@@ -1541,57 +1559,6 @@ function remoteWorktreeAddArgs(input: CreateWorktreeInput): string {
   }
 }
 
-function remoteWorktreeBootstrapCandidatesScript(
-  command: Extract<RemoteCommandKind, { type: 'worktreeBootstrapCandidates' }>,
-): string {
-  return [
-    "python3 - <<'PY'",
-    'import json, os, stat, subprocess, sys',
-    `root = ${pythonString(command.sourceRoot)}`,
-    `candidate_scope = ${pythonString(command.candidateScope ?? 'all-untracked')}`,
-    'def finish(payload):',
-    '    print(json.dumps(payload, ensure_ascii=True))',
-    '    sys.exit(0)',
-    'try:',
-    '    raw = subprocess.check_output(["git", "-C", root, "ls-files", "-z"], stderr=subprocess.PIPE)',
-    'except subprocess.CalledProcessError as exc:',
-    '    message = exc.stderr.decode("utf-8", "replace") if exc.stderr else "error.failed-read-repo"',
-    '    finish({"ok": False, "message": message})',
-    'tracked = [item.decode("utf-8", "surrogateescape") for item in raw.split(b"\\0") if item]',
-    'tracked_roots = {item.split("/", 1)[0] for item in tracked}',
-    'ignored_roots = None',
-    'if candidate_scope == "ignored-only":',
-    '    try:',
-    '        ignored_raw = subprocess.check_output(["git", "-C", root, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"], stderr=subprocess.PIPE)',
-    '    except subprocess.CalledProcessError as exc:',
-    '        message = exc.stderr.decode("utf-8", "replace") if exc.stderr else "error.failed-read-repo"',
-    '        finish({"ok": False, "message": message})',
-    '    ignored = [item.decode("utf-8", "surrogateescape") for item in ignored_raw.split(b"\\0") if item]',
-    '    ignored_roots = {item.split("/", 1)[0] for item in ignored}',
-    'candidates = []',
-    'try:',
-    '    names = os.listdir(root)',
-    'except (FileNotFoundError, PermissionError, OSError):',
-    '    finish({"ok": False, "message": "error.failed-read-repo"})',
-    'for name in names:',
-    '    if name == ".git" or name in tracked_roots:',
-    '        continue',
-    '    if ignored_roots is not None and name not in ignored_roots:',
-    '        continue',
-    '    try:',
-    '        info = os.lstat(os.path.join(root, name))',
-    '    except (FileNotFoundError, PermissionError, OSError):',
-    '        continue',
-    '    if stat.S_ISDIR(info.st_mode):',
-    '        candidates.append({"path": name, "kind": "directory"})',
-    '    elif stat.S_ISREG(info.st_mode):',
-    '        candidates.append({"path": name, "kind": "file"})',
-    'candidates.sort(key=lambda item: (0 if item["kind"] == "directory" else 1, item["path"]))',
-    'finish({"ok": True, "candidates": candidates})',
-    'PY',
-  ].join('\n')
-}
-
 function remoteBootstrapScript(command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>): string {
   const inner = remoteBootstrapInnerScript(command)
   const quoted = shellQuote(inner)
@@ -1602,6 +1569,7 @@ function remoteBootstrapScript(command: Extract<RemoteCommandKind, { type: 'boot
 }
 
 function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>): string {
+  if (command.bestEffort) return remoteBestEffortBootstrapInnerScript(command)
   const quote = shellQuote
   const copy = command.copy.map(quote).join(' ')
   const symlink = command.symlink.map(quote).join(' ')
@@ -2085,4 +2053,102 @@ function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 
     'fi',
   ]
   return lines.join('\n')
+}
+
+function remoteBestEffortBootstrapInnerScript(
+  command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>,
+): string {
+  const items = [
+    ...command.copy.map((rel) => `copy\t${rel}`),
+    ...command.symlink.map((rel) => `symlink\t${rel}`),
+  ]
+    .map(shellQuote)
+    .join(' ')
+  return [
+    'set -o pipefail',
+    `SOURCE_ROOT=${shellQuote(command.sourceRoot)}`,
+    `TARGET_ROOT=${shellQuote(command.targetRoot)}`,
+    `ITEMS=(${items})`,
+    '',
+    'path_exists() {',
+    '  [ -e "$1" ] || [ -L "$1" ]',
+    '}',
+    '',
+    'valid_rel() {',
+    '  local rel="$1"',
+    '  [ -n "$rel" ] || return 1',
+    '  [[ "$rel" =~ [[:cntrl:]] ]] && return 1',
+    '  case "$rel" in',
+    '    "."|/*|*\\\\*|".."|../*|*/..|*/../*|".git"|.git/*|*/.git|*/.git/*) return 1 ;;',
+    '    */./*|./*|*/.|*//*) return 1 ;;',
+    '  esac',
+    '  return 0',
+    '}',
+    '',
+    'parent_has_symlink() {',
+    '  local root="$1" rel="$2" current segment i',
+    '  local -a parts',
+    '  IFS=/ read -r -a parts <<< "$rel"',
+    '  current="$root"',
+    '  for ((i = 0; i < ${#parts[@]} - 1; i += 1)); do',
+    '    segment="${parts[$i]}"',
+    '    [ -n "$segment" ] || return 0',
+    '    current="$current/$segment"',
+    '    [ -L "$current" ] && return 0',
+    '  done',
+    '  return 1',
+    '}',
+    '',
+    'materialize_item() {',
+    '  local mode="$1" rel="$2" src dst parent tracked temp prepared marker',
+    '  valid_rel "$rel" || return 1',
+    '  tracked="$(mktemp "${TMPDIR:-/tmp}/goblin-bootstrap-tracked.XXXXXX")" || return 1',
+    '  if ! git -C "$SOURCE_ROOT" ls-files -z -- "$rel" >"$tracked" 2>/dev/null; then',
+    '    rm -f -- "$tracked"',
+    '    return 1',
+    '  fi',
+    '  if [ -s "$tracked" ]; then rm -f -- "$tracked"; return 1; fi',
+    '  rm -f -- "$tracked"',
+    '  src="$SOURCE_ROOT/$rel"',
+    '  dst="$TARGET_ROOT/$rel"',
+    '  [ ! -L "$src" ] && { [ -f "$src" ] || [ -d "$src" ]; } || return 1',
+    '  parent_has_symlink "$SOURCE_ROOT" "$rel" && return 1',
+    '  parent_has_symlink "$TARGET_ROOT" "$rel" && return 1',
+    '  path_exists "$dst" && return 1',
+    '  parent="$(dirname "$dst")"',
+    '  mkdir -p -- "$parent" 2>/dev/null || return 1',
+    '  parent_has_symlink "$TARGET_ROOT" "$rel" && return 1',
+    '  path_exists "$dst" && return 1',
+    '  case "$mode" in',
+    '    copy)',
+    '      temp="$(mktemp -d "$parent/.goblin-bootstrap.XXXXXX")" || return 1',
+    '      prepared="$temp/item"',
+    '      if ! cp -RP -- "$src" "$prepared" 2>/dev/null; then rm -rf -- "$temp"; return 1; fi',
+    '      if parent_has_symlink "$TARGET_ROOT" "$rel" || path_exists "$dst"; then',
+    '        rm -rf -- "$temp"',
+    '        return 1',
+    '      fi',
+    '      if ! mv -- "$prepared" "$dst" 2>/dev/null; then rm -rf -- "$temp"; return 1; fi',
+    '      rm -rf -- "$temp"',
+    '      marker=COPY',
+    '      ;;',
+    '    symlink)',
+    '      ln -s -- "$src" "$dst" 2>/dev/null || return 1',
+    '      marker=SYMLINK',
+    '      ;;',
+    '    *) return 1 ;;',
+    '  esac',
+    '  printf \'GOBLIN_BOOTSTRAP_%s\\0%s\\0\' "$marker" "$rel"',
+    '}',
+    '',
+    'if [ ! -d "$SOURCE_ROOT" ] || [ -L "$SOURCE_ROOT" ] || [ ! -d "$TARGET_ROOT" ] || [ -L "$TARGET_ROOT" ]; then',
+    '  exit 0',
+    'fi',
+    'for item in "${ITEMS[@]}"; do',
+    '  case "$item" in *$\'\\t\'*) ;; *) continue ;; esac',
+    '  mode="${item%%$\'\\t\'*}"',
+    '  rel="${item#*$\'\\t\'}"',
+    '  materialize_item "$mode" "$rel" || true',
+    'done',
+  ].join('\n')
 }

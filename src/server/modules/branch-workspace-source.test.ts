@@ -166,7 +166,6 @@ describe('branch workspace source', () => {
       ...item.repositories[0]!,
       worktreeBootstrap: {
         kind: 'materialize',
-        candidateScope: 'all-untracked',
         sourceWorktreePath: path.join(root, 'api-main'),
         selections: [{ path: '.env.local', mode: 'copy' }],
       },

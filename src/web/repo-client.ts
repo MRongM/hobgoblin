@@ -24,11 +24,7 @@ import type {
   RepositoryBranchMergeOutPlanResult,
   RepositoryBranchMergeOutResult,
 } from '#/shared/repository-branch-merge.ts'
-import type {
-  WorktreeBootstrapCandidateScope,
-  WorktreeBootstrapDecision,
-  WorktreeBootstrapPreflightResult,
-} from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await postServerJson('/api/repo/probe', { cwd })
@@ -127,19 +123,6 @@ export async function createRepositoryWorktree(
   return await postServerJson(
     '/api/repo/create-worktree',
     { cwd, ...input, worktreeBootstrap, sourceToken },
-    { signal },
-  )
-}
-
-export async function getRepositoryWorktreeBootstrapPreflight(
-  cwd: string,
-  signal?: AbortSignal,
-  candidateScope?: WorktreeBootstrapCandidateScope,
-  sourceWorktreePath?: string,
-): Promise<WorktreeBootstrapPreflightResult> {
-  return await postServerJson(
-    '/api/repo/worktree-bootstrap-preflight',
-    { cwd, candidateScope, sourceWorktreePath },
     { signal },
   )
 }

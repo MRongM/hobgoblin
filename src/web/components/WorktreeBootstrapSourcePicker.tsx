@@ -15,35 +15,41 @@ export function WorktreeBootstrapSourcePicker({
   onSourceChange,
 }: WorktreeBootstrapSourcePickerProps) {
   const t = useT()
-  const alternatives = options.filter((candidate) => candidate.id !== source.id)
 
   return (
     <div className="mb-2 grid gap-1.5 rounded-md border border-separator bg-muted/20 p-2">
       <p className="text-xs text-muted-foreground">
         {source.kind === 'primary'
           ? t('worktree-bootstrap.source-primary')
-          : t('worktree-bootstrap.source-branch', { branch: source.branch })}
+          : source.kind === 'branch'
+            ? t('worktree-bootstrap.source-branch', { branch: source.branch })
+            : t('worktree-bootstrap.source-detached', {
+                head: source.head?.slice(0, 7) ?? source.worktreePath,
+              })}
       </p>
-      {alternatives.length > 0 ? (
-        <select
-          aria-label={t('worktree-bootstrap.source-select')}
-          value=""
-          disabled={pending}
-          data-worktree-bootstrap-source-select
-          className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-          onChange={(event) => {
-            const nextSource = alternatives.find((candidate) => candidate.id === event.target.value)
-            if (nextSource) onSourceChange(nextSource)
-          }}
-        >
-          <option value="">{t('worktree-bootstrap.source-select')}</option>
-          {alternatives.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.kind === 'primary' ? t('worktree-bootstrap.source-primary-option') : candidate.branch}
-            </option>
-          ))}
-        </select>
-      ) : null}
+      <select
+        aria-label={t('worktree-bootstrap.source-select')}
+        value={source.id}
+        disabled={pending}
+        data-worktree-bootstrap-source-select
+        className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
+        onChange={(event) => {
+          const nextSource = options.find((candidate) => candidate.id === event.target.value)
+          if (nextSource) onSourceChange(nextSource)
+        }}
+      >
+        {options.map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {candidate.kind === 'primary'
+              ? t('worktree-bootstrap.source-primary-option')
+              : candidate.kind === 'branch'
+                ? candidate.branch
+                : t('worktree-bootstrap.source-detached-option', {
+                    head: candidate.head?.slice(0, 7) ?? candidate.worktreePath,
+                  })}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

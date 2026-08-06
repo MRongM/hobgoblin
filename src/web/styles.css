@@ -41,7 +41,7 @@
 @custom-variant dark (&:where(html[data-theme='dark'] *));
 
 :root {
-  --goblin-app-font-size: 14px;
+  --goblin-app-font-size: 13px;
   --goblin-file-tree-font-size: var(--goblin-app-font-size);
   --goblin-project-titlebar-font-size: max(10px, calc(var(--goblin-app-font-size) - 2px));
   --goblin-file-tree-topbar-font-size: var(--goblin-project-titlebar-font-size);

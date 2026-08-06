@@ -13,7 +13,6 @@ import {
   searchRepositoryFileTree,
   getRepositorySnapshot,
   getRepositoryStatus,
-  getRepositoryWorktreeBootstrapPreflight,
   probeRepository,
   readRepositoryFileTreeTextFile,
   readRepositoryFileTreeBinaryFile,
@@ -86,20 +85,18 @@ export function createRepoRoutes() {
     if (!Number.isFinite(parsed)) return fallback
     return Math.max(min, Math.min(max, parsed))
   }
-  function normalizeRouteWorktreeBootstrapDecision(value: unknown): WorktreeBootstrapDecision | null {
-    if (!value || typeof value !== 'object') return null
+  function normalizeRouteWorktreeBootstrapDecision(value: unknown): WorktreeBootstrapDecision {
+    if (!value || typeof value !== 'object') return { kind: 'skip' }
     const raw = value as Record<string, unknown>
     if (raw.kind === 'skip') return { kind: 'skip' }
-    const sourceWorktreePath =
-      raw.sourceWorktreePath === undefined ? undefined : normalizeWorktreeBootstrapSourcePath(raw.sourceWorktreePath)
-    if (raw.sourceWorktreePath !== undefined && !sourceWorktreePath) return null
     if (raw.kind === 'materialize') {
+      const sourceWorktreePath = normalizeWorktreeBootstrapSourcePath(raw.sourceWorktreePath)
       const selections = normalizeWorktreeBootstrapSelections(raw.selections)
-      return selections
-        ? { kind: 'materialize', selections, ...(sourceWorktreePath ? { sourceWorktreePath } : {}) }
-        : null
+      return sourceWorktreePath && selections.length > 0
+        ? { kind: 'materialize', sourceWorktreePath, selections }
+        : { kind: 'skip' }
     }
-    return null
+    return { kind: 'skip' }
   }
   app.post('/probe', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -148,34 +145,6 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
     return c.json(await jsonOr(() => getRepositoryLocalTags(cwd, c.req.raw.signal), [], 'local-tags'))
-  })
-  app.post('/worktree-bootstrap-preflight', async (c) => {
-    const body = await c.req.json().catch(() => null)
-    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
-    const candidateScope =
-      body?.candidateScope === 'all-untracked' || body?.candidateScope === 'ignored-only'
-        ? body.candidateScope
-        : undefined
-    const sourceWorktreePath =
-      body?.sourceWorktreePath === undefined ? undefined : normalizeWorktreeBootstrapSourcePath(body.sourceWorktreePath)
-    if (body?.candidateScope !== undefined && candidateScope === undefined) {
-      return c.json({ ok: false, message: 'error.invalid-arguments' })
-    }
-    if (body?.sourceWorktreePath !== undefined && sourceWorktreePath === null) {
-      return c.json({ ok: false, message: 'error.invalid-arguments' })
-    }
-    return c.json(
-      await jsonOr(
-        () =>
-          sourceWorktreePath
-            ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope, sourceWorktreePath)
-            : candidateScope
-              ? getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal, candidateScope)
-              : getRepositoryWorktreeBootstrapPreflight(cwd, c.req.raw.signal),
-        { ok: false, message: 'error.failed-read-repo' },
-        'worktree-bootstrap-preflight',
-      ),
-    )
   })
   app.post('/patch', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -493,7 +462,6 @@ export function createRepoRoutes() {
     } as Parameters<typeof createRepositoryWorktree>[1]
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
     const worktreeBootstrap = normalizeRouteWorktreeBootstrapDecision(body?.worktreeBootstrap)
-    if (!worktreeBootstrap) return c.json({ ok: false, message: 'error.invalid-arguments' })
     return c.json(
       await jsonOr(
         () => createRepositoryWorktree(cwd, input, worktreeBootstrap, c.req.raw.signal, sourceToken),

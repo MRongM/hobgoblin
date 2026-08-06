@@ -5,6 +5,7 @@ import {
   isTmuxSessionMissingMessage,
   killLocalTmuxSessionByName,
   listLocalTmuxSessions,
+  pageLocalTmuxSessionByName,
   parseTmuxSessionList,
   TMUX_SESSION_LIST_FORMAT,
   type TmuxProcessRunner,
@@ -422,6 +423,38 @@ describe('local tmux commands', () => {
       ['-L', PROJECT_SERVER_NAME, 'copy-mode', '-q', '-t', `=${sessionName}:`],
       undefined,
     )
+  })
+
+  test('pages an exact current-protocol session in copy mode and rejects invalid directions', async () => {
+    const run = vi.fn<TmuxProcessRunner>(async () => ({ ok: true, stdout: '', stderr: '' }))
+    const sessionName = 'hobgoblin-v1-aebf050981ac829e36100020'
+
+    await expect(
+      pageLocalTmuxSessionByName(sessionName, 'up', {
+        projectRoot: PROJECT_ROOT,
+        serverName: PROJECT_SERVER_NAME,
+        run,
+      }),
+    ).resolves.toEqual({ ok: true, message: '' })
+    await expect(
+      pageLocalTmuxSessionByName(sessionName, 'down', {
+        projectRoot: PROJECT_ROOT,
+        serverName: PROJECT_SERVER_NAME,
+        run,
+      }),
+    ).resolves.toEqual({ ok: true, message: '' })
+    expect(run.mock.calls).toEqual([
+      [['-L', PROJECT_SERVER_NAME, 'copy-mode', '-eu', '-t', `=${sessionName}:`], undefined],
+      [['-L', PROJECT_SERVER_NAME, 'copy-mode', '-ed', '-t', `=${sessionName}:`], undefined],
+    ])
+
+    await expect(
+      pageLocalTmuxSessionByName(sessionName, 'sideways' as 'up', {
+        projectRoot: PROJECT_ROOT,
+        run,
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(run).toHaveBeenCalledTimes(2)
   })
 
   test('recognizes tmux responses that mean an exact session is already missing', () => {

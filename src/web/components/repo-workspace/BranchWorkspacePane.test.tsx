@@ -53,18 +53,23 @@ vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
   WorkspaceRepositoryRail: ({
     workspaceRootId,
+    fileAreaCollapsed,
     onOpenFileArea,
     onCollapseFileArea,
     onToggleFileArea,
     onOpenDetailArea,
   }: {
     workspaceRootId: string
+    fileAreaCollapsed?: boolean
     onOpenFileArea?: () => void
     onCollapseFileArea?: () => void
     onToggleFileArea?: () => void
     onOpenDetailArea?: () => void
   }) => (
-    <div data-testid="rail">
+    <div
+      data-testid="rail"
+      data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
+    >
       {workspaceRootId}
       {onOpenFileArea ? (
         <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
@@ -368,6 +373,9 @@ describe('BranchWorkspacePane', () => {
       '[data-testid="branch-workspace-terminal-panel"] [data-testid="show-scope"]',
     )
     expect(back?.closest('[data-testid="mock-terminal-toolbar-leading"]')).not.toBeNull()
+    expect(back?.getAttribute('data-size')).toBe('icon')
+    expect(back?.querySelector('.lucide-panel-left-open')).not.toBeNull()
+    expect(back?.querySelector('.lucide-arrow-left')).toBeNull()
     expect(container.querySelector('[data-testid="rail"]')).toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
@@ -456,11 +464,13 @@ describe('BranchWorkspacePane', () => {
     const statusBar = container.querySelector('[data-testid="status"]')
     expect(splitPane?.getAttribute('data-after-collapsed')).toBe('true')
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('true')
+    expect(container.querySelector('[data-testid="rail"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
 
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="file-area-toggle"]')?.click())
 
     expect(splitPane?.getAttribute('data-after-collapsed')).toBe('false')
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('false')
+    expect(container.querySelector('[data-testid="rail"]')?.getAttribute('data-file-area-collapsed')).toBe('false')
   })
 
   test('collapses both the local and parent File areas from workspace navigation', () => {

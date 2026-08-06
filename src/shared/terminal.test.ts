@@ -177,6 +177,30 @@ describe('terminal protocol normalization', () => {
     ).toBeNull()
   })
 
+  test('accepts only valid tmux page directions', () => {
+    const request = {
+      type: 'request' as const,
+      requestId: 'request_page_tmux',
+      action: 'page-tmux' as const,
+      input: {
+        sessionId: 'term_abcdefghijklmnop',
+        attachmentId: 'attachment_a',
+        direction: 'up' as const,
+      },
+    }
+
+    expect(normalizeTerminalClientMessage(request)).toMatchObject({
+      action: 'page-tmux',
+      input: request.input,
+    })
+    expect(
+      normalizeTerminalClientMessage({ ...request, input: { ...request.input, direction: 'down' } }),
+    ).toMatchObject({ action: 'page-tmux', input: { direction: 'down' } })
+    expect(
+      normalizeTerminalClientMessage({ ...request, input: { ...request.input, direction: 'sideways' } }),
+    ).toBeNull()
+  })
+
   test('accepts only a boolean tmux close intent', () => {
     const base = {
       type: 'request' as const,

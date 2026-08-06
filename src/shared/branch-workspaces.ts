@@ -395,7 +395,6 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
       !isWorkspaceRepositoryName(repositoryName) ||
       !creationBase ||
       typeof syncBeforeCreate !== 'boolean' ||
-      (hasWorktreeBootstrap && !worktreeBootstrap) ||
       repositoryNames.has(repositoryName)
     ) {
       return invalidRequest()
@@ -433,22 +432,18 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
   }
 }
 
-function normalizeRepositoryWorktreeBootstrap(value: unknown): WorktreeBootstrapDecision | null {
+function normalizeRepositoryWorktreeBootstrap(value: unknown): WorktreeBootstrapDecision {
   const decision = asRecord(value)
-  if (!decision) return null
+  if (!decision) return { kind: 'skip' }
   if (decision.kind === 'skip') return { kind: 'skip' }
-  if (decision.kind !== 'materialize') return null
+  if (decision.kind !== 'materialize') return { kind: 'skip' }
   const selections = normalizeWorktreeBootstrapSelections(decision.selections)
-  const sourceWorktreePath =
-    decision.sourceWorktreePath === undefined
-      ? undefined
-      : normalizeWorktreeBootstrapSourcePath(decision.sourceWorktreePath)
-  if (!selections || (decision.sourceWorktreePath !== undefined && !sourceWorktreePath)) return null
+  const sourceWorktreePath = normalizeWorktreeBootstrapSourcePath(decision.sourceWorktreePath)
+  if (!sourceWorktreePath || selections.length === 0) return { kind: 'skip' }
   return {
     kind: 'materialize',
     selections,
-    candidateScope: 'all-untracked',
-    ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
+    sourceWorktreePath,
   }
 }
 

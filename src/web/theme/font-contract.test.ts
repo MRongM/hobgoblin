@@ -24,7 +24,7 @@ describe('font contract', () => {
   test('defines stable application and file-area font size defaults before hydration', () => {
     const stylesCss = readText(new URL('../styles.css', import.meta.url))
 
-    expect(stylesCss).toContain('--goblin-app-font-size: 14px')
+    expect(stylesCss).toContain('--goblin-app-font-size: 13px')
     expect(stylesCss).toContain('--goblin-file-tree-font-size: var(--goblin-app-font-size)')
     expect(stylesCss).toContain(
       '--goblin-project-titlebar-font-size: max(10px, calc(var(--goblin-app-font-size) - 2px))',

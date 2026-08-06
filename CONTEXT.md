@@ -81,16 +81,24 @@ The top row of the terminal area, containing terminal tabs and terminal-level ac
 _Avoid_: Terminal toolbar, detail toolbar
 
 **Terminal cycle controls**:
-The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
+The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; Desktop/Web read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; every Mobile Web selected terminal places them first in the stable Mobile Web terminal bottom dock before Return to bottom, independently of whether attachment authority has finished loading.
 _Avoid_: Project switcher, terminal tabs, terminal takeover
 
 **Terminal return to bottom**:
 The fixed navigation action that first moves the renderer's normal terminal buffer to its bottom. For a tmux-backed terminal, any connected controller, viewer, or unowned attachment additionally asks the server to leave tmux copy mode with the exact validated project server and session target; it never injects `q`, Escape, or shell input and never takes terminal ownership.
 _Avoid_: Terminal input, takeover, blind key injection, synchronized scroll position
 
+**Read-only tmux page navigation**:
+A shared one-page movement through a tmux-backed terminal's copy-mode history that a viewer or unowned attachment may request without gaining terminal input authority. The controller and every viewer observe the resulting tmux pane position; reaching the live bottom exits copy mode.
+_Avoid_: Local viewer scrollback, PageUp key injection, private tmux viewport, takeover
+
 **Desktop/Web terminal command dock**:
 A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling and Return to bottom, followed by a visual divider and any configured custom terminal buttons. It does not provide a free-form command composer and is distinct from the Mobile Web terminal command deck.
 _Avoid_: Mobile Web terminal command deck, terminal topbar, command composer, external input box
+
+**Mobile Web terminal bottom dock**:
+A stable bottom action surface mounted as soon as a Mobile Web internal terminal is selected. Its invariant action row starts with global terminal cycling and Return to bottom even while attachment authority is unresolved. Once authority arrives asynchronously, a controller receives the Mobile Web terminal command deck and configured custom terminal buttons, while a viewer or unowned attachment receives shared page-up and page-down controls for a tmux-backed terminal followed by Take over, without read-only status copy. Authority resolution, system input-method visibility, and same-surface selected-terminal changes do not replace the invariant controls; cross-project navigation mounts the destination dock immediately from its selected terminal. Controller-only state is cleared when the terminal changes or input authority is lost. Mobile Web terminal focus mode intentionally hides the complete dock.
+_Avoid_: Mobile Web terminal command deck, read-only status overlay, loading toolbar, terminal topbar
 
 **Internal terminal**:
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
@@ -109,8 +117,8 @@ A renderer-local, touch-sized interaction strip at the right edge of a Mobile We
 _Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
 
 **Mobile Web terminal command deck**:
-A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. Its action row starts with global terminal cycle controls, followed by the local return-to-bottom action, terminal input, command composition, renderer-local width presentation, and Focus. All keys are 32 pixels high. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
-_Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
+A compact, controller-only input extension of the Mobile Web terminal bottom dock. Its first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. For a controlling attachment, those two rows appear only while the system input method obscures the visual viewport and disappear when it closes; they are always absent while authority is unresolved and for viewer or unowned attachments. After the dock's invariant terminal cycle controls and local Return to bottom action, the deck adds terminal input, command composition, renderer-local width presentation, and Focus independently of those two rows. All keys are 32 pixels high. It shares the dock with configured custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+_Avoid_: Mobile Web terminal bottom dock, mobile toolbar, floating keys, virtual keyboard, Android command deck
 
 **Mobile Web terminal focus mode**:
 A temporary, controller-only presentation for the selected Mobile Web internal terminal that hides the complete auxiliary bottom dock, including the command deck, composer, and custom terminal buttons. A small top-right exit handle restores the dock; changing terminal, attachment authority, or mobile presentation resets the mode. It is renderer-local, never persisted or synchronized, and does not hide Web navigation or enter desktop Terminal focus mode.
@@ -257,20 +265,24 @@ An AI handoff offered after a branch workspace batch Git action finishes with on
 _Avoid_: Automatic error resolution, per-member AI task, member-terminal handoff
 
 **Worktree bootstrap**:
-A user-selected process that copies or symlinks immediate untracked entries from a source worktree into a newly created worktree before normal development begins.
+A user-selected, best-effort process that copies or symlinks explicitly checked files or directories from one existing source worktree into the same relative paths of a newly created worktree. Dependency skips and materialization failures never change the result of the preceding worktree creation.
 _Avoid_: Worktree setup script, post-create hook
 
 **Worktree bootstrap source**:
-The existing repository worktree whose current untracked entries supply one worktree bootstrap decision. It starts with the worktree attached to the selected branch context or base branch, falls back to the repository primary worktree when that source has no candidates or no worktree, may be changed to another existing worktree outside the selected branch, and remains fixed from candidate selection through the corresponding create execution.
+The existing repository worktree selected from the repository's current worktree list whose file tree supplies one worktree bootstrap decision. It remains fixed from dependency-tree selection through the corresponding create execution and is never the worktree being created.
 _Avoid_: Source branch, repository root, bootstrap template
 
-**Worktree bootstrap candidate**:
-An immediate child file or directory of a worktree bootstrap source that Git does not track, including ignored and ordinary untracked entries. A wholly untracked directory is one candidate, and `.git` is never a candidate.
-_Avoid_: Bootstrap file, untracked path
+**Worktree dependency selection**:
+A file or directory at any depth that the user explicitly checks in a worktree bootstrap source's lazily loaded file tree, together with its copy or symbolic-link mode. A selected directory represents one dependency rather than an implicit selection of every descendant.
+_Avoid_: Bootstrap candidate, Git-excluded entry, typed dependency path
 
-**Repository dependency candidate**:
-An existing worktree bootstrap candidate that may be selected for one newly materialized branch-workspace repository member.
-_Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
+**Repository dependency selection**:
+A worktree dependency selection scoped to one newly materialized branch-workspace repository member.
+_Avoid_: `.gitignore` rule, workspace auxiliary entry, generic file-tree selection
+
+**Worktree dependency skip**:
+A silent best-effort outcome in which a selected dependency is not materialized because it is Git-tracked, unsafe, unavailable, already occupies the target path, or cannot be copied or linked. It never fails, rolls back, or marks incomplete the worktree or branch-workspace member created before it.
+_Avoid_: Worktree creation failure, dependency validation error, dependency replacement
 
 **Selected branch context**:
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
@@ -369,7 +381,7 @@ The workspace overview representation of one branch workspace, labelled by the c
 _Avoid_: Project item, repository row, worktree row
 
 **Branch workspace member summary**:
-The inline representation of one repository member under an expanded branch workspace item, showing its repository identity followed by the resolved target branch's abbreviated commit hash as muted `#hash` text, target-worktree dirtiness, and internal-terminal activity; the `#hash` identifies a commit rather than a Git tag, and selecting the summary keeps the branch workspace active while opening that member worktree's files, Git surfaces, and terminals. It exposes the ordinary worktree's editor, terminal, remote, and repository-scoped Git actions, including worktree creation and refresh, while omitting reordering, checkout, and individual worktree or branch removal because those lifecycle operations would escape or violate the owning branch workspace lifecycle.
+The inline representation of one repository member under an expanded branch workspace item, showing its repository identity followed by the resolved target branch's abbreviated commit hash as muted `#hash` text, target-worktree dirtiness, and internal-terminal activity; the `#hash` identifies a commit rather than a Git tag, and selecting the summary keeps the branch workspace active while opening that member worktree's files, Git surfaces, and terminals. Double-clicking a navigable summary selects it through the normal click sequence and toggles the desktop file area without changing member-summary expansion; compact presentation opens the files surface. It exposes the ordinary worktree's editor, terminal, remote, and repository-scoped Git actions, including worktree creation and refresh, while omitting reordering, checkout, and individual worktree or branch removal because those lifecycle operations would escape or violate the owning branch workspace lifecycle.
 _Avoid_: Subrepository, child repository, nested project, branch workspace item
 
 **Workspace auxiliary entry**:

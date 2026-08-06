@@ -307,12 +307,12 @@ describe('branch workspace write service', () => {
     expect(createWorktree.mock.calls[2]?.[1]).toMatchObject({ syncBeforeCreate: true })
   })
 
-  test('continues creation with a transient warning when dependency bootstrap fails after Git creation', async () => {
+  test('continues creation without a warning when dependency bootstrap fails after Git creation', async () => {
     const plan = planned()
     const dependency = {
       kind: 'materialize' as const,
-      candidateScope: 'ignored-only' as const,
       selections: [{ path: 'node_modules', mode: 'symlink' as const }],
+      sourceWorktreePath: '/workspace/api',
     }
     plan.repositories[0] = { ...plan.repositories[0]!, worktreeBootstrap: dependency }
     const source = inMemorySource()
@@ -345,13 +345,6 @@ describe('branch workspace write service', () => {
       ok: true,
       branchWorkspaceId: plan.branchWorkspaceId,
       snapshot,
-      warnings: [
-        {
-          kind: 'repository-dependency-failed',
-          repositoryName: 'api',
-          message: 'link failed',
-        },
-      ],
     })
     expect(createWorktree.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
     expect(source.manifests[0]?.repositories).toEqual([
@@ -370,6 +363,7 @@ describe('branch workspace write service', () => {
       worktreeBootstrap: {
         kind: 'materialize',
         selections: [{ path: 'node_modules', mode: 'symlink' }],
+        sourceWorktreePath: '/workspace/api',
       },
     }
     const source = inMemorySource()

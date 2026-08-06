@@ -35,6 +35,7 @@ interface TerminalBridgeTestOutputs {
   'terminal.write': TerminalMutationResult
   'terminal.resize': TerminalMutationResult
   'terminal.returnToBottom': TerminalMutationResult
+  'terminal.pageTmux': TerminalMutationResult
   'terminal.takeover': TerminalTakeoverResult
   'terminal.close': TerminalCloseResult
   'terminal.create': TerminalCatalogMutationResult
@@ -57,6 +58,8 @@ function terminalHandlerNameForSocketAction(action: string): keyof TerminalBridg
       return 'terminal.resize'
     case 'return-to-bottom':
       return 'terminal.returnToBottom'
+    case 'page-tmux':
+      return 'terminal.pageTmux'
     case 'takeover':
       return 'terminal.takeover'
     case 'close':
@@ -209,6 +212,10 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
     payload: unknown,
   ): TerminalBridgeTestOutputs['terminal.returnToBottom']
   function callTerminalHandler(
+    name: 'terminal.pageTmux',
+    payload: unknown,
+  ): TerminalBridgeTestOutputs['terminal.pageTmux']
+  function callTerminalHandler(
     name: 'terminal.takeover',
     payload: unknown,
   ): TerminalBridgeTestOutputs['terminal.takeover']
@@ -248,6 +255,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         case 'terminal.write':
         case 'terminal.resize':
         case 'terminal.returnToBottom':
+        case 'terminal.pageTmux':
         case 'terminal.reorder':
         case 'terminal.notifyBell':
           return true satisfies TerminalMutationResult
@@ -402,6 +410,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
       write: async (input) => callTerminalHandler('terminal.write', input),
       resize: async (input) => callTerminalHandler('terminal.resize', input),
       returnToBottom: async (input) => callTerminalHandler('terminal.returnToBottom', input),
+      pageTmux: async (input) => callTerminalHandler('terminal.pageTmux', input),
       takeover: async (input) => callTerminalHandler('terminal.takeover', input),
       close: async (input) => callTerminalHandler('terminal.close', input),
       create: async (input) => callTerminalHandler('terminal.create', input),

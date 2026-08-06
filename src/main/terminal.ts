@@ -40,10 +40,9 @@ export function wireTerminalIpc(): void {
   })
 }
 
-// How long to wait for a 'show' or 'failed' event before treating the
-// notification as failed. In practice 'show' fires synchronously on macOS,
-// so this only kicks in if neither event fires at all (shouldn't happen in
-// normal operation, but guards against a permanent IPC hang).
+// How long to wait for a native presentation event before treating the test as
+// failed. macOS may retain suppressed notifications in delivery history, so a
+// history entry alone is not proof that the user could see the notification.
 const NOTIFICATION_SHOW_TIMEOUT_MS = 5000
 
 async function notifyTerminalBell(webContents: WebContents, input: TerminalNotifyBellInput): Promise<boolean> {
@@ -76,18 +75,10 @@ async function notifyTerminalBell(webContents: WebContents, input: TerminalNotif
   }
 }
 
-// On macOS, Notification.show() is NOT a reliable signal of delivery on its
-// own — calling show() returns immediately regardless of whether the system
-// will actually display the notification.
-//
-// The correct way to detect failure is to listen for the 'failed' event, which
-// Electron emits (via UNUserNotificationCenter's completion handler) when:
-//   - the app binary is unsigned (common in development builds), or
-//   - the user has denied notification permission for this app.
-//
-// We race 'show' vs 'failed' and resolve accordingly. The timeout is a last
-// resort: in practice one of the two events always fires, but it prevents the
-// IPC call from hanging indefinitely if neither does.
+// Notification.show() only submits the request, so resolve from Electron's
+// native presentation events instead. User interaction is definitive success;
+// a missing event times out as failure because macOS can retain suppressed,
+// unauthorized notifications in its delivery history.
 //
 function showNotificationWithResult(title: string, body: string, repoRoot: string | null, key?: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -103,6 +94,7 @@ function showNotificationWithResult(title: string, body: string, repoRoot: strin
     notif.once('show', () => settle(true))
     notif.once('failed', () => settle(false))
     notif.once('click', () => {
+      settle(true)
       // Bring the window to the foreground, then tell the renderer to switch
       // to the repo and open the terminal tab (only when repoRoot is known).
       void activateMainWindow().catch(() => {})

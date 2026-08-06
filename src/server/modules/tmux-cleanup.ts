@@ -14,6 +14,7 @@ import {
   type TmuxSessionRecord,
 } from '#/shared/tmux-cleanup.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import type { TerminalTmuxPageDirection } from '#/shared/terminal.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { isRemoteRepoId, type RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { resolveRemoteRepoTarget } from '#/server/modules/repo-backend.ts'
@@ -26,6 +27,7 @@ import {
   killLocalTmuxSessionByName,
   listLocalHostTmuxSessions,
   listLocalTmuxSessions,
+  pageLocalTmuxSessionByName,
   tmuxHostListResultFromProcessResult,
   tmuxListResultFromProcessResult,
   type TmuxCommandResult,
@@ -49,6 +51,7 @@ export interface TmuxCleanupDependencies {
   listLocal?: typeof listLocalTmuxSessions
   killLocalByName?: typeof killLocalTmuxSessionByName
   cancelLocalModeByName?: typeof cancelLocalTmuxModeBySessionName
+  pageLocalByName?: typeof pageLocalTmuxSessionByName
   listLocalHost?: typeof listLocalHostTmuxSessions
   killLocalHostByName?: typeof killLocalHostTmuxSessionByName
   resolveRemote?: (repoId: string) => Promise<RemoteRepoTarget>
@@ -64,6 +67,7 @@ interface TmuxRuntime {
   list: () => Promise<TmuxListResult>
   kill: (session: TmuxSessionRecord) => Promise<TmuxCommandResult>
   cancelMode: (session: TmuxSessionRecord) => Promise<TmuxCommandResult>
+  page: (session: TmuxSessionRecord, direction: TerminalTmuxPageDirection) => Promise<TmuxCommandResult>
 }
 
 type RuntimeResult = { ok: true; runtime: TmuxRuntime } | { ok: false; message: string }
@@ -80,10 +84,15 @@ export interface AssociatedTmuxSessionNameInput extends AssociatedTmuxTargetInpu
   sessionName: string
 }
 
+export interface AssociatedTmuxPageInput extends AssociatedTmuxSessionNameInput {
+  direction: TerminalTmuxPageDirection
+}
+
 export type TerminalTmuxCloseResult = { ok: true; status: 'closed' | 'missing' } | { ok: false; message: string }
 export type TerminalTmuxReturnToBottomResult =
   | { ok: true; status: 'returned' | 'missing' }
   | { ok: false; message: string }
+export type TerminalTmuxPageResult = { ok: true; status: 'paged' | 'missing' } | { ok: false; message: string }
 
 export async function closeAssociatedTmuxSessionByName(
   input: AssociatedTmuxSessionNameInput,
@@ -134,6 +143,33 @@ export async function returnAssociatedTmuxSessionToBottom(
     return isTmuxSessionMissingMessage(cancelled.message)
       ? { ok: true, status: 'missing' }
       : { ok: false, message: cancelled.message }
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) }
+  }
+}
+
+export async function pageAssociatedTmuxSession(
+  input: AssociatedTmuxPageInput,
+  dependencies: TmuxCleanupDependencies = {},
+  signal?: AbortSignal,
+): Promise<TerminalTmuxPageResult> {
+  if (!isHobgoblinTmuxSessionName(input?.sessionName) || (input.direction !== 'up' && input.direction !== 'down')) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const resolved = await resolveTmuxRuntime(input, dependencies, signal)
+  if (!resolved.ok) return resolved
+  const listed = await safelyList(resolved.runtime)
+  if (!listed.ok) return listed
+  const session = associatedSessions(listed.sessions, resolved.runtime.projectRoot, resolved.runtime.targetPath).find(
+    (candidate) => candidate.sessionName === input.sessionName,
+  )
+  if (!session) return { ok: true, status: 'missing' }
+  try {
+    const paged = await resolved.runtime.page(session, input.direction)
+    if (paged.ok) return { ok: true, status: 'paged' }
+    return isTmuxSessionMissingMessage(paged.message)
+      ? { ok: true, status: 'missing' }
+      : { ok: false, message: paged.message }
   } catch (error) {
     return { ok: false, message: errorMessage(error) }
   }
@@ -285,6 +321,7 @@ async function resolveTmuxRuntime(
     const listLocal = dependencies.listLocal ?? listLocalTmuxSessions
     const killLocalByName = dependencies.killLocalByName ?? killLocalTmuxSessionByName
     const cancelLocalModeByName = dependencies.cancelLocalModeByName ?? cancelLocalTmuxModeBySessionName
+    const pageLocalByName = dependencies.pageLocalByName ?? pageLocalTmuxSessionByName
     return {
       ok: true,
       runtime: {
@@ -299,6 +336,12 @@ async function resolveTmuxRuntime(
           }),
         cancelMode: async (session) =>
           await cancelLocalModeByName(session.sessionName, {
+            projectRoot: input.projectRoot,
+            serverName: session.serverName,
+            signal,
+          }),
+        page: async (session, direction) =>
+          await pageLocalByName(session.sessionName, direction, {
             projectRoot: input.projectRoot,
             serverName: session.serverName,
             signal,
@@ -341,6 +384,20 @@ async function resolveTmuxRuntime(
               projectRoot: target.remotePath,
               sessionName: session.sessionName,
               serverName: session.serverName,
+            },
+            { signal },
+          )
+          return { ok: result.ok, message: result.ok ? result.stderr : result.message || result.stderr || 'unknown' }
+        },
+        page: async (session, direction) => {
+          const result = await runRemote(
+            target,
+            {
+              type: 'tmuxPageBySessionName',
+              projectRoot: target.remotePath,
+              sessionName: session.sessionName,
+              serverName: session.serverName,
+              direction,
             },
             { signal },
           )

@@ -621,6 +621,7 @@ function renderToolbar(options: {
     restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal,
     scrollToBottom,
+    pageTmux: vi.fn(),
     focusTerminal,
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),

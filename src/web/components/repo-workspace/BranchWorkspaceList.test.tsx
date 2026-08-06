@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, type ReactNode } from 'react'
+import { act, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
@@ -639,6 +639,49 @@ describe('BranchWorkspaceList', () => {
     expect(onActivate).not.toHaveBeenCalled()
   })
 
+  test('toggles the member file area from its interaction-start state without collapsing members', () => {
+    const member = repositoryMember()
+    const item = { ...workspace('ready'), repositories: [member] }
+    function MemberFileAreaHarness() {
+      const [fileAreaCollapsed, setFileAreaCollapsed] = useState(true)
+      return (
+        <>
+          <output data-testid="member-file-area-collapsed">{String(fileAreaCollapsed)}</output>
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={item.id}
+            onActivate={() => {}}
+            fileAreaCollapsed={fileAreaCollapsed}
+            onToggleFileArea={() => setFileAreaCollapsed((collapsed) => !collapsed)}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: true })}
+            onOpenRepositoryMember={() => setFileAreaCollapsed(false)}
+          />
+        </>
+      )
+    }
+    act(() => root.render(withTerminalContexts(<MemberFileAreaHarness />)))
+
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
+    const memberButton = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')
+    expect(memberButton).not.toBeNull()
+
+    act(() => dispatchMouseDoubleClickSequence(memberButton))
+
+    expect(container.querySelector('[data-testid="member-file-area-collapsed"]')?.textContent).toBe('false')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+
+    act(() => dispatchMouseDoubleClickSequence(memberButton))
+
+    expect(container.querySelector('[data-testid="member-file-area-collapsed"]')?.textContent).toBe('true')
+    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
+  })
+
   test('selects an inactive item and requests its file area through the double-click sequence', () => {
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     const onActivate = vi.fn()
@@ -1105,6 +1148,7 @@ function terminalCommandContext(overrides: {
     restoreTmuxSessions: overrides.restoreTmuxSessions ?? vi.fn(async () => 0),
     selectTerminal: overrides.selectTerminal ?? vi.fn(),
     scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),
@@ -1147,6 +1191,16 @@ function terminalSession(worktreeTerminalKey: string): TerminalSessionSummary {
     selected: true,
     hasBell: false,
   }
+}
+
+function dispatchMouseDoubleClickSequence(target: HTMLElement | null): void {
+  if (!target) throw new Error('missing double-click target')
+  for (const detail of [1, 2]) {
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail }))
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, detail }))
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail }))
+  }
+  target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0, detail: 2 }))
 }
 
 async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {

@@ -16,6 +16,7 @@ Use this doc for UI language and presentation rules.
 - Activating a top-level multi-repository workspace starts at its workspace overview rather than restoring a repository or branch-workspace member. Hiding the workspace repository list also returns to that overview and collapses the desktop file area; showing the list does not reopen files or restore the prior member context.
 - On desktop, double-clicking an ordinary worktree main item toggles the file area. Opening the file area selects the Files tab; double-clicking again closes it.
 - Treat a branch workspace and its member worktrees as one parent scope. Selecting a member must keep the branch workspace active.
+- Double-clicking a navigable branch workspace member worktree toggles the desktop file area without changing member-summary expansion; compact presentation opens the files surface.
 - Give parent selection, member expansion, drag reordering, and the More menu separate interaction targets. The Chevron explicitly changes expansion without selection; double-clicking the parent item selects its root context through the normal click sequence and toggles the desktop file area without changing member expansion.
 - Show exactly one selected row. When a member is selected, use a subtle parent scope marker instead of a second selected state.
 - Place actions that affect every member or change membership in the branch workspace item's More menu, keep them grouped together, and label their parent-scope impact explicitly. Adding or removing members opens a branch workspace dialog; do not put removal on an individual member row.
@@ -33,6 +34,7 @@ Use this doc for UI language and presentation rules.
 - Keep compact surface selection in component-local state. Responsive changes must not mutate the Desktop Focus preference; returning to an eligible desktop destination reapplies it.
 - Preserve terminal-first entry when an internal terminal target exists; otherwise fall back to the nearest navigable scope surface.
 - In a branch workspace, compact member navigation must keep the branch workspace active and reuse the ordinary member file and detail surfaces.
+- In compact left-side scope lists, omit the inline editor shortcut, keep the internal-terminal shortcut directly clickable, and retain editor access in the item context menu.
 
 ## Detached file area windows
 

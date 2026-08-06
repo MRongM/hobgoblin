@@ -36,7 +36,7 @@ import {
   useWorktreeTerminalSnapshot,
   useTerminalSnapshot,
 } from '#/web/components/terminal/terminal-session-store.ts'
-import { MobileTerminalCommandDeck } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
+import { MobileTerminalDock } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 import { isMobileDevice } from '#/web/components/terminal/mobile-detection.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/model.ts'
@@ -160,6 +160,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     writeExtraKey,
     writeInput,
     scrollToBottom,
+    pageTmux,
     scrollByTouch,
     beginMobileSelection,
     extendMobileSelection,
@@ -714,13 +715,13 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           .map((button) => resolveTerminalCustomButtonPreset(button, t))
           .filter((button) => button.label.trim() && button.value.trim())
       : []
-  const hasMobileCommandDeck = isMobile && isController && !!key
+  const hasMobileDock = isMobile && !!key
   const hasDesktopCycleButtons = !isMobile && isController && !!key
   const hasBottomDock =
-    !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileCommandDeck || hasDesktopCycleButtons)
+    !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileDock || hasDesktopCycleButtons)
 
   useLayoutEffect(() => {
-    if (!hasBottomDock || !hasMobileCommandDeck) {
+    if (!hasBottomDock || !hasMobileDock) {
       setVisualViewportBottomInset(0)
       return
     }
@@ -745,7 +746,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       visualViewport.removeEventListener('scroll', updateBottomInset)
       window.removeEventListener('resize', updateBottomInset)
     }
-  }, [hasBottomDock, hasMobileCommandDeck])
+  }, [hasBottomDock, hasMobileDock])
 
   const cycleTerminal = useCallback(
     (direction: -1 | 1) => {
@@ -821,17 +822,17 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     const observer = new ResizeObserver(updateDockHeight)
     observer.observe(dock)
     return () => observer.disconnect()
-  }, [hasBottomDock, hasMobileCommandDeck, visibleCustomButtons.length])
+  }, [hasBottomDock, hasMobileDock, visibleCustomButtons.length])
 
   const readonlyMessage = attachment?.role === 'viewer' ? t('terminal.mirror-controlled') : t('terminal.unowned')
   const progressVariant =
     progress?.state === 2 ? 'error' : progress?.state === 4 ? 'warning' : progress?.state === 3 ? 'indeterminate' : ''
   const slotStyle =
-    bottomDockHeight === null && !hasMobileCommandDeck
+    bottomDockHeight === null && !hasMobileDock
       ? undefined
       : ({
           ...(bottomDockHeight === null ? {} : { '--goblin-terminal-bottom-dock-height': `${bottomDockHeight}px` }),
-          ...(hasMobileCommandDeck
+          ...(hasMobileDock
             ? { '--goblin-terminal-visual-viewport-bottom-inset': `${visualViewportBottomInset}px` }
             : {}),
         } as CSSProperties)
@@ -993,22 +994,37 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       {key && hasBottomDock && (
         <div ref={bottomDockRef} className="goblin-terminal-bottom-dock">
           {customButtonsDock}
-          {hasMobileCommandDeck && (
-            <MobileTerminalCommandDeck
-              key={key}
+          {hasMobileDock && (
+            <MobileTerminalDock
+              terminalKey={key}
               terminalCount={switchableTerminalCount}
-              fitToWidth={fitToWidth}
-              onExtraKey={(input) => writeExtraKey(key, input)}
-              onInput={(data) => writeInput(key, data)}
+              projection={
+                isController
+                  ? {
+                      kind: 'controller',
+                      inputMethodVisible: visualViewportBottomInset > 0,
+                      fitToWidth,
+                      onExtraKey: (input) => writeExtraKey(key, input),
+                      onInput: (data) => writeInput(key, data),
+                      onFitToWidthChange: setFitToWidth,
+                      onEnterFocus: () => setMobileFocusMode(true),
+                    }
+                  : isReadonly
+                    ? {
+                        kind: 'readonly',
+                        takeoverPending: snapshot.takeoverPending === true,
+                        onTakeover: () => takeover(key),
+                        ...(descriptor?.tmuxBacked ? { onTmuxPage: (direction) => pageTmux(key, direction) } : {}),
+                      }
+                    : { kind: 'pending' }
+              }
               onScrollToBottom={handleScrollToBottom}
               onCycleTerminal={cycleTerminal}
-              onFitToWidthChange={setFitToWidth}
-              onEnterFocus={() => setMobileFocusMode(true)}
             />
           )}
         </div>
       )}
-      {isReadonly && (
+      {isReadonly && !isMobile && (
         <ViewerStatus
           message={readonlyMessage}
           scrollToBottomLabel={t('terminal.command-deck.scroll-to-bottom')}

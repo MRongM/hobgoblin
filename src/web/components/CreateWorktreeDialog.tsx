@@ -21,10 +21,7 @@ import { ToggleGroup, ToggleGroupItem } from '#/web/components/ui/toggle-group.t
 import { useRemotePathSuggestions } from '#/web/hooks/useRemotePathSuggestions.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
-import {
-  WorktreeBootstrapCandidateList,
-  type WorktreeBootstrapCandidateChoice,
-} from '#/web/components/WorktreeBootstrapCandidateList.tsx'
+import { WorktreeDependencyTree } from '#/web/components/WorktreeDependencyTree.tsx'
 import { WorktreeBootstrapSourcePicker } from '#/web/components/WorktreeBootstrapSourcePicker.tsx'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -39,7 +36,7 @@ import {
   type CreateWorktreeInput,
 } from '#/shared/worktree-create.ts'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
-import type { WorktreeBootstrapPreflight, WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
 import type { RepositoryDependencySource } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
 type CreateWorktreeDialogMode = CreateWorktreeInput['mode']['kind']
@@ -71,9 +68,6 @@ interface Props {
 }
 
 interface WorktreeBootstrapPromptState {
-  loading: boolean
-  preflight: WorktreeBootstrapPreflight | null
-  error: boolean
   source?: RepositoryDependencySource
   sourceOptions?: readonly RepositoryDependencySource[]
 }
@@ -105,7 +99,7 @@ export function CreateWorktreeDialog({
   const [remoteBranches, setRemoteBranches] = useState<string[]>([])
   const [remoteBranchQuery, setRemoteBranchQuery] = useState('')
   const [remoteBranchesLoading, setRemoteBranchesLoading] = useState(false)
-  const [bootstrapChoices, setBootstrapChoices] = useState<Record<string, WorktreeBootstrapCandidateChoice>>({})
+  const [bootstrapSelections, setBootstrapSelections] = useState<WorktreeBootstrapSelection[]>([])
   const [originatingBranch, setOriginatingBranch] = useState('')
   const localBranchNames = repo.data.branches.map((b) => b.name)
   const hasLocalBranch = (name: string) => localBranchNames.includes(name)
@@ -133,7 +127,7 @@ export function CreateWorktreeDialog({
     setRemoteBranches([])
     setRemoteBranchQuery('')
     setRemoteBranchesLoading(false)
-    setBootstrapChoices({})
+    setBootstrapSelections([])
     setOriginatingBranch(initialBase)
   }, [open])
 
@@ -145,8 +139,12 @@ export function CreateWorktreeDialog({
 
   const bootstrapSourceId = worktreeBootstrap?.source?.id
   useEffect(() => {
-    if (open) setBootstrapChoices({})
+    if (open) setBootstrapSelections([])
   }, [bootstrapSourceId, open])
+
+  useEffect(() => {
+    if (!bootstrapEnabled) setBootstrapSelections([])
+  }, [bootstrapEnabled])
 
   useEffect(() => {
     if (!open || mode !== 'trackRemoteBranch' || remoteBranches.length > 0) return
@@ -225,18 +223,9 @@ export function CreateWorktreeDialog({
       : ''
 
   const branchActionBusy = repo.operations.branchAction.phase !== 'idle'
-  const bootstrapBusy = bootstrapEnabled && worktreeBootstrap?.loading === true
   const validPath = remoteTarget ? isResolvableRemotePathInput(effectivePath) : effectivePath.length > 0
   const input = buildInput()
-  const canSubmit = !!input && validPath && !branchActionBusy && !bootstrapBusy
-  const bootstrapCandidates =
-    bootstrapEnabled && worktreeBootstrap?.preflight?.kind === 'candidates'
-      ? worktreeBootstrap.preflight.candidates
-      : []
-  const bootstrapSelections = bootstrapCandidates.flatMap((candidate): WorktreeBootstrapSelection[] => {
-    const choice = bootstrapChoices[candidate.path] ?? 'skip'
-    return choice === 'skip' ? [] : [{ path: candidate.path, mode: choice }]
-  })
+  const canSubmit = !!input && validPath && !branchActionBusy
 
   useEffect(() => {
     if (!open || mode !== 'trackRemoteBranch') return
@@ -298,11 +287,12 @@ export function CreateWorktreeDialog({
 
   function handleSubmit() {
     const nextInput = buildInput()
-    if (!nextInput || branchActionBusy || bootstrapBusy) return
+    if (!nextInput || branchActionBusy) return
+    const submittedSelections = bootstrapEnabled && worktreeBootstrap?.source ? bootstrapSelections : []
     void onCreate({
       input: nextInput,
-      selections: bootstrapSelections,
-      ...(bootstrapSelections.length > 0 && worktreeBootstrap?.source?.kind === 'branch'
+      selections: submittedSelections,
+      ...(submittedSelections.length > 0 && worktreeBootstrap?.source
         ? { sourceWorktreePath: worktreeBootstrap.source.worktreePath }
         : {}),
     })
@@ -584,7 +574,7 @@ export function CreateWorktreeDialog({
               aria-label={t('action.create-worktree-bootstrap-toggle')}
               title={t('action.create-worktree-bootstrap-toggle')}
               onCheckedChange={(enabled) => {
-                if (!enabled) setBootstrapChoices({})
+                if (!enabled) setBootstrapSelections([])
                 onBootstrapEnabledChange?.(enabled)
               }}
             />
@@ -595,27 +585,22 @@ export function CreateWorktreeDialog({
           <WorktreeBootstrapSourcePicker
             source={worktreeBootstrap.source}
             options={worktreeBootstrap.sourceOptions ?? []}
-            pending={bootstrapBusy || branchActionBusy}
+            pending={branchActionBusy}
             onSourceChange={(source) => {
-              setBootstrapChoices({})
+              setBootstrapSelections([])
               onBootstrapSourceChange?.(source)
             }}
           />
         ) : null}
-        {bootstrapCandidates.length > 0 && (
-          <WorktreeBootstrapCandidateList
-            candidates={bootstrapCandidates}
-            choices={bootstrapChoices}
-            onChoiceChange={(candidatePath, choice) => {
-              setBootstrapChoices((current) => ({ ...current, [candidatePath]: choice }))
-            }}
+        {bootstrapEnabled && worktreeBootstrap?.source ? (
+          <WorktreeDependencyTree
+            repoId={repo.id}
+            sourceWorktreePath={worktreeBootstrap.source.worktreePath}
+            selections={bootstrapSelections}
+            disabled={branchActionBusy}
+            onSelectionsChange={setBootstrapSelections}
           />
-        )}
-        {bootstrapEnabled && worktreeBootstrap?.error && (
-          <p role="status" aria-live="polite" className="text-xs leading-4 text-muted-foreground">
-            {t('action.create-worktree-bootstrap-preflight-error')}
-          </p>
-        )}
+        ) : null}
         <DialogFooter className="pt-4">
           <Button type="button" variant="outline" className={cn(compact && 'w-full')} onClick={onClose}>
             {t('dialog.cancel')}

@@ -20,15 +20,16 @@ export type WorktreeBootstrapDecision =
   | {
       kind: 'materialize'
       selections: WorktreeBootstrapSelection[]
-      candidateScope?: WorktreeBootstrapCandidateScope
-      /** Worktree whose untracked files produced these selections. */
-      sourceWorktreePath?: string
+      /** Existing worktree whose selected entries should be materialized. */
+      sourceWorktreePath: string
     }
 
-export type WorktreeBootstrapCandidateKind = 'file' | 'directory'
-export type WorktreeBootstrapCandidateScope = 'all-untracked' | 'ignored-only'
 export type WorktreeBootstrapSelectionMode = 'copy' | 'symlink'
 export type WorktreeBootstrapMaterializationMode = WorktreeBootstrapSelectionMode | 'hardlink'
+
+export type WorktreeBootstrapTargetDecision =
+  | { kind: 'skip' }
+  | { kind: 'materialize'; selections: WorktreeBootstrapSelection[] }
 
 export interface WorktreeBootstrapTargetEntry {
   path: string
@@ -46,21 +47,10 @@ export type WorktreeBootstrapTargetPreflightResult =
   | { ok: true; preflight: WorktreeBootstrapTargetPreflight }
   | { ok: false; message: string }
 
-export interface WorktreeBootstrapCandidate {
-  path: string
-  kind: WorktreeBootstrapCandidateKind
-}
-
 export interface WorktreeBootstrapSelection {
   path: string
   mode: WorktreeBootstrapSelectionMode
 }
-
-export type WorktreeBootstrapPreflight = { kind: 'candidates'; candidates: WorktreeBootstrapCandidate[] }
-
-export type WorktreeBootstrapPreflightResult =
-  | { ok: true; preflight: WorktreeBootstrapPreflight }
-  | { ok: false; message: string }
 
 export const WORKTREE_BOOTSTRAP_SUMMARY_PATH_LIMIT = 8
 
@@ -76,7 +66,7 @@ export function normalizeWorktreeBootstrapSourcePath(value: unknown): string | n
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) ? value : null
 }
 
-export function isWorktreeBootstrapCandidatePath(value: unknown): value is string {
+export function isWorktreeBootstrapRootEntryPath(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length > 0 &&
@@ -90,18 +80,45 @@ export function isWorktreeBootstrapCandidatePath(value: unknown): value is strin
   )
 }
 
-export function normalizeWorktreeBootstrapSelections(value: unknown): WorktreeBootstrapSelection[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null
+export function normalizeWorktreeDependencyPath(value: unknown): string | null {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_IPC_PATH_LENGTH ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    value.startsWith('/') ||
+    value.includes('\\') ||
+    /[\0-\x1f\x7f]/.test(value)
+  ) {
+    return null
+  }
+
+  const rawSegments = value.split('/')
+  if (rawSegments.some((segment) => segment === '..' || segment === '.git')) return null
+  const normalized = rawSegments.filter((segment) => segment.length > 0 && segment !== '.').join('/')
+  return normalized.length > 0 && normalized.length <= MAX_IPC_PATH_LENGTH ? normalized : null
+}
+
+export function normalizeWorktreeBootstrapSelections(value: unknown): WorktreeBootstrapSelection[] {
+  if (!Array.isArray(value)) return []
   const result: WorktreeBootstrapSelection[] = []
-  const seen = new Set<string>()
   for (const item of value) {
-    if (!item || typeof item !== 'object') return null
+    if (!item || typeof item !== 'object') continue
     const raw = item as Record<string, unknown>
-    if (!isWorktreeBootstrapCandidatePath(raw.path)) return null
-    if (raw.mode !== 'copy' && raw.mode !== 'symlink') return null
-    if (seen.has(raw.path)) return null
-    seen.add(raw.path)
-    result.push({ path: raw.path, mode: raw.mode })
+    const normalizedPath = normalizeWorktreeDependencyPath(raw.path)
+    if (!normalizedPath || (raw.mode !== 'copy' && raw.mode !== 'symlink')) continue
+    if (
+      result.some(
+        (selection) =>
+          selection.path === normalizedPath || normalizedPath.startsWith(`${selection.path}/`),
+      )
+    ) {
+      continue
+    }
+    for (let index = result.length - 1; index >= 0; index -= 1) {
+      if (result[index]!.path.startsWith(`${normalizedPath}/`)) result.splice(index, 1)
+    }
+    result.push({ path: normalizedPath, mode: raw.mode })
   }
   return result
 }

@@ -161,6 +161,34 @@ describe('WorkspaceListItem', () => {
     expect(document.body.querySelectorAll('[data-slot="dropdown-menu-separator"]')).toHaveLength(1)
   })
 
+  test('hides the compact editor shortcut while keeping the internal terminal directly clickable', async () => {
+    const onEditor = vi.fn()
+    const onTerminal = vi.fn()
+    act(() => {
+      root.render(
+        <WorkspaceListItemActionDock
+          editor={action('editor', { onSelect: onEditor })}
+          internalTerminal={action('terminal', { onSelect: onTerminal })}
+        />,
+      )
+    })
+
+    const editorSlot = container.querySelector('.workspace-list-item-action-editor')
+    const terminalButton = container.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')
+
+    expect(editorSlot?.classList.contains('hidden')).toBe(true)
+    expect(editorSlot?.classList.contains('sm:inline-flex')).toBe(true)
+    expect(terminalButton).not.toBeNull()
+
+    await act(async () => {
+      terminalButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(onTerminal).toHaveBeenCalledTimes(1)
+    expect(onEditor).not.toHaveBeenCalled()
+  })
+
   test('hides only structurally inapplicable menu actions and isolates quick-action clicks', async () => {
     const onActivate = vi.fn()
     const onTerminal = vi.fn()
