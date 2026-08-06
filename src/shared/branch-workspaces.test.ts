@@ -93,7 +93,10 @@ describe('branch workspace contracts', () => {
             worktreeBootstrap: {
               kind: 'materialize',
               sourceWorktreePath: '/untrusted/client/path',
-              selections: [{ path: 'node_modules', mode: 'symlink' }],
+              selections: [
+                { path: 'backend/.venv', mode: 'symlink' },
+                { path: '../invalid', mode: 'copy' },
+              ],
             },
           },
         ],
@@ -111,8 +114,7 @@ describe('branch workspace contracts', () => {
             syncBeforeCreate: true,
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'all-untracked',
-              selections: [{ path: 'node_modules', mode: 'symlink' }],
+              selections: [{ path: 'backend/.venv', mode: 'symlink' }],
               sourceWorktreePath: '/untrusted/client/path',
             },
           },
@@ -122,7 +124,7 @@ describe('branch workspace contracts', () => {
     })
   })
 
-  test('rejects a malformed repository dependency source path', () => {
+  test('downgrades a malformed repository dependency source path to skip', () => {
     expect(
       normalizeBranchWorkspacePlanRequest({
         operation: 'create',
@@ -140,7 +142,46 @@ describe('branch workspace contracts', () => {
         ],
         auxiliaryEntries: [],
       }),
-    ).toEqual({ ok: false, message: 'error.invalid-arguments' })
+    ).toEqual({
+      ok: true,
+      request: {
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+            worktreeBootstrap: { kind: 'skip' },
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+    })
+  })
+
+  test('downgrades unsupported or empty repository dependency decisions to skip', () => {
+    for (const worktreeBootstrap of [
+      { kind: 'run', configHash: 'sha256:client', configTrusted: false },
+      {
+        kind: 'materialize',
+        sourceWorktreePath: '/repo',
+        selections: [{ path: '../invalid', mode: 'copy' }],
+      },
+    ]) {
+      const result = normalizeBranchWorkspacePlanRequest({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [{ repositoryName: 'api', baseBranch: 'main', worktreeBootstrap }],
+        auxiliaryEntries: [],
+      })
+      expect(result).toMatchObject({
+        ok: true,
+        request: {
+          repositories: [{ worktreeBootstrap: { kind: 'skip' } }],
+        },
+      })
+    }
   })
 
   test('normalizes repair and remove requests as distinct operations', () => {
@@ -217,21 +258,6 @@ describe('branch workspace contracts', () => {
         branch: 'feature/auth',
         repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
         auxiliaryEntries: [{ name: 'README.md', mode: 'move' }],
-      },
-    ],
-    [
-      'configured bootstrap decision supplied by a client',
-      {
-        operation: 'create',
-        branch: 'feature/auth',
-        repositories: [
-          {
-            repositoryName: 'api',
-            baseBranch: 'main',
-            worktreeBootstrap: { kind: 'run', configHash: 'sha256:client', configTrusted: false },
-          },
-        ],
-        auxiliaryEntries: [],
       },
     ],
     [

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
@@ -63,10 +63,14 @@ vi.mock('#/web/components/tab-strip/useFocusRegistry.ts', () => ({
 
 vi.mock('#/web/stores/i18n.ts', () => ({ useT: () => (key: string) => key }))
 vi.mock('#/web/components/repo-workspace/FocusProjectSwitcher.tsx', () => ({
-  FocusProjectSwitcher: () => <div data-testid="focus-project-switcher" />,
+  FocusProjectSwitcher: ({ repoId, compact }: { repoId: string; compact?: boolean }) => (
+    <div data-testid="focus-project-switcher" data-repo-id={repoId} data-compact={String(compact)} />
+  ),
 }))
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx', () => ({
-  WorkspaceRepositorySwitcher: () => <div data-testid="workspace-repository-switcher" />,
+  WorkspaceRepositorySwitcher: ({ repoId, compact }: { repoId: string; compact?: boolean }) => (
+    <div data-testid="workspace-repository-switcher" data-repo-id={repoId} data-compact={String(compact)} />
+  ),
 }))
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
@@ -188,6 +192,42 @@ describe('BranchWorkspaceTerminalPanel', () => {
     expect(terminalTabsProps.at(-1)?.responsiveCompact).toBe(true)
   })
 
+  test('matches the Git workspace context hierarchy in compact UI', async () => {
+    compactUi = true
+
+    await renderPanel({ toolbarLeading: <button data-testid="scope-back" /> })
+
+    const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
+    const orderedControls = Array.from(toolbar?.querySelectorAll<HTMLElement>('[data-testid]') ?? []).map(
+      (element) => element.dataset.testid,
+    )
+    const projectSwitcher = container.querySelector<HTMLElement>('[data-testid="focus-project-switcher"]')
+    const workspaceSwitcher = container.querySelector<HTMLElement>('[data-testid="workspace-repository-switcher"]')
+
+    expect(orderedControls).toEqual([
+      'scope-back',
+      'focus-project-switcher',
+      'workspace-repository-switcher',
+      'terminal-tabs',
+    ])
+    expect(projectSwitcher?.dataset).toMatchObject({ repoId: ROOT, compact: 'true' })
+    expect(workspaceSwitcher?.dataset).toMatchObject({ repoId: ROOT, compact: 'true' })
+    expect(terminalTabsProps.at(-1)?.focusMode).toBe(true)
+  })
+
+  test('keeps the complete compact hierarchy in the shared mobile topbar scroll flow', async () => {
+    compactUi = true
+
+    await renderPanel({ toolbarLeading: <button data-testid="scope-back" /> })
+
+    const toolbar = container.querySelector<HTMLElement>('[data-testid="branch-workspace-terminal-toolbar"]')
+    const content = toolbar?.firstElementChild
+
+    expect(toolbar?.style.height).toBe('41px')
+    expect(toolbar?.classList.contains('mobile-topbar-scroll')).toBe(true)
+    expect(content?.classList.contains('mobile-topbar-scroll-content')).toBe(true)
+  })
+
   test('lets terminal tabs use the available width before the drag spacer', async () => {
     await renderPanel()
 
@@ -268,6 +308,7 @@ describe('openBranchWorkspaceInternalTerminal', () => {
 
 async function renderPanel(
   props: {
+    toolbarLeading?: ReactNode
     terminalFocusMode?: boolean
     onExitTerminalFocus?: () => void
   } = {},

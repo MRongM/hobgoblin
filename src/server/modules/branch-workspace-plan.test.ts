@@ -4,9 +4,8 @@ import { buildBranchWorkspacePlan } from '#/server/modules/branch-workspace-plan
 import type { BranchWorkspaceManifestSourceSnapshot } from '#/server/modules/branch-workspace-source.ts'
 import type { BranchWorkspaceManifest, BranchWorkspacePathInspection } from '#/shared/branch-workspaces.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
-import type { BranchSnapshotInfo } from '#/shared/git-types.ts'
+import type { BranchSnapshotInfo, WorktreeInfo } from '#/shared/git-types.ts'
 import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
-import type { WorktreeBootstrapPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
 import type { WorktreeBootstrapTargetPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 const ROOT = path.resolve('/workspace')
@@ -30,6 +29,18 @@ function snapshot(...branches: ReturnType<typeof branch>[]): RepoSnapshot {
   return { current: 'main', branches }
 }
 
+function worktree(
+  worktreePath: string,
+  options: Partial<Pick<WorktreeInfo, 'branch' | 'head' | 'isPrimary' | 'isPrunable'>> = {},
+): WorktreeInfo {
+  return {
+    path: worktreePath,
+    isBare: false,
+    isPrimary: false,
+    ...options,
+  }
+}
+
 function trackedBranch(name: string, tracking: string, worktreePath?: string): BranchSnapshotInfo {
   return { ...branch(name, worktreePath), tracking }
 }
@@ -51,13 +62,26 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
     ),
     readManifests: vi.fn(async (): Promise<BranchWorkspaceManifestSourceSnapshot> => ({ kind: 'missing' })),
     getSnapshot: vi.fn(async (repoId: string) => snapshots[repoId] ?? null),
+    getWorktrees: vi.fn(async (repoId: string): Promise<WorktreeInfo[]> => {
+      const repoSnapshot = snapshots[repoId]
+      if (!repoSnapshot) return []
+      return repoSnapshot.branches.flatMap((candidate) =>
+        candidate.worktree?.path
+          ? [
+              worktree(candidate.worktree.path, {
+                branch: candidate.name,
+                isPrimary: candidate.worktree.isPrimary ?? candidate.worktree.path === repoId,
+                isPrunable: candidate.worktree.isPrunable,
+                head: candidate.worktree.head,
+              }),
+            ]
+          : [],
+      )
+    }),
     getRemoteBranches: vi.fn(async (_repoId: string) => [] as string[]),
-    getBootstrapPreflight: vi.fn(
-      async (): Promise<WorktreeBootstrapPreflightResult> => ({
-        ok: true,
-        preflight: { kind: 'candidates', candidates: [] },
-      }),
-    ),
+    getBootstrapPreflight: vi.fn(async () => {
+      throw new Error('repository dependency candidate preflight must not run')
+    }),
     getBootstrapTargetPreflight: vi.fn(
       async (): Promise<WorktreeBootstrapTargetPreflightResult> => ({
         ok: true,
@@ -104,7 +128,6 @@ function legacyBootstrapManifest(): BranchWorkspaceManifest {
   Object.assign(manifest.repositories[0]!, {
     worktreeBootstrap: {
       kind: 'materialize',
-      candidateScope: 'ignored-only',
       selections: [{ path: 'node_modules', mode: 'symlink' }],
     },
     bootstrapProgress: 'failed',
@@ -525,13 +548,6 @@ describe('branch workspace create planner', () => {
     const sourceWorktreePath = path.join(ROOT, 'api-main')
     const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main', sourceWorktreePath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
-    deps.getBootstrapPreflight.mockResolvedValue({
-      ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [],
-      },
-    })
     deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => {
       if (candidatePath === path.join(ROOT, 'README.md')) {
         return {
@@ -578,20 +594,10 @@ describe('branch workspace create planner', () => {
     if (first.ok && second.ok) expect(second.plan.token).toBe(first.plan.token)
   })
 
-  test('plans selected untracked repository dependencies from the base branch worktree', async () => {
+  test('plans selected deep repository dependencies without candidate preflight', async () => {
     const sourceWorktreePath = path.join(ROOT, 'api-main')
     const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main', sourceWorktreePath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
-    deps.getBootstrapPreflight.mockResolvedValue({
-      ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [
-          { path: 'node_modules', kind: 'directory' },
-          { path: '.cache', kind: 'directory' },
-        ],
-      },
-    })
 
     const result = await buildBranchWorkspacePlan(
       ROOT,
@@ -604,8 +610,7 @@ describe('branch workspace create planner', () => {
             baseBranch: 'main',
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'all-untracked',
-              selections: [{ path: 'node_modules', mode: 'symlink' }],
+              selections: [{ path: 'backend/.venv', mode: 'symlink' }],
               sourceWorktreePath,
             },
           },
@@ -623,8 +628,7 @@ describe('branch workspace create planner', () => {
             repositoryName: 'api',
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'all-untracked',
-              selections: [{ path: 'node_modules', mode: 'symlink' }],
+              selections: [{ path: 'backend/.venv', mode: 'symlink' }],
               sourceWorktreePath,
             },
             confirmationRequired: false,
@@ -633,12 +637,7 @@ describe('branch workspace create planner', () => {
         requiredApprovals: [],
       },
     })
-    expect(deps.getBootstrapPreflight).toHaveBeenCalledWith(
-      path.join(ROOT, 'api'),
-      undefined,
-      'all-untracked',
-      sourceWorktreePath,
-    )
+    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 
   test('plans repository dependencies from another known non-base worktree', async () => {
@@ -652,13 +651,6 @@ describe('branch workspace create planner', () => {
       ),
     })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
-    deps.getBootstrapPreflight.mockResolvedValue({
-      ok: true,
-      preflight: {
-        kind: 'candidates',
-        candidates: [{ path: '.env', kind: 'file' }],
-      },
-    })
 
     const result = await buildBranchWorkspacePlan(
       ROOT,
@@ -671,7 +663,6 @@ describe('branch workspace create planner', () => {
             baseBranch: 'develop',
             worktreeBootstrap: {
               kind: 'materialize',
-              candidateScope: 'all-untracked',
               selections: [{ path: '.env', mode: 'copy' }],
               sourceWorktreePath: alternativeSourcePath,
             },
@@ -682,7 +673,7 @@ describe('branch workspace create planner', () => {
       deps,
     )
 
-    expect(deps.getBootstrapPreflight).toHaveBeenCalledWith(repoId, undefined, 'all-untracked', alternativeSourcePath)
+    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
     expect(result).toMatchObject({
       ok: true,
       plan: {
@@ -698,7 +689,7 @@ describe('branch workspace create planner', () => {
     })
   })
 
-  test('rejects a repository dependency source that is not a known worktree', async () => {
+  test('downgrades a repository dependency source that is not a known worktree to skip', async () => {
     const repoId = path.join(ROOT, 'api')
     const deps = dependencies({
       [repoId]: snapshot(branch('main', repoId), branch('develop', path.join(ROOT, 'api-develop'))),
@@ -717,7 +708,6 @@ describe('branch workspace create planner', () => {
               baseBranch: 'develop',
               worktreeBootstrap: {
                 kind: 'materialize',
-                candidateScope: 'all-untracked',
                 selections: [{ path: '.env', mode: 'copy' }],
                 sourceWorktreePath: path.join(ROOT, 'unknown-source'),
               },
@@ -727,36 +717,61 @@ describe('branch workspace create planner', () => {
         },
         deps,
       ),
-    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    ).resolves.toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ worktreeBootstrap: { kind: 'skip' } }],
+      },
+    })
     expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 
-  test('rejects a repository dependency that is no longer untracked', async () => {
-    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+  test('plans repository dependencies from a detached worktree source', async () => {
+    const repoId = path.join(ROOT, 'api')
+    const detachedSourcePath = path.join(ROOT, 'api-detached')
+    const deps = dependencies({ [repoId]: snapshot(branch('main', repoId)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.getWorktrees.mockResolvedValue([
+      worktree(repoId, { branch: 'main', isPrimary: true }),
+      worktree(detachedSourcePath, { head: 'abcdef0' }),
+    ])
 
-    await expect(
-      buildBranchWorkspacePlan(
-        ROOT,
-        {
-          operation: 'create',
-          branch: BRANCH,
-          repositories: [
-            {
-              repositoryName: 'api',
-              baseBranch: 'main',
-              worktreeBootstrap: {
-                kind: 'materialize',
-                candidateScope: 'all-untracked',
-                selections: [{ path: '.env', mode: 'copy' }],
-              },
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            baseBranch: 'main',
+            worktreeBootstrap: {
+              kind: 'materialize',
+              selections: [{ path: 'frontend/node_modules', mode: 'copy' }],
+              sourceWorktreePath: detachedSourcePath,
             },
-          ],
-          auxiliaryEntries: [],
-        },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: false, message: 'error.worktree-bootstrap-selection-stale' })
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            worktreeBootstrap: {
+              kind: 'materialize',
+              selections: [{ path: 'frontend/node_modules', mode: 'copy' }],
+              sourceWorktreePath: detachedSourcePath,
+            },
+          },
+        ],
+      },
+    })
+    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 })
 

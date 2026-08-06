@@ -368,6 +368,9 @@ describe('BranchWorkspacePane', () => {
       '[data-testid="branch-workspace-terminal-panel"] [data-testid="show-scope"]',
     )
     expect(back?.closest('[data-testid="mock-terminal-toolbar-leading"]')).not.toBeNull()
+    expect(back?.getAttribute('data-size')).toBe('icon')
+    expect(back?.querySelector('.lucide-panel-left-open')).not.toBeNull()
+    expect(back?.querySelector('.lucide-arrow-left')).toBeNull()
     expect(container.querySelector('[data-testid="rail"]')).toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).toBeNull()
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()

@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
-  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
+  getRepositoryFileTree: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   commitRepositoryChanges: vi.fn(),
 }))
@@ -69,7 +69,7 @@ vi.mock('#/web/repo-client.ts', async () => {
   return {
     ...actual,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
-    getRepositoryWorktreeBootstrapPreflight: repoClientMocks.getRepositoryWorktreeBootstrapPreflight,
+    getRepositoryFileTree: repoClientMocks.getRepositoryFileTree,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
     commitRepositoryChanges: repoClientMocks.commitRepositoryChanges,
   }
@@ -128,9 +128,11 @@ describe('useBranchActionItems', () => {
       dialogs: null,
     })
     repoClientMocks.getCommitMessageProviders.mockResolvedValue({ codex: false, claude: false })
-    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
+    repoClientMocks.getRepositoryFileTree.mockResolvedValue({
       ok: true,
-      preflight: { kind: 'candidates', candidates: [] },
+      worktreePath: '/tmp/repo',
+      dirPath: '/tmp/repo',
+      entries: [],
     })
     settingsQueryMocks.useSettingsSnapshotQuery.mockReturnValue({
       data: { repoSettings: [] },
@@ -1060,11 +1062,37 @@ describe('useBranchActionItems', () => {
     )
   })
 
-  test('forwards selected candidates as a one-time materialize decision', async () => {
-    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValueOnce({
-      ok: true,
-      preflight: { kind: 'candidates', candidates: [{ path: '.env', kind: 'file' }] },
-    })
+  test('forwards a selected nested dependency without candidate preflight', async () => {
+    repoClientMocks.getRepositoryFileTree.mockImplementation(
+      async (_repoId: string, worktreePath: string, dirPath: string) =>
+        dirPath === worktreePath
+          ? {
+              ok: true,
+              worktreePath,
+              dirPath,
+              entries: [
+                {
+                  name: 'backend',
+                  absolutePath: `${worktreePath}/backend`,
+                  relativePath: 'backend',
+                  kind: 'directory',
+                },
+              ],
+            }
+          : {
+              ok: true,
+              worktreePath,
+              dirPath,
+              entries: [
+                {
+                  name: '.venv',
+                  absolutePath: `${worktreePath}/backend/.venv`,
+                  relativePath: 'backend/.venv',
+                  kind: 'directory',
+                },
+              ],
+            },
+    )
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
     const current = createRepoBranch('main', { isCurrent: true })
@@ -1074,6 +1102,7 @@ describe('useBranchActionItems', () => {
       branches: [current, branch],
       currentBranch: 'main',
       selectedBranch: branch.name,
+      worktreesByPath: createSourceWorktrees(),
     })
 
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
@@ -1084,18 +1113,22 @@ describe('useBranchActionItems', () => {
     await act(async () => {
       await createWorktree.onSelect()
     })
-    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
     clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
-      expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
+      expect(document.querySelector('[data-worktree-dependency-expand="backend"]')).not.toBeNull()
     })
-    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledWith(
+    expect(repoClientMocks.getRepositoryFileTree).toHaveBeenCalledWith(
       '/tmp/repo',
-      expect.any(AbortSignal),
-      undefined,
       '/tmp/repo-base',
+      '/tmp/repo-base',
+      expect.any(AbortSignal),
     )
-    clickButton('[data-materialization-item=".env"] [data-materialization-choice="copy"]')
+    clickButton('[data-worktree-dependency-expand="backend"]')
+    await waitForAssertion(() => {
+      expect(document.querySelector('[data-worktree-dependency-path="backend/.venv"]')).not.toBeNull()
+    })
+    clickElement('[data-worktree-dependency-path="backend/.venv"]')
+    changeNativeSelect('[data-worktree-dependency-mode="backend/.venv"]', 'copy')
     setInputValue('#cwt-branch', 'feature/new')
     clickButton('button[type="submit"]')
 
@@ -1114,7 +1147,7 @@ describe('useBranchActionItems', () => {
         },
         worktreeBootstrap: {
           kind: 'materialize',
-          selections: [{ path: '.env', mode: 'copy' }],
+          selections: [{ path: 'backend/.venv', mode: 'copy' }],
           sourceWorktreePath: '/tmp/repo-base',
         },
       },
@@ -1122,11 +1155,11 @@ describe('useBranchActionItems', () => {
     )
   })
 
-  test('aborts dependency loading and submits skip when dependencies are disabled', async () => {
-    let preflightSignal: AbortSignal | undefined
-    repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockImplementationOnce(
-      (_repoId: string, signal: AbortSignal) => {
-        preflightSignal = signal
+  test('aborts dependency tree loading and submits skip when dependencies are disabled', async () => {
+    let fileTreeSignal: AbortSignal | undefined
+    repoClientMocks.getRepositoryFileTree.mockImplementationOnce(
+      (_repoId: string, _worktreePath: string, _dirPath: string, signal: AbortSignal) => {
+        fileTreeSignal = signal
         return new Promise<never>(() => {})
       },
     )
@@ -1139,6 +1172,7 @@ describe('useBranchActionItems', () => {
       branches: [current, branch],
       currentBranch: 'main',
       selectedBranch: branch.name,
+      worktreesByPath: createSourceWorktrees(),
     })
 
     const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
@@ -1147,16 +1181,15 @@ describe('useBranchActionItems', () => {
     if (!createWorktree) throw new Error('missing create-worktree action')
 
     await act(async () => createWorktree.onSelect())
-    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).not.toHaveBeenCalled()
 
     clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
-      expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenCalledTimes(1)
+      expect(repoClientMocks.getRepositoryFileTree).toHaveBeenCalledTimes(1)
     })
-    expect(preflightSignal?.aborted).toBe(false)
+    expect(fileTreeSignal?.aborted).toBe(false)
 
     clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
-    await waitForAssertion(() => expect(preflightSignal?.aborted).toBe(true))
+    await waitForAssertion(() => expect(fileTreeSignal?.aborted).toBe(true))
     setInputValue('#cwt-branch', 'feature/new')
     clickButton('button[type="submit"]')
 
@@ -1179,13 +1212,7 @@ describe('useBranchActionItems', () => {
     )
   })
 
-  test('falls back from an empty branch source to the primary worktree', async () => {
-    repoClientMocks.getRepositoryWorktreeBootstrapPreflight
-      .mockResolvedValueOnce({ ok: true, preflight: { kind: 'candidates', candidates: [] } })
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: { kind: 'candidates', candidates: [{ path: 'node_modules', kind: 'directory' }] },
-      })
+  test('keeps the context source when its tree is empty and lists every existing worktree', async () => {
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
     const current = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
@@ -1207,29 +1234,35 @@ describe('useBranchActionItems', () => {
     await act(async () => createWorktree.onSelect())
     clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
-      expect(document.querySelector('[data-materialization-item="node_modules"]')).not.toBeNull()
+      expect(repoClientMocks.getRepositoryFileTree).toHaveBeenCalledTimes(1)
     })
 
-    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mock.calls).toEqual([
-      ['/tmp/repo', expect.any(AbortSignal), undefined, '/tmp/repo-base'],
-      ['/tmp/repo', expect.any(AbortSignal), undefined, undefined],
-    ])
-    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
+    expect(sourceSelect().value).toBe('worktree:/tmp/repo-base')
     const optionValues = [...sourceSelect().options].map((option) => option.value)
-    expect(optionValues).not.toContain('branch:feature/base')
-    expect(optionValues).toContain('branch:feature/other')
+    expect(optionValues).toEqual([
+      'worktree:/tmp/repo',
+      'worktree:/tmp/repo-base',
+      'worktree:/tmp/repo-other',
+      'worktree:/tmp/repo-detached',
+    ])
   })
 
-  test('loads and submits dependencies from another non-context worktree', async () => {
-    repoClientMocks.getRepositoryWorktreeBootstrapPreflight
-      .mockResolvedValueOnce({
+  test('loads and submits dependencies from another existing worktree', async () => {
+    repoClientMocks.getRepositoryFileTree.mockImplementation(
+      async (_repoId: string, worktreePath: string, dirPath: string) => ({
         ok: true,
-        preflight: { kind: 'candidates', candidates: [{ path: '.env.base', kind: 'file' }] },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        preflight: { kind: 'candidates', candidates: [{ path: '.env.other', kind: 'file' }] },
-      })
+        worktreePath,
+        dirPath,
+        entries: [
+          {
+            name: worktreePath === '/tmp/repo-other' ? '.env.other' : '.env.base',
+            absolutePath: `${worktreePath}/${worktreePath === '/tmp/repo-other' ? '.env.other' : '.env.base'}`,
+            relativePath: worktreePath === '/tmp/repo-other' ? '.env.other' : '.env.base',
+            kind: 'file',
+          },
+        ],
+      }),
+    )
     const submitBranchAction = vi.fn()
     useReposStore.setState({ submitBranchAction })
     const current = createRepoBranch('main', { isCurrent: true, worktree: { path: '/tmp/repo' } })
@@ -1251,20 +1284,21 @@ describe('useBranchActionItems', () => {
     await act(async () => createWorktree.onSelect())
     clickButton('[aria-label="action.create-worktree-bootstrap-toggle"]')
     await waitForAssertion(() => {
-      expect(document.querySelector('[data-materialization-item=".env.base"]')).not.toBeNull()
+      expect(document.querySelector('[data-worktree-dependency-path=".env.base"]')).not.toBeNull()
     })
-    changeSource('branch:feature/other')
+    changeSource('worktree:/tmp/repo-other')
     await waitForAssertion(() => {
-      expect(document.querySelector('[data-materialization-item=".env.other"]')).not.toBeNull()
+      expect(document.querySelector('[data-worktree-dependency-path=".env.other"]')).not.toBeNull()
     })
 
-    expect(repoClientMocks.getRepositoryWorktreeBootstrapPreflight).toHaveBeenLastCalledWith(
+    expect(repoClientMocks.getRepositoryFileTree).toHaveBeenLastCalledWith(
       '/tmp/repo',
-      expect.any(AbortSignal),
-      undefined,
       '/tmp/repo-other',
+      '/tmp/repo-other',
+      expect.any(AbortSignal),
     )
-    clickButton('[data-materialization-item=".env.other"] [data-materialization-choice="copy"]')
+    clickElement('[data-worktree-dependency-path=".env.other"]')
+    changeNativeSelect('[data-worktree-dependency-mode=".env.other"]', 'copy')
     setInputValue('#cwt-branch', 'feature/new')
     clickButton('button[type="submit"]')
 
@@ -1297,6 +1331,7 @@ function createSourceWorktrees() {
     '/tmp/repo': { path: '/tmp/repo', branch: 'main', isMain: true },
     '/tmp/repo-base': { path: '/tmp/repo-base', branch: 'feature/base', isMain: false },
     '/tmp/repo-other': { path: '/tmp/repo-other', branch: 'feature/other', isMain: false },
+    '/tmp/repo-detached': { path: '/tmp/repo-detached', head: 'abcdef123456', isDetached: true, isMain: false },
   }
 }
 
@@ -1405,6 +1440,20 @@ function clickButton(selector: string) {
   act(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })
+}
+
+function clickElement(selector: string) {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLElement)) throw new Error(`Missing element: ${selector}`)
+  act(() => element.click())
+}
+
+function changeNativeSelect(selector: string, value: string) {
+  const element = document.body.querySelector(selector)
+  if (!(element instanceof HTMLSelectElement)) throw new Error(`Missing select: ${selector}`)
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
+  descriptor?.set?.call(element, value)
+  act(() => element.dispatchEvent(new Event('change', { bubbles: true })))
 }
 
 function clickButtonByText(text: string) {

@@ -1,6 +1,6 @@
 import { FolderPlus, RadioTower } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { WorktreeBootstrapDecision, WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 import { CreateWorktreeDialog, type CreateWorktreeRequest } from '#/web/components/CreateWorktreeDialog.tsx'
 import { PullRemoteBranchDialog } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
 import {
@@ -13,7 +13,6 @@ import {
   type BranchActionRepo,
 } from '#/web/hooks/branch-action-state.ts'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
-import { getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
@@ -191,44 +190,21 @@ function CreateWorktreeDialogConnected({
 }) {
   const repo = useReposStore((state) => state.repos[repoId])
   const [bootstrapEnabled, setBootstrapEnabled] = useState(false)
-  const [bootstrapPreflight, setBootstrapPreflight] = useState<WorktreeBootstrapPreflight | null>(null)
-  const [bootstrapPreflightError, setBootstrapPreflightError] = useState(false)
-  const [bootstrapPreflightLoading, setBootstrapPreflightLoading] = useState(false)
   const [sourceContextBranch, setSourceContextBranch] = useState<string>()
   const [requestedSource, setRequestedSource] = useState<RepositoryDependencySource>()
-  const [activeSource, setActiveSource] = useState<RepositoryDependencySource>()
   const defaultSourceContextBranch = defaultBranch ?? repo?.data.currentBranch ?? ''
   const effectiveSourceContextBranch = sourceContextBranch ?? defaultSourceContextBranch
-  const primaryWorktreePath = useMemo(
-    () => Object.values(repo?.data.worktreesByPath ?? {}).find((worktree) => worktree.isMain)?.path,
-    [repo?.data.worktreesByPath],
-  )
-  const sourceWorktreeByBranch = useMemo(
-    () =>
-      Object.fromEntries(
-        (repo?.data.branches ?? []).flatMap((branch) =>
-          branch.worktree?.path ? [[branch.name, branch.worktree.path] as const] : [],
-        ),
-      ),
-    [repo?.data.branches],
-  )
   const sources = useMemo(
     () =>
       repositoryDependencySources({
-        baseBranch: effectiveSourceContextBranch,
-        primaryWorktreePath,
-        sourceWorktreeByBranch,
+        contextBranch: effectiveSourceContextBranch,
+        worktrees: Object.values(repo?.data.worktreesByPath ?? {}),
       }),
-    [effectiveSourceContextBranch, primaryWorktreePath, sourceWorktreeByBranch],
+    [effectiveSourceContextBranch, repo?.data.worktreesByPath],
   )
-  const sourceOptions = useMemo(() => {
-    const baseWorktreePath = sourceWorktreeByBranch[effectiveSourceContextBranch]
-    const primaryMayBeSelected = !baseWorktreePath || !primaryWorktreePath || baseWorktreePath !== primaryWorktreePath
-    return uniqueRepositoryDependencySources([
-      ...(primaryMayBeSelected ? [sources.primary] : []),
-      ...sources.alternatives.filter((candidate) => candidate.kind === 'branch'),
-    ])
-  }, [effectiveSourceContextBranch, primaryWorktreePath, sourceWorktreeByBranch, sources])
+  const activeSource =
+    (requestedSource ? sources.options.find((candidate) => candidate.id === requestedSource.id) : undefined) ??
+    sources.initial
   const handleBootstrapContextBranchChange = useCallback(
     (branch: string) => {
       if (branch === effectiveSourceContextBranch) return
@@ -241,65 +217,23 @@ function CreateWorktreeDialogConnected({
   useEffect(() => {
     if (!open) {
       setBootstrapEnabled(false)
-      setBootstrapPreflight(null)
-      setBootstrapPreflightError(false)
-      setBootstrapPreflightLoading(false)
       setSourceContextBranch(undefined)
       setRequestedSource(undefined)
-      setActiveSource(undefined)
       return
     }
     if (!bootstrapEnabled) {
-      setBootstrapPreflight(null)
-      setBootstrapPreflightError(false)
-      setBootstrapPreflightLoading(false)
       setRequestedSource(undefined)
-      setActiveSource(undefined)
-      return
     }
-    const controller = new AbortController()
-    setBootstrapPreflight(null)
-    setBootstrapPreflightError(false)
-    setBootstrapPreflightLoading(true)
-    void (async () => {
-      let source = requestedSource
-        ? sourceOptions.find((candidate) => candidate.id === requestedSource.id)
-        : sources.initial
-      source ??= sources.initial
-      setActiveSource(source)
-      let result = await getRepositoryWorktreeBootstrapPreflight(
-        repoId,
-        controller.signal,
-        undefined,
-        source.kind === 'branch' ? source.worktreePath : undefined,
-      )
-      if (controller.signal.aborted) return
-      if (result.ok && !requestedSource && source.kind === 'branch' && result.preflight.candidates.length === 0) {
-        source = sources.primary
-        setActiveSource(source)
-        result = await getRepositoryWorktreeBootstrapPreflight(repoId, controller.signal, undefined, undefined)
-        if (controller.signal.aborted) return
-      }
-      setBootstrapPreflight(result.ok ? result.preflight : null)
-      setBootstrapPreflightError(!result.ok)
-    })()
-      .catch(() => {
-        if (!controller.signal.aborted) setBootstrapPreflightError(true)
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setBootstrapPreflightLoading(false)
-      })
-    return () => controller.abort()
-  }, [bootstrapEnabled, open, repoId, requestedSource, sourceOptions, sources.initial, sources.primary])
+  }, [bootstrapEnabled, open])
 
   if (!repo) return null
 
   function resolveWorktreeBootstrapDecision(request: CreateWorktreeRequest): WorktreeBootstrapDecision {
-    return request.selections.length > 0
+    return request.selections.length > 0 && request.sourceWorktreePath
       ? {
           kind: 'materialize',
           selections: request.selections,
-          ...(request.sourceWorktreePath ? { sourceWorktreePath: request.sourceWorktreePath } : {}),
+          sourceWorktreePath: request.sourceWorktreePath,
         }
       : { kind: 'skip' }
   }
@@ -315,11 +249,8 @@ function CreateWorktreeDialogConnected({
       defaultBranch={defaultBranch}
       bootstrapEnabled={bootstrapEnabled}
       worktreeBootstrap={{
-        loading: bootstrapPreflightLoading,
-        preflight: bootstrapPreflight,
-        error: bootstrapPreflightError,
-        source: activeSource,
-        sourceOptions,
+        ...(activeSource ? { source: activeSource } : {}),
+        sourceOptions: sources.options,
       }}
       onBootstrapEnabledChange={setBootstrapEnabled}
       onBootstrapContextBranchChange={handleBootstrapContextBranchChange}
@@ -328,15 +259,4 @@ function CreateWorktreeDialogConnected({
       onCreate={handleCreate}
     />
   )
-}
-
-function uniqueRepositoryDependencySources(
-  sources: readonly RepositoryDependencySource[],
-): RepositoryDependencySource[] {
-  const seen = new Set<string>()
-  return sources.filter((source) => {
-    if (seen.has(source.id)) return false
-    seen.add(source.id)
-    return true
-  })
 }

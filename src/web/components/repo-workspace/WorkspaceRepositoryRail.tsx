@@ -216,11 +216,18 @@ export function WorkspaceRepositoryRail({
                 },
               ]),
             ),
-            primaryWorktreePath: Object.values(repo.data.worktreesByPath).find((worktree) => worktree.isMain)?.path,
-            sourceWorktreeByBranch: Object.fromEntries(
-              repo.data.branches.flatMap((branch) =>
-                branch.worktree?.path ? [[branch.name, branch.worktree.path]] : [],
-              ),
+            worktrees: Object.values(repo.data.worktreesByPath).flatMap((worktree) =>
+              worktree.isPrunable
+                ? []
+                : [
+                    {
+                      path: worktree.path,
+                      isMain: worktree.isMain,
+                      ...(worktree.branch ? { branch: worktree.branch } : {}),
+                      ...(worktree.head ? { head: worktree.head } : {}),
+                      ...(worktree.isDetached ? { isDetached: true } : {}),
+                    },
+                  ],
             ),
           },
         ]

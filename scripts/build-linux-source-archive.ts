@@ -80,6 +80,11 @@ function trackedDeploymentFiles(): string[] {
     .split('\0')
     .filter(Boolean)
     .filter((relativePath) => !isTestOnlyPath(relativePath))
+    // git ls-files still reports tracked entries deleted only in the working tree.
+    .filter(
+      (relativePath) =>
+        lstatSync(path.join(repoRoot, relativePath), { throwIfNoEntry: false }) !== undefined,
+    )
     .sort()
 
   if (files.length === 0) fail('No tracked Linux deployment source files found.')

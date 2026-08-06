@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, PanelRightOpen, X } from 'lucide-react'
+import { ArrowLeft, PanelLeftOpen, PanelRightOpen, X } from 'lucide-react'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { BranchDetail } from '#/web/components/BranchDetail.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
@@ -167,13 +167,13 @@ export function BranchWorkspacePane({
     <Button
       type="button"
       variant="ghost"
-      size="icon-xs"
+      size="icon"
       data-testid="show-scope"
       aria-label={t('workspace.branch-workspace.scope-list')}
       title={t('workspace.branch-workspace.scope-list')}
       onClick={() => showCompactSurface('scope')}
     >
-      <ArrowLeft aria-hidden="true" />
+      <PanelLeftOpen aria-hidden="true" />
     </Button>
   ) : undefined
 

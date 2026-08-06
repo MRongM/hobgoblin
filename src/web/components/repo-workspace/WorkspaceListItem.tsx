@@ -201,7 +201,7 @@ export function WorkspaceListItemActionDock({ editor, internalTerminal, moreMenu
     <div data-workspace-list-item-action-dock="" className="flex w-16 items-center justify-end gap-0.5">
       <span
         className={cn(
-          'workspace-list-item-action-editor inline-flex size-5',
+          'workspace-list-item-action-editor hidden size-5 sm:inline-flex',
           dockBusy && 'pointer-events-auto opacity-100',
         )}
       >

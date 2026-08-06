@@ -33,6 +33,7 @@ Use this doc for UI language and presentation rules.
 - Keep compact surface selection in component-local state. Responsive changes must not mutate the Desktop Focus preference; returning to an eligible desktop destination reapplies it.
 - Preserve terminal-first entry when an internal terminal target exists; otherwise fall back to the nearest navigable scope surface.
 - In a branch workspace, compact member navigation must keep the branch workspace active and reuse the ordinary member file and detail surfaces.
+- In compact left-side scope lists, omit the inline editor shortcut, keep the internal-terminal shortcut directly clickable, and retain editor access in the item context menu.
 
 ## Detached file area windows
 

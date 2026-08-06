@@ -23,44 +23,63 @@ afterEach(() => {
 })
 
 describe('WorktreeBootstrapSourcePicker', () => {
-  test('identifies the primary worktree and selects another branch source', () => {
+  test('lists primary, branch, and detached worktrees and changes the active source', () => {
     const onSourceChange = vi.fn()
-    const primary = { id: 'primary', kind: 'primary' } as const
-    const feature = branchSource('feature/source', '/tmp/repo-feature')
+    const primary: RepositoryDependencySource = {
+      id: 'worktree:/repo',
+      kind: 'primary',
+      branch: 'main',
+      worktreePath: '/repo',
+    }
+    const feature: RepositoryDependencySource = {
+      id: 'worktree:/repo-feature',
+      kind: 'branch',
+      branch: 'feature/source',
+      worktreePath: '/repo-feature',
+    }
+    const detached: RepositoryDependencySource = {
+      id: 'worktree:/repo-detached',
+      kind: 'detached',
+      head: 'abcdef123456',
+      worktreePath: '/repo-detached',
+    }
 
     render(
-      <WorktreeBootstrapSourcePicker source={primary} options={[primary, feature]} onSourceChange={onSourceChange} />,
+      <WorktreeBootstrapSourcePicker
+        source={primary}
+        options={[primary, feature, detached]}
+        onSourceChange={onSourceChange}
+      />,
     )
 
-    expect(document.body.textContent).toContain('worktree-bootstrap.source-primary')
     const select = sourceSelect()
-    expect([...select.options].map((option) => option.textContent)).not.toContain(
+    expect(select.value).toBe(primary.id)
+    expect([...select.options].map((option) => option.textContent)).toEqual([
       'worktree-bootstrap.source-primary-option',
-    )
-    expect([...select.options].map((option) => option.textContent)).toContain('feature/source')
+      'feature/source',
+      'worktree-bootstrap.source-detached-option',
+    ])
 
-    changeSelect(select, feature.id)
+    changeSelect(select, detached.id)
 
-    expect(onSourceChange).toHaveBeenCalledWith(feature)
+    expect(onSourceChange).toHaveBeenCalledWith(detached)
   })
 
-  test('identifies a branch source and offers the primary worktree', () => {
-    const source = branchSource('feature/base', '/tmp/repo-base')
-    const primary = { id: 'primary', kind: 'primary' } as const
+  test('keeps a single current source visible and respects pending state', () => {
+    const source: RepositoryDependencySource = {
+      id: 'worktree:/repo-base',
+      kind: 'branch',
+      branch: 'feature/base',
+      worktreePath: '/repo-base',
+    }
 
-    render(<WorktreeBootstrapSourcePicker source={source} options={[primary]} onSourceChange={vi.fn()} pending />)
+    render(<WorktreeBootstrapSourcePicker source={source} options={[source]} onSourceChange={vi.fn()} pending />)
 
-    expect(document.body.textContent).toContain('worktree-bootstrap.source-branch')
-    expect([...sourceSelect().options].map((option) => option.textContent)).toContain(
-      'worktree-bootstrap.source-primary-option',
-    )
+    expect(sourceSelect().value).toBe(source.id)
+    expect([...sourceSelect().options].map((option) => option.textContent)).toEqual(['feature/base'])
     expect(sourceSelect().disabled).toBe(true)
   })
 })
-
-function branchSource(branch: string, worktreePath: string): RepositoryDependencySource {
-  return { id: `branch:${branch}`, kind: 'branch', branch, worktreePath }
-}
 
 function render(element: ReactNode) {
   container = document.createElement('div')

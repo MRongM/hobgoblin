@@ -562,15 +562,11 @@ describe('i18n dictionaries', () => {
     expect(en['changes.discard-confirm-confirm']).toBe('Discard')
   })
 
-  test('includes one-time worktree bootstrap candidate copy in every dictionary', () => {
+  test('includes materialization choices in every dictionary', () => {
     const keys = [
-      'action.create-worktree-bootstrap-candidates-label',
-      'action.create-worktree-bootstrap-candidates-description',
       'action.create-worktree-bootstrap-candidate-skip',
       'action.create-worktree-bootstrap-candidate-copy',
       'action.create-worktree-bootstrap-candidate-symlink',
-      'action.create-worktree-bootstrap-preflight-error',
-      'error.worktree-bootstrap-selection-stale',
     ] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {

@@ -110,31 +110,6 @@ describe('repo-client', () => {
     )
   })
 
-  test('requests bootstrap preflight from an explicit source worktree', async () => {
-    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ ok: true, preflight: { kind: 'candidates', candidates: [] } }),
-    }))
-    vi.stubGlobal('fetch', fetchMock)
-    const { getRepositoryWorktreeBootstrapPreflight } = await import('#/web/repo-client.ts')
-
-    await expect(
-      getRepositoryWorktreeBootstrapPreflight('/repo', undefined, 'all-untracked', '/repo-feature'),
-    ).resolves.toMatchObject({ ok: true })
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:32100/api/repo/worktree-bootstrap-preflight',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({
-          cwd: '/repo',
-          candidateScope: 'all-untracked',
-          sourceWorktreePath: '/repo-feature',
-        }),
-      }),
-    )
-  })
-
   test('requests invalid worktree cleanup with the selected path and source token', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

@@ -46,7 +46,6 @@ const projectActionState = vi.hoisted(() => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
-  getRepositoryWorktreeBootstrapPreflight: vi.fn(),
 }))
 
 vi.mock('@dnd-kit/core', async () => {
@@ -140,7 +139,6 @@ vi.mock('#/web/repo-client.ts', async () => {
   return {
     ...actual,
     getRepositoryRemoteBranches: repoClientMocks.getRepositoryRemoteBranches,
-    getRepositoryWorktreeBootstrapPreflight: repoClientMocks.getRepositoryWorktreeBootstrapPreflight,
   }
 })
 
@@ -201,11 +199,6 @@ beforeEach(() => {
   projectActionState.internalTerminalDisabled = false
   repoClientMocks.getRepositoryRemoteBranches.mockReset()
   repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
-  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockReset()
-  repoClientMocks.getRepositoryWorktreeBootstrapPreflight.mockResolvedValue({
-    ok: true,
-    preflight: { kind: 'candidates', candidates: [] },
-  })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)

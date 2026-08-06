@@ -123,7 +123,10 @@ const branchWorkspaceState = vi.hoisted(() => ({
   dialogProps: null as null | {
     open: boolean
     mode: string
-    repositories: Array<{ id: string; primaryWorktreePath?: string }>
+    repositories: Array<{
+      id: string
+      worktrees?: Array<{ path: string; branch?: string; head?: string; isDetached?: boolean; isMain: boolean }>
+    }>
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
@@ -319,7 +322,10 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
   }: {
     open: boolean
     mode: string
-    repositories: Array<{ id: string; primaryWorktreePath?: string }>
+    repositories: Array<{
+      id: string
+      worktrees?: Array<{ path: string; branch?: string; head?: string; isDetached?: boolean; isMain: boolean }>
+    }>
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
@@ -516,6 +522,12 @@ beforeEach(() => {
     repo.data.worktreesByPath = {
       [API]: { path: API, branch: 'main', isMain: true },
       '/worktrees/api-feature': { path: '/worktrees/api-feature', branch: 'feature/api', isMain: false },
+      '/worktrees/api-detached': {
+        path: '/worktrees/api-detached',
+        head: 'abcdef123456',
+        isDetached: true,
+        isMain: false,
+      },
     }
     repo.data.status = [
       {
@@ -1398,8 +1410,17 @@ describe('WorkspaceRepositoryRail', () => {
     const item = branchWorkspaceState.items[0]!
 
     expect(
-      branchWorkspaceState.dialogProps?.repositories.find((repository) => repository.id === API)?.primaryWorktreePath,
-    ).toBe(API)
+      branchWorkspaceState.dialogProps?.repositories.find((repository) => repository.id === API)?.worktrees,
+    ).toEqual([
+      { path: API, branch: 'main', isMain: true },
+      { path: '/worktrees/api-feature', branch: 'feature/api', isMain: false },
+      {
+        path: '/worktrees/api-detached',
+        head: 'abcdef123456',
+        isDetached: true,
+        isMain: false,
+      },
+    ])
 
     act(() => branchWorkspaceListState.props?.onExtend?.(item))
     expect(branchWorkspaceState.dialogProps).toMatchObject({ open: true, mode: 'extend', workspace: item })
@@ -1820,7 +1841,7 @@ describe('WorkspaceRepositoryRail', () => {
     renderRail()
 
     const api = repositoryListState.props?.repositories.find((repository) => repository.id === API)
-    expect(api?.terminalWorktreePaths).toEqual([API, '/worktrees/api-feature'])
+    expect(api?.terminalWorktreePaths).toEqual([API, '/worktrees/api-detached', '/worktrees/api-feature'])
   })
 })
 

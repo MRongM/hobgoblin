@@ -16,7 +16,7 @@ import {
   workspaceRepositoryPath,
   workspaceRootId,
 } from '#/server/modules/workspace-paths.ts'
-import { getRepositorySnapshot, getRepositoryWorktreeBootstrapPreflight } from '#/server/modules/repo-read-paths.ts'
+import { getRepositorySnapshot, getRepositoryWorktrees } from '#/server/modules/repo-read-paths.ts'
 import { getRepositoryRemoteBranches } from '#/server/modules/repo-write-paths.ts'
 import {
   normalizeBranchWorkspacePlanRequest,
@@ -29,30 +29,21 @@ import {
   type BranchWorkspaceRepositoryPlan,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
+import { PROTECTED_BRANCHES, type WorktreeInfo } from '#/shared/git-types.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { TerminalSessionSummary } from '#/shared/terminal.ts'
 import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
-import type {
-  WorktreeBootstrapCandidateScope,
-  WorktreeBootstrapDecision,
-  WorktreeBootstrapPreflightResult,
-} from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef } from '#/shared/worktree-create.ts'
 
 export interface BranchWorkspacePlanDependencies {
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
   readManifests?: typeof readBranchWorkspaceManifests
   getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
+  getWorktrees?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeInfo[]>
   getRemoteBranches?: (repoId: string, signal?: AbortSignal) => Promise<string[]>
-  getBootstrapPreflight?: (
-    repoId: string,
-    signal?: AbortSignal,
-    candidateScope?: WorktreeBootstrapCandidateScope,
-    sourceWorktreePath?: string,
-  ) => Promise<WorktreeBootstrapPreflightResult>
   inspectPath?: typeof inspectBranchWorkspacePath
   pathExists?: (repoId: string, candidatePath: string) => Promise<boolean>
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
@@ -1054,37 +1045,21 @@ async function planRepository(
   }
 
   const decision = requestedBootstrap ?? { kind: 'skip' }
-  const baseSourceWorktreePath = localBase?.worktree?.path
-  let sourceWorktreePath = baseSourceWorktreePath
-  if (decision.kind === 'materialize') {
-    sourceWorktreePath = undefined
-    const requestedSourceWorktreePath = decision.sourceWorktreePath
-    if (requestedSourceWorktreePath) {
-      const primaryWorktreePath = workspaceRepositoryPath(repoId)
-      const knownSourceWorktreePath = [
-        primaryWorktreePath,
-        ...snapshot.branches.flatMap((candidate) => (candidate.worktree?.path ? [candidate.worktree.path] : [])),
-      ].find(
-        (candidate): candidate is string => !!candidate && sameHostPath(repoId, candidate, requestedSourceWorktreePath),
-      )
-      if (!knownSourceWorktreePath) return { ok: false, message: 'error.invalid-arguments' }
-      if (!primaryWorktreePath || !sameHostPath(repoId, knownSourceWorktreePath, primaryWorktreePath)) {
-        sourceWorktreePath = knownSourceWorktreePath
+  let worktreeBootstrap: WorktreeBootstrapDecision = { kind: 'skip' }
+  if (decision.kind === 'materialize' && decision.sourceWorktreePath && decision.selections.length > 0) {
+    const worktrees = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => [])
+    const sourceWorktree = worktrees.find(
+      (candidate) =>
+        !candidate.isBare &&
+        !candidate.isPrunable &&
+        sameHostPath(repoId, candidate.path, decision.sourceWorktreePath!),
+    )
+    if (sourceWorktree) {
+      worktreeBootstrap = {
+        kind: 'materialize',
+        selections: decision.selections.map((selection) => ({ ...selection })),
+        sourceWorktreePath: sourceWorktree.path,
       }
-    }
-  }
-
-  const bootstrap = await (dependencies.getBootstrapPreflight ?? getRepositoryWorktreeBootstrapPreflight)(
-    repoId,
-    signal,
-    'all-untracked',
-    sourceWorktreePath,
-  )
-  if (!bootstrap.ok) return bootstrap
-  if (decision.kind === 'materialize') {
-    const candidates = new Set(bootstrap.preflight.candidates.map((candidate) => candidate.path))
-    if (decision.selections.some((selection) => !candidates.has(selection.path))) {
-      return { ok: false, message: 'error.worktree-bootstrap-selection-stale' }
     }
   }
   return {
@@ -1098,15 +1073,7 @@ async function planRepository(
       branchOrigin: target ? 'pre-existing' : 'created',
       worktreePath,
       mode,
-      worktreeBootstrap:
-        decision.kind === 'materialize'
-          ? {
-              kind: 'materialize',
-              candidateScope: 'all-untracked',
-              selections: decision.selections.map((selection) => ({ ...selection })),
-              ...(sourceWorktreePath ? { sourceWorktreePath } : {}),
-            }
-          : { kind: 'skip' },
+      worktreeBootstrap,
       confirmationRequired: false,
       satisfied: false,
     },

@@ -484,11 +484,6 @@ export function createBranchWorkspaceWriteService(
                 repository.repositoryName,
                 'complete',
               )
-              warnings.push({
-                kind: 'repository-dependency-failed',
-                repositoryName: repository.repositoryName,
-                message: result.message,
-              })
               continue
             }
             await persistMemberProgress(

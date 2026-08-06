@@ -11,12 +11,9 @@ import type {
   BranchWorkspaceReadResult,
   BranchWorkspaceSnapshot,
 } from '#/shared/branch-workspaces.ts'
-import type { WorktreeBootstrapPreflight } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
 import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef } from '#/shared/worktree-create.ts'
-import {
-  WorktreeBootstrapCandidateList,
-  type WorktreeBootstrapCandidateChoice,
-} from '#/web/components/WorktreeBootstrapCandidateList.tsx'
+import { WorktreeDependencyTree } from '#/web/components/WorktreeDependencyTree.tsx'
 import {
   MaterializationCandidateList,
   type MaterializationCandidateChoice,
@@ -34,7 +31,7 @@ import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import { getRepositoryRemoteBranches, getRepositoryWorktreeBootstrapPreflight } from '#/web/repo-client.ts'
+import { getRepositoryRemoteBranches } from '#/web/repo-client.ts'
 import { WorktreeBootstrapSourcePicker } from '#/web/components/WorktreeBootstrapSourcePicker.tsx'
 import {
   projectBranchWorkspaceOperationProgress,
@@ -43,6 +40,7 @@ import {
 import {
   repositoryDependencySources,
   type RepositoryDependencySource,
+  type RepositoryDependencyWorktree,
 } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
 
 export interface BranchWorkspaceRepositoryOption {
@@ -52,25 +50,13 @@ export interface BranchWorkspaceRepositoryOption {
   branches: string[]
   defaultBranch: string
   branchDetails?: Record<string, { tracking?: string; trackingGone?: boolean }>
-  primaryWorktreePath?: string
-  sourceWorktreeByBranch?: Record<string, string>
+  worktrees?: RepositoryDependencyWorktree[]
 }
 
 type RemoteBranchesState =
   | { status: 'loading'; branches: string[] }
   | { status: 'ready'; branches: string[] }
   | { status: 'error'; branches: string[] }
-
-type RepositoryBootstrapState =
-  | { status: 'loading' }
-  | {
-      status: 'ready'
-      preflight: WorktreeBootstrapPreflight
-      source: RepositoryDependencySource
-      sourceOptions: RepositoryDependencySource[]
-      sourceSelectionEnabled: boolean
-    }
-  | { status: 'error' }
 
 interface BranchWorkspaceDialogProps {
   open: boolean
@@ -125,11 +111,12 @@ export function BranchWorkspaceDialog({
   const [creationBases, setCreationBases] = useState<Record<string, WorktreeCreationBase>>({})
   const [syncBeforeCreate, setSyncBeforeCreate] = useState<Record<string, boolean>>({})
   const [remoteBranches, setRemoteBranches] = useState<Record<string, RemoteBranchesState>>({})
-  const [repositoryBootstraps, setRepositoryBootstraps] = useState<Record<string, RepositoryBootstrapState>>({})
-  const [repositoryBootstrapChoices, setRepositoryBootstrapChoices] = useState<
-    Record<string, Record<string, WorktreeBootstrapCandidateChoice | undefined>>
+  const [repositoryBootstrapSources, setRepositoryBootstrapSources] = useState<
+    Record<string, RepositoryDependencySource | undefined>
   >({})
-  const bootstrapControllers = useRef<Record<string, AbortController>>({})
+  const [repositoryBootstrapSelections, setRepositoryBootstrapSelections] = useState<
+    Record<string, WorktreeBootstrapSelection[] | undefined>
+  >({})
   const remoteBranchControllers = useRef<Record<string, AbortController>>({})
   const [auxiliaryChoices, setAuxiliaryChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
   const [auxiliaryRefreshPending, setAuxiliaryRefreshPending] = useState(false)
@@ -190,10 +177,8 @@ export function BranchWorkspaceDialog({
     Object.values(remoteBranchControllers.current).forEach((controller) => controller.abort())
     remoteBranchControllers.current = {}
     setRemoteBranches({})
-    Object.values(bootstrapControllers.current).forEach((controller) => controller.abort())
-    bootstrapControllers.current = {}
-    setRepositoryBootstraps({})
-    setRepositoryBootstrapChoices({})
+    setRepositoryBootstrapSources({})
+    setRepositoryBootstrapSelections({})
     setAuxiliaryChoices({})
     setAuxiliaryRefreshPending(false)
     setAuxiliaryRefreshError(null)
@@ -216,7 +201,6 @@ export function BranchWorkspaceDialog({
 
   useEffect(
     () => () => {
-      Object.values(bootstrapControllers.current).forEach((controller) => controller.abort())
       Object.values(remoteBranchControllers.current).forEach((controller) => controller.abort())
     },
     [],
@@ -246,14 +230,12 @@ export function BranchWorkspaceDialog({
   }
 
   const clearRepositoryBootstrap = (repositoryName: string) => {
-    bootstrapControllers.current[repositoryName]?.abort()
-    delete bootstrapControllers.current[repositoryName]
-    setRepositoryBootstraps((current) => {
+    setRepositoryBootstrapSources((current) => {
       const next = { ...current }
       delete next[repositoryName]
       return next
     })
-    setRepositoryBootstrapChoices((current) => {
+    setRepositoryBootstrapSelections((current) => {
       const next = { ...current }
       delete next[repositoryName]
       return next
@@ -291,77 +273,23 @@ export function BranchWorkspaceDialog({
     }
   }
 
-  const loadRepositoryBootstrap = async (
+  const initializeRepositoryBootstrap = (
     repository: BranchWorkspaceRepositoryOption,
     creationBase = effectiveCreationBase(
       repository,
       branch.trim(),
       creationBases[repository.name] ?? defaultCreationBase(repository),
     ),
-    requestedSource?: RepositoryDependencySource,
   ) => {
-    bootstrapControllers.current[repository.name]?.abort()
-    const controller = new AbortController()
-    bootstrapControllers.current[repository.name] = controller
-    setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'loading' } }))
-    try {
-      const baseBranch = creationBase.kind === 'localBranch' ? creationBase.branch : ''
-      const sources = repositoryDependencySources({
-        baseBranch,
-        primaryWorktreePath: repository.primaryWorktreePath,
-        sourceWorktreeByBranch: repository.sourceWorktreeByBranch,
-      })
-      const readSource = async (source: RepositoryDependencySource, sourcePathOverride?: string) =>
-        await getRepositoryWorktreeBootstrapPreflight(
-          repository.id,
-          controller.signal,
-          'all-untracked',
-          sourcePathOverride ?? (source.kind === 'branch' ? source.worktreePath : undefined),
-        )
-      let source = requestedSource ?? sources.initial
-      let result = await readSource(
-        source,
-        requestedSource === undefined ? repository.sourceWorktreeByBranch?.[baseBranch] : undefined,
-      )
-      if (controller.signal.aborted) return
-      if (!result.ok) {
-        setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'error' } }))
-        return
-      }
-      const initialEmpty = requestedSource === undefined && result.preflight.candidates.length === 0
-      if (initialEmpty && source.kind === 'branch') {
-        source = sources.primary
-        result = await readSource(source)
-        if (controller.signal.aborted) return
-        if (!result.ok) {
-          setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'error' } }))
-          return
-        }
-      }
-      const sourceOptions = uniqueRepositoryDependencySources([
-        sources.initial,
-        sources.primary,
-        ...sources.alternatives,
-      ])
-      setRepositoryBootstraps((current) => ({
-        ...current,
-        [repository.name]: {
-          status: 'ready',
-          preflight: result.preflight,
-          source,
-          sourceOptions,
-          sourceSelectionEnabled: sourceOptions.length > 1,
-        },
-      }))
-    } catch {
-      if (!controller.signal.aborted) {
-        setRepositoryBootstraps((current) => ({ ...current, [repository.name]: { status: 'error' } }))
-      }
-    } finally {
-      if (bootstrapControllers.current[repository.name] === controller) {
-        delete bootstrapControllers.current[repository.name]
-      }
-    }
+    const sources = repositoryDependencySources({
+      contextBranch: creationBase.kind === 'localBranch' ? creationBase.branch : '',
+      worktrees: repository.worktrees ?? [],
+    })
+    setRepositoryBootstrapSources((current) => ({
+      ...current,
+      [repository.name]: sources.initial ?? undefined,
+    }))
+    setRepositoryBootstrapSelections((current) => ({ ...current, [repository.name]: [] }))
   }
 
   const createRequest = (): Extract<BranchWorkspacePlanRequest, { operation: 'create' }> => ({
@@ -386,29 +314,24 @@ export function BranchWorkspaceDialog({
         branch.trim(),
         creationBases[repository.name] ?? defaultCreationBase(repository),
       )
-    const state = repositoryDependenciesEnabled[repository.name] ? repositoryBootstraps[repository.name] : undefined
-    const selections =
-      state?.status === 'ready' && state.preflight.kind === 'candidates'
-        ? state.preflight.candidates.flatMap((candidate) => {
-            const choice = repositoryBootstrapChoices[repository.name]?.[candidate.path] ?? 'skip'
-            return choice === 'skip' ? [] : [{ path: candidate.path, mode: choice }]
-          })
-        : []
+    const dependencySource = repositoryDependenciesEnabled[repository.name]
+      ? repositoryBootstrapSources[repository.name]
+      : undefined
+    const selections = repositoryDependenciesEnabled[repository.name]
+      ? (repositoryBootstrapSelections[repository.name] ?? [])
+      : []
     return {
       repositoryName: repository.name,
       creationBase,
       syncBeforeCreate:
         fixed?.syncBeforeCreate ??
         (syncBeforeCreate[repository.name] === true && syncEligible(repository, creationBase)),
-      ...(selections.length > 0
+      ...(dependencySource && selections.length > 0
         ? {
             worktreeBootstrap: {
               kind: 'materialize' as const,
-              candidateScope: 'all-untracked' as const,
+              sourceWorktreePath: dependencySource.worktreePath,
               selections,
-              ...(state?.status === 'ready' && state.source.kind === 'branch'
-                ? { sourceWorktreePath: state.source.worktreePath }
-                : {}),
             },
           }
         : {}),
@@ -465,13 +388,6 @@ export function BranchWorkspaceDialog({
   const allSelectableRepositoriesSelected =
     selectableRepositories.length > 0 && selectedSelectableCount === selectableRepositories.length
   const someSelectableRepositoriesSelected = selectedSelectableCount > 0 && !allSelectableRepositoriesSelected
-  const repositoryBootstrapPending = repositories.some(
-    (repository) =>
-      selectedRepositories[repository.name] &&
-      !fixedRepositories.has(repository.name) &&
-      repositoryDependenciesEnabled[repository.name] &&
-      repositoryBootstraps[repository.name]?.status !== 'ready',
-  )
   const operationProgress =
     plan && plan.steps.length > 0 && (mode === 'create' || mode === 'remove') && (pending || result !== null)
       ? projectBranchWorkspaceOperationProgress(plan, progressWorkspace, {
@@ -555,7 +471,7 @@ export function BranchWorkspaceDialog({
                       nextBranch.trim(),
                       creationBases[repository.name] ?? defaultCreationBase(repository),
                     )
-                    void loadRepositoryBootstrap(repository, base)
+                    initializeRepositoryBootstrap(repository, base)
                   }
                 }}
               />
@@ -596,9 +512,16 @@ export function BranchWorkspaceDialog({
               </label>
               {visibleRepositories.map((repository) => {
                 const fixed = fixedRepositories.has(repository.name)
-                const bootstrap = repositoryBootstraps[repository.name]
                 const requestedCreationBase = creationBases[repository.name] ?? defaultCreationBase(repository)
                 const creationBase = effectiveCreationBase(repository, branch.trim(), requestedCreationBase)
+                const dependencySources = repositoryDependencySources({
+                  contextBranch: creationBase.kind === 'localBranch' ? creationBase.branch : '',
+                  worktrees: repository.worktrees ?? [],
+                })
+                const dependencySource =
+                  dependencySources.options.find(
+                    (source) => source.id === repositoryBootstrapSources[repository.name]?.id,
+                  ) ?? dependencySources.initial
                 const existingTarget = creationBase.kind === 'localBranch' && creationBase.branch === branch.trim()
                 const synchronizationEligible = syncEligible(repository, creationBase)
                 const remoteState = remoteBranches[repository.name]
@@ -653,7 +576,7 @@ export function BranchWorkspaceDialog({
                               ...current,
                               [repository.name]: enabled,
                             }))
-                            if (enabled) void loadRepositoryBootstrap(repository)
+                            if (enabled) initializeRepositoryBootstrap(repository)
                             else clearRepositoryBootstrap(repository.name)
                           }}
                         />
@@ -677,12 +600,8 @@ export function BranchWorkspaceDialog({
                             ...current,
                             [repository.name]: syncEligible(repository, nextCreationBase),
                           }))
-                          setRepositoryBootstrapChoices((current) => ({
-                            ...current,
-                            [repository.name]: {},
-                          }))
                           if (repositoryDependenciesEnabled[repository.name]) {
-                            void loadRepositoryBootstrap(repository, nextCreationBase)
+                            initializeRepositoryBootstrap(repository, nextCreationBase)
                           }
                         }}
                       >
@@ -756,55 +675,56 @@ export function BranchWorkspaceDialog({
                     {selectedRepositories[repository.name] &&
                     repositoryDependenciesEnabled[repository.name] &&
                     !fixed ? (
-                      <div className="pl-6">
-                        {bootstrap?.status === 'loading' ? (
-                          <p className="text-xs text-muted-foreground" role="status">
-                            {t('workspace.branch-workspace.repository-dependencies-loading')}
+                      <div
+                        className="grid gap-2 pl-6"
+                        aria-labelledby={`branch-workspace-repository-dependencies-${repository.name}`}
+                      >
+                        <div>
+                          <p
+                            id={`branch-workspace-repository-dependencies-${repository.name}`}
+                            className="text-xs font-medium"
+                          >
+                            {t('workspace.branch-workspace.repository-dependencies')}
                           </p>
-                        ) : null}
-                        {bootstrap?.status === 'error' ? (
-                          <p className="text-xs text-muted-foreground" role="status">
-                            {t('workspace.branch-workspace.repository-dependencies-error')}
+                          <p className="text-[10px] text-muted-foreground">
+                            {t('workspace.branch-workspace.repository-dependencies-description')}
                           </p>
-                        ) : null}
-                        {bootstrap?.status === 'ready' && bootstrap.sourceSelectionEnabled ? (
+                        </div>
+                        {dependencySource ? (
+                          <>
                           <WorktreeBootstrapSourcePicker
-                            source={bootstrap.source}
-                            options={bootstrap.sourceOptions}
+                            source={dependencySource}
+                            options={dependencySources.options}
                             pending={pending}
                             onSourceChange={(source) => {
-                              setRepositoryBootstrapChoices((current) => ({
+                              setRepositoryBootstrapSources((current) => ({
                                 ...current,
-                                [repository.name]: {},
+                                [repository.name]: source,
                               }))
-                              void loadRepositoryBootstrap(repository, creationBase, source)
+                              setRepositoryBootstrapSelections((current) => ({
+                                ...current,
+                                [repository.name]: [],
+                              }))
                             }}
                           />
-                        ) : null}
-                        {bootstrap?.status === 'ready' && bootstrap.preflight.candidates.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            {t('workspace.branch-workspace.repository-dependencies-empty')}
-                          </p>
-                        ) : null}
-                        {bootstrap?.status === 'ready' && bootstrap.preflight.candidates.length > 0 ? (
-                          <WorktreeBootstrapCandidateList
-                            headingId={`branch-workspace-repository-dependencies-${repository.name}`}
-                            label={t('workspace.branch-workspace.repository-dependencies')}
-                            description={t('workspace.branch-workspace.repository-dependencies-description')}
-                            candidates={bootstrap.preflight.candidates}
-                            choices={repositoryBootstrapChoices[repository.name] ?? {}}
+                          <WorktreeDependencyTree
+                            repoId={repository.id}
+                            sourceWorktreePath={dependencySource.worktreePath}
+                            selections={repositoryBootstrapSelections[repository.name] ?? []}
                             disabled={pending}
-                            onChoiceChange={(candidatePath, choice) =>
-                              setRepositoryBootstrapChoices((current) => ({
+                            onSelectionsChange={(selections) =>
+                              setRepositoryBootstrapSelections((current) => ({
                                 ...current,
-                                [repository.name]: {
-                                  ...current[repository.name],
-                                  [candidatePath]: choice,
-                                },
+                                [repository.name]: selections,
                               }))
                             }
                           />
-                        ) : null}
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            {t('workspace.branch-workspace.repository-dependencies-empty')}
+                          </p>
+                        )}
                       </div>
                     ) : null}
                   </div>
@@ -1094,7 +1014,7 @@ export function BranchWorkspaceDialog({
             <Button
               type="button"
               data-action="preview"
-              disabled={pending || repositoryBootstrapPending || request() === null}
+              disabled={pending || request() === null}
               onClick={() => {
                 const next = request()
                 if (next) void onPreview(next)
@@ -1173,17 +1093,6 @@ function parseCreationBaseSelectValue(value: string): WorktreeCreationBase | nul
 
 function sameCreationBase(left: WorktreeCreationBase, right: WorktreeCreationBase): boolean {
   return left.kind === right.kind && worktreeCreationBaseRef(left) === worktreeCreationBaseRef(right)
-}
-
-function uniqueRepositoryDependencySources(
-  sources: readonly RepositoryDependencySource[],
-): RepositoryDependencySource[] {
-  const seen = new Set<string>()
-  return sources.filter((source) => {
-    if (seen.has(source.id)) return false
-    seen.add(source.id)
-    return true
-  })
 }
 
 function BranchWorkspaceCreationSourcePreview({ repository }: { repository: BranchWorkspaceRepositoryPlan }) {

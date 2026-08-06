@@ -265,20 +265,24 @@ An AI handoff offered after a branch workspace batch Git action finishes with on
 _Avoid_: Automatic error resolution, per-member AI task, member-terminal handoff
 
 **Worktree bootstrap**:
-A user-selected process that copies or symlinks immediate untracked entries from a source worktree into a newly created worktree before normal development begins.
+A user-selected, best-effort process that copies or symlinks explicitly checked files or directories from one existing source worktree into the same relative paths of a newly created worktree. Dependency skips and materialization failures never change the result of the preceding worktree creation.
 _Avoid_: Worktree setup script, post-create hook
 
 **Worktree bootstrap source**:
-The existing repository worktree whose current untracked entries supply one worktree bootstrap decision. It starts with the worktree attached to the selected branch context or base branch, falls back to the repository primary worktree when that source has no candidates or no worktree, may be changed to another existing worktree outside the selected branch, and remains fixed from candidate selection through the corresponding create execution.
+The existing repository worktree selected from the repository's current worktree list whose file tree supplies one worktree bootstrap decision. It remains fixed from dependency-tree selection through the corresponding create execution and is never the worktree being created.
 _Avoid_: Source branch, repository root, bootstrap template
 
-**Worktree bootstrap candidate**:
-An immediate child file or directory of a worktree bootstrap source that Git does not track, including ignored and ordinary untracked entries. A wholly untracked directory is one candidate, and `.git` is never a candidate.
-_Avoid_: Bootstrap file, untracked path
+**Worktree dependency selection**:
+A file or directory at any depth that the user explicitly checks in a worktree bootstrap source's lazily loaded file tree, together with its copy or symbolic-link mode. A selected directory represents one dependency rather than an implicit selection of every descendant.
+_Avoid_: Bootstrap candidate, Git-excluded entry, typed dependency path
 
-**Repository dependency candidate**:
-An existing worktree bootstrap candidate that may be selected for one newly materialized branch-workspace repository member.
-_Avoid_: `.gitignore` rule, workspace auxiliary entry, generic untracked file
+**Repository dependency selection**:
+A worktree dependency selection scoped to one newly materialized branch-workspace repository member.
+_Avoid_: `.gitignore` rule, workspace auxiliary entry, generic file-tree selection
+
+**Worktree dependency skip**:
+A silent best-effort outcome in which a selected dependency is not materialized because it is Git-tracked, unsafe, unavailable, already occupies the target path, or cannot be copied or linked. It never fails, rolls back, or marks incomplete the worktree or branch-workspace member created before it.
+_Avoid_: Worktree creation failure, dependency validation error, dependency replacement
 
 **Selected branch context**:
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.

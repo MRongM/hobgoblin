@@ -3,6 +3,7 @@ import {
   compactWorktreeBootstrapPaths,
   formatWorktreeBootstrapSummary,
   hasWorktreeBootstrapSummaryDetails,
+  normalizeWorktreeDependencyPath,
   normalizeWorktreeBootstrapSelections,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
@@ -26,32 +27,61 @@ describe('worktree bootstrap summary', () => {
   })
 })
 
-describe('worktree bootstrap candidates', () => {
-  test('normalizes unique root-level selections', () => {
-    expect(
-      normalizeWorktreeBootstrapSelections([
-        { path: '.env', mode: 'copy' },
-        { path: 'node_modules', mode: 'symlink' },
-      ]),
-    ).toEqual([
-      { path: '.env', mode: 'copy' },
-      { path: 'node_modules', mode: 'symlink' },
-    ])
+describe('worktree bootstrap selections', () => {
+  test('normalizes safe nested dependency paths', () => {
+    expect(normalizeWorktreeDependencyPath('./backend/.venv')).toBe('backend/.venv')
+    expect(normalizeWorktreeDependencyPath('frontend/node_modules/')).toBe('frontend/node_modules')
+    expect(normalizeWorktreeDependencyPath('packages//web/./cache')).toBe('packages/web/cache')
   })
 
   test.each([
-    null,
-    [],
-    [{ path: '.env', mode: 'hardlink' }],
-    [{ path: 'config/local.json', mode: 'copy' }],
-    [{ path: '..', mode: 'copy' }],
-    [{ path: '.git', mode: 'copy' }],
-    [{ path: 'bad\\name', mode: 'copy' }],
-    [
+    '',
+    '.',
+    '..',
+    '../secret',
+    'backend/../secret',
+    '.git',
+    'src/.git/config',
+    '/absolute/path',
+    'C:\\absolute\\path',
+    'bad\\name',
+    'bad\0name',
+  ])('rejects unsafe dependency path: %j', (value) => {
+    expect(normalizeWorktreeDependencyPath(value)).toBeNull()
+  })
+
+  test('normalizes valid selections and independently drops malformed items', () => {
+    expect(
+      normalizeWorktreeBootstrapSelections([
+        { path: '.env', mode: 'copy' },
+        { path: '../secret', mode: 'copy' },
+        { path: 'backend/.venv', mode: 'symlink' },
+        { path: 'frontend/node_modules', mode: 'hardlink' },
+      ]),
+    ).toEqual([
       { path: '.env', mode: 'copy' },
-      { path: '.env', mode: 'symlink' },
-    ],
-  ])('rejects malformed or unsafe selections: %j', (value) => {
-    expect(normalizeWorktreeBootstrapSelections(value)).toBeNull()
+      { path: 'backend/.venv', mode: 'symlink' },
+    ])
+  })
+
+  test('returns an empty selection list for malformed containers', () => {
+    expect(normalizeWorktreeBootstrapSelections(null)).toEqual([])
+    expect(normalizeWorktreeBootstrapSelections({})).toEqual([])
+    expect(normalizeWorktreeBootstrapSelections([])).toEqual([])
+  })
+
+  test('deduplicates selections and lets a later ancestor replace descendants', () => {
+    expect(
+      normalizeWorktreeBootstrapSelections([
+        { path: '.env', mode: 'copy' },
+        { path: '.env', mode: 'symlink' },
+        { path: 'backend/.venv/bin', mode: 'copy' },
+        { path: 'backend/.venv', mode: 'symlink' },
+        { path: 'backend/.venv/cache', mode: 'copy' },
+      ]),
+    ).toEqual([
+      { path: '.env', mode: 'copy' },
+      { path: 'backend/.venv', mode: 'symlink' },
+    ])
   })
 })

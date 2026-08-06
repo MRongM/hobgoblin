@@ -1,8 +1,10 @@
 import os from 'node:os'
 import path from 'node:path'
+import { createServer } from 'node:net'
 import { promises as fs } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { git } from '#/system/git/helper.ts'
 import {
   bootstrapWorktreeSelectionsAfterCreate,
   getWorktreeBootstrapTargetPreflight,
@@ -26,6 +28,7 @@ beforeEach(async () => {
   targetRoot = path.join(tmp, 'repo-worktree')
   await mkdir(sourceRoot, { recursive: true })
   await mkdir(targetRoot, { recursive: true })
+  await git(sourceRoot, ['init', '--quiet'])
   mocks.getRepoRoot.mockResolvedValue(sourceRoot)
 })
 
@@ -63,143 +66,145 @@ describe('worktree bootstrap', () => {
     await expect(readFile(path.join(targetRoot, '.env'), 'utf8')).resolves.toBe('target\n')
   })
 
-  test('replaces only an approved existing copy target as a whole', async () => {
-    await mkdir(path.join(sourceRoot, 'cache'))
-    await writeFile(path.join(sourceRoot, 'cache', 'fresh.txt'), 'fresh\n')
-    await mkdir(path.join(targetRoot, 'cache'))
-    await writeFile(path.join(targetRoot, 'cache', 'stale.txt'), 'stale\n')
-
-    const result = await bootstrapWorktreeSelectionsAfterCreate(
-      sourceRoot,
-      targetRoot,
-      [{ path: 'cache', mode: 'copy' }],
-      { replaceExisting: [{ path: 'cache', mode: 'copy' }] },
-    )
-
-    expect(result.ok).toBe(true)
-    await expect(readFile(path.join(targetRoot, 'cache', 'fresh.txt'), 'utf8')).resolves.toBe('fresh\n')
-    await expect(readFile(path.join(targetRoot, 'cache', 'stale.txt'), 'utf8')).rejects.toMatchObject({
-      code: 'ENOENT',
-    })
-  })
-
-  test('rejects replacement paths outside the concrete manual plan', async () => {
-    await writeFile(path.join(sourceRoot, '.env'), 'source\n')
-
-    await expect(
-      bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [{ path: '.env', mode: 'copy' }], {
-        replaceExisting: [{ path: 'other.env', mode: 'copy' }],
-      }),
-    ).resolves.toEqual({
-      ok: false,
-      message: 'Worktree bootstrap failed: invalid replacement target: other.env',
-    })
-  })
-
-  test('keeps an approved existing copy target when temporary preparation fails', async () => {
-    await mkdir(path.join(sourceRoot, 'cache'))
-    await writeFile(path.join(sourceRoot, 'cache', 'fresh.txt'), 'fresh\n')
-    await mkdir(path.join(targetRoot, 'cache'))
-    await writeFile(path.join(targetRoot, 'cache', 'stale.txt'), 'stale\n')
-    const copy = vi.spyOn(fs, 'cp').mockRejectedValueOnce(new Error('copy interrupted'))
-
-    const result = await bootstrapWorktreeSelectionsAfterCreate(
-      sourceRoot,
-      targetRoot,
-      [{ path: 'cache', mode: 'copy' }],
-      { replaceExisting: [{ path: 'cache', mode: 'copy' }] },
-    )
-
-    copy.mockRestore()
-    expect(result).toEqual({
-      ok: false,
-      message: 'Worktree bootstrap failed: failed to copy cache: copy interrupted',
-    })
-    await expect(readFile(path.join(targetRoot, 'cache', 'stale.txt'), 'utf8')).resolves.toBe('stale\n')
-    await expect(readFile(path.join(targetRoot, 'cache', 'fresh.txt'), 'utf8')).rejects.toMatchObject({
-      code: 'ENOENT',
-    })
-  })
-
-  test('copies and symlinks manual selections using literal root paths', async () => {
-    const literalName = 'local[1]*?.env'
-    await writeFile(path.join(sourceRoot, literalName), 'TOKEN=placeholder\n')
-    await mkdir(path.join(sourceRoot, 'node_modules'))
+  test('copies and symlinks deep untracked selections from the exact source worktree', async () => {
+    await mkdir(path.join(sourceRoot, 'backend', '.venv'), { recursive: true })
+    await writeFile(path.join(sourceRoot, 'backend', '.venv', 'pyvenv.cfg'), 'placeholder\n')
+    await mkdir(path.join(sourceRoot, 'frontend', 'node_modules', 'pkg'), { recursive: true })
+    await writeFile(path.join(sourceRoot, 'frontend', 'node_modules', 'pkg', 'index.js'), 'export {}\n')
 
     const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
-      { path: literalName, mode: 'copy' },
-      { path: 'node_modules', mode: 'symlink' },
+      { path: 'backend/.venv', mode: 'symlink' },
+      { path: 'frontend/node_modules', mode: 'copy' },
     ])
 
     expect(result).toEqual({
       ok: true,
-      message: `Copied 1 path: ${literalName}\nSymlinked 1 path: node_modules`,
+      message: 'Copied 1 path: frontend/node_modules\nSymlinked 1 path: backend/.venv',
       worktreeBootstrap: {
-        copy: { count: 1, paths: [literalName] },
-        symlink: { count: 1, paths: ['node_modules'] },
+        copy: { count: 1, paths: ['frontend/node_modules'] },
+        symlink: { count: 1, paths: ['backend/.venv'] },
         hardlink: { count: 0, paths: [] },
         skippedMissing: { count: 0, paths: [] },
       },
     })
-    await expect(readFile(path.join(targetRoot, literalName), 'utf8')).resolves.toBe('TOKEN=placeholder\n')
-    await expect(readlink(path.join(targetRoot, 'node_modules'))).resolves.toBe(path.join(sourceRoot, 'node_modules'))
+    await expect(readlink(path.join(targetRoot, 'backend', '.venv'))).resolves.toBe(
+      path.join(sourceRoot, 'backend', '.venv'),
+    )
+    await expect(readFile(path.join(targetRoot, 'frontend', 'node_modules', 'pkg', 'index.js'), 'utf8')).resolves.toBe(
+      'export {}\n',
+    )
   })
 
-  test('does not treat goblin.toml as bootstrap configuration', async () => {
-    await writeFile(path.join(sourceRoot, 'goblin.toml'), '[invalid')
-    await writeFile(path.join(sourceRoot, '.env'), 'TOKEN=placeholder\n')
+  test('skips tracked files and directories containing tracked files while continuing later selections', async () => {
+    await writeFile(path.join(sourceRoot, 'tracked.env'), 'tracked\n')
+    await mkdir(path.join(sourceRoot, 'mixed'), { recursive: true })
+    await writeFile(path.join(sourceRoot, 'mixed', 'tracked.txt'), 'tracked\n')
+    await writeFile(path.join(sourceRoot, 'mixed', 'untracked.txt'), 'untracked\n')
+    await writeFile(path.join(sourceRoot, 'later.env'), 'later\n')
+    await git(sourceRoot, ['add', '--', 'tracked.env', 'mixed/tracked.txt'])
 
     const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
-      { path: '.env', mode: 'copy' },
+      { path: 'tracked.env', mode: 'copy' },
+      { path: 'mixed', mode: 'copy' },
+      { path: 'later.env', mode: 'copy' },
     ])
 
-    expect(result.ok).toBe(true)
-    await expect(readFile(path.join(targetRoot, '.env'), 'utf8')).resolves.toBe('TOKEN=placeholder\n')
-    await expect(readFile(path.join(targetRoot, 'goblin.toml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  test('plans all manual destinations before writing any selection', async () => {
-    await writeFile(path.join(sourceRoot, '.env'), 'source\n')
-    await writeFile(path.join(sourceRoot, 'later.txt'), 'later\n')
-    await writeFile(path.join(targetRoot, '.env'), 'target\n')
-
-    const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
-      { path: '.env', mode: 'copy' },
-      { path: 'later.txt', mode: 'copy' },
-    ])
-
-    expect(result).toEqual({
-      ok: false,
-      message: 'Worktree bootstrap failed: destination already exists: .env',
-    })
-    await expect(readFile(path.join(targetRoot, 'later.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  test('reports missing manual selections without failing', async () => {
-    const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
-      { path: 'missing.env', mode: 'copy' },
-    ])
-
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: true,
-      message: 'Skipped missing 1 path: missing.env',
+      worktreeBootstrap: { copy: { count: 1, paths: ['later.env'] } },
+    })
+    await expect(readFile(path.join(targetRoot, 'later.env'), 'utf8')).resolves.toBe('later\n')
+    await expect(readFile(path.join(targetRoot, 'tracked.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(path.join(targetRoot, 'mixed', 'untracked.txt'), 'utf8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
+  })
+
+  test('silently skips missing, symlinked, unsupported, escaping, and existing selections', async () => {
+    const outsideSource = path.join(tmp, 'outside-source')
+    const outsideTarget = path.join(tmp, 'outside-target')
+    await mkdir(outsideSource)
+    await mkdir(outsideTarget)
+    await writeFile(path.join(outsideSource, 'escaped.env'), 'outside\n')
+    await writeFile(path.join(sourceRoot, 'real.env'), 'real\n')
+    await symlink(path.join(sourceRoot, 'real.env'), path.join(sourceRoot, 'linked.env'))
+    await symlink(outsideSource, path.join(sourceRoot, 'escaped'))
+    await mkdir(path.join(sourceRoot, 'frontend', 'node_modules'), { recursive: true })
+    await symlink(outsideTarget, path.join(targetRoot, 'frontend'))
+    await writeFile(path.join(sourceRoot, 'existing.env'), 'source\n')
+    await writeFile(path.join(targetRoot, 'existing.env'), 'target\n')
+
+    const socketPath = path.join(sourceRoot, 'unsupported.sock')
+    const socket = createServer()
+    await new Promise<void>((resolve, reject) => {
+      socket.once('error', reject)
+      socket.listen(socketPath, resolve)
+    })
+    try {
+      const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
+        { path: 'missing.env', mode: 'copy' },
+        { path: 'linked.env', mode: 'copy' },
+        { path: 'escaped/escaped.env', mode: 'copy' },
+        { path: 'frontend/node_modules', mode: 'copy' },
+        { path: 'existing.env', mode: 'copy' },
+        { path: 'unsupported.sock', mode: 'copy' },
+      ])
+
+      expect(result).toEqual({ ok: true, message: '' })
+      await expect(readFile(path.join(targetRoot, 'existing.env'), 'utf8')).resolves.toBe('target\n')
+      await expect(readFile(path.join(outsideTarget, 'node_modules'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await new Promise<void>((resolve) => socket.close(() => resolve()))
+    }
+  })
+
+  test('isolates copy and symlink failures and summarizes only later successes', async () => {
+    await writeFile(path.join(sourceRoot, 'copy-fails.env'), 'copy\n')
+    await mkdir(path.join(sourceRoot, 'link-fails'))
+    await writeFile(path.join(sourceRoot, 'later.env'), 'later\n')
+    const copy = vi.spyOn(fs, 'cp').mockRejectedValueOnce(new Error('copy interrupted'))
+    const link = vi.spyOn(fs, 'symlink').mockRejectedValueOnce(new Error('link interrupted'))
+
+    const result = await bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [
+      { path: 'copy-fails.env', mode: 'copy' },
+      { path: 'link-fails', mode: 'symlink' },
+      { path: 'later.env', mode: 'copy' },
+    ])
+
+    copy.mockRestore()
+    link.mockRestore()
+    expect(result).toMatchObject({
+      ok: true,
       worktreeBootstrap: {
-        copy: { count: 0, paths: [] },
+        copy: { count: 1, paths: ['later.env'] },
         symlink: { count: 0, paths: [] },
-        hardlink: { count: 0, paths: [] },
-        skippedMissing: { count: 1, paths: ['missing.env'] },
       },
     })
+    await expect(readFile(path.join(targetRoot, 'later.env'), 'utf8')).resolves.toBe('later\n')
+    await expect(readFile(path.join(targetRoot, 'copy-fails.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  test('cancels manual materialization before resolving the repo root', async () => {
+  test('treats Git query errors as silent skips', async () => {
+    const nonRepositorySource = path.join(tmp, 'plain-directory')
+    await mkdir(nonRepositorySource)
+    await writeFile(path.join(nonRepositorySource, 'local.env'), 'local\n')
+
+    await expect(
+      bootstrapWorktreeSelectionsAfterCreate(nonRepositorySource, targetRoot, [
+        { path: 'local.env', mode: 'copy' },
+      ]),
+    ).resolves.toEqual({ ok: true, message: '' })
+    await expect(readFile(path.join(targetRoot, 'local.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  test('stops remaining materialization after cancellation while preserving success', async () => {
     const controller = new AbortController()
     controller.abort()
 
     await expect(
-      bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [{ path: '.env', mode: 'copy' }], {
+      bootstrapWorktreeSelectionsAfterCreate(sourceRoot, targetRoot, [{ path: 'later.env', mode: 'copy' }], {
         signal: controller.signal,
       }),
-    ).resolves.toEqual({ ok: false, message: 'cancelled' })
+    ).resolves.toEqual({ ok: true, message: '' })
   })
 })

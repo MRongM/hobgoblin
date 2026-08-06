@@ -49,6 +49,7 @@ export function BranchWorkspaceTerminalPanel({
   } = useTerminalSessionContext()
   const terminalBase = useMemo(() => branchWorkspaceTerminalBase(context), [context])
   const terminalCreationAvailable = context.available && !context.busy
+  const contextRail = terminalFocusMode || compact
 
   const handleNewTerminal = useCallback(
     async (launchMode: TerminalLaunchMode = 'native') => {
@@ -77,12 +78,12 @@ export function BranchWorkspaceTerminalPanel({
       <Toolbar
         data-testid="branch-workspace-terminal-toolbar"
         variant="detail"
-        chrome="topbar"
+        chrome={compact ? 'toolbar' : 'topbar'}
         tone="topbar"
-        className={cn('[-webkit-app-region:drag]', terminalFocusMode && 'topbar')}
+        className={cn('mobile-topbar-scroll', '[-webkit-app-region:drag]', terminalFocusMode && 'topbar')}
       >
-        {terminalFocusMode ? (
-          <>
+        <div className="mobile-topbar-scroll-content flex h-full min-w-0 items-center gap-1 overflow-hidden">
+          {terminalFocusMode ? (
             <Button
               variant="ghost"
               size="icon"
@@ -92,28 +93,32 @@ export function BranchWorkspaceTerminalPanel({
             >
               <PanelLeftOpen />
             </Button>
-            <FocusProjectSwitcher repoId={context.rootId} />
-            <WorkspaceRepositorySwitcher repoId={context.rootId} />
-          </>
-        ) : (
-          toolbarLeading
-        )}
-        <TerminalTabs
-          worktreeTerminalKey={terminalWorktreeKey}
-          sessions={snapshot.sessions}
-          detailId={`branch-workspace-terminal-${context.id}`}
-          responsiveCompact={compact}
-          panelActive
-          focusMode={terminalFocusMode}
-          focusRegistry={terminalTabFocusRegistry}
-          emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
-          onNew={(launchMode) => void handleNewTerminal(launchMode)}
-          onSelect={(_worktreeKey, key) => handleSelectTerminal(key)}
-          onScrollToBottom={scrollToBottom}
-          onFocusTerminal={focusTerminal}
-          onClose={handleCloseTerminal}
-          onReorder={handleReorderTerminals}
-        />
+          ) : (
+            toolbarLeading
+          )}
+          {contextRail && (
+            <>
+              <FocusProjectSwitcher repoId={context.rootId} compact={compact} />
+              <WorkspaceRepositorySwitcher repoId={context.rootId} compact={compact} />
+            </>
+          )}
+          <TerminalTabs
+            worktreeTerminalKey={terminalWorktreeKey}
+            sessions={snapshot.sessions}
+            detailId={`branch-workspace-terminal-${context.id}`}
+            responsiveCompact={compact}
+            panelActive
+            focusMode={contextRail}
+            focusRegistry={terminalTabFocusRegistry}
+            emptyFocusKey={EMPTY_TERMINAL_TAB_FOCUS_KEY}
+            onNew={(launchMode) => void handleNewTerminal(launchMode)}
+            onSelect={(_worktreeKey, key) => handleSelectTerminal(key)}
+            onScrollToBottom={scrollToBottom}
+            onFocusTerminal={focusTerminal}
+            onClose={handleCloseTerminal}
+            onReorder={handleReorderTerminals}
+          />
+        </div>
         <div aria-hidden="true" className="w-2 shrink-0 self-stretch" />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
