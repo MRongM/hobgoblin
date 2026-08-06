@@ -3,6 +3,7 @@ import * as tmuxCleanupModule from '#/server/modules/tmux-cleanup.ts'
 import {
   cleanupAssociatedTmuxSessions,
   closeAssociatedTmuxSessionByName,
+  pageAssociatedTmuxSession,
   previewAssociatedTmuxSessions,
   returnAssociatedTmuxSessionToBottom,
   type TmuxCleanupDependencies,
@@ -131,6 +132,92 @@ describe('associated tmux cleanup', () => {
       },
       { signal: undefined },
     )
+  })
+
+  test('pages only the exact associated local session in the requested direction', async () => {
+    const listLocal = vi.fn(async () => ({
+      ok: true as const,
+      sessions: [
+        {
+          sessionName: FIRST_NAME,
+          initialPath: '/work/feature/',
+          terminalNumber: 1,
+          attachedClients: 1,
+          serverName: LOCAL_SERVER_NAME,
+        },
+      ],
+    }))
+    const pageLocalByName = vi.fn(async () => ({ ok: true, message: '' }))
+
+    await expect(
+      pageAssociatedTmuxSession(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          itemPath: '/work/feature/.',
+          sessionName: FIRST_NAME,
+          direction: 'up',
+        },
+        { platform: 'linux', listLocal, pageLocalByName },
+      ),
+    ).resolves.toEqual({ ok: true, status: 'paged' })
+    expect(pageLocalByName).toHaveBeenCalledWith(FIRST_NAME, 'up', {
+      projectRoot: LOCAL_PROJECT_ROOT,
+      serverName: LOCAL_SERVER_NAME,
+      signal: undefined,
+    })
+  })
+
+  test('pages an exact associated SSH session through its project tmux server', async () => {
+    const resolveRemote = vi.fn(async () => REMOTE_TARGET)
+    const runRemote = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        stdout: `/srv/feature\t1\t1\t${REMOTE_FIRST_NAME}\t${REMOTE_SERVER_NAME}`,
+        stderr: '',
+      })
+      .mockResolvedValueOnce({ ok: true, stdout: '', stderr: '' })
+
+    await expect(
+      pageAssociatedTmuxSession(
+        {
+          projectRoot: REMOTE_REPO,
+          itemPath: '/srv/feature',
+          sessionName: REMOTE_FIRST_NAME,
+          direction: 'down',
+        },
+        dependencies({ resolveRemote, runRemote }),
+      ),
+    ).resolves.toEqual({ ok: true, status: 'paged' })
+    expect(runRemote).toHaveBeenNthCalledWith(
+      2,
+      REMOTE_TARGET,
+      {
+        type: 'tmuxPageBySessionName',
+        projectRoot: REMOTE_TARGET.remotePath,
+        sessionName: REMOTE_FIRST_NAME,
+        serverName: REMOTE_SERVER_NAME,
+        direction: 'down',
+      },
+      { signal: undefined },
+    )
+  })
+
+  test('rejects an invalid tmux page direction before listing sessions', async () => {
+    const listLocal = vi.fn()
+
+    await expect(
+      pageAssociatedTmuxSession(
+        {
+          projectRoot: LOCAL_PROJECT_ROOT,
+          itemPath: LOCAL_PATH,
+          sessionName: FIRST_NAME,
+          direction: 'sideways' as 'up',
+        },
+        { platform: 'linux', listLocal },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(listLocal).not.toHaveBeenCalled()
   })
 
   test('does not close an exact name reported at a different path', async () => {

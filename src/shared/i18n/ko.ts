@@ -800,6 +800,8 @@ export const ko: Record<DictKey, string> = {
   'terminal.custom-buttons': '사용자 지정 터미널 버튼',
   'terminal.command-deck': '터미널 명령 패널',
   'terminal.command-deck.scroll-to-bottom': '맨 아래로',
+  'terminal.command-deck.page-up': '위로 페이지 이동',
+  'terminal.command-deck.page-down': '아래로 페이지 이동',
   'terminal.command-deck.previous-terminal': '이전 터미널',
   'terminal.command-deck.next-terminal': '다음 터미널',
   'terminal.command-deck.compose': '명령 입력',

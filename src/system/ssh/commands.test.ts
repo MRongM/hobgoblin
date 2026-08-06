@@ -55,6 +55,20 @@ describe('remote command scripts', () => {
       sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
       serverName,
     })
+    const pageUpByName = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxPageBySessionName',
+      projectRoot: '/srv/repo',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
+      direction: 'up',
+    } as Parameters<typeof buildRemoteCommandInvocation>[1])
+    const pageDownByName = buildRemoteCommandInvocation(TARGET, {
+      type: 'tmuxPageBySessionName',
+      projectRoot: '/srv/repo',
+      sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      serverName,
+      direction: 'down',
+    } as Parameters<typeof buildRemoteCommandInvocation>[1])
 
     expect(list.script).toContain(`tmux -L '${serverName}' -u list-sessions`)
     expect(list.script).toContain(`#{session_name}\t${serverName}`)
@@ -66,6 +80,23 @@ describe('remote command scripts', () => {
     expect(cancelModeByName.script).toBe(
       "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -q -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
     )
+    expect(pageUpByName.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -eu -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
+    )
+    expect(pageDownByName.script).toBe(
+      "command -v tmux >/dev/null 2>&1 || exit 127\ntmux -L 'hobgoblin-project-v1-44159cd9e973adba7b472e6f' copy-mode -ed -t '=hobgoblin-v1-aebf050981ac829e36100020:'",
+    )
+  })
+
+  test('rejects an invalid tmux copy-mode page direction', () => {
+    expect(() =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'tmuxPageBySessionName',
+        projectRoot: '/srv/repo',
+        sessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        direction: 'sideways',
+      } as unknown as Parameters<typeof buildRemoteCommandInvocation>[1]),
+    ).toThrow('error.invalid-arguments')
   })
 
   test('builds a fixed host-wide tmux inventory and exact-origin kill command', () => {

@@ -7,7 +7,9 @@ function getTerminalBridge(): RendererTerminalBridge {
 
 function bindTerminalMethod<TKey extends keyof RendererTerminalBridge>(key: TKey): RendererTerminalBridge[TKey] {
   return ((...args: Parameters<RendererTerminalBridge[TKey]>) => {
-    const method = getTerminalBridge()[key] as (...innerArgs: Parameters<RendererTerminalBridge[TKey]>) => ReturnType<RendererTerminalBridge[TKey]>
+    const method = getTerminalBridge()[key] as (
+      ...innerArgs: Parameters<RendererTerminalBridge[TKey]>
+    ) => ReturnType<RendererTerminalBridge[TKey]>
     return method(...args)
   }) as unknown as RendererTerminalBridge[TKey]
 }
@@ -18,6 +20,7 @@ export const terminalBridge: RendererTerminalBridge = {
   write: bindTerminalMethod('write'),
   resize: bindTerminalMethod('resize'),
   returnToBottom: bindTerminalMethod('returnToBottom'),
+  pageTmux: bindTerminalMethod('pageTmux'),
   takeover: bindTerminalMethod('takeover'),
   close: bindTerminalMethod('close'),
   create: bindTerminalMethod('create'),

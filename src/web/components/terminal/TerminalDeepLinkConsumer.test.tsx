@@ -177,6 +177,7 @@ function renderConsumer(options: {
     restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: options.selectTerminal,
     scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),

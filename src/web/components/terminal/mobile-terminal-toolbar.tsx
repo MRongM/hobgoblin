@@ -9,6 +9,7 @@ import {
   type TerminalExtraKeyInput,
 } from '#/web/components/terminal/terminal-extra-keys.ts'
 import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
+import type { TerminalTmuxPageDirection } from '#/shared/terminal.ts'
 
 export type MobileTerminalDockProjection =
   | { kind: 'pending' }
@@ -25,6 +26,7 @@ export type MobileTerminalDockProjection =
       kind: 'readonly'
       takeoverPending: boolean
       onTakeover: () => void
+      onTmuxPage?: (direction: TerminalTmuxPageDirection) => void
     }
 
 interface MobileTerminalDockProps {
@@ -199,6 +201,34 @@ export function MobileTerminalDock({
               onClick={controllerProjection.onEnterFocus}
             >
               {t('terminal.command-deck.focus')}
+            </Button>
+          </>
+        )}
+        {projection.kind === 'readonly' && projection.onTmuxPage && (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              title={t('terminal.command-deck.page-up')}
+              aria-label={t('terminal.command-deck.page-up')}
+              className="goblin-terminal-command-deck__btn"
+              onPointerDown={preserveTerminalFocus}
+              onClick={() => projection.onTmuxPage?.('up')}
+            >
+              ⇈
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              title={t('terminal.command-deck.page-down')}
+              aria-label={t('terminal.command-deck.page-down')}
+              className="goblin-terminal-command-deck__btn"
+              onPointerDown={preserveTerminalFocus}
+              onClick={() => projection.onTmuxPage?.('down')}
+            >
+              ⇊
             </Button>
           </>
         )}

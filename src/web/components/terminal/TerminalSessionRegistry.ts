@@ -13,6 +13,7 @@ import type {
   TerminalLaunchMode,
   TerminalSessionSnapshot,
   TerminalSessionSummary as ServerTerminalSessionSummary,
+  TerminalTmuxPageDirection,
 } from '#/shared/terminal.ts'
 import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
@@ -518,6 +519,10 @@ export class TerminalSessionRegistry {
 
   scrollToBottom = (key: string): void => {
     this.sessions.get(key)?.scrollToBottom()
+  }
+
+  pageTmux = (key: string, direction: TerminalTmuxPageDirection): void => {
+    this.sessions.get(key)?.pageTmux(direction)
   }
 
   focusTerminal = (key: string): void => {

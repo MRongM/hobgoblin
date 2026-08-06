@@ -160,6 +160,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     writeExtraKey,
     writeInput,
     scrollToBottom,
+    pageTmux,
     scrollByTouch,
     beginMobileSelection,
     extendMobileSelection,
@@ -1013,6 +1014,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
                         kind: 'readonly',
                         takeoverPending: snapshot.takeoverPending === true,
                         onTakeover: () => takeover(key),
+                        ...(descriptor?.tmuxBacked ? { onTmuxPage: (direction) => pageTmux(key, direction) } : {}),
                       }
                     : { kind: 'pending' }
               }

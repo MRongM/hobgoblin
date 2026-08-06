@@ -814,6 +814,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.custom-buttons': 'カスタムターミナルボタン',
   'terminal.command-deck': 'ターミナルコマンドデッキ',
   'terminal.command-deck.scroll-to-bottom': '一番下へ',
+  'terminal.command-deck.page-up': '上へページ移動',
+  'terminal.command-deck.page-down': '下へページ移動',
   'terminal.command-deck.previous-terminal': '前のターミナル',
   'terminal.command-deck.next-terminal': '次のターミナル',
   'terminal.command-deck.compose': 'コマンド入力',

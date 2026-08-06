@@ -1,10 +1,13 @@
 import { isValidRepoLocator } from '#/shared/input-validation.ts'
 import {
   closeAssociatedTmuxSessionByName,
+  pageAssociatedTmuxSession,
   previewAssociatedTmuxSessions,
   returnAssociatedTmuxSessionToBottom,
   type AssociatedTmuxSessionNameInput,
+  type AssociatedTmuxPageInput,
   type TerminalTmuxCloseResult,
+  type TerminalTmuxPageResult,
   type TerminalTmuxReturnToBottomResult,
 } from '#/server/modules/tmux-cleanup.ts'
 import {
@@ -54,6 +57,7 @@ import {
   type TerminalSocketResponseMessage,
   type TerminalTakeoverInput,
   type TerminalTakeoverResult,
+  type TerminalTmuxPageInput,
   type TerminalWriteInput,
 } from '#/shared/terminal.ts'
 
@@ -152,6 +156,9 @@ const realtimeRequestHandlers = {
   },
   'return-to-bottom'(clientId, attachmentId, input) {
     return returnServerTerminalToBottom(clientId, { ...input, attachmentId })
+  },
+  'page-tmux'(clientId, attachmentId, input) {
+    return pageServerTerminal(clientId, { ...input, attachmentId })
   },
   takeover(clientId, attachmentId, input) {
     return takeoverServerTerminal(clientId, { ...input, attachmentId })
@@ -299,9 +306,7 @@ export function resizeServerTerminal(clientId: string, input: TerminalResizeInpu
 }
 
 export interface TerminalReturnToBottomDependencies {
-  returnTmuxSessionToBottom?: (
-    input: AssociatedTmuxSessionNameInput,
-  ) => Promise<TerminalTmuxReturnToBottomResult>
+  returnTmuxSessionToBottom?: (input: AssociatedTmuxSessionNameInput) => Promise<TerminalTmuxReturnToBottomResult>
 }
 
 export async function returnServerTerminalToBottom(
@@ -329,6 +334,41 @@ export async function returnServerTerminalToBottom(
     projectRoot: session.scope,
     itemPath: session.tmuxWorkingDirectory,
     sessionName: session.tmuxSessionName,
+  })
+  return result.ok
+}
+
+export interface TerminalTmuxPageDependencies {
+  pageTmuxSession?: (input: AssociatedTmuxPageInput) => Promise<TerminalTmuxPageResult>
+}
+
+export async function pageServerTerminal(
+  clientId: string,
+  input: TerminalTmuxPageInput,
+  dependencies: TerminalTmuxPageDependencies = {},
+): Promise<TerminalMutationResult> {
+  if (
+    !isValidTerminalClientId(clientId) ||
+    !isValidTerminalSessionId(input?.sessionId) ||
+    !isValidTerminalAttachmentId(input?.attachmentId) ||
+    !input.attachmentId ||
+    (input.direction !== 'up' && input.direction !== 'down')
+  ) {
+    return false
+  }
+  const session = manager.getSession(clientId, input.sessionId)
+  if (
+    !session?.tmuxSessionName ||
+    !session.tmuxWorkingDirectory ||
+    !authorizeTerminalAttachment(session, input.attachmentId, 'navigate').ok
+  ) {
+    return false
+  }
+  const result = await (dependencies.pageTmuxSession ?? pageAssociatedTmuxSession)({
+    projectRoot: session.scope,
+    itemPath: session.tmuxWorkingDirectory,
+    sessionName: session.tmuxSessionName,
+    direction: input.direction,
   })
   return result.ok
 }

@@ -521,6 +521,8 @@ describe('i18n dictionaries', () => {
     const keys = [
       'terminal.command-deck',
       'terminal.command-deck.scroll-to-bottom',
+      'terminal.command-deck.page-up',
+      'terminal.command-deck.page-down',
       'terminal.command-deck.previous-terminal',
       'terminal.command-deck.next-terminal',
       'terminal.command-deck.compose',
@@ -539,6 +541,8 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['terminal.command-deck.compose' as keyof typeof zh]).toBe('命令输入')
     expect(zh['terminal.command-deck.scroll-to-bottom' as keyof typeof zh]).toBe('回到底部')
+    expect(zh['terminal.command-deck.page-up' as keyof typeof zh]).toBe('向上翻页')
+    expect(zh['terminal.command-deck.page-down' as keyof typeof zh]).toBe('向下翻页')
     expect(zh['terminal.command-deck.fit-width' as keyof typeof zh]).toBe('适应宽度')
     expect(zh['terminal.command-deck.focus' as keyof typeof zh]).toBe('专注模式')
     expect(zh['terminal.command-deck.exit-focus' as keyof typeof zh]).toBe('退出专注模式')

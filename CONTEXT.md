@@ -88,12 +88,16 @@ _Avoid_: Project switcher, terminal tabs, terminal takeover
 The fixed navigation action that first moves the renderer's normal terminal buffer to its bottom. For a tmux-backed terminal, any connected controller, viewer, or unowned attachment additionally asks the server to leave tmux copy mode with the exact validated project server and session target; it never injects `q`, Escape, or shell input and never takes terminal ownership.
 _Avoid_: Terminal input, takeover, blind key injection, synchronized scroll position
 
+**Read-only tmux page navigation**:
+A shared one-page movement through a tmux-backed terminal's copy-mode history that a viewer or unowned attachment may request without gaining terminal input authority. The controller and every viewer observe the resulting tmux pane position; reaching the live bottom exits copy mode.
+_Avoid_: Local viewer scrollback, PageUp key injection, private tmux viewport, takeover
+
 **Desktop/Web terminal command dock**:
 A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling and Return to bottom, followed by a visual divider and any configured custom terminal buttons. It does not provide a free-form command composer and is distinct from the Mobile Web terminal command deck.
 _Avoid_: Mobile Web terminal command deck, terminal topbar, command composer, external input box
 
 **Mobile Web terminal bottom dock**:
-A stable bottom action surface mounted as soon as a Mobile Web internal terminal is selected. Its invariant action row starts with global terminal cycling and Return to bottom even while attachment authority is unresolved. Once authority arrives asynchronously, a controller receives the Mobile Web terminal command deck and configured custom terminal buttons, while a viewer or unowned attachment receives Take over without read-only status copy. Authority resolution, system input-method visibility, and same-surface selected-terminal changes do not replace the invariant controls; cross-project navigation mounts the destination dock immediately from its selected terminal. Controller-only state is cleared when the terminal changes or input authority is lost. Mobile Web terminal focus mode intentionally hides the complete dock.
+A stable bottom action surface mounted as soon as a Mobile Web internal terminal is selected. Its invariant action row starts with global terminal cycling and Return to bottom even while attachment authority is unresolved. Once authority arrives asynchronously, a controller receives the Mobile Web terminal command deck and configured custom terminal buttons, while a viewer or unowned attachment receives shared page-up and page-down controls for a tmux-backed terminal followed by Take over, without read-only status copy. Authority resolution, system input-method visibility, and same-surface selected-terminal changes do not replace the invariant controls; cross-project navigation mounts the destination dock immediately from its selected terminal. Controller-only state is cleared when the terminal changes or input authority is lost. Mobile Web terminal focus mode intentionally hides the complete dock.
 _Avoid_: Mobile Web terminal command deck, read-only status overlay, loading toolbar, terminal topbar
 
 **Internal terminal**:

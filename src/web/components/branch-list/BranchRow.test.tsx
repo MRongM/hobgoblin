@@ -1309,6 +1309,7 @@ function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessi
     restoreTmuxSessions: vi.fn(async () => 0),
     selectTerminal: vi.fn(),
     scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),

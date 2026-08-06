@@ -4,6 +4,7 @@ import type {
   TerminalControllerStatus,
   TerminalLaunchMode,
   TerminalSessionPhase,
+  TerminalTmuxPageDirection,
 } from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
@@ -155,6 +156,7 @@ export interface TerminalSessionContextValue {
   restoreTmuxSessions: (base: TerminalSessionBase) => Promise<number>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
+  pageTmux: (key: string, direction: TerminalTmuxPageDirection) => void
   focusTerminal: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   scrollByTouch: (key: string, input: TerminalTouchScrollInput) => void

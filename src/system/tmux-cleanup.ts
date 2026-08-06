@@ -320,10 +320,25 @@ export async function cancelLocalTmuxModeBySessionName(
   return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
 }
 
+export async function pageLocalTmuxSessionByName(
+  sessionName: string,
+  direction: 'up' | 'down',
+  options: LocalTmuxKillOptions,
+): Promise<TmuxCommandResult> {
+  const targetArgs = localProjectTmuxTargetArgs(sessionName, options)
+  if (!targetArgs || (direction !== 'up' && direction !== 'down')) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const args = [...targetArgs, 'copy-mode', direction === 'up' ? '-eu' : '-ed', '-t', `=${sessionName}:`]
+  const result = await (options.run ?? runLocalTmuxCommand)(args, options.signal)
+  return result.ok ? { ok: true, message: result.stderr } : { ok: false, message: result.message }
+}
+
 function localProjectTmuxTargetArgs(sessionName: string, options: LocalTmuxKillOptions): string[] | null {
   if (!isHobgoblinTmuxSessionName(sessionName)) return null
   const expectedServerName = buildTmuxServerName(options.projectRoot)
-  if (!expectedServerName || (options.serverName !== undefined && options.serverName !== expectedServerName)) return null
+  if (!expectedServerName || (options.serverName !== undefined && options.serverName !== expectedServerName))
+    return null
   return options.serverName ? ['-L', options.serverName] : []
 }
 

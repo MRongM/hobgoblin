@@ -217,6 +217,9 @@ export function createServerTerminalBridge(options: {
     returnToBottom(input) {
       return requestOverSocket('return-to-bottom', input)
     },
+    pageTmux(input) {
+      return requestOverSocket('page-tmux', input)
+    },
     takeover(input) {
       return requestOverSocket('takeover', input)
     },
@@ -348,6 +351,10 @@ export function createServerTerminalBridge(options: {
   async function requestOverSocket(
     action: 'return-to-bottom',
     input: TerminalSocketRequestInputs['return-to-bottom'],
+  ): Promise<TerminalMutationResult>
+  async function requestOverSocket(
+    action: 'page-tmux',
+    input: TerminalSocketRequestInputs['page-tmux'],
   ): Promise<TerminalMutationResult>
   async function requestOverSocket(
     action: 'takeover',

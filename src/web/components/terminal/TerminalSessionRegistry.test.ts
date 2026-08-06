@@ -12,6 +12,7 @@ const bridgeMocks = vi.hoisted(() => ({
   close: vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true })),
   reorder: vi.fn(async () => true),
   setBadge: vi.fn(),
+  pageTmux: vi.fn(async () => true),
   takeover: vi.fn(async () => ({ ok: false as const, message: 'error.unavailable' })),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('#/web/terminal.ts', () => ({
     close: bridgeMocks.close,
     reorder: bridgeMocks.reorder,
     setBadge: bridgeMocks.setBadge,
+    pageTmux: bridgeMocks.pageTmux,
     takeover: bridgeMocks.takeover,
   },
 }))
@@ -86,6 +88,7 @@ describe('TerminalSessionRegistry', () => {
     bridgeMocks.close.mockResolvedValue({ ok: true })
     bridgeMocks.reorder.mockClear()
     bridgeMocks.setBadge.mockClear()
+    bridgeMocks.pageTmux.mockClear()
     bridgeMocks.takeover.mockClear()
     window.sessionStorage.setItem('goblin:web-terminal-attachment-id', 'attachment_local')
     registry = new TerminalSessionRegistry(
@@ -131,6 +134,27 @@ describe('TerminalSessionRegistry', () => {
       targetKind: 'branch-workspace',
       branchWorkspaceId: 'branch-workspace-1',
     })
+  })
+
+  test('delegates tmux page navigation to the selected managed session', async () => {
+    registry.setRepoIndex(makeRepoIndex())
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [
+        makeServerSession('session-a', 'terminal-1', {
+          controller: { attachmentId: 'attachment_remote', status: 'connected' },
+          tmuxBacked: true,
+        }),
+      ],
+      'attachment_local',
+      new Map(),
+    )
+    const key = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]!.key
+
+    registry.pageTmux(key, 'up')
+    await Promise.resolve()
+
+    expect(bridgeMocks.pageTmux).toHaveBeenCalledWith({ sessionId: 'session-a', direction: 'up' })
   })
 
   test('publishes a stable terminal catalog across synchronized projects', () => {

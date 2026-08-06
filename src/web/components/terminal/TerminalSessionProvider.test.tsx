@@ -291,9 +291,7 @@ const getSessionSnapshotMock = vi.fn<
 >(async () => null)
 const closeMock = vi.fn(async (): Promise<TerminalCloseResult> => ({ ok: true }))
 const createTerminalMock = vi.fn<(input: TerminalCreateInput) => Promise<TerminalCatalogMutationResult>>()
-const openTmuxSessionsMock = vi.fn<
-  (input: TerminalOpenTmuxSessionsInput) => Promise<TerminalOpenTmuxSessionsResult>
->()
+const openTmuxSessionsMock = vi.fn<(input: TerminalOpenTmuxSessionsInput) => Promise<TerminalOpenTmuxSessionsResult>>()
 let managedServerSessions: TerminalSessionSummary[] = []
 
 function attachResult(): TerminalAttachResult {
@@ -543,6 +541,7 @@ beforeEach(() => {
       write: vi.fn(async () => true),
       resize: vi.fn(async () => true),
       returnToBottom: vi.fn(async () => true),
+      pageTmux: vi.fn(async () => true),
       takeover: vi.fn(async () => ({
         ok: true as const,
         sessionId: 'session-1',

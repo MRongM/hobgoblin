@@ -170,6 +170,14 @@ export interface TerminalReturnToBottomInput {
   attachmentId?: string
 }
 
+export type TerminalTmuxPageDirection = 'up' | 'down'
+
+export interface TerminalTmuxPageInput {
+  sessionId: string
+  direction: TerminalTmuxPageDirection
+  attachmentId?: string
+}
+
 export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
@@ -275,6 +283,7 @@ export interface TerminalSocketRequestInputs {
   write: TerminalWriteInput
   resize: TerminalResizeInput
   'return-to-bottom': TerminalReturnToBottomInput
+  'page-tmux': TerminalTmuxPageInput
   takeover: TerminalTakeoverInput
   close: TerminalSessionInput
   'list-sessions': TerminalListSessionsInput
@@ -291,6 +300,7 @@ export interface TerminalSocketResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   'return-to-bottom': TerminalMutationResult
+  'page-tmux': TerminalMutationResult
   takeover: TerminalTakeoverResult
   close: TerminalCloseResult
   'list-sessions': TerminalSessionSummary[]
@@ -347,6 +357,7 @@ const TERMINAL_SOCKET_ACTIONS = [
   'write',
   'resize',
   'return-to-bottom',
+  'page-tmux',
   'takeover',
   'close',
   'list-sessions',
@@ -402,6 +413,11 @@ const TerminalWriteInputSchema = v.object({
 const TerminalResizeInputSchema = TerminalAttachInputSchema
 const TerminalReturnToBottomInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
+  attachmentId: TerminalOptionalAttachmentIdSchema,
+})
+const TerminalTmuxPageInputSchema = v.object({
+  sessionId: TerminalSessionIdSchema,
+  direction: v.picklist(['up', 'down']),
   attachmentId: TerminalOptionalAttachmentIdSchema,
 })
 const TerminalSessionInputSchema = v.object({
@@ -542,6 +558,12 @@ const TerminalClientMessageSchema = v.variant('type', [
     requestId: TerminalRequestIdSchema,
     action: v.literal('return-to-bottom'),
     input: TerminalReturnToBottomInputSchema,
+  }),
+  v.object({
+    type: v.literal('request'),
+    requestId: TerminalRequestIdSchema,
+    action: v.literal('page-tmux'),
+    input: TerminalTmuxPageInputSchema,
   }),
   v.object({
     type: v.literal('request'),

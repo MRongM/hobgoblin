@@ -13,6 +13,8 @@ const translations: Record<string, string> = {
   'terminal.command-deck.scroll-to-bottom': 'Back to bottom',
   'terminal.command-deck.previous-terminal': 'Previous terminal',
   'terminal.command-deck.next-terminal': 'Next terminal',
+  'terminal.command-deck.page-up': 'Page up',
+  'terminal.command-deck.page-down': 'Page down',
   'terminal.command-deck.compose': 'Compose',
   'terminal.command-deck.hide-compose': 'Hide compose',
   'terminal.command-deck.original-width': 'Original width',
@@ -172,6 +174,50 @@ describe('MobileTerminalDock', () => {
       )
       await act(async () => takeoverButton?.click())
       expect(onTakeover).toHaveBeenCalledTimes(1)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('renders plain double-arrow tmux page actions in the read-only dock', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onTmuxPage = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <MobileTerminalDock
+          terminalKey="terminal-1"
+          terminalCount={2}
+          projection={{
+            kind: 'readonly',
+            takeoverPending: false,
+            onTakeover: vi.fn(),
+            onTmuxPage,
+          }}
+          onScrollToBottom={vi.fn()}
+          onCycleTerminal={vi.fn()}
+        />,
+      )
+    })
+
+    try {
+      const actionRow = container.querySelector('.goblin-terminal-command-deck__row--actions')
+      const buttons = [...(actionRow?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+      expect(buttons.map((button) => button.textContent)).toEqual(['T↑', 'T↓', 'Back to bottom', '⇈', '⇊', 'Take over'])
+      expect(buttons[3]).toMatchObject({ title: 'Page up' })
+      expect(buttons[3]?.getAttribute('aria-label')).toBe('Page up')
+      expect(buttons[4]).toMatchObject({ title: 'Page down' })
+      expect(buttons[4]?.getAttribute('aria-label')).toBe('Page down')
+
+      await act(async () => {
+        buttons[3]?.click()
+        buttons[4]?.click()
+      })
+      expect(onTmuxPage.mock.calls).toEqual([['up'], ['down']])
     } finally {
       await act(async () => root.unmount())
       container.remove()

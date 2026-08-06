@@ -813,6 +813,8 @@ export const en = {
   'terminal.custom-buttons': 'Custom terminal buttons',
   'terminal.command-deck': 'Terminal command deck',
   'terminal.command-deck.scroll-to-bottom': 'Back to bottom',
+  'terminal.command-deck.page-up': 'Page up',
+  'terminal.command-deck.page-down': 'Page down',
   'terminal.command-deck.previous-terminal': 'Previous terminal',
   'terminal.command-deck.next-terminal': 'Next terminal',
   'terminal.command-deck.compose': 'Compose',

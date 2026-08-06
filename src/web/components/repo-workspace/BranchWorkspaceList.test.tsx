@@ -1105,6 +1105,7 @@ function terminalCommandContext(overrides: {
     restoreTmuxSessions: overrides.restoreTmuxSessions ?? vi.fn(async () => 0),
     selectTerminal: overrides.selectTerminal ?? vi.fn(),
     scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
     focusTerminal: vi.fn(),
     scrollLines: vi.fn(),
     scrollByTouch: vi.fn(),

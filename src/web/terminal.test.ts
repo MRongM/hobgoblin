@@ -79,11 +79,19 @@ describe('terminal web host bridge', () => {
       const store: Record<string, string> = {}
       return {
         getItem: (k: string) => store[k] ?? null,
-        setItem: (k: string, v: string) => { store[k] = v },
-        removeItem: (k: string) => { delete store[k] },
-        clear: () => { for (const k of Object.keys(store)) delete store[k] },
+        setItem: (k: string, v: string) => {
+          store[k] = v
+        },
+        removeItem: (k: string) => {
+          delete store[k]
+        },
+        clear: () => {
+          for (const k of Object.keys(store)) delete store[k]
+        },
         key: (i: number) => Object.keys(store)[i] ?? null,
-        get length() { return Object.keys(store).length },
+        get length() {
+          return Object.keys(store).length
+        },
       }
     }
     Object.defineProperty(window, 'localStorage', { value: createStorage(), configurable: true })
@@ -259,7 +267,9 @@ describe('terminal web host bridge', () => {
 
     socket?.emitOpen()
     await Promise.resolve()
-    const request = socket?.sent.map((payload) => JSON.parse(payload)).find((message) => message.action === 'return-to-bottom')
+    const request = socket?.sent
+      .map((payload) => JSON.parse(payload))
+      .find((message) => message.action === 'return-to-bottom')
     expect(request).toMatchObject({
       type: 'request',
       action: 'return-to-bottom',
@@ -271,6 +281,37 @@ describe('terminal web host bridge', () => {
         requestId: request?.requestId,
         ok: true,
         action: 'return-to-bottom',
+        payload: true,
+      }),
+    )
+
+    await expect(resultPromise).resolves.toBe(true)
+    dispose()
+  })
+
+  test('pages a tmux terminal through the terminal websocket', async () => {
+    const { terminalBridge } = await import('#/web/terminal.ts')
+    const dispose = terminalBridge.onOutput(() => {})
+    const socket = MockWebSocket.instances[0]
+    const resultPromise = terminalBridge.pageTmux({
+      sessionId: 'term_1234567890123456',
+      direction: 'up',
+    })
+
+    socket?.emitOpen()
+    await Promise.resolve()
+    const request = socket?.sent.map((payload) => JSON.parse(payload)).find((message) => message.action === 'page-tmux')
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'page-tmux',
+      input: { sessionId: 'term_1234567890123456', direction: 'up' },
+    })
+    socket?.emitMessage(
+      JSON.stringify({
+        type: 'response',
+        requestId: request?.requestId,
+        ok: true,
+        action: 'page-tmux',
         payload: true,
       }),
     )
@@ -388,12 +429,14 @@ describe('terminal web host bridge', () => {
     const listPromise = terminalBridge.listSessions({ repoRoot: '/tmp/repo' })
     socket?.emitOpen()
     await Promise.resolve()
-    const request = socket?.sent.map((payload) => JSON.parse(payload)).find((message) => message.action === 'list-sessions')
+    const request = socket?.sent
+      .map((payload) => JSON.parse(payload))
+      .find((message) => message.action === 'list-sessions')
     expect(request).toMatchObject({
       type: 'request',
       action: 'list-sessions',
       input: {
-      repoRoot: '/tmp/repo',
+        repoRoot: '/tmp/repo',
       },
     })
     socket?.emitMessage(
@@ -421,7 +464,9 @@ describe('terminal web host bridge', () => {
     const snapshotPromise = terminalBridge.getSessionSnapshot({ sessionId: 'term_1234567890123456' })
     socket?.emitOpen()
     await Promise.resolve()
-    const request = socket?.sent.map((payload) => JSON.parse(payload)).find((message) => message.action === 'session-snapshot')
+    const request = socket?.sent
+      .map((payload) => JSON.parse(payload))
+      .find((message) => message.action === 'session-snapshot')
     expect(request).toMatchObject({
       type: 'request',
       action: 'session-snapshot',
@@ -576,7 +621,9 @@ describe('terminal web host bridge', () => {
     })
     socket?.emitOpen()
     await Promise.resolve()
-    const createRequest = socket?.sent.map((payload) => JSON.parse(payload)).find((message) => message.action === 'create')
+    const createRequest = socket?.sent
+      .map((payload) => JSON.parse(payload))
+      .find((message) => message.action === 'create')
     socket?.emitMessage(
       JSON.stringify({
         type: 'response',

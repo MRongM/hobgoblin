@@ -41,6 +41,13 @@ export type RemoteCommandKind =
   | { type: 'tmuxListSessions'; projectRoot: string }
   | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
   | { type: 'tmuxCancelModeBySessionName'; projectRoot: string; sessionName: string; serverName?: string }
+  | {
+      type: 'tmuxPageBySessionName'
+      projectRoot: string
+      sessionName: string
+      serverName?: string
+      direction: 'up' | 'down'
+    }
   | { type: 'tmuxListHostSessions' }
   | { type: 'tmuxKillHostSessionByName'; sessionName: string; serverName?: string }
   | { type: 'testDirectory'; path: string }
@@ -276,6 +283,22 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return [
         'command -v tmux >/dev/null 2>&1 || exit 127',
         `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} copy-mode -q -t ${shellQuote(`=${command.sessionName}:`)}`,
+      ].join('\n')
+    }
+    case 'tmuxPageBySessionName': {
+      const serverName = buildTmuxServerName(command.projectRoot)
+      if (
+        !serverName ||
+        !isHobgoblinTmuxSessionName(command.sessionName) ||
+        (command.serverName !== undefined && command.serverName !== serverName) ||
+        (command.direction !== 'up' && command.direction !== 'down')
+      ) {
+        throw new TypeError('error.invalid-arguments')
+      }
+      const copyModeFlag = command.direction === 'up' ? '-eu' : '-ed'
+      return [
+        'command -v tmux >/dev/null 2>&1 || exit 127',
+        `tmux${command.serverName ? ` -L ${shellQuote(command.serverName)}` : ''} copy-mode ${copyModeFlag} -t ${shellQuote(`=${command.sessionName}:`)}`,
       ].join('\n')
     }
     case 'tmuxKillHostSessionByName': {

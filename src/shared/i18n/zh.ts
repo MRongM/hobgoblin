@@ -768,6 +768,8 @@ export const zh: Record<DictKey, string> = {
   'terminal.custom-buttons': '自定义终端按钮',
   'terminal.command-deck': '终端命令面板',
   'terminal.command-deck.scroll-to-bottom': '回到底部',
+  'terminal.command-deck.page-up': '向上翻页',
+  'terminal.command-deck.page-down': '向下翻页',
   'terminal.command-deck.previous-terminal': '上一个终端',
   'terminal.command-deck.next-terminal': '下一个终端',
   'terminal.command-deck.compose': '命令输入',

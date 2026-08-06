@@ -7,6 +7,7 @@ import type {
   TerminalAttachInput,
   TerminalOutputEvent,
   TerminalRestartInput,
+  TerminalTmuxPageDirection,
   TerminalWindowsPty,
 } from '#/shared/terminal.ts'
 import { normalizeTerminalSize, resolveTerminalOwnership } from '#/shared/terminal.ts'
@@ -53,6 +54,7 @@ export class ManagedTerminalSession {
   private outputFlushFrame: number | null = null
   private pendingFocus = false
   private renderPending = true
+  private tmuxNavigationTail: Promise<void> = Promise.resolve()
 
   private pendingResize: { cols: number; rows: number } | null = null
   private pendingOutput: string[] = []
@@ -258,11 +260,25 @@ export class ManagedTerminalSession {
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId || !this.descriptor.tmuxBacked) return
     this.prioritizeNextOutput = true
-    void terminalBridge.returnToBottom({ sessionId }).catch(() => {})
+    this.enqueueTmuxNavigation(() => terminalBridge.returnToBottom({ sessionId }))
+  }
+
+  pageTmux(direction: TerminalTmuxPageDirection): void {
+    const sessionId = this.runtime.currentSessionId()
+    if (!sessionId || !this.descriptor.tmuxBacked) return
+    this.prioritizeNextOutput = true
+    this.enqueueTmuxNavigation(() => terminalBridge.pageTmux({ sessionId, direction }))
   }
 
   scrollLines(amount: number): void {
     this.view.scrollLines(amount)
+  }
+
+  private enqueueTmuxNavigation(action: () => Promise<unknown>): void {
+    this.tmuxNavigationTail = this.tmuxNavigationTail.then(action).then(
+      () => undefined,
+      () => undefined,
+    )
   }
 
   serialize(): string {
