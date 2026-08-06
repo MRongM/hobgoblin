@@ -3,7 +3,10 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { MobileTerminalCommandDeck } from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
+import {
+  MobileTerminalDock,
+  type MobileTerminalDockProjection,
+} from '#/web/components/terminal/mobile-terminal-toolbar.tsx'
 
 const translations: Record<string, string> = {
   'terminal.command-deck': 'Terminal command deck',
@@ -17,6 +20,7 @@ const translations: Record<string, string> = {
   'terminal.command-deck.focus': 'Focus',
   'terminal.command-deck.input-placeholder': 'Command',
   'terminal.command-deck.send': 'Send',
+  'terminal.takeover': 'Take over',
 }
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -27,7 +31,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-describe('MobileTerminalCommandDeck', () => {
+describe('MobileTerminalDock', () => {
   test('renders the exact Android extra-key rows and Web action row', async () => {
     const fixture = await renderToolbar()
     try {
@@ -125,6 +129,189 @@ describe('MobileTerminalCommandDeck', () => {
       await fixture.cleanup()
     }
   })
+
+  test('fills the read-only takeover action without input controls or status copy', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onTakeover = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <MobileTerminalDock
+          terminalKey="terminal-1"
+          terminalCount={2}
+          projection={{
+            kind: 'readonly',
+            takeoverPending: false,
+            onTakeover,
+          }}
+          onScrollToBottom={vi.fn()}
+          onCycleTerminal={vi.fn()}
+        />,
+      )
+    })
+
+    try {
+      const actionRow = container.querySelector('.goblin-terminal-command-deck__row--actions')
+      expect([...(actionRow?.children ?? [])].map((child) => child.textContent)).toEqual([
+        'T↑',
+        'T↓',
+        'Back to bottom',
+        'Take over',
+      ])
+      expect(actionRow?.querySelector('[role="status"]')).toBeNull()
+      expect(container.textContent).not.toContain('Mirror controlled elsewhere')
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
+      expect(container.textContent).not.toContain('ENTER')
+      expect(container.textContent).not.toContain('Compose')
+
+      const takeoverButton = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'Take over',
+      )
+      await act(async () => takeoverButton?.click())
+      expect(onTakeover).toHaveBeenCalledTimes(1)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('preserves invariant actions and resets controller state across terminal and authority changes', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onExtraKey = vi.fn()
+    const onInput = vi.fn()
+    const onScrollToBottom = vi.fn()
+    const onCycleTerminal = vi.fn()
+    const onFitToWidthChange = vi.fn()
+    const onEnterFocus = vi.fn()
+    const controllerProjection = () => ({
+      kind: 'controller' as const,
+      inputMethodVisible: true,
+      fitToWidth: true,
+      onExtraKey,
+      onInput,
+      onFitToWidthChange,
+      onEnterFocus,
+    })
+    const renderDock = (terminalKey: string, projection: MobileTerminalDockProjection = controllerProjection()) =>
+      root.render(
+        <MobileTerminalDock
+          terminalKey={terminalKey}
+          terminalCount={2}
+          projection={projection}
+          onScrollToBottom={onScrollToBottom}
+          onCycleTerminal={onCycleTerminal}
+        />,
+      )
+    const button = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => candidate.textContent === label)
+
+    await act(async () => renderDock('terminal-1'))
+    const previousBefore = button('T↑')
+    const nextBefore = button('T↓')
+    const returnBefore = button('Back to bottom')
+
+    await act(async () => {
+      button('CTRL')?.click()
+      button('Compose')?.click()
+    })
+    await act(async () => setInputValue(container.querySelector<HTMLInputElement>('input'), 'printf test'))
+
+    await act(async () => renderDock('terminal-2'))
+
+    try {
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('Back to bottom')).toBe(returnBefore)
+      expect(container.querySelector('.goblin-terminal-command-deck__composer-input')).toBeNull()
+      expect(button('CTRL')?.getAttribute('aria-pressed')).toBe('false')
+
+      await act(async () => {
+        button('ALT')?.click()
+        button('Compose')?.click()
+      })
+      await act(async () => setInputValue(container.querySelector<HTMLInputElement>('input'), 'stale draft'))
+      await act(async () =>
+        renderDock('terminal-2', {
+          kind: 'readonly',
+          takeoverPending: false,
+          onTakeover: vi.fn(),
+        }),
+      )
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('Back to bottom')).toBe(returnBefore)
+      await act(async () => renderDock('terminal-2'))
+
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('Back to bottom')).toBe(returnBefore)
+      expect(button('ALT')?.getAttribute('aria-pressed')).toBe('false')
+      expect(container.querySelector('.goblin-terminal-command-deck__composer-input')).toBeNull()
+      await act(async () => button('Compose')?.click())
+      expect(container.querySelector<HTMLInputElement>('input')?.value).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('shows extra-key rows only while the input method is visible without replacing invariant actions', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const controllerProjection = (inputMethodVisible: boolean): MobileTerminalDockProjection => ({
+      kind: 'controller',
+      inputMethodVisible,
+      fitToWidth: true,
+      onExtraKey: vi.fn(),
+      onInput: vi.fn(),
+      onFitToWidthChange: vi.fn(),
+      onEnterFocus: vi.fn(),
+    })
+    const renderDock = (inputMethodVisible: boolean) =>
+      root.render(
+        <MobileTerminalDock
+          terminalKey="terminal-1"
+          terminalCount={2}
+          projection={controllerProjection(inputMethodVisible)}
+          onScrollToBottom={vi.fn()}
+          onCycleTerminal={vi.fn()}
+        />,
+      )
+    const button = (label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => candidate.textContent === label)
+
+    await act(async () => renderDock(false))
+    const previousBefore = button('T↑')
+    const nextBefore = button('T↓')
+    const returnBefore = button('Back to bottom')
+
+    try {
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
+
+      await act(async () => renderDock(true))
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(2)
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('Back to bottom')).toBe(returnBefore)
+
+      await act(async () => renderDock(false))
+      expect(container.querySelectorAll('.goblin-terminal-command-deck__row--extra-keys')).toHaveLength(0)
+      expect(button('T↑')).toBe(previousBefore)
+      expect(button('T↓')).toBe(nextBefore)
+      expect(button('Back to bottom')).toBe(returnBefore)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
 })
 
 async function renderToolbar() {
@@ -141,15 +328,20 @@ async function renderToolbar() {
 
   await act(async () => {
     root.render(
-      <MobileTerminalCommandDeck
+      <MobileTerminalDock
+        terminalKey="terminal-1"
         terminalCount={2}
-        fitToWidth
-        onExtraKey={onExtraKey}
-        onInput={onInput}
+        projection={{
+          kind: 'controller',
+          inputMethodVisible: true,
+          fitToWidth: true,
+          onExtraKey,
+          onInput,
+          onFitToWidthChange,
+          onEnterFocus,
+        }}
         onScrollToBottom={onScrollToBottom}
         onCycleTerminal={onCycleTerminal}
-        onFitToWidthChange={onFitToWidthChange}
-        onEnterFocus={onEnterFocus}
       />,
     )
   })

@@ -81,7 +81,7 @@ The top row of the terminal area, containing terminal tabs and terminal-level ac
 _Avoid_: Terminal toolbar, detail toolbar
 
 **Terminal cycle controls**:
-The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; Mobile Web controller terminals place them before Return to bottom in the command deck action row.
+The fixed previous-terminal and next-terminal actions that traverse the global open internal-terminal catalog in project order, including terminals in other projects. Selecting one changes the workspace destination and selected internal terminal without requesting input authority. Desktop/Web controller terminals place them first in the Desktop/Web terminal command dock; Desktop/Web read-only terminals place them first in a bottom-left read-only dock before Return to bottom and Take over, with status text last; every Mobile Web selected terminal places them first in the stable Mobile Web terminal bottom dock before Return to bottom, independently of whether attachment authority has finished loading.
 _Avoid_: Project switcher, terminal tabs, terminal takeover
 
 **Terminal return to bottom**:
@@ -91,6 +91,10 @@ _Avoid_: Terminal input, takeover, blind key injection, synchronized scroll posi
 **Desktop/Web terminal command dock**:
 A controller-only bottom-left terminal action surface whose fixed controls are global terminal cycling and Return to bottom, followed by a visual divider and any configured custom terminal buttons. It does not provide a free-form command composer and is distinct from the Mobile Web terminal command deck.
 _Avoid_: Mobile Web terminal command deck, terminal topbar, command composer, external input box
+
+**Mobile Web terminal bottom dock**:
+A stable bottom action surface mounted as soon as a Mobile Web internal terminal is selected. Its invariant action row starts with global terminal cycling and Return to bottom even while attachment authority is unresolved. Once authority arrives asynchronously, a controller receives the Mobile Web terminal command deck and configured custom terminal buttons, while a viewer or unowned attachment receives Take over without read-only status copy. Authority resolution, system input-method visibility, and same-surface selected-terminal changes do not replace the invariant controls; cross-project navigation mounts the destination dock immediately from its selected terminal. Controller-only state is cleared when the terminal changes or input authority is lost. Mobile Web terminal focus mode intentionally hides the complete dock.
+_Avoid_: Mobile Web terminal command deck, read-only status overlay, loading toolbar, terminal topbar
 
 **Internal terminal**:
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
@@ -109,8 +113,8 @@ A renderer-local, touch-sized interaction strip at the right edge of a Mobile We
 _Avoid_: Scroll slider, persistent scrollbar, page scrollbar, terminal ownership control, synchronized scroll position
 
 **Mobile Web terminal command deck**:
-A compact, controller-only input surface below a Mobile Web internal terminal whose first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. Its action row starts with global terminal cycle controls, followed by the local return-to-bottom action, terminal input, command composition, renderer-local width presentation, and Focus. All keys are 32 pixels high. It shares the terminal bottom dock with custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
-_Avoid_: Mobile toolbar, floating keys, virtual keyboard, Android command deck
+A compact, controller-only input extension of the Mobile Web terminal bottom dock. Its first two rows follow Hobgoblin Android's Termux-compatible extra-key order, distribute their seven keys evenly across the available width, and retain a 44-pixel minimum key width on narrow screens. For a controlling attachment, those two rows appear only while the system input method obscures the visual viewport and disappear when it closes; they are always absent while authority is unresolved and for viewer or unowned attachments. After the dock's invariant terminal cycle controls and local Return to bottom action, the deck adds terminal input, command composition, renderer-local width presentation, and Focus independently of those two rows. All keys are 32 pixels high. It shares the dock with configured custom terminal buttons, reserves terminal viewport space instead of floating over output, and is distinct from the Terminal topbar and the Android native command deck.
+_Avoid_: Mobile Web terminal bottom dock, mobile toolbar, floating keys, virtual keyboard, Android command deck
 
 **Mobile Web terminal focus mode**:
 A temporary, controller-only presentation for the selected Mobile Web internal terminal that hides the complete auxiliary bottom dock, including the command deck, composer, and custom terminal buttons. A small top-right exit handle restores the dock; changing terminal, attachment authority, or mobile presentation resets the mode. It is renderer-local, never persisted or synchronized, and does not hide Web navigation or enter desktop Terminal focus mode.
