@@ -102,6 +102,30 @@ export const ja: Record<DictKey, string> = {
   'workspace.configuration-invalid': 'ワークスペース設定が無効です。更新して続行してください。',
   'workspace.config.write-failed': 'ワークスペース設定を保存できませんでした。',
   'workspace.config.repository-unavailable': '選択したすべてのリポジトリが利用可能である必要があります。',
+  'workspace.recovery.action': 'プロジェクト設定を整理して再インポート',
+  'workspace.recovery.title': 'プロジェクト設定を整理して再インポートしますか？',
+  'workspace.recovery.planning': '復旧の影響を確認中…',
+  'workspace.recovery.confirm-summary':
+    '{branches} 件のブランチワークスペースを削除し、プロジェクト設定を整理して、{repositories} 件のリポジトリを再インポートします。',
+  'workspace.recovery.registry-reset-warning':
+    '共有ワークスペース設定レジストリを修復できません。続行すると、すべてのプロジェクトの設定レコードがリセットされます。',
+  'workspace.recovery.registry-repair-warning':
+    '共有ワークスペース設定レジストリの無効なレコードを削除し、他のプロジェクトの有効なレコードは保持します。',
+  'workspace.recovery.record-only': 'アプリケーションレコードのみ削除。ファイルや Git 状態が残る場合があります',
+  'workspace.recovery.destructive-warning':
+    '最初に通常の安全チェック付き削除を実行します。この処理では対象の内部ターミナルを閉じ、管理対象 worktree の未コミット変更を破棄する場合があります。失敗した場合はアプリケーションレコードのみを削除し、残ったディレクトリ、worktree、ブランチは強制削除しません。',
+  'workspace.recovery.abort': '復旧を停止',
+  'workspace.recovery.confirm': '整理して再インポート',
+  'workspace.recovery.retry': '再確認',
+  'workspace.recovery.result-success': 'プロジェクト設定を整理し、リポジトリを再インポートしました。',
+  'workspace.recovery.result-residual':
+    '復旧は完了しましたが、ブランチワークスペースのディレクトリ、worktree、またはブランチが残っている可能性があります。',
+  'workspace.recovery.result-failed': 'プロジェクト設定の復旧を完了できませんでした。',
+  'workspace.recovery.plan-failed': '復旧の影響を確認できませんでした。',
+  'workspace.recovery.cancelled': 'プロジェクト設定の復旧を停止しました。',
+  'workspace.recovery.failed': 'プロジェクト設定の復旧に失敗しました。',
+  'workspace.recovery.plan-stale': '確認後にプロジェクトが変更されました。続行する前に再確認してください。',
+  'workspace.recovery.operation-in-progress': 'プロジェクト設定の復旧はすでに実行中です。',
   'workspace.repositories.hide': 'ワークスペースリポジトリを非表示',
   'workspace.repositories.show': 'ワークスペースリポジトリを表示',
   'workspace.branch-workspace.list': 'ブランチワークスペース',

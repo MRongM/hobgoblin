@@ -45,7 +45,7 @@ describe('repo session hydration', () => {
         name: cwd === rootTarget.id ? 'example:workspace' : cwd,
         isGitRepo: cwd !== rootTarget.id,
       }),
-      'workspace.restore': () => ({
+      'workspace.import': () => ({
         ok: true,
         rootId: rootTarget.id,
         repositories: [{ id: child.id, name: 'api', remoteRef: child }],

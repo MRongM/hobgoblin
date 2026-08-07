@@ -102,6 +102,30 @@ export const en = {
   'workspace.configuration-invalid': 'The workspace configuration is invalid. Update it to continue.',
   'workspace.config.write-failed': 'Workspace configuration could not be saved.',
   'workspace.config.repository-unavailable': 'Every selected repository must be available.',
+  'workspace.recovery.action': 'Clean project configuration and re-import',
+  'workspace.recovery.title': 'Clean project configuration and re-import?',
+  'workspace.recovery.planning': 'Inspecting recovery impact…',
+  'workspace.recovery.confirm-summary':
+    'This will remove {branches} branch workspaces, clear the project configuration, and import {repositories} repositories.',
+  'workspace.recovery.registry-reset-warning':
+    'The shared workspace configuration registry cannot be repaired. Continuing will reset configuration records for every project.',
+  'workspace.recovery.registry-repair-warning':
+    'Invalid records in the shared workspace configuration registry will be removed while valid records for other projects are preserved.',
+  'workspace.recovery.record-only': 'application record only; files and Git state may remain',
+  'workspace.recovery.destructive-warning':
+    'Normal safety checks are used first. This may close scoped terminals and discard uncommitted changes in managed worktrees. If removal fails, only the application record is removed; remaining directories, worktrees, and branches are left in place.',
+  'workspace.recovery.abort': 'Stop recovery',
+  'workspace.recovery.confirm': 'Clean and re-import',
+  'workspace.recovery.retry': 'Plan again',
+  'workspace.recovery.result-success': 'Project configuration was cleaned and repositories were imported again.',
+  'workspace.recovery.result-residual':
+    'Recovery finished, but some branch workspace directories, worktrees, or branches may remain.',
+  'workspace.recovery.result-failed': 'Project configuration recovery did not complete.',
+  'workspace.recovery.plan-failed': 'Recovery impact could not be inspected.',
+  'workspace.recovery.cancelled': 'Project configuration recovery was stopped.',
+  'workspace.recovery.failed': 'Project configuration recovery failed.',
+  'workspace.recovery.plan-stale': 'The project changed after inspection. Inspect it again before continuing.',
+  'workspace.recovery.operation-in-progress': 'Project configuration recovery is already in progress.',
   'workspace.repositories.hide': 'Hide workspace repositories',
   'workspace.repositories.show': 'Show workspace repositories',
   'workspace.branch-workspace.list': 'Branch workspaces',

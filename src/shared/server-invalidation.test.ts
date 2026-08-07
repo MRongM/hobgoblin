@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   isBranchWorkspaceOperationUpdatedEvent,
+  isWorkspaceConfigurationInvalidationEvent,
   isWorkspaceInvalidationEvent,
   settingsInvalidationScopesForPrefsPatch,
 } from '#/shared/server-invalidation.ts'
@@ -37,6 +38,34 @@ describe('isWorkspaceInvalidationEvent', () => {
         sourceToken: 42,
       }),
     ).toBe(false)
+  })
+})
+
+describe('isWorkspaceConfigurationInvalidationEvent', () => {
+  test('accepts a safe root and optional source token', () => {
+    expect(
+      isWorkspaceConfigurationInvalidationEvent({
+        type: 'workspace-configuration-invalidated',
+        rootId: '/workspace',
+        sourceToken: 'workspace_import_1',
+      }),
+    ).toBe(true)
+    expect(
+      isWorkspaceConfigurationInvalidationEvent({
+        type: 'workspace-configuration-invalidated',
+        rootId: 'ssh-config://example/srv/workspace',
+      }),
+    ).toBe(true)
+  })
+
+  test.each([
+    { type: 'workspace-configuration-invalidated', rootId: '' },
+    { type: 'workspace-configuration-invalidated', rootId: ' /workspace' },
+    { type: 'workspace-configuration-invalidated', rootId: '/workspace\n' },
+    { type: 'workspace-configuration-invalidated', rootId: '/workspace', sourceToken: 'bad token' },
+    { type: 'workspace-configuration-invalidated', rootId: '/workspace', sourceToken: 42 },
+  ])('rejects malformed configuration invalidations', (event) => {
+    expect(isWorkspaceConfigurationInvalidationEvent(event)).toBe(false)
   })
 })
 

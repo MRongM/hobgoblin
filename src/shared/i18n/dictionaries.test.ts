@@ -237,6 +237,38 @@ describe('i18n dictionaries', () => {
     expect(zh['action.confirm-cleanup-invalid-worktree-note']).toContain('磁盘')
   })
 
+  test('includes workspace configuration recovery disclosure in every locale', () => {
+    const keys = [
+      'workspace.recovery.action',
+      'workspace.recovery.title',
+      'workspace.recovery.planning',
+      'workspace.recovery.confirm-summary',
+      'workspace.recovery.registry-reset-warning',
+      'workspace.recovery.registry-repair-warning',
+      'workspace.recovery.record-only',
+      'workspace.recovery.destructive-warning',
+      'workspace.recovery.abort',
+      'workspace.recovery.confirm',
+      'workspace.recovery.retry',
+      'workspace.recovery.result-success',
+      'workspace.recovery.result-residual',
+      'workspace.recovery.result-failed',
+      'workspace.recovery.plan-failed',
+      'workspace.recovery.cancelled',
+      'workspace.recovery.failed',
+      'workspace.recovery.plan-stale',
+      'workspace.recovery.operation-in-progress',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.recovery.action']).toBe('清理项目配置并重新导入')
+    expect(zh['workspace.recovery.destructive-warning']).toContain('未提交改动')
+    expect(zh['workspace.recovery.destructive-warning']).toContain('仅移除应用记录')
+    expect(zh['workspace.recovery.registry-reset-warning']).toContain('所有项目')
+  })
+
   test('warns that branch workspace removal discards uncommitted changes in every locale', () => {
     expect(en['workspace.branch-workspace.delete-warning']).toContain('uncommitted changes')
     expect(zh['workspace.branch-workspace.delete-warning']).toContain('未提交改动')

@@ -44,6 +44,7 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
     'repo.abort': async () => undefined,
     'workspace.restore': defaultWorkspaceRead,
     'workspace.discover': defaultWorkspaceRead,
+    'workspace.import': defaultWorkspaceRead,
     'workspace.configure': ({ rootPath, config }: { rootPath: string; config: unknown }) => {
       calls.workspaceConfigure.push({ rootPath, config })
       return { ok: false, message: 'workspace.config.write-failed' }
@@ -75,6 +76,9 @@ export function installGoblin(overrides: Record<string, (input: any) => unknown>
   }
   if (overrides['workspace.discover'] && !overrides['workspace.restore']) {
     handlers['workspace.restore'] = overrides['workspace.discover']
+  }
+  if (overrides['workspace.discover'] && !overrides['workspace.import']) {
+    handlers['workspace.import'] = overrides['workspace.discover']
   }
   installGoblinTestBridge(handlers)
   return calls

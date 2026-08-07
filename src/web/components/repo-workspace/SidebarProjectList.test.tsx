@@ -62,6 +62,12 @@ const hostTmuxInventoryState = vi.hoisted(() => ({
   visible: true,
 }))
 
+const workspaceRecoveryState = vi.hoisted(() => ({
+  calls: [] as Array<{ rootId: string; workspace: unknown; disabled?: boolean }>,
+  onSelect: vi.fn(),
+  visible: false,
+}))
+
 const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
 }))
@@ -201,6 +207,25 @@ vi.mock('#/web/hooks/useHostTmuxInventory.tsx', () => ({
   },
 }))
 
+vi.mock('#/web/hooks/useWorkspaceConfigurationRecovery.tsx', () => ({
+  useWorkspaceConfigurationRecovery: (options: { rootId: string; workspace: unknown; disabled?: boolean }) => {
+    workspaceRecoveryState.calls.push(options)
+    return {
+      visible: workspaceRecoveryState.visible && !!options.workspace,
+      contextAction: {
+        label: 'workspace.recovery.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: true,
+        separated: true,
+        onSelect: workspaceRecoveryState.onSelect,
+      },
+      dialog: <div data-testid="workspace-recovery-dialog" />,
+    }
+  },
+}))
+
 vi.mock('#/web/components/ExternalAppIcon/index.tsx', () => ({
   EditorAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-editor-app-icon" data-pref={pref} />,
   TerminalAppIcon: ({ pref }: { pref: string }) => <span data-testid="mock-terminal-app-icon" data-pref={pref} />,
@@ -294,6 +319,9 @@ beforeEach(() => {
   hostTmuxInventoryState.calls = []
   hostTmuxInventoryState.onSelect.mockReset()
   hostTmuxInventoryState.visible = true
+  workspaceRecoveryState.calls = []
+  workspaceRecoveryState.onSelect.mockReset()
+  workspaceRecoveryState.visible = false
   repoClientMocks.getRepositoryRemoteBranches.mockReset()
   repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
   container = document.createElement('div')
@@ -608,6 +636,50 @@ describe('SidebarProjectList', () => {
     expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain(
       'workspace.detect-repositories',
     )
+  })
+
+  test('offers configuration recovery only from an anomalous project context menu', async () => {
+    workspaceRecoveryState.visible = true
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        '/repo-b': {
+          rootId: '/repo-b',
+          repositoryIds: ['/repo-b/missing'],
+          candidates: [{ id: '/repo-b/missing', name: 'missing', selected: true, available: false }],
+          configured: true,
+          configuredRepositoryNames: ['missing'],
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    }))
+    const { onActivate, onClose } = renderList()
+
+    const moreLabels = (await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())
+    expect(moreLabels).not.toContain('workspace.recovery.action')
+    const contextItems = await openContextMenu(projectRow('/repo-b'))
+    const recovery = contextItems.find((item) => item.textContent?.includes('workspace.recovery.action'))
+    expect(recovery?.getAttribute('data-variant')).toBe('destructive')
+
+    await act(async () => {
+      recovery?.click()
+      await Promise.resolve()
+    })
+
+    expect(workspaceRecoveryState.onSelect).toHaveBeenCalledTimes(1)
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(workspaceRecoveryState.calls).toEqual([
+      { rootId: '/repo-a', workspace: undefined, disabled: false },
+      {
+        rootId: '/repo-b',
+        workspace: expect.objectContaining({ configurationError: null }),
+        disabled: false,
+      },
+    ])
   })
 
   test('offers destructive tmux cleanup from More without activating or closing the project', async () => {

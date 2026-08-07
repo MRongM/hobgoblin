@@ -150,6 +150,8 @@ export interface WorkspaceProjectState {
   repositoryIds: string[]
   candidates: WorkspaceRepositoryCandidate[]
   configured: boolean
+  /** Ordered persisted names, including records that discovery can no longer project. */
+  configuredRepositoryNames?: string[]
   configurationError: string | null
   phase: 'scanning' | 'ready' | 'error'
   skipped: WorkspaceDiscoveryIssue[]

@@ -95,6 +95,30 @@ export const ko: Record<DictKey, string> = {
   'workspace.configuration-invalid': '워크스페이스 구성이 잘못되었습니다. 업데이트한 후 계속하세요.',
   'workspace.config.write-failed': '워크스페이스 구성을 저장할 수 없습니다.',
   'workspace.config.repository-unavailable': '선택한 모든 저장소를 사용할 수 있어야 합니다.',
+  'workspace.recovery.action': '프로젝트 구성 정리 후 다시 가져오기',
+  'workspace.recovery.title': '프로젝트 구성을 정리하고 다시 가져올까요?',
+  'workspace.recovery.planning': '복구 영향을 확인하는 중…',
+  'workspace.recovery.confirm-summary':
+    '브랜치 워크스페이스 {branches}개를 제거하고 프로젝트 구성을 정리한 뒤 저장소 {repositories}개를 다시 가져옵니다.',
+  'workspace.recovery.registry-reset-warning':
+    '공유 워크스페이스 구성 레지스트리를 복구할 수 없습니다. 계속하면 모든 프로젝트의 구성 레코드가 초기화됩니다.',
+  'workspace.recovery.registry-repair-warning':
+    '공유 워크스페이스 구성 레지스트리의 잘못된 레코드를 제거하고 다른 프로젝트의 유효한 레코드는 유지합니다.',
+  'workspace.recovery.record-only': '애플리케이션 레코드만 제거하며 파일과 Git 상태가 남을 수 있음',
+  'workspace.recovery.destructive-warning':
+    '먼저 일반 안전 검사를 적용해 제거합니다. 이 과정에서 관련 내부 터미널을 닫고 관리되는 worktree의 커밋되지 않은 변경 사항을 버릴 수 있습니다. 실패하면 애플리케이션 레코드만 제거하며 남은 디렉터리, worktree, 브랜치는 강제로 삭제하지 않습니다.',
+  'workspace.recovery.abort': '복구 중지',
+  'workspace.recovery.confirm': '정리 후 다시 가져오기',
+  'workspace.recovery.retry': '다시 확인',
+  'workspace.recovery.result-success': '프로젝트 구성을 정리하고 저장소를 다시 가져왔습니다.',
+  'workspace.recovery.result-residual':
+    '복구는 완료되었지만 일부 브랜치 워크스페이스 디렉터리, worktree 또는 브랜치가 남아 있을 수 있습니다.',
+  'workspace.recovery.result-failed': '프로젝트 구성 복구를 완료하지 못했습니다.',
+  'workspace.recovery.plan-failed': '복구 영향을 확인할 수 없습니다.',
+  'workspace.recovery.cancelled': '프로젝트 구성 복구를 중지했습니다.',
+  'workspace.recovery.failed': '프로젝트 구성 복구에 실패했습니다.',
+  'workspace.recovery.plan-stale': '확인 후 프로젝트 상태가 변경되었습니다. 계속하기 전에 다시 확인하세요.',
+  'workspace.recovery.operation-in-progress': '프로젝트 구성 복구가 이미 진행 중입니다.',
   'workspace.repositories.hide': '워크스페이스 저장소 숨기기',
   'workspace.repositories.show': '워크스페이스 저장소 표시',
   'workspace.branch-workspace.list': '브랜치 워크스페이스',

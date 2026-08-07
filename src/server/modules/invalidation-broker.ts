@@ -3,6 +3,7 @@ import type {
   BranchWorkspaceOperationUpdatedEvent,
   SettingsInvalidationEvent,
   SettingsInvalidationScope,
+  WorkspaceConfigurationInvalidationEvent,
   WorkspaceInvalidationEvent,
 } from '#/shared/server-invalidation.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
@@ -56,14 +57,24 @@ export function publishSettingsInvalidation(scopes: SettingsInvalidationScope[])
 }
 
 export function publishWorkspaceInvalidation(rootId: string, sourceToken?: string): void {
-  const normalizedSourceToken =
-    typeof sourceToken === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(sourceToken) ? sourceToken : undefined
+  const normalizedSourceToken = normalizeSourceToken(sourceToken)
   publishInvalidationPayload(
     JSON.stringify({
       type: 'workspace-invalidated',
       rootId,
       ...(normalizedSourceToken ? { sourceToken: normalizedSourceToken } : {}),
     } satisfies WorkspaceInvalidationEvent),
+  )
+}
+
+export function publishWorkspaceConfigurationInvalidation(rootId: string, sourceToken?: string): void {
+  const normalizedSourceToken = normalizeSourceToken(sourceToken)
+  publishInvalidationPayload(
+    JSON.stringify({
+      type: 'workspace-configuration-invalidated',
+      rootId,
+      ...(normalizedSourceToken ? { sourceToken: normalizedSourceToken } : {}),
+    } satisfies WorkspaceConfigurationInvalidationEvent),
   )
 }
 
@@ -80,4 +91,8 @@ export function publishBranchWorkspaceOperationUpdate(
       operation,
     } satisfies BranchWorkspaceOperationUpdatedEvent),
   )
+}
+
+function normalizeSourceToken(sourceToken: string | undefined): string | undefined {
+  return typeof sourceToken === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(sourceToken) ? sourceToken : undefined
 }

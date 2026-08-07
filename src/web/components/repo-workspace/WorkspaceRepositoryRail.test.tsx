@@ -10,7 +10,6 @@ import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
-import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import type {
   BranchWorkspacePlan,
@@ -58,10 +57,6 @@ const repositoryListState = vi.hoisted(() => ({
     onReorder: (fromId: string, toId: string) => void
     onToggleFileArea?: () => void
   },
-}))
-
-const workspaceBatchState = vi.hoisted(() => ({
-  onSettled: null as null | ((result: WorkspacePullResult) => void | Promise<void>),
 }))
 
 const branchWorkspaceState = vi.hoisted(() => ({
@@ -352,26 +347,6 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx', (
   },
 }))
 
-vi.mock('#/web/hooks/useWorkspacePullActions.ts', () => ({
-  useWorkspacePullActions: (
-    _rootId: string,
-    onSettled: ((result: WorkspacePullResult) => void | Promise<void>) | undefined,
-  ) => {
-    workspaceBatchState.onSettled = onSettled ?? null
-    return {
-      plan: null,
-      result: null,
-      pending: false,
-      error: null,
-      requestPlan: vi.fn(),
-      confirm: vi.fn(),
-      retry: vi.fn(),
-      cancel: vi.fn(),
-      reset: vi.fn(),
-    }
-  },
-}))
-
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryList.tsx', () => ({
   WorkspaceRepositoryList: (props: NonNullable<typeof repositoryListState.props>) => {
     repositoryListState.props = props
@@ -512,7 +487,6 @@ beforeEach(() => {
   toastMocks.success.mockReset()
   toastMocks.error.mockReset()
   repositoryListState.props = null
-  workspaceBatchState.onSettled = null
   const overview = replaceRepo(emptyRepo(ROOT, 'workspace'), (repo) => {
     repo.isGitRepo = false
   })
@@ -995,8 +969,8 @@ describe('WorkspaceRepositoryRail', () => {
     expect(createWorkspace).not.toBeNull()
     expect(createWorkspace?.querySelector('.lucide-folder-plus')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.batch.remove-action"]')).toBeNull()
-    expect(container?.querySelector('button[aria-label="workspace.pull-all"]')).not.toBeNull()
-    expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="workspace.pull-all"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="workspace.configure"]')).toBeNull()
   })
 
   test('uses the workspace member name when shared repository state keeps a remote project prefix', () => {
@@ -1065,15 +1039,12 @@ describe('WorkspaceRepositoryRail', () => {
     expect(repositorySection?.querySelector('[aria-label="workspace.repositories.expand"]')).toBeNull()
     const hide = repositorySection?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.hide"]')
     expect(hide?.querySelector('.lucide-eye-off')).not.toBeNull()
-    for (const label of [
-      'workspace.branch-workspace.create',
-      'workspace.pull-all',
-      'workspace.configure',
-      'workspace.rescan',
-    ]) {
+    for (const label of ['workspace.branch-workspace.create', 'workspace.rescan']) {
       expect(repositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
       expect(branchWorkspaceSection?.querySelector(`[aria-label="${label}"]`)).toBeNull()
     }
+    expect(repositorySection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
+    expect(repositorySection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
 
     act(() => hide?.click())
 
@@ -1087,12 +1058,12 @@ describe('WorkspaceRepositoryRail', () => {
     for (const label of [
       'workspace.branch-workspace.reload',
       'workspace.branch-workspace.create',
-      'workspace.pull-all',
       'workspace.repositories.show',
     ]) {
       expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
     expect(migratedSection?.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
     expect(migratedSection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
     expect(migratedSection?.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
 
@@ -1100,14 +1071,11 @@ describe('WorkspaceRepositoryRail', () => {
 
     const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     expect(restoredRepositorySection).not.toBeNull()
-    for (const label of [
-      'workspace.branch-workspace.create',
-      'workspace.pull-all',
-      'workspace.configure',
-      'workspace.rescan',
-    ]) {
+    for (const label of ['workspace.branch-workspace.create', 'workspace.rescan']) {
       expect(restoredRepositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
   })
 
   test('shows the branch workspace recovery header while repositories are hidden from a member repository', () => {
@@ -1722,75 +1690,6 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
   })
 
-  test('refreshes configured members after a batch operation without rediscovering workspace directories', async () => {
-    renderRail()
-
-    await act(async () =>
-      workspaceBatchState.onSettled?.({
-        ok: true,
-        planToken: 'sha256:plan',
-        members: [],
-      }),
-    )
-
-    expect(refreshCoreData).toHaveBeenCalledTimes(2)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
-    expect(rescanWorkspace).not.toHaveBeenCalled()
-  })
-
-  test('shows a success toast when pulling all repositories completes', async () => {
-    renderRail()
-    const result = {
-      ok: true,
-      planToken: 'sha256:plan',
-      members: [],
-    } satisfies WorkspacePullResult
-
-    await act(async () => await workspaceBatchState.onSettled?.(result))
-
-    expect(toastMocks.success).toHaveBeenCalledWith('workspace.pull-all-success')
-    expect(toastMocks.error).not.toHaveBeenCalled()
-  })
-
-  test('shows an error toast when a batch does not complete every repository', async () => {
-    renderRail()
-    const result = {
-      ok: false,
-      planToken: 'sha256:plan',
-      members: [{ repoId: API, phase: 'failed', message: 'busy' }],
-      message: 'workspace.pull.execute-failed',
-    } satisfies WorkspacePullResult
-
-    await act(async () => await workspaceBatchState.onSettled?.(result))
-
-    expect(toastMocks.error).toHaveBeenCalledWith('workspace.pull-all-incomplete', {
-      description: 'workspace.pull.execute-failed',
-    })
-    expect(toastMocks.success).not.toHaveBeenCalled()
-  })
-
-  test('rescans before opening configuration and saves through the workspace action', async () => {
-    let resolveRescan: (() => void) | undefined
-    const rescanPromise = new Promise<void>((resolve) => {
-      resolveRescan = resolve
-    })
-    rescanWorkspace.mockImplementationOnce(() => rescanPromise)
-    renderRail()
-
-    act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.click())
-    expect(rescanWorkspace).toHaveBeenCalledWith(ROOT)
-    expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')).toBeNull()
-
-    await act(async () => {
-      resolveRescan?.()
-      await rescanPromise
-    })
-    await act(async () => document.querySelector<HTMLButtonElement>('button[type="submit"]')?.click())
-
-    expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['api', 'web'] })
-  })
-
   test('optimistically reorders configured repositories and persists their names', async () => {
     const web = useReposStore.getState().repos[WEB]!
     useReposStore.setState({
@@ -1804,7 +1703,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([WEB, API])
     expect(repositoryListState.props?.disabled).toBe(true)
-    expect(container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.disabled).toBe(true)
+    expect(container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')).toBeNull()
     expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['web', 'api'] })
     act(() => repositoryListState.props?.onReorder(API, WEB))
     expect(configureWorkspace).toHaveBeenCalledTimes(1)

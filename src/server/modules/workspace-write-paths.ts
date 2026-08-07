@@ -73,10 +73,10 @@ export async function saveWorkspaceConfig(
   } catch (error) {
     return { ok: false, message: safeMessage(error) }
   }
-  return projectSavedWorkspaceConfiguration(discovery, config)
+  return projectWorkspaceConfiguration(discovery, config)
 }
 
-function projectSavedWorkspaceConfiguration(
+export function projectWorkspaceConfiguration(
   discovery: Extract<WorkspaceDiscoveryResult, { ok: true }>,
   config: WorkspaceConfig,
 ): WorkspaceDiscoveryResult {

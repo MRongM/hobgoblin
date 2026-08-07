@@ -23,7 +23,7 @@ export type BranchWorkspaceManifestSourceSnapshot =
   | { kind: 'ready'; manifests: BranchWorkspaceManifest[] }
   | { kind: 'invalid'; message: string }
 
-interface BranchWorkspaceSourceDependencies {
+export interface BranchWorkspaceSourceDependencies {
   dataFile?: string
   randomId?: () => string
 }
@@ -76,6 +76,33 @@ export async function updateBranchWorkspaceManifests(
   dependencies: BranchWorkspaceSourceDependencies = {},
 ): Promise<void> {
   await mutateBranchWorkspaceManifests(rootId, mutate, dependencies)
+}
+
+export async function discardBranchWorkspaceRecords(
+  rootId: string,
+  branchWorkspaceIds: readonly string[],
+  dependencies: BranchWorkspaceSourceDependencies = {},
+): Promise<void> {
+  if (branchWorkspaceIds.length === 0) return
+  const normalizedRootId = workspaceRootId(rootId)
+  const discardedIds = new Set(branchWorkspaceIds)
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+
+  await enqueueWrite(dataFile, async () => {
+    const snapshot = await readRegistry(dataFile)
+    if (snapshot.kind === 'missing') return
+    if (snapshot.kind === 'invalid') throw new Error('workspace.branch-workspace.read-failed')
+    const group = snapshot.registry.workspaces.find((workspace) => workspace.rootId === normalizedRootId)
+    if (!group || !group.branchWorkspaces.some((manifest) => discardedIds.has(manifest.id))) return
+    const workspaces = snapshot.registry.workspaces.map((workspace) => ({
+      rootId: workspace.rootId,
+      branchWorkspaces:
+        workspace.rootId === normalizedRootId
+          ? cloneManifests(workspace.branchWorkspaces.filter((manifest) => !discardedIds.has(manifest.id)))
+          : cloneManifests(workspace.branchWorkspaces),
+    }))
+    await writeRegistry(dataFile, { version: 1, workspaces }, dependencies.randomId?.() ?? randomUUID())
+  })
 }
 
 export async function cleanupBranchWorkspaceRegistry(

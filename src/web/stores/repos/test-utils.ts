@@ -484,6 +484,7 @@ export function installGoblinTestBridge(handlers: Record<string, RpcTestHandler>
         if (url.pathname === '/api/repo/abort') return call('repo.abort', body)
         if (url.pathname === '/api/workspace/restore') return call('workspace.restore', body)
         if (url.pathname === '/api/workspace/discover') return call('workspace.discover', body)
+        if (url.pathname === '/api/workspace/import') return call('workspace.import', body)
         if (url.pathname === '/api/workspace/configure') return call('workspace.configure', body)
         throw new Error(`Unhandled fetch URL: ${url.pathname}`)
       })()

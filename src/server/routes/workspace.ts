@@ -2,9 +2,11 @@ import { Hono, type Context } from 'hono'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import { cleanupBranchWorkspaceRegistryRecords } from '#/server/modules/branch-workspace-registry-write-paths.ts'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
+import { createWorkspaceRecoveryWriteService } from '#/server/modules/workspace-recovery-write-paths.ts'
 import { createBranchWorkspaceDependencyWriteService } from '#/server/modules/branch-workspace-dependency-write-paths.ts'
 import { createBranchWorkspaceGitActionWriteService } from '#/server/modules/branch-workspace-git-action-write-paths.ts'
 import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
+import { importWorkspaceRepositories } from '#/server/modules/workspace-import-write-paths.ts'
 import { saveWorkspaceConfig } from '#/server/modules/workspace-write-paths.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 import { isBranchWorkspaceApproval, normalizeBranchWorkspacePlanRequest } from '#/shared/branch-workspaces.ts'
@@ -21,6 +23,7 @@ import {
   normalizeBranchWorkspaceDependencyExecuteInput,
   normalizeBranchWorkspaceDependencyPlanRequest,
 } from '#/shared/branch-workspace-dependencies.ts'
+import { normalizeWorkspaceRecoveryExecuteInput } from '#/shared/workspace-recovery.ts'
 
 export interface WorkspaceRouteOptions {
   terminalHost?: ServerTerminalHost
@@ -43,6 +46,9 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
   })
   const branchWorkspaceGitActionWriteService = createBranchWorkspaceGitActionWriteService()
   const branchWorkspaceDependencyWriteService = createBranchWorkspaceDependencyWriteService()
+  const workspaceRecoveryWriteService = createWorkspaceRecoveryWriteService({
+    branchService: branchWorkspaceWriteService,
+  })
 
   app.post('/discover', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -66,6 +72,21 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
     }
   })
 
+  app.post('/import', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootPath = typeof body?.rootPath === 'string' ? body.rootPath : ''
+    const sourceToken =
+      typeof body?.sourceToken === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(body.sourceToken)
+        ? body.sourceToken
+        : undefined
+    try {
+      return c.json(await importWorkspaceRepositories(rootPath, { ...(sourceToken ? { sourceToken } : {}) }))
+    } catch (error) {
+      console.warn('[server][workspace] import failed', error)
+      return c.json({ ok: false as const, message: 'workspace.config.write-failed' })
+    }
+  })
+
   app.post('/configure', async (c) => {
     const body = await c.req.json().catch(() => null)
     const rootPath = typeof body?.rootPath === 'string' ? body.rootPath : ''
@@ -75,6 +96,30 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       console.warn('[server][workspace] configuration failed', error)
       return c.json({ ok: false as const, message: 'workspace.config.write-failed' })
     }
+  })
+
+  app.post('/recovery/plan', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    if (!isNonEmptyString(rootId)) return c.json({ ok: false as const, message: 'error.invalid-arguments' })
+    return c.json(await workspaceRecoveryWriteService.plan(rootId))
+  })
+
+  app.post('/recovery/execute', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    const normalized = normalizeWorkspaceRecoveryExecuteInput(body?.input)
+    if (!isNonEmptyString(rootId) || !normalized.ok) {
+      return c.json({ ok: false as const, message: 'error.invalid-arguments' })
+    }
+    return c.json(await workspaceRecoveryWriteService.execute(rootId, normalized.input))
+  })
+
+  app.post('/recovery/abort', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
+    if (!isNonEmptyString(rootId)) return c.json({ ok: false as const, message: 'error.invalid-arguments' })
+    return c.json({ ok: workspaceRecoveryWriteService.abort(rootId) })
   })
 
   app.get('/branch-workspaces/read', async (c) => {

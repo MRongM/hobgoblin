@@ -13,6 +13,10 @@ import {
   cleanupBranchWorkspaceRegistry,
   configureWorkspace,
   discoverWorkspace,
+  importWorkspace,
+  abortWorkspaceRecovery,
+  executeWorkspaceRecovery,
+  planWorkspaceRecovery,
   executeBranchWorkspace,
   planBranchWorkspace,
   readBranchWorkspaces,
@@ -65,6 +69,22 @@ describe('workspace client', () => {
     })
   })
 
+  test('posts the root path and source token to the atomic workspace import endpoint', async () => {
+    const result = {
+      ok: true,
+      rootId: '/workspace',
+      repositories: [{ id: '/workspace/api', name: 'api' }],
+      skipped: [],
+    }
+    mocks.postServerJson.mockResolvedValue(result)
+
+    await expect(importWorkspace('/workspace', 'workspace_import_1')).resolves.toEqual(result)
+    expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/import', {
+      rootPath: '/workspace',
+      sourceToken: 'workspace_import_1',
+    })
+  })
+
   test('posts the root path and config to the workspace configuration endpoint', async () => {
     const result = { ok: false, message: 'workspace.config.repository-unavailable' }
     mocks.postServerJson.mockResolvedValue(result)
@@ -73,6 +93,29 @@ describe('workspace client', () => {
     expect(mocks.postServerJson).toHaveBeenCalledWith('/api/workspace/configure', {
       rootPath: '/workspace',
       config: { repo: ['api', 'web'] },
+    })
+  })
+
+  test('posts workspace recovery plan, execute, and abort requests', async () => {
+    mocks.postServerJson.mockResolvedValue({ ok: true })
+    const input = {
+      planToken: `sha256:${'1'.repeat(64)}`,
+      sourceToken: 'workspace_recovery_1',
+    }
+
+    await planWorkspaceRecovery('/workspace')
+    await executeWorkspaceRecovery('/workspace', input)
+    await abortWorkspaceRecovery('/workspace')
+
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/recovery/plan', {
+      rootId: '/workspace',
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/recovery/execute', {
+      rootId: '/workspace',
+      input,
+    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/recovery/abort', {
+      rootId: '/workspace',
     })
   })
 

@@ -27,6 +27,7 @@ import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpe
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { useHostTmuxInventory } from '#/web/hooks/useHostTmuxInventory.tsx'
+import { useWorkspaceConfigurationRecovery } from '#/web/hooks/useWorkspaceConfigurationRecovery.tsx'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import {
@@ -131,6 +132,11 @@ function SortableProjectRow({
     disabled: false,
   })
   const hostTmuxInventory = useHostTmuxInventory({ projectRoot: project.id, disabled: false })
+  const workspaceRecovery = useWorkspaceConfigurationRecovery({
+    rootId: project.id,
+    workspace,
+    disabled: project.unavailable,
+  })
   const changeCountLabel =
     project.changeCount > 0 ? t('branch-status.worktree-dirty', { n: project.changeCount }) : null
   const editorAction: WorkspaceListItemAction | undefined = projectExternalActions.visible
@@ -219,6 +225,7 @@ function SortableProjectRow({
         additionalActions={[
           ...(hostTmuxInventory.visible ? [hostTmuxInventory.contextAction] : []),
           ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
+          ...(workspaceRecovery.visible ? [workspaceRecovery.contextAction] : []),
         ]}
       >
         <WorkspaceListItemFrame
@@ -288,6 +295,7 @@ function SortableProjectRow({
       {project.isGitRepo ? creation.dialogs : null}
       {hostTmuxInventory.dialog}
       {tmuxCleanup.dialog}
+      {workspaceRecovery.dialog}
     </>
   )
 }

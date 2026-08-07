@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
+import { Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
-import type { WorkspaceConfig } from '#/shared/workspace.ts'
-import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -22,12 +20,10 @@ import {
 } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import { branchWorkspaceTerminalBase } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceMemberPresentation } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
-import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
   WorkspaceRepositoryList,
   type WorkspaceRepositoryListItem,
 } from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
-import { WorkspacePullDialog } from '#/web/components/repo-workspace/WorkspacePullDialog.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import {
@@ -41,7 +37,6 @@ import { cleanupBranchWorkspaceRegistry } from '#/web/workspace-client.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
 import { useBranchWorkspaceDependencyActions } from '#/web/hooks/useBranchWorkspaceDependencyActions.ts'
 import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
-import { useWorkspacePullActions } from '#/web/hooks/useWorkspacePullActions.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -111,7 +106,6 @@ export function WorkspaceRepositoryRail({
   const branchActions = useBranchWorkspaceActions(workspaceRootId)
   const branchDependencyActions = useBranchWorkspaceDependencyActions(workspaceRootId)
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
-  const [configurationOpen, setConfigurationOpen] = useState(false)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
   const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'extend' | 'reduce' | 'repair' | 'remove'>(
     'create',
@@ -121,7 +115,6 @@ export function WorkspaceRepositoryRail({
   const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false)
   const [dependencyDialogMode, setDependencyDialogMode] = useState<'add' | 'remove'>('add')
   const [dependencyBranchWorkspaceId, setDependencyBranchWorkspaceId] = useState('')
-  const [pullOpen, setPullOpen] = useState(false)
   const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
   const [reorderPending, setReorderPending] = useState(false)
   const [reorderError, setReorderError] = useState<string | null>(null)
@@ -184,14 +177,6 @@ export function WorkspaceRepositoryRail({
       ),
     [branchItems, repos, repositoryIdByName],
   )
-  const configuredRepositoryNames = useMemo(
-    () =>
-      (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
-        const name = candidateNameById.get(repositoryId)
-        return name ? [name] : []
-      }),
-    [candidateNameById, workspace?.repositoryIds],
-  )
   const repositoryOptions = useMemo(
     () =>
       (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
@@ -241,17 +226,6 @@ export function WorkspaceRepositoryRail({
     const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
     return Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
   }, [workspaceRootId])
-  const settlePull = useCallback(
-    async (result: WorkspacePullResult) => {
-      if (result.ok) toast.success(t('workspace.pull-all-success'))
-      else
-        toast.error(t('workspace.pull-all-incomplete'), result.message ? { description: t(result.message) } : undefined)
-      await refreshWorkspaceMemberCoreData()
-    },
-    [refreshWorkspaceMemberCoreData, t],
-  )
-  const pullActions = useWorkspacePullActions(workspaceRootId, settlePull)
-
   useEffect(() => {
     if (activeContext.kind !== 'branch-workspace' || !activeContext.memberRepositoryName) return
     const branchWorkspace = branchItems.find((item) => item.id === activeContext.branchWorkspaceId)
@@ -473,10 +447,6 @@ export function WorkspaceRepositoryRail({
     setReorderPending(false)
     if (!result.ok) setReorderError(result.message)
   }
-  const openConfiguration = async () => {
-    await rescanWorkspace(workspaceRootId)
-    setConfigurationOpen(true)
-  }
   const openBranchDialog = (
     mode: 'create' | 'extend' | 'reduce' | 'repair' | 'remove',
     item: BranchWorkspaceSnapshot | null,
@@ -509,11 +479,6 @@ export function WorkspaceRepositoryRail({
       )
     }
   }
-  const openPull = () => {
-    pullActions.reset()
-    setPullOpen(true)
-    void pullActions.requestPlan()
-  }
   const openDependencyDialog = (mode: 'add' | 'remove', item: BranchWorkspaceSnapshot) => {
     branchDependencyActions.reset()
     setDependencyDialogMode(mode)
@@ -534,32 +499,10 @@ export function WorkspaceRepositoryRail({
       >
         <FolderPlus aria-hidden="true" />
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t('workspace.pull-all')}
-        title={t('workspace.pull-all')}
-        disabled={!batchReady || reorderPending}
-        onClick={openPull}
-      >
-        <Download aria-hidden="true" />
-      </Button>
     </>
   )
   const workspaceRepositoryOnlyActions = (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t('workspace.configure')}
-        title={t('workspace.configure')}
-        disabled={scanning || reorderPending}
-        onClick={() => void openConfiguration()}
-      >
-        <Settings2 aria-hidden="true" />
-      </Button>
       <Button
         type="button"
         variant="ghost"
@@ -754,13 +697,6 @@ export function WorkspaceRepositoryRail({
           </div>
         )}
       </div>
-      <WorkspaceConfigurationDialog
-        open={configurationOpen}
-        onOpenChange={setConfigurationOpen}
-        configuredRepositoryNames={configuredRepositoryNames}
-        candidates={workspace.candidates}
-        onSave={(config: WorkspaceConfig) => configureWorkspace(workspaceRootId, config)}
-      />
       <BranchWorkspaceDialog
         open={branchDialogOpen}
         mode={branchDialogMode}
@@ -802,20 +738,6 @@ export function WorkspaceRepositoryRail({
         onPreview={branchDependencyActions.requestPlan}
         onConfirm={branchDependencyActions.confirm}
         onCancel={branchDependencyActions.cancel}
-      />
-      <WorkspacePullDialog
-        open={pullOpen}
-        plan={pullActions.plan}
-        result={pullActions.result}
-        pending={pullActions.pending}
-        error={pullActions.error}
-        onOpenChange={(open) => {
-          setPullOpen(open)
-          if (!open && !pullActions.pending) pullActions.reset()
-        }}
-        onConfirm={pullActions.confirm}
-        onRetry={pullActions.retry}
-        onCancel={pullActions.cancel}
       />
       <ConfirmDialog
         open={registryCleanupOpen}
