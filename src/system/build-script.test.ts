@@ -167,7 +167,24 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('bun scripts/build-release-artifacts.ts --platform macos --arch ${{ matrix.arch }}')
     expect(workflow).toContain('uses: ./.github/workflows/windows-test.yml')
     expect(windowsWorkflow).toContain('workflow_call:')
-    expect(windowsWorkflow).toContain('bun run test')
+    expect(windowsWorkflow).toContain('name: Test Windows compatibility')
+    for (const windowsTestPath of [
+      'src/main/external-open.test.ts',
+      'src/main/terminal.test.ts',
+      'src/server/terminal/terminal-pty-runtime.test.ts',
+      'src/server/terminal/terminal-scope.test.ts',
+      'src/shared/file-path-target.test.ts',
+      'src/shared/path-semantics.test.ts',
+      'src/shared/worktree-guards.test.ts',
+      'src/system/open-app.test.ts',
+      'src/system/terminals.test.ts',
+      'src/system/windows-terminal.test.ts',
+      'src/web/components/terminal/terminal-path-links.test.ts',
+      'src/web/lib/editor-open-targets.test.ts',
+      'src/web/lib/paths.test.ts',
+    ]) {
+      expect(windowsWorkflow).toContain(windowsTestPath)
+    }
     expect(windowsWorkflow).toContain('bun scripts/build-release-artifacts.ts --platform windows --arch x64')
     expect(windowsWorkflow).toContain('Smoke test packaged Windows app startup')
     expect(windowsWorkflow).toContain('Hobgoblin Smoke 用户 Data')

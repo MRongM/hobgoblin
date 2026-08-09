@@ -112,7 +112,11 @@ describe('terminal IPC', () => {
       }),
     ).resolves.toBe(true)
     expect(flashFrame).toHaveBeenCalledWith(true)
-    expect(app.dock?.bounce).toHaveBeenCalledWith('informational')
+    if (process.platform === 'darwin') {
+      expect(app.dock?.bounce).toHaveBeenCalledWith('informational')
+    } else {
+      expect(app.dock?.bounce).not.toHaveBeenCalled()
+    }
     expect(Notification).toHaveBeenCalledWith({
       title: 'Terminal bell',
       body: 'zsh needs attention in feature',
@@ -188,18 +192,22 @@ describe('terminal IPC', () => {
     ).resolves.toBe(true)
     expect(flashFrame).toHaveBeenCalledWith(true)
   })
- 
+
   test('sends the dock badge count through the trusted ipc sender only', async () => {
     const { app } = await import('electron')
     invoke(TERMINAL_SET_BADGE_CHANNEL, 2)
     expect(app.dock?.bounce).not.toHaveBeenCalled()
-    expect(app.dock?.setBadge).toHaveBeenCalledWith('2')
+    if (process.platform === 'darwin') {
+      expect(app.dock?.setBadge).toHaveBeenCalledWith('2')
+    } else {
+      expect(app.dock?.setBadge).not.toHaveBeenCalled()
+    }
 
     invokeWithEvent(TERMINAL_SET_BADGE_CHANNEL, 4, {
       sender: { id: 99, once: vi.fn() },
       senderFrame: { url: 'https://example.com/' },
     })
-    expect(app.dock?.setBadge).toHaveBeenCalledTimes(1)
+    expect(app.dock?.setBadge).toHaveBeenCalledTimes(process.platform === 'darwin' ? 1 : 0)
   })
 })
 

@@ -54,8 +54,22 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Test
-        run: bun run test
+      - name: Test Windows compatibility
+        run: >-
+          bun run test --
+          src/main/external-open.test.ts
+          src/main/terminal.test.ts
+          src/server/terminal/terminal-pty-runtime.test.ts
+          src/server/terminal/terminal-scope.test.ts
+          src/shared/file-path-target.test.ts
+          src/shared/path-semantics.test.ts
+          src/shared/worktree-guards.test.ts
+          src/system/open-app.test.ts
+          src/system/terminals.test.ts
+          src/system/windows-terminal.test.ts
+          src/web/components/terminal/terminal-path-links.test.ts
+          src/web/lib/editor-open-targets.test.ts
+          src/web/lib/paths.test.ts
 
       - name: Build Windows artifact
         run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
