@@ -60,7 +60,10 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
-    implementation(libs.sshj)
+    implementation(libs.sshj) {
+        // AndroidCompatibleSshConfig disables Bouncy Castle; supported key flows use platform JCA.
+        exclude(group = "org.bouncycastle")
+    }
     implementation(libs.termux.terminal.emulator)
     implementation(libs.termux.terminal.view)
 
