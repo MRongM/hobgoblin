@@ -1,5 +1,6 @@
 import path from 'node:path'
 import type { WorktreeInfo } from '#/shared/git-types.ts'
+import { windowsPathIdentityKey } from '#/shared/path-semantics.ts'
 
 export type KnownWorktreeResult =
   | { ok: true; path: string }
@@ -10,9 +11,7 @@ export function resolveKnownWorktree(
   worktreePath: string,
   branch?: string,
 ): KnownWorktreeResult {
-  const target = worktrees.find(
-    (wt) => path.resolve(wt.path) === path.resolve(worktreePath) && (!branch || wt.branch === branch),
-  )
+  const target = worktrees.find((wt) => sameFilesystemPath(wt.path, worktreePath) && (!branch || wt.branch === branch))
   if (!target) {
     return { ok: false, message: branch ? 'error.worktree-not-found-for-branch' : 'error.invalid-worktree-path' }
   }
@@ -29,11 +28,9 @@ export function resolveRemovableWorktree(
   worktreePath: string,
   repoRoot: string,
 ): RemovableWorktreeResult {
-  const target = worktrees.find(
-    (wt) => path.resolve(wt.path) === path.resolve(worktreePath) && (!branch || wt.branch === branch),
-  )
+  const target = worktrees.find((wt) => sameFilesystemPath(wt.path, worktreePath) && (!branch || wt.branch === branch))
   if (!target) return { ok: false, message: 'error.worktree-not-found-for-branch' }
-  if (!repoRoot || !target.path || target.isPrimary || path.resolve(target.path) === path.resolve(repoRoot)) {
+  if (!repoRoot || !target.path || target.isPrimary || sameFilesystemPath(target.path, repoRoot)) {
     return { ok: false, message: 'error.cannot-remove-main-worktree' }
   }
   return { ok: true, target }
@@ -54,12 +51,21 @@ export function resolvePrunableWorktree(
   worktreePath: string,
   repoRoot: string,
 ): PrunableWorktreeResult {
-  const target = worktrees.find((wt) => path.resolve(wt.path) === path.resolve(worktreePath))
+  const target = worktrees.find((wt) => sameFilesystemPath(wt.path, worktreePath))
   if (!target) return { ok: false, message: 'error.worktree-not-prunable' }
-  if (!repoRoot || !target.path || target.isPrimary || path.resolve(target.path) === path.resolve(repoRoot)) {
+  if (!repoRoot || !target.path || target.isPrimary || sameFilesystemPath(target.path, repoRoot)) {
     return { ok: false, message: 'error.cannot-remove-main-worktree' }
   }
   if (target.isLocked) return { ok: false, message: 'error.cannot-remove-locked-worktree' }
   if (target.isPrunable !== true) return { ok: false, message: 'error.worktree-not-prunable' }
   return { ok: true, target }
+}
+
+function sameFilesystemPath(left: string, right: string): boolean {
+  const leftWindowsIdentity = windowsPathIdentityKey(left)
+  const rightWindowsIdentity = windowsPathIdentityKey(right)
+  if (leftWindowsIdentity !== null || rightWindowsIdentity !== null) {
+    return leftWindowsIdentity !== null && leftWindowsIdentity === rightWindowsIdentity
+  }
+  return path.resolve(left) === path.resolve(right)
 }

@@ -54,6 +54,16 @@ describe('worktreeRelativePathFromAbsolute', () => {
     expect(worktreeRelativePathFromAbsolute('C:\\repo', 'D:\\repo\\app.ts')).toBeNull()
   })
 
+  test('rejects absolute paths that escape through dot segments', () => {
+    expect(worktreeRelativePathFromAbsolute('/repo', '/repo/../outside.ts')).toBeNull()
+    expect(worktreeRelativePathFromAbsolute('C:\\repo', 'C:\\repo\\..\\outside.ts')).toBeNull()
+  })
+
+  test('normalizes absolute dot segments that remain inside the worktree', () => {
+    expect(worktreeRelativePathFromAbsolute('/repo', '/repo/src/../app.ts')).toBe('app.ts')
+    expect(worktreeRelativePathFromAbsolute('C:\\repo', 'C:\\repo\\src\\..\\app.ts')).toBe('app.ts')
+  })
+
   test('does not mix POSIX and Windows styles', () => {
     expect(worktreeRelativePathFromAbsolute('/repo', 'C:\\repo\\app.ts')).toBeNull()
     expect(worktreeRelativePathFromAbsolute('C:\\repo', '/repo/app.ts')).toBeNull()

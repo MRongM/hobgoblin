@@ -27,7 +27,9 @@ const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
 
 export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): SpawnTerminalPtyRuntimeResult {
   try {
-    const shell = input.command || process.env.SHELL || (process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : '/bin/zsh')
+    const shell =
+      input.command ||
+      (process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : process.env.SHELL || '/bin/zsh')
     const args = input.args ?? (process.platform === 'win32' ? [] : ['-l'])
     const env = { ...process.env, TERM: 'xterm-256color' }
     const term = pty.spawn(shell, args, {
@@ -46,7 +48,10 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
   }
 }
 
-export function detectWindowsPtyCompatibility(platform: NodeJS.Platform | string, release: string): TerminalWindowsPty | null {
+export function detectWindowsPtyCompatibility(
+  platform: NodeJS.Platform | string,
+  release: string,
+): TerminalWindowsPty | null {
   if (platform !== 'win32') return null
   const buildNumber = parseWindowsBuildNumber(release)
   const backend = buildNumber !== null && buildNumber < NODE_PTY_CONPTY_DEFAULT_BUILD ? 'winpty' : 'conpty'

@@ -26,6 +26,15 @@ describe('resolveKnownWorktree', () => {
     expect(result).toEqual({ ok: true, path: '/repo-linked' })
   })
 
+  test('resolves equivalent Windows paths case-insensitively', () => {
+    const result = resolveKnownWorktree(
+      [{ path: 'C:\\Projects\\Example', branch: 'main', isBare: false, isPrimary: true }],
+      'c:/projects/example',
+    )
+
+    expect(result).toEqual({ ok: true, path: 'C:\\Projects\\Example' })
+  })
+
   test('rejects an unknown worktree path', () => {
     const result = resolveKnownWorktree(
       [{ path: '/repo', branch: 'main', isBare: false, isPrimary: true }],
@@ -67,6 +76,13 @@ describe('resolveRemovableWorktree', () => {
     expect(result).toEqual({ ok: false, message: 'error.cannot-remove-main-worktree' })
   })
 
+  test('refuses a Windows repo root independent of path casing', () => {
+    const odd = { path: 'C:\\Projects\\Example', branch: 'main', isBare: false, isPrimary: false }
+    const result = resolveRemovableWorktree([odd], 'main', 'c:/projects/example', 'C:\\PROJECTS\\EXAMPLE')
+
+    expect(result).toEqual({ ok: false, message: 'error.cannot-remove-main-worktree' })
+  })
+
   test('rejects when no worktree matches both branch and path', () => {
     const result = resolveRemovableWorktree([linked], 'feature', '/somewhere/else', repoRoot)
     expect(result).toEqual({ ok: false, message: 'error.worktree-not-found-for-branch' })
@@ -104,9 +120,10 @@ describe('resolvePrunableWorktree', () => {
   })
 
   test('rejects primary and locked worktrees', () => {
-    expect(
-      resolvePrunableWorktree([{ ...stale, path: repoRoot, isPrimary: true }], repoRoot, repoRoot),
-    ).toEqual({ ok: false, message: 'error.cannot-remove-main-worktree' })
+    expect(resolvePrunableWorktree([{ ...stale, path: repoRoot, isPrimary: true }], repoRoot, repoRoot)).toEqual({
+      ok: false,
+      message: 'error.cannot-remove-main-worktree',
+    })
     expect(resolvePrunableWorktree([{ ...stale, isLocked: true }], '/repo-stale', repoRoot)).toEqual({
       ok: false,
       message: 'error.cannot-remove-locked-worktree',
