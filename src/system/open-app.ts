@@ -29,7 +29,7 @@ function isUsableEditorPath(p: string): boolean {
 
 /** Standard macOS install locations for a .app bundle. */
 export function appCandidates(appName: string): string[] {
-  return [path.join(os.homedir(), `Applications/${appName}.app`), `/Applications/${appName}.app`]
+  return [path.posix.join(os.homedir(), `Applications/${appName}.app`), `/Applications/${appName}.app`]
 }
 
 /** Find the first existing .app bundle path for `appName`, or null. */
@@ -42,7 +42,7 @@ function resolveAppPath(appName: string): string | null {
 function resolveAppCli(appName: string, cliName: string): string | null {
   const appPath = resolveAppPath(appName)
   if (!appPath) return null
-  const cli = path.join(appPath, 'Contents/Resources/app/bin', cliName)
+  const cli = path.posix.join(appPath, 'Contents/Resources/app/bin', cliName)
   return existsSync(cli) ? cli : null
 }
 
@@ -166,21 +166,22 @@ export function openRemoteByAppCli(
     return Promise.resolve({ ok: false, message: 'error.invalid-arguments' })
   }
 
-  const cli = resolveAppCli(appName, cliName)
-  if (!cli) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
+  const command = process.platform === 'darwin' ? resolveAppCli(appName, cliName) : resolveEditorCommand(cliName)
+  if (!command) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
 
   const args =
     typeof target === 'string' || target.line === undefined
       ? ['--remote', `ssh-remote+${alias}`, remotePath]
       : ['--remote', `ssh-remote+${alias}`, '--goto', editorTargetPathArgument(target)]
 
-  return execa(cli, args, {
+  return execa(command, args, {
     timeout: OPEN_TIMEOUT_MS,
     forceKillAfterDelay: 500,
     reject: false,
   }).then((result) => {
     if (result.failed) {
-      const message = result.stderr?.trim() || result.shortMessage || result.message || 'error.remote-editor-not-supported'
+      const message =
+        result.stderr?.trim() || result.shortMessage || result.message || 'error.remote-editor-not-supported'
       return { ok: false, message }
     }
     return { ok: true, message: remotePath }
