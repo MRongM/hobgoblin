@@ -975,6 +975,7 @@ export async function removeRemoteWorktree(
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
+    skipWorktreeStatus?: boolean
     forceDeleteBranch?: boolean
     signal?: AbortSignal
     run?: RemoteGitRunner
@@ -986,16 +987,25 @@ export async function removeRemoteWorktree(
   if (!listResult.ok) return remoteExecResult(listResult)
   const worktrees = parseWorktrees(listResult.stdout)
 
-  const resolved = resolveRemoteRemovableWorktree(worktrees, input.branch, input.worktreePath, target.remotePath)
+  const resolved = resolveRemoteRemovableWorktree(
+    worktrees,
+    input.alsoDeleteBranch ? input.branch : undefined,
+    input.worktreePath,
+    target.remotePath,
+  )
   if ('ok' in resolved) return resolved
 
-  const status = await run({ type: 'gitStatus', path: resolved.path }, target, { signal: input.signal })
-  if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
-  const statusAwareWorktree = !status.ok
-    ? { ...resolved, isDirty: undefined }
-    : { ...resolved, isDirty: parseStatus(status.stdout).length > 0 }
+  let statusAwareWorktree = resolved
+  if (!input.skipWorktreeStatus) {
+    const status = await run({ type: 'gitStatus', path: resolved.path }, target, { signal: input.signal })
+    if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
+    statusAwareWorktree = !status.ok
+      ? { ...resolved, isDirty: undefined }
+      : { ...resolved, isDirty: parseStatus(status.stdout).length > 0 }
+  }
   const invalid = validateRemovableWorktreeState(statusAwareWorktree, {
     forceRemoveWorktree: input.forceRemoveWorktree,
+    skipWorktreeStatus: input.skipWorktreeStatus,
   })
   if (invalid) return invalid
 
@@ -1421,11 +1431,11 @@ async function resolveKnownRemoteWorktree(
 
 function resolveRemoteRemovableWorktree(
   worktrees: WorktreeInfo[],
-  branch: string,
+  branch: string | undefined,
   worktreePath: string,
   repoPath: string,
 ): WorktreeInfo | ExecResult {
-  const target = worktrees.find((worktree) => worktree.path === worktreePath && worktree.branch === branch)
+  const target = worktrees.find((worktree) => worktree.path === worktreePath && (!branch || worktree.branch === branch))
   if (!target) return { ok: false, message: 'error.worktree-not-found-for-branch' }
   if (target.isPrimary || target.path === repoPath) return { ok: false, message: 'error.cannot-remove-main-worktree' }
   return target

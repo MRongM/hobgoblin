@@ -178,6 +178,7 @@ export interface RepoBackend {
       worktreePath: string
       alsoDeleteBranch: boolean
       forceRemoveWorktree?: boolean
+      skipWorktreeStatus?: boolean
       forceDeleteBranch?: boolean
       alsoDeleteUpstream?: boolean
     },
@@ -492,11 +493,20 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     },
     async removeWorktree(input, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      const worktrees = await getWorktrees(repoId, { signal })
-      const removable = resolveRemovableWorktree(worktrees, input.branch, input.worktreePath, repoId)
+      const worktrees = await getWorktrees(repoId, {
+        ...(input.skipWorktreeStatus ? { includeStatus: false } : {}),
+        signal,
+      })
+      const removable = resolveRemovableWorktree(
+        worktrees,
+        input.alsoDeleteBranch ? input.branch : undefined,
+        input.worktreePath,
+        repoId,
+      )
       if (!removable.ok) return { ok: false, message: removable.message }
       const invalid = validateRemovableWorktreeState(removable.target, {
         forceRemoveWorktree: input.forceRemoveWorktree,
+        skipWorktreeStatus: input.skipWorktreeStatus,
       })
       if (invalid) return invalid
       if (input.alsoDeleteBranch) {
@@ -676,9 +686,7 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
         const requestedSourcePath = path.posix.normalize(decision.sourceWorktreePath)
         const source = worktrees.find(
           (worktree) =>
-            !worktree.isBare &&
-            !worktree.isPrunable &&
-            path.posix.normalize(worktree.path) === requestedSourcePath,
+            !worktree.isBare && !worktree.isPrunable && path.posix.normalize(worktree.path) === requestedSourcePath,
         )
         if (!source) return created
         const bootstrapped = await bootstrapRemoteWorktreeSelectionsAfterCreate(

@@ -2137,15 +2137,13 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
-  test('removeRepositoryWorktree force-removes a known dirty worktree without forcing branch deletion', async () => {
+  test('removeRepositoryWorktree can force-remove without reading worktree status', async () => {
     mocks.getWorktrees.mockResolvedValueOnce([
       {
         path: '/tmp/repo-worktree',
         branch: 'feature/a',
         isBare: false,
         isPrimary: false,
-        isDirty: true,
-        changeCount: 1,
       },
     ])
     const { removeRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
@@ -2155,7 +2153,39 @@ describe('repo mutation invalidation publishing', () => {
       worktreePath: '/tmp/repo-worktree',
       alsoDeleteBranch: false,
       forceRemoveWorktree: true,
+      skipWorktreeStatus: true,
       forceDeleteBranch: false,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(mocks.getWorktrees).toHaveBeenCalledWith('/tmp/repo', {
+      includeStatus: false,
+      signal: undefined,
+    })
+    expect(mocks.removeWorktree).toHaveBeenCalledWith('/tmp/repo', '/tmp/repo-worktree', {
+      force: true,
+      signal: undefined,
+    })
+    expect(mocks.deleteBranch).not.toHaveBeenCalled()
+  })
+
+  test('removeRepositoryWorktree removes a detached worktree by exact path when retaining branches', async () => {
+    mocks.getWorktrees.mockResolvedValueOnce([
+      {
+        path: '/tmp/repo-worktree',
+        head: 'abcdef0',
+        isBare: false,
+        isPrimary: false,
+      },
+    ])
+    const { removeRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await removeRepositoryWorktree('/tmp/repo', {
+      branch: 'feature/a',
+      worktreePath: '/tmp/repo-worktree',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      skipWorktreeStatus: true,
     })
 
     expect(result).toEqual({ ok: true, message: 'ok' })

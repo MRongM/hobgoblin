@@ -1414,7 +1414,7 @@ describe('branch workspace remove planner', () => {
 })
 
 describe('branch workspace reduce planner', () => {
-  test('plans selected members in configured order with dirty and terminal approvals', async () => {
+  test('plans selected members in configured order without dirty preflight', async () => {
     const current = manifestForReduction()
     const memberBranch = (index: number, dirty: boolean) => ({
       ...branch(BRANCH, current.repositories[index]!.worktreePath),
@@ -1463,10 +1463,10 @@ describe('branch workspace reduce planner', () => {
       plan: {
         operation: 'reduce',
         repositories: [
-          { repositoryName: 'api', action: 'remove-worktree', dirty: false },
-          { repositoryName: 'worker', action: 'remove-worktree', dirty: true },
+          { repositoryName: 'api', action: 'remove-worktree' },
+          { repositoryName: 'worker', action: 'remove-worktree' },
         ],
-        requiredApprovals: ['discard-member-changes', 'close-terminals'],
+        requiredApprovals: ['close-terminals'],
         terminalSessionIds: ['terminal-api-12345', 'terminal-worker-1'],
         steps: [
           { kind: 'remove-worktree', repositoryName: 'api' },
@@ -1475,6 +1475,21 @@ describe('branch workspace reduce planner', () => {
       },
     })
     if (!result.ok) throw new Error('Expected a reduction plan')
+    expect(result.plan.repositories.every((repository) => !Object.hasOwn(repository, 'dirty'))).toBe(true)
+    expect(deps.getSnapshot).toHaveBeenCalledTimes(2)
+    expect(deps.getSnapshot).toHaveBeenNthCalledWith(1, path.join(ROOT, 'api'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+    expect(deps.getSnapshot).toHaveBeenNthCalledWith(2, path.join(ROOT, 'worker'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+    expect(listTerminalSessions.mock.calls.map(([repoId]) => repoId)).toEqual([
+      ROOT,
+      path.join(ROOT, 'api'),
+      path.join(ROOT, 'worker'),
+    ])
     expect(result.plan.manifest.repositories.map((member) => [member.repositoryName, member.progress])).toEqual([
       ['api', 'pending'],
       ['web', 'complete'],
@@ -1546,11 +1561,50 @@ describe('branch workspace reduce planner', () => {
             targetBranch: BRANCH,
             checkedOutBranch: 'release/previous',
             action: 'remove-worktree',
-            dirty: false,
           },
         ],
       },
     })
+  })
+
+  test('keeps a detached registered member on the Git worktree removal path', async () => {
+    const current = manifestForReduction()
+    const memberPath = current.repositories[0]!.worktreePath
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH)),
+    })
+    deps.getWorktrees.mockResolvedValue([worktree(memberPath, { head: 'abcdef0' })])
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path || candidatePath === memberPath,
+      kind: 'directory',
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            action: 'remove-worktree',
+            worktreePresent: true,
+            satisfied: false,
+          },
+        ],
+        requiredApprovals: [],
+      },
+    })
+    if (!result.ok) throw new Error('Expected a reduction plan')
+    expect(result.plan.repositories[0]).not.toHaveProperty('checkedOutBranch')
+    expect(deps.getWorktrees).toHaveBeenCalledWith(path.join(ROOT, 'api'), undefined)
   })
 
   test('treats a missing selected member path as satisfied without touching its target branch elsewhere', async () => {
@@ -1590,8 +1644,17 @@ describe('branch workspace reduce planner', () => {
     })
   })
 
-  test('rejects a selected member path occupied by non-worktree content', async () => {
-    const current = manifestForReduction()
+  test('plans cleanup for a selected member path left behind by interrupted worktree removal', async () => {
+    const original = manifestForReduction()
+    const current: BranchWorkspaceManifest = {
+      ...original,
+      operation: { kind: 'reduce' },
+      repositories: original.repositories.map((member, index) => ({
+        ...member,
+        progress: index === 0 ? 'failed' : 'complete',
+        ...(index === 0 ? { lastError: 'cancelled' } : {}),
+      })),
+    }
     const worktreeBranch = (index: number) => ({
       ...branch(BRANCH, current.repositories[index]!.worktreePath),
       worktree: {
@@ -1609,16 +1672,37 @@ describe('branch workspace reduce planner', () => {
     deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
       ...missing(candidatePath),
       exists: candidatePath === current.path || candidatePath === current.repositories[0]!.worktreePath,
-      kind: candidatePath === current.path ? 'directory' : 'file',
+      kind: 'directory',
+      directChild: path.dirname(candidatePath) === current.path,
     }))
 
-    await expect(
-      buildBranchWorkspacePlan(
-        ROOT,
-        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-path-not-worktree' })
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            repositoryName: 'api',
+            action: 'remove-entry',
+            worktreePresent: false,
+            satisfied: false,
+          },
+        ],
+        requiredApprovals: ['unmanaged-content'],
+        steps: [
+          {
+            kind: 'remove-entry',
+            repositoryName: 'api',
+            entryName: 'api',
+          },
+        ],
+      },
+    })
   })
 
   test.each([
@@ -1656,7 +1740,7 @@ describe('branch workspace reduce planner', () => {
     ).resolves.toEqual({ ok: false, message })
   })
 
-  test('rejects a new reduction when an unselected member has drifted', async () => {
+  test('does not inspect unselected member health', async () => {
     const current = manifestForReduction()
     const cleanMember = (index: number) => ({
       ...branch(BRANCH, current.repositories[index]!.worktreePath),
@@ -1678,13 +1762,79 @@ describe('branch workspace reduce planner', () => {
       kind: candidatePath === current.path ? 'directory' : 'missing',
     }))
 
-    await expect(
-      buildBranchWorkspacePlan(
-        ROOT,
-        { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.needs-repair' })
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: { repositories: [{ repositoryName: 'api', action: 'remove-worktree' }] },
+    })
+    expect(deps.getSnapshot).toHaveBeenCalledTimes(1)
+    expect(deps.getSnapshot).toHaveBeenCalledWith(path.join(ROOT, 'api'), undefined, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    })
+  })
+
+  test.each(['create', 'extend', 'repair'] as const)(
+    'allows explicit member removal from an interrupted %s lifecycle',
+    async (operation) => {
+      const current = manifestForReduction()
+      current.operation = { kind: operation }
+      current.repositories[1] = { ...current.repositories[1]!, progress: 'failed', lastError: 'interrupted' }
+      const deps = dependencies({
+        [path.join(ROOT, 'api')]: snapshot(branch(BRANCH, current.repositories[0]!.worktreePath)),
+      })
+      deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+      deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+      deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+        ...missing(candidatePath),
+        exists: candidatePath === current.path,
+        kind: candidatePath === current.path ? 'directory' : 'missing',
+      }))
+
+      await expect(
+        buildBranchWorkspacePlan(
+          ROOT,
+          { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+          deps,
+        ),
+      ).resolves.toMatchObject({
+        ok: true,
+        plan: { operation: 'reduce', repositories: [{ repositoryName: 'api', action: 'remove-worktree' }] },
+      })
+    },
+  )
+
+  test('does not require dirty state for a selected registered worktree', async () => {
+    const current = manifestForReduction()
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch(BRANCH, current.repositories[0]!.worktreePath)),
+    })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api', 'web', 'worker'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+      ...missing(candidatePath),
+      exists: candidatePath === current.path,
+      kind: candidatePath === current.path ? 'directory' : 'missing',
+    }))
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      { operation: 'reduce', branchWorkspaceId: current.id, repositories: ['api'] },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ repositoryName: 'api', action: 'remove-worktree' }],
+        requiredApprovals: [],
+      },
+    })
   })
 
   test('does not inspect one-time auxiliary content before reducing members', async () => {

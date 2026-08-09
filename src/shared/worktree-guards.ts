@@ -25,11 +25,13 @@ export type RemovableWorktreeResult =
 
 export function resolveRemovableWorktree(
   worktrees: WorktreeInfo[],
-  branch: string,
+  branch: string | undefined,
   worktreePath: string,
   repoRoot: string,
 ): RemovableWorktreeResult {
-  const target = worktrees.find((wt) => path.resolve(wt.path) === path.resolve(worktreePath) && wt.branch === branch)
+  const target = worktrees.find(
+    (wt) => path.resolve(wt.path) === path.resolve(worktreePath) && (!branch || wt.branch === branch),
+  )
   if (!target) return { ok: false, message: 'error.worktree-not-found-for-branch' }
   if (!repoRoot || !target.path || target.isPrimary || path.resolve(target.path) === path.resolve(repoRoot)) {
     return { ok: false, message: 'error.cannot-remove-main-worktree' }

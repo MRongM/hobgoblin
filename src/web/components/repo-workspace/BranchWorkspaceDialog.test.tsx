@@ -1382,7 +1382,7 @@ describe('BranchWorkspaceDialog', () => {
     })
   })
 
-  test('requires explicit dirty and terminal approvals for member reduction', async () => {
+  test('requires only terminal approval for member reduction', async () => {
     const onConfirm = vi.fn(async () => ({ ok: true as const, branchWorkspaceId: 'branch-1' }))
     renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), plan: reductionPlan(), onConfirm })
 
@@ -1393,16 +1393,49 @@ describe('BranchWorkspaceDialog', () => {
       '[aria-label="workspace.branch-workspace.approval.close-terminals"]',
     )
     const confirm = document.querySelector<HTMLButtonElement>('[data-action="confirm"]')
-    expect(dirtyApproval?.checked).toBe(false)
+    expect(dirtyApproval).toBeNull()
     expect(terminalApproval?.checked).toBe(false)
     expect(confirm?.disabled).toBe(true)
     expect(confirm?.dataset.variant).toBe('destructive')
 
-    act(() => dirtyApproval?.click())
     act(() => terminalApproval?.click())
     expect(confirm?.disabled).toBe(false)
     await clickAction('confirm')
-    expect(onConfirm).toHaveBeenCalledWith(['discard-member-changes', 'close-terminals'])
+    expect(onConfirm).toHaveBeenCalledWith(['close-terminals'])
+  })
+
+  test('requires unmanaged-content approval before cleaning a member-removal residue', async () => {
+    const plan = reductionPlan()
+    plan.repositories[0] = {
+      ...plan.repositories[0]!,
+      action: 'remove-entry',
+      worktreePresent: false,
+    }
+    plan.requiredApprovals = ['unmanaged-content']
+    plan.terminalSessionIds = []
+    plan.steps = [
+      {
+        id: 'repository:api',
+        kind: 'remove-entry',
+        label: 'api',
+        repositoryName: 'api',
+        entryName: 'api',
+      },
+    ]
+    const onConfirm = vi.fn(async () => ({ ok: true as const, branchWorkspaceId: 'branch-1' }))
+    renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), plan, onConfirm })
+
+    const unmanagedApproval = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.approval.unmanaged-content"]',
+    )
+    const confirm = document.querySelector<HTMLButtonElement>('[data-action="confirm"]')
+    expect(unmanagedApproval?.checked).toBe(false)
+    expect(confirm?.disabled).toBe(true)
+
+    act(() => unmanagedApproval?.click())
+    expect(confirm?.disabled).toBe(false)
+    await clickAction('confirm')
+    expect(onConfirm).toHaveBeenCalledWith(['unmanaged-content'])
   })
 })
 
@@ -1677,10 +1710,9 @@ function reductionPlan(): BranchWorkspacePlan {
         satisfied: false,
         action: 'remove-worktree',
         worktreePresent: true,
-        dirty: true,
       },
     ],
-    requiredApprovals: ['discard-member-changes', 'close-terminals'],
+    requiredApprovals: ['close-terminals'],
     terminalSessionIds: ['terminal-api'],
     steps: [{ id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' }],
   }

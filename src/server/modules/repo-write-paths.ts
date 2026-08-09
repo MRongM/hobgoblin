@@ -589,6 +589,7 @@ export async function removeRepositoryWorktree(
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
+    skipWorktreeStatus?: boolean
     forceDeleteBranch?: boolean
     alsoDeleteUpstream?: boolean
   },

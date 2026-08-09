@@ -820,7 +820,7 @@ describe('remote git helpers', () => {
     )
   })
 
-  test('removeRemoteWorktree force-removes known dirty worktrees without forcing branch deletion', async () => {
+  test('removeRemoteWorktree can force-remove without reading status or forcing branch deletion', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       switch (command.type) {
         case 'gitWorktreeList':
@@ -849,6 +849,7 @@ describe('remote git helpers', () => {
       worktreePath: '/srv/repo-feature',
       alsoDeleteBranch: false,
       forceRemoveWorktree: true,
+      skipWorktreeStatus: true,
       run: run as any,
     })
 
@@ -862,6 +863,43 @@ describe('remote git helpers', () => {
       expect.objectContaining({ type: 'gitBranchDelete' }),
       TARGET,
       expect.anything(),
+    )
+    expect(run).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'gitStatus' }), TARGET, expect.anything())
+  })
+
+  test('removeRemoteWorktree removes a detached worktree by exact path when retaining branches', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'gitWorktreeList') {
+        return okRemoteResult(
+          [
+            'worktree /srv/repo',
+            'HEAD f00ba4',
+            'branch refs/heads/main',
+            '',
+            'worktree /srv/repo-feature',
+            'HEAD ba5eba1',
+            'detached',
+          ].join('\n'),
+        )
+      }
+      if (command.type === 'gitWorktreeRemove') return okRemoteResult('Removed worktree')
+      return okRemoteResult('')
+    })
+
+    const result = await removeRemoteWorktree(TARGET, {
+      branch: 'feature/test',
+      worktreePath: '/srv/repo-feature',
+      alsoDeleteBranch: false,
+      forceRemoveWorktree: true,
+      skipWorktreeStatus: true,
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'Removed worktree' })
+    expect(run).toHaveBeenCalledWith(
+      { type: 'gitWorktreeRemove', path: '/srv/repo', worktreePath: '/srv/repo-feature', force: true },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
     )
   })
 
@@ -1299,9 +1337,7 @@ describe('remote git helpers', () => {
   test('materializes deep remote selections in best-effort literal mode', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       if (command.type === 'bootstrapRemoteWorktree') {
-        return okRemoteResult(
-          'GOBLIN_BOOTSTRAP_COPY\0backend/.venv\0GOBLIN_BOOTSTRAP_SYMLINK\0frontend/node_modules\0',
-        )
+        return okRemoteResult('GOBLIN_BOOTSTRAP_COPY\0backend/.venv\0GOBLIN_BOOTSTRAP_SYMLINK\0frontend/node_modules\0')
       }
       return okRemoteResult('')
     })

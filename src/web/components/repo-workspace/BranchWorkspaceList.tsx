@@ -547,8 +547,8 @@ function BranchWorkspaceRow({
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
             onRemoveMember={
-              isRepairableDrift(item) &&
-              !member.ready &&
+              recoveryAction !== 'continue-reduce' &&
+              recoveryAction !== 'continue-delete' &&
               member.progress !== 'removed' &&
               item.repositories.length > 1 &&
               onReduceMember

@@ -56,7 +56,7 @@ describe('validateRemovableWorktreeState', () => {
     })
   })
 
-  test('allows force removal only for known dirty worktrees', () => {
+  test('allows explicit force removal with known dirty or intentionally skipped status', () => {
     expect(
       validateRemovableWorktreeState(
         {
@@ -93,12 +93,9 @@ describe('validateRemovableWorktreeState', () => {
           isBare: false,
           isPrimary: false,
         },
-        { forceRemoveWorktree: true },
+        { forceRemoveWorktree: true, skipWorktreeStatus: true },
       ),
-    ).toEqual({
-      ok: false,
-      message: 'error.cannot-remove-dirty-worktree',
-    })
+    ).toBeNull()
   })
 })
 
