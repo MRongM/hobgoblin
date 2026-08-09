@@ -1,12 +1,23 @@
 name: Windows Test Build
 
 on:
+  workflow_call:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-test.yml
+      - electron-builder.ts
+      - package.json
+      - bun.lock
+      - scripts/**
+      - src/**
   push:
     branches:
+      - main
       - windows
     paths:
       - .github/workflows/windows-test.yml
+      - electron-builder.ts
       - package.json
       - bun.lock
       - scripts/**
@@ -43,13 +54,16 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Test
+        run: bun run test
+
       - name: Build Windows artifact
         run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
 
       - name: Smoke test packaged Windows app startup
         shell: pwsh
         env:
-          GOBLIN_SMOKE_USER_DATA: ${{ runner.temp }}\hobgoblin-smoke-user-data
+          GOBLIN_SMOKE_USER_DATA: ${{ runner.temp }}\Hobgoblin Smoke 用户 Data
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -247,7 +261,7 @@ jobs:
           if ($ready -and $logPath -and (Test-Path $logPath)) {
             try {
               $serverUrl = Get-SmokeServerUrl -LogPath $logPath
-              $terminalWorkspace = Join-Path $env:RUNNER_TEMP "hobgoblin-terminal-smoke-workspace"
+              $terminalWorkspace = Join-Path $env:RUNNER_TEMP "Hobgoblin Terminal 路径 Workspace"
               Invoke-TerminalCreateSmoke -ServerUrl $serverUrl -WorkspacePath $terminalWorkspace
             } catch {
               $terminalSmokeError = $_
@@ -281,7 +295,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hobgoblin-windows-startup-logs-${{ github.sha }}
-          path: ${{ runner.temp }}\hobgoblin-smoke-user-data\**\*
+          path: ${{ runner.temp }}\Hobgoblin Smoke 用户 Data\**\*
           if-no-files-found: warn
           retention-days: 7
 
