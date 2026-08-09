@@ -4,12 +4,12 @@ English | [简体中文](README.zh-CN.md) | [한국어](README.ko.md) | [日本�
 
 Hobgoblin is not just a branch management tool. It is a high-productivity workspace for Git worktree-based development with AI CLI tools, available as a desktop app or a browser-accessible server mode.
 
-The core model is simple: **multi-project + multi-worktree / multi-branch + multi-terminal**. Open several repositories, isolate parallel branches in separate worktrees, attach terminals to the right context, and run AI CLI tools such as Codex or Claude without losing track of Git state. Work with local repositories, Git SSH remotes, or repositories reachable through SSH-config aliases.
+The core model is simple: **multi-project + multi-worktree + multi-terminal**. Open several repositories, isolate parallel branches in separate worktrees, attach terminals to the right context, and run AI CLI tools such as Codex or Claude without losing track of Git state. Work with local repositories, Git SSH remotes, or repositories reachable through SSH-config aliases.
 
 ## Productivity Formula
 
 ```text
-Hobgoblin = multi-project x multi-worktree / multi-branch x multi-terminal
+Hobgoblin = multi-project x multi-worktree x multi-terminal
 ```
 
 This is the intended workflow: every project, worktree, branch, terminal, and AI CLI session stays connected to the same Git-aware workspace.
