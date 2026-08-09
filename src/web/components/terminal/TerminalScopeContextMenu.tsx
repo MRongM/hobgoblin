@@ -1,5 +1,4 @@
-import { X } from 'lucide-react'
-import { useState, type ReactElement, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import {
   useTerminalSessionContext,
@@ -7,12 +6,6 @@ import {
 } from '#/web/components/terminal/terminal-session-context.ts'
 import { parseWorktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalAggregateCount } from '#/web/components/terminal/terminal-session-store.ts'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '#/web/components/ui/context-menu.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface CloseTerminalScopeResult {
@@ -65,29 +58,4 @@ export function useCloseTerminalScope(worktreeTerminalKeys: readonly string[]): 
       />
     ),
   }
-}
-
-export function TerminalScopeContextMenu({
-  worktreeTerminalKeys,
-  children,
-}: {
-  worktreeTerminalKeys: readonly string[]
-  children: ReactElement
-}) {
-  const closeScope = useCloseTerminalScope(worktreeTerminalKeys)
-
-  return (
-    <>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem variant="destructive" disabled={closeScope.disabled} onSelect={closeScope.requestClose}>
-            <X aria-hidden="true" />
-            {closeScope.label}
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      {closeScope.dialog}
-    </>
-  )
 }

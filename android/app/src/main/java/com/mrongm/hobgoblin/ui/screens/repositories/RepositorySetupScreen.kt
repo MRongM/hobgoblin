@@ -265,11 +265,6 @@ internal fun repositoryTmuxScope(
     return RepositoryTmuxScope(projectRoot = projectRoot, allowedInitialPaths = allowedInitialPaths)
 }
 
-internal fun repositoryTmuxDiscoveryPaths(
-    repository: RemoteRepositoryProfile,
-    snapshotState: ResourceState<RemoteRepositorySnapshot>,
-): List<String>? = repositoryTmuxScope(repository, snapshotState)?.allowedInitialPaths
-
 internal fun tmuxScanButtonText(isScanning: Boolean): LocalizedText =
     LocalizedText(if (isScanning) R.string.repository_tmux_scanning else R.string.repository_tmux_scan)
 
@@ -352,11 +347,6 @@ internal fun worktreeCreationSource(
         WorktreeCreationSource.TrackRemote(remoteRef = normalizedRef, localBranch = localBranch)
     }
 }
-
-internal fun repositoriesAfterLocalDelete(
-    repositories: List<RemoteRepositoryProfile>,
-    repositoryId: String,
-): List<RemoteRepositoryProfile> = repositories.filterNot { it.id == repositoryId }
 
 internal fun createProjectFromInspection(
     host: SshHostProfile,

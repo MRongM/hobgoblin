@@ -1,7 +1,11 @@
-import { createHash } from 'node:crypto'
-import path from 'node:path'
 import { isBranchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import {
+  findRepositoryStatus,
+  normalizeRepositoryPath,
+  normalizedStatusEntries,
+  repositoryPlanFingerprint,
+} from '#/server/modules/repository-status-plan.ts'
 import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { getRepositoryPatch, getRepositorySnapshot, getRepositoryStatus } from '#/server/modules/repo-read-paths.ts'
 import {
@@ -17,8 +21,7 @@ import {
   type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
-import type { ExecResult, StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
-import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import type { ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 export interface BranchWorkspaceGitActionPlanDependencies {
@@ -137,7 +140,7 @@ async function buildBatchCommitPlan(
         repositoryName: member.repositoryName,
       }
     }
-    const entries = normalizedEntries(facts.status.entries)
+    const entries = normalizedStatusEntries(facts.status.entries)
     members.push({
       repositoryName: member.repositoryName,
       repoId: facts.repoId,
@@ -145,7 +148,7 @@ async function buildBatchCommitPlan(
       targetWorktreePath: member.worktreePath,
       dirty: entries.length > 0,
       changeCount: entries.length,
-      fingerprint: fingerprint({ head: facts.head, status: entries, patch: patch.message }),
+      fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
     })
   }
   const planWithoutToken = {
@@ -154,7 +157,7 @@ async function buildBatchCommitPlan(
     branchWorkspaceId: manifest.id,
     members,
   }
-  return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
+  return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
 async function buildBatchMergeInPlan(
@@ -175,7 +178,7 @@ async function buildBatchMergeInPlan(
       signal,
     )
     if (!facts.ok) return facts
-    const targetEntries = normalizedEntries(facts.status.entries)
+    const targetEntries = normalizedStatusEntries(facts.status.entries)
     const targetBranch = facts.snapshot.branches.find((branch) => branch.name === member.targetBranch)!
     const sourceBranches = facts.snapshot.branches
       .filter((branch) => branch.name !== member.targetBranch)
@@ -202,7 +205,7 @@ async function buildBatchMergeInPlan(
       pullMergePushReady: Boolean(targetBranch.tracking && !targetBranch.trackingGone),
       ...(message ? { message } : {}),
       sourceBranches,
-      fingerprint: fingerprint({
+      fingerprint: repositoryPlanFingerprint({
         targetHead: facts.head,
         targetStatus: targetEntries,
         sourceBranches,
@@ -215,7 +218,7 @@ async function buildBatchMergeInPlan(
     branchWorkspaceId: manifest.id,
     members,
   }
-  return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
+  return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
 async function buildBatchMergeOutPlan(
@@ -236,12 +239,14 @@ async function buildBatchMergeOutPlan(
       signal,
     )
     if (!facts.ok) return facts
-    const targetEntries = normalizedEntries(facts.status.entries)
+    const targetEntries = normalizedStatusEntries(facts.status.entries)
     const destinationBranches = facts.snapshot.branches
       .filter((branch) => branch.name !== member.targetBranch)
       .map((branch): BranchWorkspaceBatchMergeOutDestinationPlan => {
         const worktreePath = branch.worktree?.path
-        const destinationStatus = worktreePath ? findStatus(facts.repoId, facts.statuses, worktreePath) : undefined
+        const destinationStatus = worktreePath
+          ? findRepositoryStatus(facts.repoId, facts.statuses, worktreePath)
+          : undefined
         const ownedTemporaryWorktree = Boolean(
           worktreePath && isBranchWorkspaceBatchMergeTemporaryWorktreePath(facts.repoId, worktreePath),
         )
@@ -282,7 +287,7 @@ async function buildBatchMergeOutPlan(
       ready,
       ...(message ? { message } : {}),
       destinationBranches,
-      fingerprint: fingerprint({
+      fingerprint: repositoryPlanFingerprint({
         targetHead: facts.head,
         targetStatus: targetEntries,
         destinationBranches: destinationBranches.map((branch) => branch.branch),
@@ -295,7 +300,7 @@ async function buildBatchMergeOutPlan(
     branchWorkspaceId: manifest.id,
     members,
   }
-  return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
+  return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
 async function buildSyncPlan(
@@ -336,10 +341,10 @@ async function buildSyncPlan(
       targetHead: facts.head,
       ready,
       ...(message ? { message } : {}),
-      fingerprint: fingerprint({
+      fingerprint: repositoryPlanFingerprint({
         kind,
         head: facts.head,
-        status: normalizedEntries(facts.status.entries),
+        status: normalizedStatusEntries(facts.status.entries),
         upstream: branch.tracking ?? null,
         trackingGone: branch.trackingGone === true,
         remotes,
@@ -353,7 +358,7 @@ async function buildSyncPlan(
     members,
     ready: members.every((member) => member.ready),
   }
-  return { ok: true, plan: { token: fingerprint(planWithoutToken), ...planWithoutToken } }
+  return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
 async function readMemberFacts(
@@ -382,10 +387,13 @@ async function readMemberFacts(
   ])
   if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable', repositoryName }
   const branch = snapshot.branches.find((candidate) => candidate.name === targetBranch)
-  if (!branch?.worktree || normalizePath(repoId, branch.worktree.path) !== normalizePath(repoId, targetWorktreePath)) {
+  if (
+    !branch?.worktree ||
+    normalizeRepositoryPath(repoId, branch.worktree.path) !== normalizeRepositoryPath(repoId, targetWorktreePath)
+  ) {
     return { ok: false, message: 'workspace.branch-workspace.git-action.target-worktree-required', repositoryName }
   }
-  const status = findStatus(repoId, statuses, targetWorktreePath)
+  const status = findRepositoryStatus(repoId, statuses, targetWorktreePath)
   if (!status)
     return { ok: false, message: 'workspace.branch-workspace.git-action.target-worktree-unavailable', repositoryName }
   return {
@@ -396,34 +404,6 @@ async function readMemberFacts(
     status,
     head: branch.worktree.head ?? status.head ?? branch.lastCommitHash,
   }
-}
-
-function findStatus(repoId: string, statuses: WorktreeStatus[], worktreePath: string): WorktreeStatus | undefined {
-  const expected = normalizePath(repoId, worktreePath)
-  return statuses.find((status) => normalizePath(repoId, status.path) === expected)
-}
-
-function normalizePath(repoId: string, value: string): string {
-  return isRemoteRepoId(repoId) ? path.posix.normalize(value) : path.resolve(value)
-}
-
-function normalizedEntries(entries: StatusEntry[]): StatusEntry[] {
-  return entries
-    .map((entry) => ({
-      x: entry.x,
-      y: entry.y,
-      path: entry.path,
-      ...(entry.originalPath ? { originalPath: entry.originalPath } : {}),
-    }))
-    .sort((a, b) =>
-      `${a.path}\0${a.originalPath ?? ''}\0${a.x}${a.y}`.localeCompare(
-        `${b.path}\0${b.originalPath ?? ''}\0${b.x}${b.y}`,
-      ),
-    )
-}
-
-function fingerprint(value: unknown): string {
-  return `sha256:${createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex')}`
 }
 
 function safeMessage(error: unknown): string {

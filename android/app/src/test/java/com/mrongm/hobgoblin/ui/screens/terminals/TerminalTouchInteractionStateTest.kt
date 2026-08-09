@@ -64,12 +64,6 @@ class TerminalTouchInteractionStateTest {
     }
 
     @Test
-    fun `tap movement threshold distinguishes click from drag`() {
-        assertTrue(terminalWithinTouchSlop(downX = 10f, downY = 10f, currentX = 13f, currentY = 14f, touchSlopPx = 6))
-        assertFalse(terminalWithinTouchSlop(downX = 10f, downY = 10f, currentX = 18f, currentY = 14f, touchSlopPx = 6))
-    }
-
-    @Test
     fun `double tap action uses top and bottom halves`() {
         assertEquals(TerminalDoubleTapAction.JumpTop, terminalDoubleTapAction(yPx = 99f, heightPx = 200))
         assertEquals(TerminalDoubleTapAction.JumpBottom, terminalDoubleTapAction(yPx = 100f, heightPx = 200))

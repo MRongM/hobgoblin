@@ -14,7 +14,6 @@
     "start": "bun run build:web && electron .",
     "build": "bun scripts/build.ts",
     "build:web": "vite build",
-    "build:server": "bun build ./src/server/entrypoints/main.ts ./src/server/entrypoints/terminal-worker.ts --outdir ./dist/server --target node --external node-pty --external sharp",
     "start:server": "node scripts/start-server.ts",
     "build:electron": "electron-builder",
     "install:app": "bun install.ts",

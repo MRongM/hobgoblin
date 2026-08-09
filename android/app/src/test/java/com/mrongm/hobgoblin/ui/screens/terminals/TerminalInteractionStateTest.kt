@@ -312,12 +312,6 @@ class TerminalInteractionStateTest {
     }
 
     @Test
-    fun `quick confirm and cancel append carriage return by default`() {
-        assertEquals("YES\r", terminalQuickInput(TerminalQuickConfirmInput))
-        assertEquals("NO\r", terminalQuickInput(TerminalQuickCancelInput))
-    }
-
-    @Test
     fun `control character maps letters to terminal bytes`() {
         assertEquals("\u0001", terminalControlCharacter('a'))
         assertEquals("\u0003", terminalControlCharacter('C'))
@@ -496,14 +490,6 @@ class TerminalInteractionStateTest {
 
         assertTrue(source.contains("TerminalBackgroundSwipeEdge(onBackground)"))
         assertTrue(source.contains("BackHandler {\n        navigateBack()"))
-    }
-
-    @Test
-    fun `stick to bottom follows scroll position`() {
-        assertTrue(terminalStickToBottom(scrollValue = 0, maxValue = 0))
-        assertTrue(terminalStickToBottom(scrollValue = 952, maxValue = 1000))
-        assertTrue(terminalStickToBottom(scrollValue = 952, maxValue = 1000, thresholdPx = 48))
-        assertFalse(terminalStickToBottom(scrollValue = 900, maxValue = 1000, thresholdPx = 48))
     }
 
     @Test

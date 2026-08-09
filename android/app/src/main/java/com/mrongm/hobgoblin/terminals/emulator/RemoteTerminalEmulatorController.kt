@@ -42,13 +42,6 @@ class RemoteTerminalEmulatorController(
         }
     }
 
-    fun visibleText(): String = emulator.getSelectedText(
-        0,
-        0,
-        emulator.mColumns - 1,
-        emulator.mRows - 1,
-    ).trimEnd()
-
     fun observe(onChanged: () -> Unit): AutoCloseable {
         val observerId = UUID.randomUUID().toString()
         observers[observerId] = onChanged

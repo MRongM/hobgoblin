@@ -6,7 +6,6 @@ import type { BranchWorkspaceManifest, BranchWorkspacePathInspection } from '#/s
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { BranchSnapshotInfo, WorktreeInfo } from '#/shared/git-types.ts'
 import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
-import type { WorktreeBootstrapTargetPreflightResult } from '#/shared/worktree-bootstrap-summary.ts'
 
 const ROOT = path.resolve('/workspace')
 const BRANCH = 'feature/auth'
@@ -79,20 +78,6 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
       )
     }),
     getRemoteBranches: vi.fn(async (_repoId: string) => [] as string[]),
-    getBootstrapPreflight: vi.fn(async () => {
-      throw new Error('repository dependency candidate preflight must not run')
-    }),
-    getBootstrapTargetPreflight: vi.fn(
-      async (): Promise<WorktreeBootstrapTargetPreflightResult> => ({
-        ok: true,
-        preflight: {
-          pending: [{ path: 'node_modules', mode: 'symlink' }],
-          satisfied: [],
-          conflicts: [],
-          hasSetup: false,
-        },
-      }),
-    ),
     inspectPath: vi.fn(
       async (_rootId: string, candidatePath: string): Promise<BranchWorkspacePathInspection> => missing(candidatePath),
     ),
@@ -637,7 +622,6 @@ describe('branch workspace create planner', () => {
         requiredApprovals: [],
       },
     })
-    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 
   test('plans repository dependencies from another known non-base worktree', async () => {
@@ -673,7 +657,6 @@ describe('branch workspace create planner', () => {
       deps,
     )
 
-    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
     expect(result).toMatchObject({
       ok: true,
       plan: {
@@ -723,7 +706,6 @@ describe('branch workspace create planner', () => {
         repositories: [{ worktreeBootstrap: { kind: 'skip' } }],
       },
     })
-    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 
   test('plans repository dependencies from a detached worktree source', async () => {
@@ -771,7 +753,6 @@ describe('branch workspace create planner', () => {
         ],
       },
     })
-    expect(deps.getBootstrapPreflight).not.toHaveBeenCalled()
   })
 })
 
@@ -919,7 +900,6 @@ describe('branch workspace repair planner', () => {
     await expect(
       buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.nothing-to-repair' })
-    expect(deps.getBootstrapTargetPreflight).not.toHaveBeenCalled()
   })
 
   test('recreates a missing legacy member worktree without dependency bootstrap', async () => {
@@ -944,7 +924,6 @@ describe('branch workspace repair planner', () => {
         steps: [{ kind: 'create-worktree', repositoryName: 'api' }],
       },
     })
-    expect(deps.getBootstrapTargetPreflight).not.toHaveBeenCalled()
   })
 
   test('repairs only missing roots and repository worktrees while releasing auxiliary intent', async () => {

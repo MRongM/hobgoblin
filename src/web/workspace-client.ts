@@ -23,11 +23,6 @@ import type {
 } from '#/shared/branch-workspace-dependencies.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type {
-  WorkspacePullExecuteInput,
-  WorkspacePullPlanResult,
-  WorkspacePullResult,
-} from '#/shared/workspace-pull.ts'
-import type {
   WorkspaceRecoveryExecuteInput,
   WorkspaceRecoveryExecuteResult,
   WorkspaceRecoveryPlanResult,
@@ -146,19 +141,4 @@ export async function executeBranchWorkspaceGitAction(
 
 export async function abortBranchWorkspaceGitAction(rootId: string): Promise<{ ok: boolean }> {
   return await postServerJson('/api/workspace/branch-workspaces/git-actions/abort', { rootId })
-}
-
-export async function planWorkspacePull(rootId: string): Promise<WorkspacePullPlanResult> {
-  return await postServerJson('/api/workspace/pull/plan', { rootId })
-}
-
-export async function executeWorkspacePull(
-  rootId: string,
-  input: WorkspacePullExecuteInput,
-): Promise<WorkspacePullResult> {
-  return await postServerJson('/api/workspace/pull/execute', { rootId, ...input })
-}
-
-export async function abortWorkspacePull(rootId: string): Promise<{ ok: boolean }> {
-  return await postServerJson('/api/workspace/pull/abort', { rootId })
 }

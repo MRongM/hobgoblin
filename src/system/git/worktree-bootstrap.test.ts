@@ -5,18 +5,7 @@ import { promises as fs } from 'node:fs'
 import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { git } from '#/system/git/helper.ts'
-import {
-  bootstrapWorktreeSelectionsAfterCreate,
-  getWorktreeBootstrapTargetPreflight,
-} from '#/system/git/worktree-bootstrap.ts'
-
-const mocks = vi.hoisted(() => ({
-  getRepoRoot: vi.fn(),
-}))
-
-vi.mock('#/system/git/branches.ts', () => ({
-  getRepoRoot: mocks.getRepoRoot,
-}))
+import { bootstrapWorktreeSelectionsAfterCreate } from '#/system/git/worktree-bootstrap.ts'
 
 let tmp = ''
 let sourceRoot = ''
@@ -29,7 +18,6 @@ beforeEach(async () => {
   await mkdir(sourceRoot, { recursive: true })
   await mkdir(targetRoot, { recursive: true })
   await git(sourceRoot, ['init', '--quiet'])
-  mocks.getRepoRoot.mockResolvedValue(sourceRoot)
 })
 
 afterEach(async () => {
@@ -38,34 +26,6 @@ afterEach(async () => {
 })
 
 describe('worktree bootstrap', () => {
-  test('classifies pending, satisfied, and conflicting manual targets without writing', async () => {
-    await writeFile(path.join(sourceRoot, '.env'), 'source\n')
-    await writeFile(path.join(sourceRoot, 'pending.env'), 'pending\n')
-    await mkdir(path.join(sourceRoot, 'node_modules'))
-    await writeFile(path.join(targetRoot, '.env'), 'target\n')
-    await symlink(path.join(sourceRoot, 'node_modules'), path.join(targetRoot, 'node_modules'))
-
-    const result = await getWorktreeBootstrapTargetPreflight(sourceRoot, targetRoot, {
-      kind: 'materialize',
-      selections: [
-        { path: '.env', mode: 'copy' },
-        { path: 'pending.env', mode: 'copy' },
-        { path: 'node_modules', mode: 'symlink' },
-      ],
-    })
-
-    expect(result).toEqual({
-      ok: true,
-      preflight: {
-        pending: [{ path: 'pending.env', mode: 'copy' }],
-        satisfied: [{ path: 'node_modules', mode: 'symlink' }],
-        conflicts: [{ path: '.env', mode: 'copy' }],
-        hasSetup: false,
-      },
-    })
-    await expect(readFile(path.join(targetRoot, '.env'), 'utf8')).resolves.toBe('target\n')
-  })
-
   test('copies and symlinks deep untracked selections from the exact source worktree', async () => {
     await mkdir(path.join(sourceRoot, 'backend', '.venv'), { recursive: true })
     await writeFile(path.join(sourceRoot, 'backend', '.venv', 'pyvenv.cfg'), 'placeholder\n')

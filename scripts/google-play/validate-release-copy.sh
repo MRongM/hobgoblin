@@ -4,7 +4,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-RELEASE_ROOT="${1:-$REPO_ROOT/release/google-play/0.1.0}"
+source "$SCRIPT_DIR/release-assets-lib.sh"
+
+PACKAGE_VERSION="$(package_version "$REPO_ROOT/package.json")"
+RELEASE_ROOT="${1:-$REPO_ROOT/release/google-play/$PACKAGE_VERSION}"
 LOCALES=(en-US zh-CN ja-JP ko-KR)
 
 fail() {

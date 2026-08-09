@@ -4,10 +4,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ASSET_ROOT="${HOBGOBLIN_PLAY_ASSET_ROOT:-$REPO_ROOT/release/google-play/0.1.0/graphics}"
-PACKAGE_NAME="com.mrongm.hobgoblin"
-
 source "$SCRIPT_DIR/release-assets-lib.sh"
+
+PACKAGE_VERSION="$(package_version "$REPO_ROOT/package.json")"
+ASSET_ROOT="${HOBGOBLIN_PLAY_ASSET_ROOT:-$REPO_ROOT/release/google-play/$PACKAGE_VERSION/graphics}"
+PACKAGE_NAME="com.mrongm.hobgoblin"
 
 usage() {
     printf '%s\n' \

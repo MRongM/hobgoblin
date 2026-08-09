@@ -106,8 +106,6 @@
     <string name="host_initializing_ssh_access">SSH 액세스를 초기화하고 연결을 테스트하는 중…</string>
     <string name="host_after_setup_saved_key">설정 후 이 호스트는 저장된 개인 키를 사용합니다.</string>
     <string name="host_optional">선택 사항</string>
-    <string name="diagnostics_title">호스트 진단</string>
-    <string name="diagnostics_failed">진단 실패</string>
     <string name="diagnostics_run">진단 실행</string>
     <string name="diagnostics_running">진단 실행 중…</string>
     <string name="diagnostics_status_failed">실패</string>
@@ -138,7 +136,6 @@
     <string name="hosts_empty_title">SSH 호스트 없음</string>
     <string name="hosts_empty_description">원격 개발 장치를 추가하여 진단 및 터미널 접근을 시작하세요.</string>
     <plurals name="hosts_project_count">
-        <item quantity="one">프로젝트 %1$d개</item>
         <item quantity="other">프로젝트 %1$d개</item>
     </plurals>
     <string name="hosts_delete_title">호스트 프로필을 삭제하시겠습니까?</string>
@@ -179,7 +176,6 @@
     <string name="projects_empty_title">프로젝트 없음</string>
     <string name="projects_empty_on_host">%1$s에 프로젝트 없음</string>
     <plurals name="projects_terminal_count">
-        <item quantity="one">터미널 %1$d개</item>
         <item quantity="other">터미널 %1$d개</item>
     </plurals>
     <string name="projects_show_all">모든 프로젝트 표시</string>
@@ -188,20 +184,6 @@
     <string name="projects_delete_title">프로젝트 기록을 삭제하시겠습니까?</string>
     <string name="projects_delete_description">Hobgoblin Android에서 %1$s을(를) 제거합니다. SSH 서버의 데이터는 삭제되지 않습니다.</string>
     <string name="projects_loading_description">저장된 프로젝트를 불러오는 중입니다.</string>
-    <string name="workspace_title">워크스페이스</string>
-    <string name="placeholder_local_terminal_deferred">Android 로컬 터미널과 로컬 Git은 v1에서 지원하지 않습니다. 긴급 작업에는 SSH 터미널을 사용하세요.</string>
-    <string name="placeholder_host_label">호스트 %1$s</string>
-    <string name="placeholder_run_diagnostics">진단 실행</string>
-    <string name="placeholder_ssh">SSH</string>
-    <string name="placeholder_shell">셸</string>
-    <string name="placeholder_git">Git</string>
-    <string name="placeholder_path">경로</string>
-    <string name="placeholder_repo">저장소</string>
-    <string name="placeholder_terminal_spike">터미널 스파이크</string>
-    <string name="placeholder_terminal_disconnected">터미널 연결이 끊어졌습니다. 다시 연결하거나 진단으로 돌아가세요.</string>
-    <string name="placeholder_product_name">Hobgoblin Android</string>
-    <string name="placeholder_product_description">SSH 원격 우선 긴급 작업.</string>
-    <string name="placeholder_local_terminal">로컬 터미널</string>
     <string name="repository_tab_worktrees">워크트리</string>
     <string name="repository_tab_commits">커밋</string>
     <string name="repository_terminal_mode_remote_ssh">원격 SSH</string>
@@ -426,7 +408,6 @@
     <string name="host_tmux_session_name">session · %1$s</string>
     <string name="host_tmux_idle">유휴</string>
     <string name="host_tmux_attached_clients">클라이언트 %1$d개 연결됨</string>
-    <string name="host_tmux_terminal_label">terminal-%1$d</string>
     <string name="host_tmux_close_description">%1$s의 Android 연결을 닫고 나중에 다시 연결할 수 있도록 로컬 기록을 유지합니다. 원격 tmux 세션은 계속 실행됩니다.</string>
     <string name="host_tmux_delete_title">tmux 터미널을 삭제할까요?</string>
     <string name="host_tmux_delete_local_description">Android 터미널 목록에서 %1$s을 삭제하고 활성 연결을 중지합니다. 아래 옵션을 선택하지 않으면 원격 tmux 세션은 계속 실행됩니다.</string>

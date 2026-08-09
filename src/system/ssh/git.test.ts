@@ -2,7 +2,6 @@ import { describe, expect, test, vi } from 'vitest'
 import * as remoteGitOperations from '#/system/ssh/git.ts'
 import {
   bootstrapRemoteWorktreeSelectionsAfterCreate,
-  getRemoteWorktreeBootstrapTargetPreflight,
   checkoutRemoteBranch,
   commitRemoteChanges,
   createRemoteBranch,
@@ -22,7 +21,6 @@ import {
   getRemoteSnapshot,
   getRemoteTags,
   inventoryRemoteFileTransfer,
-  isRemoteAncestor,
   listRemoteFileTreeDirectory,
   mergeRemoteBranch,
   moveRemoteFileTreeEntries,
@@ -1113,17 +1111,6 @@ describe('remote git helpers', () => {
     })
   })
 
-  test('isRemoteAncestor dispatches the safe remote ancestry command', async () => {
-    const run = vi.fn(async () => okRemoteResult(''))
-
-    await expect(isRemoteAncestor(TARGET, 'feature/test', 'main', { run: run as any })).resolves.toBe(true)
-    expect(run).toHaveBeenCalledWith(
-      { type: 'gitIsAncestor', path: '/srv/repo', ancestor: 'feature/test', descendant: 'main' },
-      TARGET,
-      { signal: undefined, timeoutMs: 180_000 },
-    )
-  })
-
   test('mergeRemoteBranch rejects relative worktree paths before running remote commands', async () => {
     const run = vi.fn()
 
@@ -1364,58 +1351,9 @@ describe('remote git helpers', () => {
         type: 'bootstrapRemoteWorktree',
         sourceRoot: '/srv/repo',
         targetRoot: '/srv/repo-worktree',
-        bestEffort: true,
         copy: ['backend/.venv'],
         symlink: ['frontend/node_modules'],
-        hardlink: [],
-        exclude: [],
-        setup: undefined,
-        literalPaths: true,
       },
-      TARGET,
-      { signal: undefined, timeoutMs: 600_000 },
-    )
-  })
-
-  test('getRemoteWorktreeBootstrapTargetPreflight parses manual target states', async () => {
-    const run = vi.fn(async (command: { type: string }) => {
-      if (command.type === 'bootstrapRemoteWorktree') {
-        return okRemoteResult(
-          [
-            'GOBLIN_BOOTSTRAP_CONFLICT copy .env',
-            'GOBLIN_BOOTSTRAP_PENDING copy missing.env',
-            'GOBLIN_BOOTSTRAP_SATISFIED symlink node_modules',
-          ].join('\n'),
-        )
-      }
-      return okRemoteResult('')
-    })
-
-    const result = await getRemoteWorktreeBootstrapTargetPreflight(
-      TARGET,
-      '/srv/repo-worktree',
-      {
-        kind: 'materialize',
-        selections: [
-          { path: '.env', mode: 'copy' },
-          { path: 'missing.env', mode: 'copy' },
-          { path: 'node_modules', mode: 'symlink' },
-        ],
-      },
-      { run: run as any },
-    )
-
-    expect(result).toEqual({
-      ok: true,
-      preflight: {
-        pending: [{ path: 'missing.env', mode: 'copy' }],
-        satisfied: [{ path: 'node_modules', mode: 'symlink' }],
-        conflicts: [{ path: '.env', mode: 'copy' }],
-        hasSetup: false,
-      },
-    })
-    expect(run).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'bootstrapRemoteWorktree', inspectOnly: true }),
       TARGET,
       { signal: undefined, timeoutMs: 600_000 },
     )

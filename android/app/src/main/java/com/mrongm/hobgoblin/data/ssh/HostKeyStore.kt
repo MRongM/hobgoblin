@@ -24,8 +24,6 @@ class HostKeyStore private constructor(
         return HostKeyTrust.Trusted(fingerprint)
     }
 
-    fun reject(fingerprint: String): HostKeyTrust.Rejected = HostKeyTrust.Rejected(fingerprint)
-
     private fun keyFor(target: RemoteTarget): String = "host-key:${target.user}@${target.host}:${target.port}"
 
     companion object {

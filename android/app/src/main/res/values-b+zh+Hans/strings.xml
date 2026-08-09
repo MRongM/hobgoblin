@@ -106,8 +106,6 @@
     <string name="host_initializing_ssh_access">正在初始化并测试 SSH 访问…</string>
     <string name="host_after_setup_saved_key">设置后，此主机将使用已保存的私钥。</string>
     <string name="host_optional">可选</string>
-    <string name="diagnostics_title">主机诊断</string>
-    <string name="diagnostics_failed">诊断失败</string>
     <string name="diagnostics_run">运行诊断</string>
     <string name="diagnostics_running">正在运行诊断…</string>
     <string name="diagnostics_status_failed">失败</string>
@@ -138,7 +136,6 @@
     <string name="hosts_empty_title">没有 SSH 主机</string>
     <string name="hosts_empty_description">添加远程开发机器以开始诊断和终端访问。</string>
     <plurals name="hosts_project_count">
-        <item quantity="one">%1$d 个项目</item>
         <item quantity="other">%1$d 个项目</item>
     </plurals>
     <string name="hosts_delete_title">删除主机配置？</string>
@@ -179,7 +176,6 @@
     <string name="projects_empty_title">没有项目</string>
     <string name="projects_empty_on_host">%1$s 上没有项目</string>
     <plurals name="projects_terminal_count">
-        <item quantity="one">%1$d 个终端</item>
         <item quantity="other">%1$d 个终端</item>
     </plurals>
     <string name="projects_show_all">显示所有项目</string>
@@ -188,20 +184,6 @@
     <string name="projects_delete_title">删除项目记录？</string>
     <string name="projects_delete_description">这会从 Hobgoblin Android 中移除%1$s，但不会删除 SSH 服务器上的任何内容。</string>
     <string name="projects_loading_description">正在加载已保存的项目。</string>
-    <string name="workspace_title">工作区</string>
-    <string name="placeholder_local_terminal_deferred">v1 暂不支持 Android 本地终端和本地 Git；紧急操作请使用 SSH 终端。</string>
-    <string name="placeholder_host_label">主机 %1$s</string>
-    <string name="placeholder_run_diagnostics">运行诊断</string>
-    <string name="placeholder_ssh">SSH</string>
-    <string name="placeholder_shell">Shell</string>
-    <string name="placeholder_git">Git</string>
-    <string name="placeholder_path">路径</string>
-    <string name="placeholder_repo">仓库</string>
-    <string name="placeholder_terminal_spike">终端试验</string>
-    <string name="placeholder_terminal_disconnected">终端已断开。请重新连接或返回诊断。</string>
-    <string name="placeholder_product_name">Hobgoblin Android</string>
-    <string name="placeholder_product_description">SSH 远程优先的紧急操作。</string>
-    <string name="placeholder_local_terminal">本地终端</string>
     <string name="repository_tab_worktrees">工作树</string>
     <string name="repository_tab_commits">提交</string>
     <string name="repository_terminal_mode_remote_ssh">远程 SSH</string>
@@ -426,7 +408,6 @@
     <string name="host_tmux_session_name">session · %1$s</string>
     <string name="host_tmux_idle">空闲</string>
     <string name="host_tmux_attached_clients">%1$d 个客户端已连接</string>
-    <string name="host_tmux_terminal_label">terminal-%1$d</string>
     <string name="host_tmux_close_description">关闭 %1$s 的 Android 连接并保留本地记录，以便稍后重连。远程 tmux 会话会继续运行。</string>
     <string name="host_tmux_delete_title">删除 tmux 终端？</string>
     <string name="host_tmux_delete_local_description">从 Android 终端列表删除 %1$s，并停止其活动连接。除非勾选下方选项，否则远程 tmux 会话将继续运行。</string>

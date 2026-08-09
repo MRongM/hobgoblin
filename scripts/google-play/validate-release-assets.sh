@@ -4,9 +4,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ASSET_ROOT="${1:-$REPO_ROOT/release/google-play/0.1.0/graphics}"
-
 source "$SCRIPT_DIR/release-assets-lib.sh"
+
+PACKAGE_VERSION="$(package_version "$REPO_ROOT/package.json")"
+ASSET_ROOT="${1:-$REPO_ROOT/release/google-play/$PACKAGE_VERSION/graphics}"
 
 validate_png "$ASSET_ROOT/app-icon.png" 512 512 1048576 required
 validate_png "$ASSET_ROOT/feature-graphic.png" 1024 500 15728640 forbidden

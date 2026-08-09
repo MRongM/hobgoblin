@@ -60,13 +60,6 @@ export interface RepoFileSearchMatch {
   kind: RepoFileSearchEntryKind
 }
 
-export interface RepoFileSearchRequest {
-  repoId: string
-  worktreePath: string
-  query: string
-  limit?: number
-}
-
 export type RepoFileSearchResult =
   | {
       ok: true
@@ -136,13 +129,6 @@ export interface RepoFileTransferRequest {
   worktreePath: string
   targetDirPath: string
   source: RepoFileTransferSource
-}
-
-export interface RepoFileMoveRequest {
-  repoId: string
-  worktreePath: string
-  paths: string[]
-  targetDirPath: string
 }
 
 export type RepoFileTreeTextFileReadResult =
@@ -259,17 +245,6 @@ export function isRepoFileTransferRequest(value: unknown): value is RepoFileTran
   return false
 }
 
-export function isRepoFileMoveRequest(value: unknown): value is RepoFileMoveRequest {
-  return (
-    isRecord(value) &&
-    typeof value.repoId === 'string' &&
-    typeof value.worktreePath === 'string' &&
-    isStringArray(value.paths) &&
-    value.paths.length > 0 &&
-    typeof value.targetDirPath === 'string'
-  )
-}
-
 export function isRepoFileTreeBinaryFileReadRequest(value: unknown): value is RepoFileTreeBinaryFileReadRequest {
   return (
     isRecord(value) &&
@@ -295,19 +270,6 @@ export function normalizeFileTreeSearchLimit(value: unknown): number {
   const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
   if (!Number.isFinite(parsed)) return FILE_TREE_SEARCH_LIMIT_DEFAULT
   return Math.max(1, Math.min(FILE_TREE_SEARCH_LIMIT_MAX, parsed))
-}
-
-export function isRepoFileSearchRequest(value: unknown): value is RepoFileSearchRequest {
-  return (
-    isRecord(value) &&
-    typeof value.repoId === 'string' &&
-    value.repoId.length > 0 &&
-    typeof value.worktreePath === 'string' &&
-    value.worktreePath.length > 0 &&
-    typeof value.query === 'string' &&
-    value.query.trim().length > 0 &&
-    (value.limit === undefined || typeof value.limit === 'number')
-  )
 }
 
 function fileTreeSearchBasename(relativePath: string): string {

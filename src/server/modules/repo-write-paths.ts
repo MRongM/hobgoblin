@@ -2,12 +2,7 @@ import { runServerCancellable, abortServerNetworkOp } from '#/server/common/netw
 import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
-import {
-  isValidRepositoryWorktreePath,
-  resolveRemoteRepoTarget,
-  resolveRepoBackend,
-  runWithRepoBackend,
-} from '#/server/modules/repo-backend.ts'
+import { resolveRemoteRepoTarget, resolveRepoBackend, runWithRepoBackend } from '#/server/modules/repo-backend.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import { cloneRepository as cloneGitRepository } from '#/system/git/clone.ts'
 import { initRepository as gitInit } from '#/system/git/init.ts'
@@ -42,7 +37,6 @@ import { type CloneRepoResult } from '#/shared/rpc.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
-import path from 'node:path'
 import PQueue from 'p-queue'
 import {
   isAbsoluteWorktreePath,

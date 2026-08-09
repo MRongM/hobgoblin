@@ -178,21 +178,12 @@ async function main(): Promise<void> {
   // Renderer bundle MUST exist before electron-builder packs it (the
   // `files` glob in electron-builder.ts expects `dist/web/`).
   await timeStep('build:web', () => $`bun run build:web`)
-  await timeStep('build:server', () => $`bun run build:server`)
   await timeStep('artifact check', () => {
     const webDist = path.join(repoRoot, 'dist/web')
     for (const artifact of [path.join(webDist, 'index.html'), path.join(webDist, 'boot.js')]) {
       if (!existsSync(artifact)) {
         fail(`Error: web build artifact missing: ${artifact}`)
       }
-    }
-    const serverDistEntry = path.join(repoRoot, 'dist/server/main.js')
-    if (!existsSync(serverDistEntry)) {
-      fail(`Error: server build artifact missing: ${serverDistEntry}`)
-    }
-    const terminalWorkerDistEntry = path.join(repoRoot, 'dist/server/terminal-worker.js')
-    if (!existsSync(terminalWorkerDistEntry)) {
-      fail(`Error: server build artifact missing: ${terminalWorkerDistEntry}`)
     }
   })
 

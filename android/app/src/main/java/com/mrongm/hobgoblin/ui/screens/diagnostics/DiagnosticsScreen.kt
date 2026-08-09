@@ -4,26 +4,16 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.mrongm.hobgoblin.R
@@ -33,71 +23,7 @@ import com.mrongm.hobgoblin.domain.ssh.DiagnosticStage
 import com.mrongm.hobgoblin.domain.ssh.DiagnosticStageResult
 import com.mrongm.hobgoblin.domain.ssh.DiagnosticStatus
 import com.mrongm.hobgoblin.domain.ssh.DiagnosticsResult
-import com.mrongm.hobgoblin.domain.ssh.RemoteTarget
-import com.mrongm.hobgoblin.domain.ssh.SshHostProfile
 import com.mrongm.hobgoblin.ui.theme.HobgoblinSpacing
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DiagnosticsScreen(
-    host: SshHostProfile,
-    onBack: () -> Unit,
-    onOpenTerminal: () -> Unit,
-    onRunDiagnostics: () -> DiagnosticsResult,
-    onTrustHostKey: (String) -> Unit,
-) {
-    val diagnosticsFailed = stringResource(R.string.diagnostics_failed)
-    val scope = rememberCoroutineScope()
-    var diagnosticsState: ResourceState<DiagnosticsResult> by remember { mutableStateOf(ResourceState.Idle) }
-
-    fun runDiagnostics() {
-        diagnosticsState = ResourceState.Loading
-        scope.launch {
-            diagnosticsState = runCatching {
-                withContext(Dispatchers.IO) { onRunDiagnostics() }
-            }.fold(
-                onSuccess = { ResourceState.Loaded(it) },
-                onFailure = {
-                    ResourceState.Error(it.message ?: diagnosticsFailed, it)
-                },
-            )
-        }
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.diagnostics_title)) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text(stringResource(R.string.common_back))
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(HobgoblinSpacing.Md)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(HobgoblinSpacing.Md),
-        ) {
-            Text(host.title, style = MaterialTheme.typography.titleLarge)
-            Text(host.subtitle, style = MaterialTheme.typography.bodyMedium)
-            HostDiagnosticsContent(
-                state = diagnosticsState,
-                onRunDiagnostics = { runDiagnostics() },
-                onTrustHostKey = onTrustHostKey,
-                onOpenTerminal = onOpenTerminal,
-            )
-        }
-    }
-}
 
 @Composable
 internal fun HostDiagnosticsContent(
@@ -257,14 +183,3 @@ internal fun pendingDiagnosticStages(running: DiagnosticStage? = null): List<Dia
             status = if (stage == running) DiagnosticStatus.Running else DiagnosticStatus.Pending,
         )
     }
-
-@Suppress("unused")
-private fun targetPreview(): RemoteTarget = RemoteTarget(
-    id = "dev@example.com:22/",
-    alias = "Dev",
-    host = "example.com",
-    user = "dev",
-    port = 22,
-    remotePath = "/",
-    identityRefId = null,
-)

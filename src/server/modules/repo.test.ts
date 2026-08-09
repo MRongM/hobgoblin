@@ -53,7 +53,6 @@ const mocks = vi.hoisted(() => ({
   getWorktreePatch: vi.fn(),
   getWorktrees: vi.fn(),
   isAncestor: vi.fn(),
-  isRemoteAncestor: vi.fn(),
   fetchAll: vi.fn(),
   fetchRemote: vi.fn(),
   fetchRemoteRepository: vi.fn(),
@@ -263,7 +262,6 @@ vi.mock('#/system/ssh/git.ts', () => ({
   readRemoteFileTreeBinaryFile: mocks.readRemoteFileTreeBinaryFile,
   readRemoteFileTreeTextFile: mocks.readRemoteFileTreeTextFile,
   mergeRemoteBranch: mocks.mergeRemoteBranch,
-  isRemoteAncestor: mocks.isRemoteAncestor,
   moveRemoteFileTreeEntries: mocks.moveRemoteFileTreeEntries,
   renameRemoteFileTreeEntry: mocks.renameRemoteFileTreeEntry,
   replaceRemoteFileTreeBinaryFile: mocks.replaceRemoteFileTreeBinaryFile,
@@ -542,28 +540,6 @@ describe('getRepositorySnapshot', () => {
   })
 })
 
-describe('repository ancestry read paths', () => {
-  test('reads local ancestry through the repository backend', async () => {
-    mocks.isAncestor.mockResolvedValueOnce(false)
-    const { isRepositoryAncestor } = await import('#/server/modules/repo-read-paths.ts')
-
-    await expect(isRepositoryAncestor('/tmp/repo', 'feature/a', 'main')).resolves.toBe(false)
-    expect(mocks.isAncestor).toHaveBeenCalledWith('/tmp/repo', 'feature/a', 'main', undefined)
-  })
-
-  test('reads remote ancestry through the repository backend', async () => {
-    mocks.isRemoteAncestor.mockResolvedValueOnce(true)
-    const { isRepositoryAncestor } = await import('#/server/modules/repo-read-paths.ts')
-
-    await expect(isRepositoryAncestor('ssh-config://prod/srv/repo', 'feature/a', 'main')).resolves.toBe(true)
-    expect(mocks.isRemoteAncestor).toHaveBeenCalledWith(
-      expect.objectContaining({ remotePath: '/srv/repo' }),
-      'feature/a',
-      'main',
-      { signal: undefined },
-    )
-  })
-})
 
 describe('repository history read paths', () => {
   test('getRepositoryHistory delegates to local backend history reads', async () => {

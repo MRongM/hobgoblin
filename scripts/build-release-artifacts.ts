@@ -71,21 +71,6 @@ function assertFileExists(relativePath: string): void {
   fail(`Error: expected build artifact missing: ${relativePath}`)
 }
 
-async function buildServerBundle(): Promise<void> {
-  const result = await Bun.build({
-    entrypoints: ['./src/server/entrypoints/main.ts', './src/server/entrypoints/terminal-worker.ts'],
-    outdir: './dist/server',
-    target: 'node',
-    external: ['node-pty'],
-  })
-  if (result.success) return
-
-  for (const log of result.logs) {
-    console.error(log)
-  }
-  fail('Error: server build failed.')
-}
-
 const platform = parsePlatform(values.platform)
 const arch = parseArch(values.arch)
 assertSupported(platform, arch)
@@ -101,12 +86,9 @@ if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
 rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
 
 await $`bun ${viteCli} build`
-await buildServerBundle()
 
 assertFileExists('dist/web/index.html')
 assertFileExists('dist/web/boot.js')
-assertFileExists('dist/server/main.js')
-assertFileExists('dist/server/terminal-worker.js')
 
 const platformArgs = platform === 'macos' ? ['--mac', 'dmg'] : ['--win', 'nsis']
 const archFlag = arch === 'arm64' ? '--arm64' : '--x64'

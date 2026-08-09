@@ -106,8 +106,6 @@
     <string name="host_initializing_ssh_access">SSH アクセスを初期化して接続をテストしています…</string>
     <string name="host_after_setup_saved_key">設定後、このホストは保存した秘密鍵を使用します。</string>
     <string name="host_optional">任意</string>
-    <string name="diagnostics_title">ホスト診断</string>
-    <string name="diagnostics_failed">診断に失敗しました</string>
     <string name="diagnostics_run">診断を実行</string>
     <string name="diagnostics_running">診断を実行中…</string>
     <string name="diagnostics_status_failed">失敗</string>
@@ -138,7 +136,6 @@
     <string name="hosts_empty_title">SSH ホストがありません</string>
     <string name="hosts_empty_description">リモート開発マシンを追加して、診断とターミナルアクセスを開始します。</string>
     <plurals name="hosts_project_count">
-        <item quantity="one">%1$d 件のプロジェクト</item>
         <item quantity="other">%1$d 件のプロジェクト</item>
     </plurals>
     <string name="hosts_delete_title">ホストプロファイルを削除しますか？</string>
@@ -179,7 +176,6 @@
     <string name="projects_empty_title">プロジェクトがありません</string>
     <string name="projects_empty_on_host">%1$s にプロジェクトはありません</string>
     <plurals name="projects_terminal_count">
-        <item quantity="one">%1$d 件のターミナル</item>
         <item quantity="other">%1$d 件のターミナル</item>
     </plurals>
     <string name="projects_show_all">すべてのプロジェクトを表示</string>
@@ -188,20 +184,6 @@
     <string name="projects_delete_title">プロジェクト記録を削除しますか？</string>
     <string name="projects_delete_description">%1$s を Hobgoblin Android から削除します。SSH サーバー上のデータは削除されません。</string>
     <string name="projects_loading_description">保存済みプロジェクトを読み込んでいます。</string>
-    <string name="workspace_title">ワークスペース</string>
-    <string name="placeholder_local_terminal_deferred">Android ローカルターミナルとローカル Git は v1 では未対応です。緊急作業には SSH ターミナルを使用してください。</string>
-    <string name="placeholder_host_label">ホスト %1$s</string>
-    <string name="placeholder_run_diagnostics">診断を実行</string>
-    <string name="placeholder_ssh">SSH</string>
-    <string name="placeholder_shell">シェル</string>
-    <string name="placeholder_git">Git</string>
-    <string name="placeholder_path">パス</string>
-    <string name="placeholder_repo">リポジトリ</string>
-    <string name="placeholder_terminal_spike">ターミナルスパイク</string>
-    <string name="placeholder_terminal_disconnected">ターミナルが切断されました。再接続するか診断に戻ってください。</string>
-    <string name="placeholder_product_name">Hobgoblin Android</string>
-    <string name="placeholder_product_description">SSH リモート優先の緊急操作。</string>
-    <string name="placeholder_local_terminal">ローカルターミナル</string>
     <string name="repository_tab_worktrees">ワークツリー</string>
     <string name="repository_tab_commits">コミット</string>
     <string name="repository_terminal_mode_remote_ssh">リモート SSH</string>
@@ -426,7 +408,6 @@
     <string name="host_tmux_session_name">session · %1$s</string>
     <string name="host_tmux_idle">アイドル</string>
     <string name="host_tmux_attached_clients">%1$d クライアント接続中</string>
-    <string name="host_tmux_terminal_label">terminal-%1$d</string>
     <string name="host_tmux_close_description">%1$s の Android 接続を閉じ、後で再接続できるようローカル記録を残します。リモート tmux セッションは実行を続けます。</string>
     <string name="host_tmux_delete_title">tmux ターミナルを削除しますか？</string>
     <string name="host_tmux_delete_local_description">%1$s を Android のターミナル一覧から削除し、アクティブな接続を停止します。下の項目を選択しない限り、リモート tmux セッションは実行を続けます。</string>

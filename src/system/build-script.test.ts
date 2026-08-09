@@ -118,7 +118,6 @@ describe('desktop build scripts', () => {
     expect(buildScript).toContain("await timeStep('typecheck', () => $`bun run typecheck`)")
     expect(buildScript).toMatch(/await timeStep\(\s*'typecheck',\s*\(\) => \{/)
     expect(buildScript).toContain("await timeStep('build:web', () => $`bun run build:web`)")
-    expect(buildScript).toContain("await timeStep('build:server', () => $`bun run build:server`)")
     expect(buildScript).toContain("await timeStep('artifact check'")
     expect(buildScript).toContain(
       "await timeStep('electron-builder', () => $`bun run build:electron -- ${builderArgs}`)",
@@ -237,7 +236,6 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))")
     expect(releaseScript).toContain("const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')")
     expect(releaseScript).toContain('await $`bun ${viteCli} build`')
-    expect(releaseScript).toContain('async function buildServerBundle()')
     expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
     expect(releaseScript).toContain(
       "const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')",
@@ -249,6 +247,14 @@ describe('desktop build scripts', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
     expect(config.files).toEqual(expect.arrayContaining(['THIRD_PARTY_NOTICES.md', 'LICENSES/**/*']))
+  })
+
+  test('desktop packaging loads server entrypoints from source without a redundant server bundle', () => {
+    const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+
+    expect(config.files).toEqual(expect.arrayContaining(['src/server/**/*.ts']))
+    expect(config.files).not.toContain('dist/server/**/*')
+    expect(readText('package.json')).not.toContain('"build:server"')
   })
 
   test('desktop packaging includes the executable hob launcher outside asar', () => {

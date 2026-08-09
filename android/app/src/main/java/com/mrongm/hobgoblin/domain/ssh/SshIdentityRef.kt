@@ -12,9 +12,3 @@ data class SshIdentityRef(
         require(protectedPath.isNotBlank()) { "Identity protected path is required" }
     }
 }
-
-data class SshPassphrasePromptState(
-    val identityId: String,
-    val copy: String = "Enter passphrase for this connection",
-)
-

@@ -60,14 +60,10 @@ import {
   compactWorktreeBootstrapPaths,
   formatWorktreeBootstrapSummary,
   hasWorktreeBootstrapSummaryDetails,
-  isWorktreeBootstrapRootEntryPath,
   normalizeWorktreeBootstrapSelections,
   normalizeWorktreeDependencyPath,
   type WorktreeBootstrapSelection,
   type WorktreeBootstrapSummary,
-  type WorktreeBootstrapTargetDecision,
-  type WorktreeBootstrapTargetEntry,
-  type WorktreeBootstrapTargetPreflightResult,
 } from '#/shared/worktree-bootstrap-summary.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
@@ -793,21 +789,6 @@ export async function mergeRemoteBranch(
   return hasUnmergedStatusEntries(parseStatus(status.stdout)) ? { ...execResult, reason: 'merge-conflict' } : execResult
 }
 
-export async function isRemoteAncestor(
-  target: RemoteRepoTarget,
-  ancestor: string,
-  descendant: string,
-  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
-): Promise<boolean> {
-  if (!isSafeBranchName(ancestor) || !isSafeBranchName(descendant)) return false
-  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run({ type: 'gitIsAncestor', path: target.remotePath, ancestor, descendant }, target, {
-    signal: options.signal,
-    timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
-  })
-  return result.ok && !options.signal?.aborted
-}
-
 export async function resetRemoteHard(
   target: RemoteRepoTarget,
   worktreePath: string,
@@ -1178,92 +1159,6 @@ export async function getRemoteBrowserUrl(
     : getBrowserRemoteUrlForRemotes(remoteInfo.remotes, upstream)
 }
 
-export async function getRemoteWorktreeBootstrapTargetPreflight(
-  target: RemoteRepoTarget,
-  worktreePath: string,
-  decision: WorktreeBootstrapTargetDecision,
-  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
-): Promise<WorktreeBootstrapTargetPreflightResult> {
-  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
-  if (decision.kind === 'skip') {
-    return { ok: true, preflight: { pending: [], satisfied: [], conflicts: [], hasSetup: false } }
-  }
-
-  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  for (const selection of decision.selections) {
-    if (
-      !isWorktreeBootstrapRootEntryPath(selection.path) ||
-      (selection.mode !== 'copy' && selection.mode !== 'symlink')
-    ) {
-      return { ok: false, message: 'Worktree bootstrap failed: error.invalid-arguments' }
-    }
-  }
-
-  const result = await run(
-    {
-      type: 'bootstrapRemoteWorktree',
-      sourceRoot: path.posix.normalize(target.remotePath),
-      targetRoot: worktreePath,
-      copy: decision.selections.filter((entry) => entry.mode === 'copy').map((entry) => entry.path),
-      symlink: decision.selections.filter((entry) => entry.mode === 'symlink').map((entry) => entry.path),
-      hardlink: [],
-      exclude: [],
-      setup: undefined,
-      literalPaths: true,
-      inspectOnly: true,
-    },
-    target,
-    { signal: options.signal, timeoutMs: REMOTE_BOOTSTRAP_TIMEOUT_MS },
-  )
-  if (options.signal?.aborted || result.message === 'cancelled') return { ok: false, message: 'cancelled' }
-  if (!result.ok) {
-    return {
-      ok: false,
-      message: `Worktree bootstrap failed: ${result.message || result.stderr || 'error.failed-read-repo'}`,
-    }
-  }
-
-  const parsed = parseRemoteWorktreeBootstrapTargetPreflight(result.stdout)
-  if (!parsed.ok) return parsed
-  return { ok: true, preflight: { ...parsed.preflight, hasSetup: false } }
-}
-
-function parseRemoteWorktreeBootstrapTargetPreflight(stdout: string): WorktreeBootstrapTargetPreflightResult {
-  const pending: WorktreeBootstrapTargetEntry[] = []
-  const satisfied: WorktreeBootstrapTargetEntry[] = []
-  const conflicts: WorktreeBootstrapTargetEntry[] = []
-  const seen = new Set<string>()
-
-  for (const line of stdout.split('\n')) {
-    if (!line) continue
-    const match = /^GOBLIN_BOOTSTRAP_(PENDING|SATISFIED|CONFLICT) (copy|symlink) (.+)$/.exec(line)
-    if (!match) return { ok: false, message: 'Worktree bootstrap failed: error.failed-read-repo' }
-    const state = match[1]
-    const mode = match[2] as WorktreeBootstrapTargetEntry['mode']
-    const targetPath = match[3]
-    if (!isSafeRemoteBootstrapTargetPath(targetPath)) {
-      return { ok: false, message: 'Worktree bootstrap failed: error.failed-read-repo' }
-    }
-    const key = `${mode}\0${targetPath}`
-    if (seen.has(key)) return { ok: false, message: 'Worktree bootstrap failed: error.failed-read-repo' }
-    seen.add(key)
-    const entry = { path: targetPath, mode }
-    if (state === 'PENDING') pending.push(entry)
-    else if (state === 'SATISFIED') satisfied.push(entry)
-    else conflicts.push(entry)
-  }
-
-  return { ok: true, preflight: { pending, satisfied, conflicts, hasSetup: false } }
-}
-
-function isSafeRemoteBootstrapTargetPath(value: string): boolean {
-  if (!value || value === '.' || value.startsWith('/') || /[\0-\x1f\x7f]/.test(value)) return false
-  const normalized = value.replaceAll('\\', '/')
-  if (normalized !== value || normalized.endsWith('/')) return false
-  const segments = normalized.split('/')
-  return !segments.some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git')
-}
-
 export async function bootstrapRemoteWorktreeSelectionsAfterCreate(
   target: RemoteRepoTarget,
   worktreePath: string,
@@ -1284,13 +1179,8 @@ export async function bootstrapRemoteWorktreeSelectionsAfterCreate(
         type: 'bootstrapRemoteWorktree',
         sourceRoot: path.posix.normalize(target.remotePath),
         targetRoot: worktreePath,
-        bestEffort: true,
         copy: normalizedSelections.filter((entry) => entry.mode === 'copy').map((entry) => entry.path),
         symlink: normalizedSelections.filter((entry) => entry.mode === 'symlink').map((entry) => entry.path),
-        hardlink: [],
-        exclude: [],
-        setup: undefined,
-        literalPaths: true,
       },
       target,
       { signal: options.signal, timeoutMs: REMOTE_BOOTSTRAP_TIMEOUT_MS },

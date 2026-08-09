@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { serverDataFile } from '#/server/common/data-dir.ts'
+import { enqueueFileWrite, writeJsonRegistryAtomically } from '#/server/modules/queued-json-registry.ts'
 import { branchWorkspacePath, workspaceRepositoryPath, workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import {
   isBranchWorkspaceDirectoryName,
@@ -88,7 +89,7 @@ export async function discardBranchWorkspaceRecords(
   const discardedIds = new Set(branchWorkspaceIds)
   const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
 
-  await enqueueWrite(dataFile, async () => {
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
     const snapshot = await readRegistry(dataFile)
     if (snapshot.kind === 'missing') return
     if (snapshot.kind === 'invalid') throw new Error('workspace.branch-workspace.read-failed')
@@ -101,7 +102,11 @@ export async function discardBranchWorkspaceRecords(
           ? cloneManifests(workspace.branchWorkspaces.filter((manifest) => !discardedIds.has(manifest.id)))
           : cloneManifests(workspace.branchWorkspaces),
     }))
-    await writeRegistry(dataFile, { version: 1, workspaces }, dependencies.randomId?.() ?? randomUUID())
+    await writeJsonRegistryAtomically(
+      dataFile,
+      { version: 1, workspaces },
+      dependencies.randomId?.() ?? randomUUID(),
+    )
   })
 }
 
@@ -111,7 +116,7 @@ export async function cleanupBranchWorkspaceRegistry(
   const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
   let result: BranchWorkspaceRegistryCleanupResult = { ok: true, outcome: 'unchanged', removedRecords: 0 }
 
-  await enqueueWrite(dataFile, async () => {
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
     let raw: string
     try {
       raw = await readFile(dataFile, 'utf8')
@@ -124,7 +129,7 @@ export async function cleanupBranchWorkspaceRegistry(
     try {
       parsed = JSON.parse(raw)
     } catch {
-      await writeRegistry(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
+      await writeJsonRegistryAtomically(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
       result = { ok: true, outcome: 'reset', removedRecords: 0 }
       return
     }
@@ -136,12 +141,12 @@ export async function cleanupBranchWorkspaceRegistry(
 
     const recovered = recoverRegistry(parsed)
     if (!recovered) {
-      await writeRegistry(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
+      await writeJsonRegistryAtomically(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
       result = { ok: true, outcome: 'reset', removedRecords: 0 }
       return
     }
 
-    await writeRegistry(dataFile, recovered.registry, dependencies.randomId?.() ?? randomUUID())
+    await writeJsonRegistryAtomically(dataFile, recovered.registry, dependencies.randomId?.() ?? randomUUID())
     result = { ok: true, outcome: 'repaired', removedRecords: recovered.removedRecords }
   })
 
@@ -156,7 +161,7 @@ async function mutateBranchWorkspaceManifests(
   const normalizedRootId = workspaceRootId(rootId)
   const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
 
-  await enqueueWrite(dataFile, async () => {
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
     const snapshot = await readRegistry(dataFile)
     if (snapshot.kind === 'invalid') throw new Error('workspace.branch-workspace.read-failed')
     const registry: BranchWorkspaceRegistry =
@@ -172,7 +177,11 @@ async function mutateBranchWorkspaceManifests(
     if (existingIndex >= 0) groups[existingIndex] = persisted
     else groups.push(persisted)
 
-    await writeRegistry(dataFile, { version: 1, workspaces: groups }, dependencies.randomId?.() ?? randomUUID())
+    await writeJsonRegistryAtomically(
+      dataFile,
+      { version: 1, workspaces: groups },
+      dependencies.randomId?.() ?? randomUUID(),
+    )
   })
 }
 
@@ -441,32 +450,6 @@ function optionalProgress(value: unknown): BranchWorkspaceRepositoryMember['prog
   if (value === undefined) return undefined
   if (!isProgress(value)) throw new Error(invalidRegistryMessage)
   return value
-}
-
-async function writeRegistry(dataFile: string, registry: BranchWorkspaceRegistry, randomId: string): Promise<void> {
-  await mkdir(path.dirname(dataFile), { recursive: true })
-  const temporaryFile = path.join(path.dirname(dataFile), `.${path.basename(dataFile)}.${randomId}.tmp`)
-  let temporaryFileCreated = false
-  try {
-    await writeFile(temporaryFile, `${JSON.stringify(registry, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
-    temporaryFileCreated = true
-    await rename(temporaryFile, dataFile)
-    temporaryFileCreated = false
-  } catch (error) {
-    if (temporaryFileCreated) await unlink(temporaryFile).catch(() => undefined)
-    throw error
-  }
-}
-
-async function enqueueWrite(dataFile: string, write: () => Promise<void>): Promise<void> {
-  const previous = writeQueues.get(dataFile) ?? Promise.resolve()
-  const operation = previous.catch(() => undefined).then(write)
-  writeQueues.set(dataFile, operation)
-  try {
-    await operation
-  } finally {
-    if (writeQueues.get(dataFile) === operation) writeQueues.delete(dataFile)
-  }
 }
 
 function cloneManifests(manifests: BranchWorkspaceManifest[]): BranchWorkspaceManifest[] {

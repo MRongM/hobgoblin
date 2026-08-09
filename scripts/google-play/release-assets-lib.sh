@@ -8,6 +8,24 @@ require_command() {
     fi
 }
 
+package_version() {
+    local package_json="$1"
+    require_command node
+    [[ -s "$package_json" ]] || {
+        printf 'Package manifest is missing: %s\n' "$package_json" >&2
+        return 1
+    }
+    node -e '
+        const fs = require("node:fs")
+        const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
+        if (typeof manifest.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(manifest.version)) {
+            process.stderr.write(`Invalid package version: ${JSON.stringify(manifest.version)}\n`)
+            process.exit(1)
+        }
+        process.stdout.write(manifest.version)
+    ' "$package_json"
+}
+
 profile_density() {
     local profile="$1"
     case "$profile" in

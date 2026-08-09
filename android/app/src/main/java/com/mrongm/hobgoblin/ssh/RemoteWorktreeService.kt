@@ -110,9 +110,6 @@ fun evaluateWorktreeRemoval(
     }
 }
 
-fun worktreeRemovalConfirmationText(worktree: RemoteRepositoryWorktree): String =
-    "Remove remote worktree ${worktree.path} from the SSH server? This does not delete the branch."
-
 private fun normalizeRemoteWorktreePath(value: String): String {
     val collapsed = value.trim().replace(Regex("/+"), "/")
     return if (collapsed == "/") collapsed else collapsed.trimEnd('/')

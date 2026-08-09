@@ -22,7 +22,6 @@ import com.mrongm.hobgoblin.terminals.TmuxSessionProtocol
 import com.mrongm.hobgoblin.termux.ExternalTermuxLaunchResult
 import com.mrongm.hobgoblin.ssh.WorktreeCreationSource
 import com.mrongm.hobgoblin.ssh.WorktreeRemovalBlockReason
-import com.mrongm.hobgoblin.ui.screens.placeholders.localTerminalPlaceholderTextResource
 import com.mrongm.hobgoblin.ui.text.LocalizedText
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -144,7 +143,7 @@ class RepositorySetupStateTest {
 
         assertEquals(
             listOf("/srv/scripts"),
-            repositoryTmuxDiscoveryPaths(workspace, ResourceState.Idle),
+            repositoryTmuxScope(workspace, ResourceState.Idle)?.allowedInitialPaths,
         )
     }
 
@@ -152,9 +151,9 @@ class RepositorySetupStateTest {
     fun `git tmux discovery waits for a usable repository snapshot`() {
         val repository = repository(id = "repo-1", remotePath = "/srv/app")
 
-        assertNull(repositoryTmuxDiscoveryPaths(repository, ResourceState.Idle))
-        assertNull(repositoryTmuxDiscoveryPaths(repository, ResourceState.Loading))
-        assertNull(repositoryTmuxDiscoveryPaths(repository, ResourceState.Error("git failed")))
+        assertNull(repositoryTmuxScope(repository, ResourceState.Idle))
+        assertNull(repositoryTmuxScope(repository, ResourceState.Loading))
+        assertNull(repositoryTmuxScope(repository, ResourceState.Error("git failed")))
     }
 
     @Test
@@ -171,14 +170,14 @@ class RepositorySetupStateTest {
 
         assertEquals(
             expected,
-            repositoryTmuxDiscoveryPaths(repository, ResourceState.Loaded(usableSnapshot)),
+            repositoryTmuxScope(repository, ResourceState.Loaded(usableSnapshot))?.allowedInitialPaths,
         )
         assertEquals(
             expected,
-            repositoryTmuxDiscoveryPaths(
+            repositoryTmuxScope(
                 repository,
                 ResourceState.Stale(usableSnapshot, loadedAtMillis = 1L, reason = "offline"),
-            ),
+            )?.allowedInitialPaths,
         )
     }
 
@@ -195,7 +194,7 @@ class RepositorySetupStateTest {
 
         assertEquals(
             listOf("/srv/app", "/srv/app-feature"),
-            repositoryTmuxDiscoveryPaths(repository, ResourceState.Loaded(usableSnapshot)),
+            repositoryTmuxScope(repository, ResourceState.Loaded(usableSnapshot))?.allowedInitialPaths,
         )
         assertEquals(
             "/srv/app",
@@ -303,11 +302,6 @@ class RepositorySetupStateTest {
                 fallback = RepositoryWorkspaceTab.Worktrees,
             ),
         )
-    }
-
-    @Test
-    fun `local terminal placeholder makes v1 scope explicit`() {
-        assertEquals(R.string.placeholder_local_terminal_deferred, localTerminalPlaceholderTextResource())
     }
 
     @Test
@@ -716,15 +710,6 @@ class RepositorySetupStateTest {
                 remoteBranchNames = setOf("origin/feature/android"),
             ),
         )
-    }
-
-    @Test
-    fun `local project delete removes only the selected saved project record`() {
-        val app = repository(id = "repo-1", remotePath = "/srv/app")
-        val api = repository(id = "repo-2", remotePath = "/srv/api")
-
-        assertEquals(listOf(api), repositoriesAfterLocalDelete(listOf(app, api), "repo-1"))
-        assertEquals(listOf(app, api), repositoriesAfterLocalDelete(listOf(app, api), "missing"))
     }
 
     @Test

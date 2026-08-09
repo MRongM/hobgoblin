@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { serverDataFile } from '#/server/common/data-dir.ts'
+import { enqueueFileWrite, writeJsonRegistryAtomically } from '#/server/modules/queued-json-registry.ts'
 import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { isWorkspaceRepositoryName, type WorkspaceConfig, type WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
 import type { WorkspaceRecoveryCleanupScope } from '#/shared/workspace-recovery.ts'
@@ -78,7 +78,7 @@ export async function writeWorkspaceConfig(
   const normalizedConfig = normalizeWorkspaceConfig(config)
   const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
 
-  await enqueueWrite(dataFile, async () => {
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
     const snapshot = await readRegistry(dataFile)
     if (snapshot.kind === 'invalid') throw new Error('workspace.config.read-failed')
     const registry: WorkspaceConfigRegistry =
@@ -92,7 +92,11 @@ export async function writeWorkspaceConfig(
     if (existingIndex >= 0) workspaces[existingIndex] = persisted
     else workspaces.push(persisted)
 
-    await writeRegistry(dataFile, { version: 1, workspaces }, dependencies.randomId?.() ?? randomUUID())
+    await writeJsonRegistryAtomically(
+      dataFile,
+      { version: 1, workspaces },
+      dependencies.randomId?.() ?? randomUUID(),
+    )
   })
 }
 
@@ -118,7 +122,7 @@ export async function cleanupWorkspaceConfig(
   const normalizedRootId = workspaceRootId(plan.rootId)
   if (normalizedRootId !== plan.rootId) throw new Error('workspace.recovery.plan-stale')
 
-  await enqueueWrite(dataFile, async () => {
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
     const raw = await readRawRegistry(dataFile)
     if (rawRegistryFingerprint(raw) !== plan.fingerprint) throw new Error('workspace.recovery.plan-stale')
     if (raw.kind === 'missing') {
@@ -137,7 +141,7 @@ export async function cleanupWorkspaceConfig(
           }
     const currentCount = inspected.scope === 'registry-reset' ? -1 : inspected.registry.workspaces.length
     if (plan.scope === 'project' && nextRegistry.workspaces.length === currentCount) return
-    await writeRegistry(dataFile, nextRegistry, dependencies.randomId?.() ?? randomUUID())
+    await writeJsonRegistryAtomically(dataFile, nextRegistry, dependencies.randomId?.() ?? randomUUID())
   })
 }
 
@@ -239,32 +243,6 @@ function normalizeRegistry(value: unknown): WorkspaceConfigRegistry {
     workspaces.push({ rootId: normalizedRootId, repo: config.repo })
   }
   return { version: 1, workspaces }
-}
-
-async function writeRegistry(dataFile: string, registry: WorkspaceConfigRegistry, randomId: string): Promise<void> {
-  await mkdir(path.dirname(dataFile), { recursive: true })
-  const temporaryFile = path.join(path.dirname(dataFile), `.${path.basename(dataFile)}.${randomId}.tmp`)
-  let temporaryFileCreated = false
-  try {
-    await writeFile(temporaryFile, `${JSON.stringify(registry, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
-    temporaryFileCreated = true
-    await rename(temporaryFile, dataFile)
-    temporaryFileCreated = false
-  } catch (error) {
-    if (temporaryFileCreated) await unlink(temporaryFile).catch(() => undefined)
-    throw error
-  }
-}
-
-async function enqueueWrite(dataFile: string, write: () => Promise<void>): Promise<void> {
-  const previous = writeQueues.get(dataFile) ?? Promise.resolve()
-  const operation = previous.catch(() => undefined).then(write)
-  writeQueues.set(dataFile, operation)
-  try {
-    await operation
-  } finally {
-    if (writeQueues.get(dataFile) === operation) writeQueues.delete(dataFile)
-  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

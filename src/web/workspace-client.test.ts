@@ -22,9 +22,6 @@ import {
   readBranchWorkspaces,
   reorderBranchWorkspaces,
   restoreWorkspace,
-  planWorkspacePull,
-  executeWorkspacePull,
-  abortWorkspacePull,
   planBranchWorkspaceGitAction,
   executeBranchWorkspaceGitAction,
   abortBranchWorkspaceGitAction,
@@ -180,25 +177,6 @@ describe('workspace client', () => {
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(4, '/api/workspace/branch-workspaces/reorder', {
       rootId: '/workspace',
       orderedIds: ['third', 'first'],
-    })
-  })
-
-  test('posts pull-only plan, execute, and abort requests', async () => {
-    mocks.postServerJson.mockResolvedValue({ ok: true })
-
-    await planWorkspacePull('/workspace')
-    await executeWorkspacePull('/workspace', { planToken: 'sha256:pull' })
-    await abortWorkspacePull('/workspace')
-
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/pull/plan', {
-      rootId: '/workspace',
-    })
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/pull/execute', {
-      rootId: '/workspace',
-      planToken: 'sha256:pull',
-    })
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/pull/abort', {
-      rootId: '/workspace',
     })
   })
 

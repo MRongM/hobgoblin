@@ -99,7 +99,7 @@ function createAppMenuTemplate(state: AppMenuState): MenuItemConstructorOptions[
     createEditMenu(),
     createViewMenu(state),
     createWindowMenu(state),
-    createHelpMenu(state),
+    createHelpMenu(),
   ]
 }
 
@@ -112,7 +112,7 @@ function createMacAppMenu(state: AppMenuState): MenuItemConstructorOptions {
         click: () => send({ type: 'open-settings-requested', page: 'about' }),
       },
       separator(),
-      createRendererCommandMenuItem(state, 'app-settings'),
+      createRendererCommandMenuItem('app-settings'),
       createAppearanceMenu(state.themePref),
       createLanguageMenu(state.langPref),
       separator(),
@@ -131,13 +131,13 @@ function createFileMenu(state: AppMenuState): MenuItemConstructorOptions {
   return {
     label: t('menu.file'),
     submenu: [
-      createRendererCommandMenuItem(state, 'file-open-local-repo'),
-      createRendererCommandMenuItem(state, 'file-open-local-repo-path'),
-      createRendererCommandMenuItem(state, 'file-clone-repo'),
-      createRendererCommandMenuItem(state, 'file-open-remote-repo'),
+      createRendererCommandMenuItem('file-open-local-repo'),
+      createRendererCommandMenuItem('file-open-local-repo-path'),
+      createRendererCommandMenuItem('file-clone-repo'),
+      createRendererCommandMenuItem('file-open-remote-repo'),
       { label: t('menu.file.open-recent'), submenu: createRecentReposMenu(state.recentRepos) },
       separator(),
-      createRendererCommandMenuItem(state, 'file-close-tab'),
+      createRendererCommandMenuItem('file-close-tab'),
       { label: t('menu.file.close-window'), click: () => focusedRegisteredSurface()?.window.close() },
       separator(),
       { label: t('menu.file.open-in-browser'), click: () => void openWebVersionFromMenu() },
@@ -146,7 +146,7 @@ function createFileMenu(state: AppMenuState): MenuItemConstructorOptions {
         ? []
         : [
             separator(),
-            createRendererCommandMenuItem(state, 'file-settings'),
+            createRendererCommandMenuItem('file-settings'),
             separator(),
             { role: 'quit' as const, label: t('menu.file.quit') },
           ]),
@@ -192,13 +192,13 @@ function createViewMenu(state: AppMenuState): MenuItemConstructorOptions {
   return {
     label: t('menu.view'),
     submenu: [
-      createRendererCommandMenuItem(state, 'view-status'),
-      createRendererCommandMenuItem(state, 'view-changes'),
-      createRendererCommandMenuItem(state, 'view-terminal'),
-      createRendererCommandMenuItem(state, 'view-terminal-primary-action'),
+      createRendererCommandMenuItem('view-status'),
+      createRendererCommandMenuItem('view-changes'),
+      createRendererCommandMenuItem('view-terminal'),
+      createRendererCommandMenuItem('view-terminal-primary-action'),
       ...(state.isMac ? [] : [separator(), createAppearanceMenu(state.themePref), createLanguageMenu(state.langPref)]),
       separator(),
-      createRendererCommandMenuItem(state, 'view-refresh'),
+      createRendererCommandMenuItem('view-refresh'),
       {
         label: t('menu.view.reload-page'),
         click: () => focusedRegisteredSurface()?.window.webContents.reload(),
@@ -226,17 +226,17 @@ function createWindowMenu(state: AppMenuState): MenuItemConstructorOptions {
       { role: 'minimize', label: t('menu.window.minimize') },
       { role: 'zoom', label: t('menu.window.zoom') },
       separator(),
-      createRendererCommandMenuItem(state, 'window-next-repo'),
-      createRendererCommandMenuItem(state, 'window-prev-repo'),
+      createRendererCommandMenuItem('window-next-repo'),
+      createRendererCommandMenuItem('window-prev-repo'),
       ...(state.isMac ? [separator(), { role: 'front' as const, label: t('menu.window.front') }] : []),
     ],
   }
 }
 
-function createHelpMenu(state: AppMenuState): MenuItemConstructorOptions {
+function createHelpMenu(): MenuItemConstructorOptions {
   return {
     label: t('menu.help'),
-    submenu: [createRendererCommandMenuItem(state, 'help-shortcuts')],
+    submenu: [createRendererCommandMenuItem('help-shortcuts')],
   }
 }
 
@@ -264,12 +264,7 @@ function createLanguageMenu(langPref: LangPref): MenuItemConstructorOptions {
   }
 }
 
-function accelerator(state: AppMenuState, value: string): string | undefined {
-  return state.shortcutsDisabled ? undefined : value
-}
-
 function createRendererCommandMenuItem(
-  state: AppMenuState,
   id: Parameters<typeof rendererMenuCommandById>[0],
 ): MenuItemConstructorOptions {
   const command = rendererMenuCommandById(id)

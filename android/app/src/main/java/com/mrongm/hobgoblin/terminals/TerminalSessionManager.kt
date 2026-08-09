@@ -92,22 +92,6 @@ class TerminalSessionManager(
         return recovered
     }
 
-    fun recoverOrGetTmuxSession(
-        candidate: TmuxTerminalRecoveryCandidate,
-    ): TerminalSessionRecord? {
-        val result: TmuxRecoveryResult
-        val snapshot: List<TerminalSessionRecord>
-        synchronized(lock) {
-            result = recoverOrGetTmuxSessionLocked(candidate) ?: return null
-            snapshot = sortedSessionsLocked()
-        }
-        if (result.created) {
-            sessionStore?.saveSessions(snapshot)
-            notifyCollectionObservers()
-        }
-        return result.record
-    }
-
     fun recoverOrGetHostTmuxSession(
         candidate: HostTmuxRecoveryCandidate,
     ): TerminalSessionRecord? {
@@ -325,9 +309,6 @@ class TerminalSessionManager(
                 .filter { it.repositoryId == repositoryId && it.remotePath == remotePath }
                 .sortedWith(workspaceSessionComparator)
         }
-
-    fun mostRecentSessionForWorkspace(repositoryId: String, remotePath: String): TerminalSessionRecord? =
-        sessionsForWorkspace(repositoryId, remotePath).firstOrNull()
 
     fun observeSessions(onChanged: (List<TerminalSessionRecord>) -> Unit): AutoCloseable {
         val observerId = UUID.randomUUID().toString()

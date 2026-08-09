@@ -7,7 +7,6 @@ import {
   workspaceRepositoryId,
   workspaceRepositoryPath,
   workspaceRootId,
-  workspaceWorktreePath,
 } from '#/server/modules/workspace-paths.ts'
 import { normalizeRemoteRepoId, normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import type { RemoteCommandResult } from '#/system/ssh/commands.ts'
@@ -50,7 +49,6 @@ describe('workspace paths', () => {
     expect(workspaceRootId(root)).toBe(root)
     expect(workspaceRepositoryId(root, 'api')).toBe(repository)
     expect(workspaceRepositoryPath(repository)).toBe(repository)
-    expect(workspaceWorktreePath(repository, 'feature/remote')).toBe(path.join(root, 'api-feature-remote'))
   })
 
   test('keeps remote ids opaque while deriving POSIX repository and worktree paths', () => {
@@ -60,7 +58,6 @@ describe('workspace paths', () => {
     expect(workspaceRootId(root)).toBe(root)
     expect(workspaceRepositoryId(root, 'api')).toBe(repository)
     expect(workspaceRepositoryPath(repository)).toBe('/srv/workspace/api')
-    expect(workspaceWorktreePath(repository, 'feature/remote')).toBe('/srv/workspace/api-feature-remote')
   })
 
   test('rejects unsafe members and malformed remote repository ids', () => {
@@ -68,7 +65,6 @@ describe('workspace paths', () => {
 
     expect(workspaceRepositoryId(root, '../api')).toBeNull()
     expect(workspaceRepositoryPath('ssh-config://broken')).toBeNull()
-    expect(workspaceWorktreePath('ssh-config://broken', 'feature/a')).toBeNull()
   })
 
   test('checks remote worktree path existence on the repository SSH target', async () => {

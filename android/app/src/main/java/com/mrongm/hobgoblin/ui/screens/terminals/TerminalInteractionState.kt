@@ -9,11 +9,7 @@ import com.mrongm.hobgoblin.terminals.TerminalSessionStatus
 import com.mrongm.hobgoblin.ui.text.LocalizedText
 import java.net.URI
 
-internal const val TerminalQuickConfirmInput = "YES"
-internal const val TerminalQuickCancelInput = "NO"
-
 internal const val TerminalDefaultFocusMode = false
-internal const val TerminalStickToBottomThresholdPx = 48
 
 internal fun terminalBackgroundSwipeTriggered(
     horizontalDistancePx: Float,
@@ -260,12 +256,6 @@ private fun terminalWorkspaceHostSessions(
     return sessions.filter { it.hostId in hostIds }
 }
 
-internal fun terminalStickToBottom(
-    scrollValue: Int,
-    maxValue: Int,
-    thresholdPx: Int = TerminalStickToBottomThresholdPx,
-): Boolean = maxValue == 0 || scrollValue >= maxValue - thresholdPx
-
 internal fun terminalInputAvailable(state: TerminalSessionState): Boolean =
     state is TerminalSessionState.Connected
 
@@ -362,8 +352,6 @@ private fun terminalDirectBrowserUrl(value: String): String? {
     if (uri.host.isNullOrBlank()) return null
     return value
 }
-
-internal fun terminalQuickInput(value: String): String = "$value\r"
 
 internal fun terminalControlCharacter(key: Char): String? {
     val letter = key.uppercaseChar()

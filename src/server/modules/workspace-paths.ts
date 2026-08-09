@@ -35,14 +35,6 @@ export function workspaceRepositoryPath(repoId: string): string | null {
   return parseRemoteRepoId(repoId)?.remotePath ?? null
 }
 
-export function workspaceWorktreePath(repoId: string, branch: string): string | null {
-  const repositoryPath = workspaceRepositoryPath(repoId)
-  if (!repositoryPath) return null
-  const suffix = branch.replaceAll('/', '-')
-  const pathApi = isRemoteRepoId(repoId) ? path.posix : path
-  return pathApi.join(pathApi.dirname(repositoryPath), `${pathApi.basename(repositoryPath)}-${suffix}`)
-}
-
 export function branchWorkspaceDirectoryName(branch: string, occupiedNames: ReadonlySet<string>): string {
   const normalizedBranch = branch.trim()
   if (!normalizedBranch || normalizedBranch.includes('\0') || /[\x00-\x1f\x7f]/.test(normalizedBranch)) {

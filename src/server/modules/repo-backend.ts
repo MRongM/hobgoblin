@@ -77,7 +77,6 @@ import {
   getRemoteBrowserUrl,
   getRemoteCommitDetail,
   getRemoteHistory,
-  isRemoteAncestor,
   getRemotePatch,
   getRemoteSnapshot,
   getRemoteStatus,
@@ -142,7 +141,6 @@ export interface RepoBackend {
   push(branch: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
-  isAncestor(ancestor: string, descendant: string, signal?: AbortSignal): Promise<boolean>
   resetHard(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
   discardChanges(worktreePath: string, paths: string[], signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
@@ -415,9 +413,6 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await mergeBranch(worktreePath, branch, signal)
     },
-    async isAncestor(ancestor, descendant, signal) {
-      return await isAncestor(repoId, ancestor, descendant, signal)
-    },
     async resetHard(worktreePath, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await resetHardToCurrentHead(worktreePath, signal)
@@ -637,9 +632,6 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async merge(worktreePath, branch, signal) {
       return await mergeRemoteBranch(target, worktreePath, branch, { signal })
-    },
-    async isAncestor(ancestor, descendant, signal) {
-      return await isRemoteAncestor(target, ancestor, descendant, { signal })
     },
     async resetHard(worktreePath, signal) {
       return await resetRemoteHard(target, worktreePath, { signal })

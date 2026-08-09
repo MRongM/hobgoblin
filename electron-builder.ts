@@ -8,7 +8,6 @@ const config: Configuration = {
     output: 'release',
   },
   files: [
-    'dist/server/**/*',
     // Keep these runtime-loaded TS sources in the asar. Main resolves `#/*`
     // imports through Electron's native TS loader, so removing these globs
     // breaks packaged builds even though dev still works.

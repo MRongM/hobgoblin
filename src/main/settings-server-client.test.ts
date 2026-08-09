@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
     clientId: 'client_sharedterminal',
   })),
   requestEmbeddedServerJson: vi.fn(),
-  postEmbeddedServerJson: vi.fn(),
 }))
 
 vi.mock('#/main/server-manager.ts', () => ({
@@ -17,7 +16,6 @@ vi.mock('#/main/server-manager.ts', () => ({
 
 vi.mock('#/shared/embedded-server-client.ts', () => ({
   requestEmbeddedServerJson: mocks.requestEmbeddedServerJson,
-  postEmbeddedServerJson: mocks.postEmbeddedServerJson,
 }))
 
 describe('main settings server client', () => {
@@ -54,19 +52,6 @@ describe('main settings server client', () => {
       { url: 'http://127.0.0.1:32100/', secret: 'secret', clientId: 'client_sharedterminal' },
       '/api/settings/prefs',
       undefined,
-    )
-  })
-
-  test('persists settings prefs patches through the embedded server runtime', async () => {
-    const prefs = defaultSettingsPrefs({ theme: 'dark', colorTheme: 'github', globalShortcut: 'Alt+K' })
-    mocks.postEmbeddedServerJson.mockResolvedValueOnce({ settings: prefs })
-
-    const mod = await import('#/main/settings-server-client.ts')
-    await expect(mod.updateSettingsPrefs({ theme: 'dark' })).resolves.toBe(prefs)
-    expect(mocks.postEmbeddedServerJson).toHaveBeenCalledWith(
-      { url: 'http://127.0.0.1:32100/', secret: 'secret', clientId: 'client_sharedterminal' },
-      '/api/settings/prefs',
-      { settings: { theme: 'dark' } },
     )
   })
 

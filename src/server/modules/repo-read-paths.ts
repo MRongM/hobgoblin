@@ -85,17 +85,6 @@ export async function getRepositoryPatch(cwd: string, worktreePath: string, sign
   return await runWithRepoBackend(cwd, async (backend) => await backend.getPatch(worktreePath, signal))
 }
 
-export async function isRepositoryAncestor(
-  cwd: string,
-  ancestor: string,
-  descendant: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  return signal?.aborted
-    ? false
-    : await runWithRepoBackend(cwd, async (backend) => await backend.isAncestor(ancestor, descendant, signal))
-}
-
 export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {
   return await probeCommitMessageProviders(signal)
 }
