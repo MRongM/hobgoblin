@@ -293,7 +293,7 @@ jobs:
 
               [void]$terminalOutput.Clear()
               $marker = "__HOBGOBLIN_终端_IO_OK__"
-              $command = "[Console]::WriteLine(('__HOBGOBLIN_' + '终端_IO_OK__')); [Console]::WriteLine((Get-Location).Path)`r"
+              $command = "Write-Output ('__HOBGOBLIN_' + '终端_IO_OK__'); Write-Output ((Get-Location).Path)`r"
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_write"
