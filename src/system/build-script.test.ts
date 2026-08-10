@@ -167,6 +167,12 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('bun scripts/build-release-artifacts.ts --platform macos --arch ${{ matrix.arch }}')
     expect(workflow).toContain('uses: ./.github/workflows/windows-test.yml')
     expect(windowsWorkflow).toContain('workflow_call:')
+    expect(windowsWorkflow).toContain('fail-fast: false')
+    expect(windowsWorkflow).toContain('- arch: x64')
+    expect(windowsWorkflow).toContain('runner: windows-latest')
+    expect(windowsWorkflow).toContain('- arch: arm64')
+    expect(windowsWorkflow).toContain('runner: windows-11-arm')
+    expect(windowsWorkflow).toContain('runs-on: ${{ matrix.runner }}')
     expect(windowsWorkflow).toContain('name: Test Windows compatibility')
     for (const windowsTestPath of [
       'src/main/external-open.test.ts',
@@ -185,10 +191,15 @@ describe('desktop build scripts', () => {
     ]) {
       expect(windowsWorkflow).toContain(windowsTestPath)
     }
-    expect(windowsWorkflow).toContain('bun scripts/build-release-artifacts.ts --platform windows --arch x64')
+    expect(windowsWorkflow).toContain(
+      'bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}',
+    )
     expect(windowsWorkflow).toContain('Smoke test packaged Windows app startup')
     expect(windowsWorkflow).toContain('Hobgoblin Smoke 用户 Data')
     expect(windowsWorkflow).toContain('Hobgoblin Terminal 路径 Workspace')
+    expect(windowsWorkflow).toContain('name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('path: release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(workflow).toContain('actions/setup-java@v4')
     expect(workflow).toContain('distribution: temurin')
     expect(workflow).toContain('java-version: 17')
@@ -206,6 +217,7 @@ describe('desktop build scripts', () => {
     expect(workflow).toContain('--clobber')
     expect(workflow).toContain('Hobgoblin-${VERSION}-arm64.dmg')
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.dmg')
+    expect(workflow.split('Hobgoblin-${VERSION}-arm64.exe').length - 1).toBe(2)
     expect(workflow).toContain('Hobgoblin-${VERSION}-x64.exe')
     expect(workflow).toContain('Hobgoblin-${VERSION}-android.apk')
     expect(workflow).toContain('Hobgoblin-${VERSION}-linux-source.tar.gz')
@@ -254,7 +266,7 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain("type ReleasePlatform = 'macos' | 'windows'")
     expect(releaseScript).toContain("type ReleaseArch = 'arm64' | 'x64'")
     expect(releaseScript).toContain("macos: ['arm64', 'x64']")
-    expect(releaseScript).toContain("windows: ['x64']")
+    expect(releaseScript).toContain("windows: ['arm64', 'x64']")
     expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.dmg`')
     expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.exe`')
     expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))")
@@ -288,10 +300,10 @@ describe('desktop build scripts', () => {
     expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
-  test('desktop release packaging config includes Windows x64 NSIS output', () => {
+  test('desktop release packaging config includes Windows ARM64 and x64 NSIS output', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
-    expect(config.win?.target).toEqual([{ target: 'nsis', arch: ['x64'] }])
+    expect(config.win?.target).toEqual([{ target: 'nsis', arch: ['arm64', 'x64'] }])
     expect(config.win?.artifactName).toBe('${productName}-${version}-${arch}.${ext}')
     expect(config.nsis?.oneClick).toBe(false)
     expect(config.nsis?.perMachine).toBe(false)

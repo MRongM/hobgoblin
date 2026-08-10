@@ -57,7 +57,7 @@ const config: Configuration = {
     artifactName: '${productName}-${version}-${arch}.${ext}',
   },
   win: {
-    target: [{ target: 'nsis', arch: ['x64'] }],
+    target: [{ target: 'nsis', arch: ['arm64', 'x64'] }],
     artifactName: '${productName}-${version}-${arch}.${ext}',
   },
   nsis: {

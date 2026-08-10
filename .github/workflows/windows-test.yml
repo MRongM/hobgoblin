@@ -32,8 +32,16 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Build Windows x64
-    runs-on: windows-latest
+    name: Build Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,7 +81,7 @@ jobs:
           src/web/lib/paths.test.ts
 
       - name: Build Windows artifact
-        run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
+        run: bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}
 
       - name: Smoke test packaged Windows app startup
         shell: pwsh
@@ -429,7 +437,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-startup-logs-${{ github.sha }}
+          name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}
           path: ${{ runner.temp }}\Hobgoblin Smoke 用户 Data\**\*
           if-no-files-found: warn
           retention-days: 7
@@ -437,7 +445,7 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-x64-${{ github.sha }}
-          path: release/Hobgoblin-*-x64.exe
+          name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}
+          path: release/Hobgoblin-*-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 7

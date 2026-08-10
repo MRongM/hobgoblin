@@ -17,6 +17,7 @@ describe('release documentation', () => {
     expect(content).toContain('Branch workspace')
     expect(content).toContain('Android')
     expect(content).toContain('tmux')
+    expect(content).toContain('Windows x64 / ARM64')
     expect(content).toContain('linux-source.tar.gz')
     expect(content).toContain('scripts/serve-systemd.sh')
   })
@@ -28,6 +29,7 @@ describe('release documentation', () => {
     expect((page.match(/install_linux_title:/g) ?? []).length).toBe(4)
     expect((page.match(/Branch workspace/g) ?? []).length).toBeGreaterThanOrEqual(4)
     expect((page.match(/tmux/g) ?? []).length).toBeGreaterThanOrEqual(4)
+    expect((page.match(/Windows x64 \/ ARM64/g) ?? []).length).toBeGreaterThanOrEqual(4)
     expect(page).toContain('Hobgoblin-&lt;version&gt;-linux-source.tar.gz')
   })
 
@@ -53,6 +55,7 @@ describe('release documentation', () => {
     for (const asset of [
       'Hobgoblin-2.2.4-arm64.dmg',
       'Hobgoblin-2.2.4-x64.dmg',
+      'Hobgoblin-2.2.4-arm64.exe',
       'Hobgoblin-2.2.4-x64.exe',
       'Hobgoblin-2.2.4-android.apk',
       'Hobgoblin-2.2.4-linux-source.tar.gz',

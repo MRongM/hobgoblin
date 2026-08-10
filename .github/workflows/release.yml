@@ -149,6 +149,7 @@ jobs:
           EXPECTED=(
             "Hobgoblin-${VERSION}-arm64.dmg"
             "Hobgoblin-${VERSION}-x64.dmg"
+            "Hobgoblin-${VERSION}-arm64.exe"
             "Hobgoblin-${VERSION}-x64.exe"
             "Hobgoblin-${VERSION}-android.apk"
             "Hobgoblin-${VERSION}-linux-source.tar.gz"
@@ -195,6 +196,7 @@ jobs:
           gh release upload "$TAG" \
             "release-assets/Hobgoblin-${VERSION}-arm64.dmg" \
             "release-assets/Hobgoblin-${VERSION}-x64.dmg" \
+            "release-assets/Hobgoblin-${VERSION}-arm64.exe" \
             "release-assets/Hobgoblin-${VERSION}-x64.exe" \
             "release-assets/Hobgoblin-${VERSION}-android.apk" \
             "release-assets/Hobgoblin-${VERSION}-linux-source.tar.gz" \

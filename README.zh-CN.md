@@ -75,7 +75,7 @@ Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是�
 
 - **macOS Apple Silicon：** 下载 `arm64.dmg` 文件。
 - **macOS Intel：** 下载 `x64.dmg` 文件。
-- **Windows x64：** 下载 `.exe` 安装程序。
+- **Windows x64 / ARM64：** 下载与设备架构匹配的 `.exe` 安装程序。
 - **Android：** 下载 `android.apk` 文件。该 APK 未签名，安装前必须先完成签名。
 - **Linux Server Mode：** 下载面向部署的源码包 `Hobgoblin-<version>-linux-source.tar.gz`。
 

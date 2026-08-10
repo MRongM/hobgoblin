@@ -75,7 +75,7 @@ Hobgoblin は [Goblin](https://nano-props.github.io/goblin/) から始まりま�
 
 - **macOS Apple Silicon:** `arm64.dmg` ファイルをダウンロードします。
 - **macOS Intel:** `x64.dmg` ファイルをダウンロードします。
-- **Windows x64:** `.exe` インストーラーをダウンロードします。
+- **Windows x64 / ARM64:** デバイスのアーキテクチャに合う `.exe` インストーラーをダウンロードします。
 - **Android:** `android.apk` をダウンロードします。この APK は未署名のため、インストール前に署名が必要です。
 - **Linux Server Mode:** デプロイ用ソースアーカイブ `Hobgoblin-<version>-linux-source.tar.gz` をダウンロードします。
 

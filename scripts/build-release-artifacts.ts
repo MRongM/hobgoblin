@@ -2,6 +2,7 @@
 // Build one standard release artifact for the current CI runner.
 // Usage: bun scripts/build-release-artifacts.ts --platform macos --arch arm64
 //        bun scripts/build-release-artifacts.ts --platform macos --arch x64
+//        bun scripts/build-release-artifacts.ts --platform windows --arch arm64
 //        bun scripts/build-release-artifacts.ts --platform windows --arch x64
 import { $ } from 'bun'
 import { existsSync, rmSync } from 'node:fs'
@@ -21,7 +22,7 @@ type ReleaseArch = 'arm64' | 'x64'
 
 const SUPPORTED_ARCHES: Record<ReleasePlatform, ReleaseArch[]> = {
   macos: ['arm64', 'x64'],
-  windows: ['x64'],
+  windows: ['arm64', 'x64'],
 }
 
 const { values } = parseArgs({

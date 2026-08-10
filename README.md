@@ -75,7 +75,7 @@ Choose the artifact for your platform:
 
 - **macOS Apple Silicon:** download the `arm64.dmg` file.
 - **macOS Intel:** download the `x64.dmg` file.
-- **Windows x64:** download the `.exe` installer.
+- **Windows x64 / ARM64:** download the `.exe` installer that matches your device architecture.
 - **Android:** download the `android.apk` file. The APK is unsigned and must be signed before installation.
 - **Linux Server Mode:** download `Hobgoblin-<version>-linux-source.tar.gz` for the deployment-focused source archive.
 
