@@ -34,7 +34,7 @@ describe('spawnTerminalPtyRuntime', () => {
         args: ['-NoLogo'],
       },
     ])
-    spawnMock.mockReturnValue(terminalPty('pwsh.exe'))
+    spawnMock.mockReturnValue(terminalPty('xterm-256color'))
 
     const result = spawnTerminalPtyRuntime({
       cwd: 'C:\\repo',
@@ -43,6 +43,8 @@ describe('spawnTerminalPtyRuntime', () => {
     })
 
     expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.runtime.processName()).toBe('pwsh.exe')
     expect(spawnMock).toHaveBeenCalledWith(
       'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
       ['-NoLogo'],

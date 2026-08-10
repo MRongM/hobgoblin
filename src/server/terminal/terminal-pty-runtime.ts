@@ -1,5 +1,6 @@
 import * as pty from 'node-pty'
 import os from 'node:os'
+import path from 'node:path'
 import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 
@@ -42,9 +43,11 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
           env,
         })
         const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
-        return windowsPty
-          ? { ok: true, runtime: new NodePtyTerminalRuntime(term), windowsPty }
-          : { ok: true, runtime: new NodePtyTerminalRuntime(term) }
+        const runtime = new NodePtyTerminalRuntime(
+          term,
+          process.platform === 'win32' ? path.win32.basename(candidate.command) : undefined,
+        )
+        return windowsPty ? { ok: true, runtime, windowsPty } : { ok: true, runtime }
       } catch (error) {
         lastError = error
       }
@@ -105,9 +108,11 @@ function parseWindowsBuildNumber(release: string): number | null {
 
 class NodePtyTerminalRuntime implements TerminalPtyRuntime {
   private readonly term: pty.IPty
+  private readonly launchedProcessName: string | undefined
 
-  constructor(term: pty.IPty) {
+  constructor(term: pty.IPty, launchedProcessName?: string) {
     this.term = term
+    this.launchedProcessName = launchedProcessName
   }
 
   write(data: string): void {
@@ -131,7 +136,7 @@ class NodePtyTerminalRuntime implements TerminalPtyRuntime {
   }
 
   processName(): string {
-    return readTerminalProcessName(this.term)
+    return this.launchedProcessName ?? readTerminalProcessName(this.term)
   }
 }
 
