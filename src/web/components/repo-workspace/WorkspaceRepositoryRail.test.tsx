@@ -973,6 +973,24 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).toBeNull()
   })
 
+  test('does not ask for manual configuration when repository membership is automatically imported', () => {
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        [ROOT]: {
+          ...state.workspaceProjects[ROOT]!,
+          configured: false,
+          configuredRepositoryNames: undefined,
+          skipped: [],
+        },
+      },
+    }))
+
+    renderRail()
+
+    expect(container?.textContent).not.toContain('workspace.configuration-required')
+  })
+
   test('uses the workspace member name when shared repository state keeps a remote project prefix', () => {
     const state = useReposStore.getState()
     useReposStore.setState({

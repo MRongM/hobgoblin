@@ -685,15 +685,13 @@ export function WorkspaceRepositoryRail({
             {t(reorderError)}
           </div>
         ) : null}
-        {(workspace.error || workspace.configurationError || !workspace.configured || workspace.skipped.length > 0) && (
+        {(workspace.error || workspace.configurationError || workspace.skipped.length > 0) && (
           <div className="px-3 py-1.5 text-[10px] leading-4 text-warning" role="status">
             {workspace.error
               ? t('workspace.scan-failed')
               : workspace.configurationError
                 ? t('workspace.configuration-invalid')
-                : !workspace.configured
-                  ? t('workspace.configuration-required')
-                  : t('workspace.scan-skipped', { count: workspace.skipped.length })}
+                : t('workspace.scan-skipped', { count: workspace.skipped.length })}
           </div>
         )}
       </div>
