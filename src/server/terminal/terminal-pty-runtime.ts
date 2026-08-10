@@ -1,5 +1,6 @@
 import * as pty from 'node-pty'
 import os from 'node:os'
+import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 
 export interface TerminalPtyRuntime {
@@ -27,25 +28,62 @@ const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
 
 export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): SpawnTerminalPtyRuntimeResult {
   try {
-    const shell =
-      input.command ||
-      (process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : process.env.SHELL || '/bin/zsh')
-    const args = input.args ?? (process.platform === 'win32' ? [] : ['-l'])
+    const candidates = resolveTerminalPtySpawnCandidates(input)
     const env = { ...process.env, TERM: 'xterm-256color' }
-    const term = pty.spawn(shell, args, {
-      name: 'xterm-256color',
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.cwd,
-      env,
-    })
-    const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
-    return windowsPty
-      ? { ok: true, runtime: new NodePtyTerminalRuntime(term), windowsPty }
-      : { ok: true, runtime: new NodePtyTerminalRuntime(term) }
+    let lastError: unknown
+
+    for (const candidate of candidates) {
+      try {
+        const term = pty.spawn(candidate.command, candidate.args, {
+          name: 'xterm-256color',
+          cols: input.cols,
+          rows: input.rows,
+          cwd: input.cwd,
+          env,
+        })
+        const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
+        return windowsPty
+          ? { ok: true, runtime: new NodePtyTerminalRuntime(term), windowsPty }
+          : { ok: true, runtime: new NodePtyTerminalRuntime(term) }
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    return {
+      ok: false,
+      message:
+        lastError instanceof Error
+          ? lastError.message
+          : process.platform === 'win32' && !input.command
+            ? 'No supported Windows terminal shell found'
+            : 'error.unknown',
+    }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'error.unknown' }
   }
+}
+
+function resolveTerminalPtySpawnCandidates(
+  input: SpawnTerminalPtyRuntimeInput,
+): Array<{ command: string; args: string[] }> {
+  if (input.command) {
+    return [
+      {
+        command: input.command,
+        args: input.args ?? (process.platform === 'win32' ? [] : ['-l']),
+      },
+    ]
+  }
+
+  if (process.platform === 'win32') {
+    return resolveWindowsTerminalShellCandidates().map((candidate) => ({
+      command: candidate.command,
+      args: input.args ?? candidate.args,
+    }))
+  }
+
+  return [{ command: process.env.SHELL || '/bin/zsh', args: input.args ?? ['-l'] }]
 }
 
 export function detectWindowsPtyCompatibility(

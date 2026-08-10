@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { detectWindowsPtyCompatibility, spawnTerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
 
-const { spawnMock } = vi.hoisted(() => ({
+const { resolveWindowsShellCandidatesMock, spawnMock } = vi.hoisted(() => ({
+  resolveWindowsShellCandidatesMock: vi.fn(),
   spawnMock: vi.fn(),
 }))
 
@@ -9,8 +10,13 @@ vi.mock('node-pty', () => ({
   spawn: spawnMock,
 }))
 
+vi.mock('#/server/terminal/windows-terminal-shell.ts', () => ({
+  resolveWindowsTerminalShellCandidates: resolveWindowsShellCandidatesMock,
+}))
+
 beforeEach(() => {
   spawnMock.mockReset()
+  resolveWindowsShellCandidatesMock.mockReset()
 })
 
 afterEach(() => {
@@ -19,11 +25,16 @@ afterEach(() => {
 })
 
 describe('spawnTerminalPtyRuntime', () => {
-  test('prefers COMSPEC over a POSIX SHELL on Windows', () => {
+  test('starts the first resolved PowerShell candidate on Windows', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    vi.stubEnv('SHELL', '/usr/bin/bash')
-    vi.stubEnv('COMSPEC', 'C:\\Windows\\System32\\cmd.exe')
-    spawnMock.mockReturnValue(terminalPty())
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      {
+        kind: 'powershell-core',
+        command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockReturnValue(terminalPty('pwsh.exe'))
 
     const result = spawnTerminalPtyRuntime({
       cwd: 'C:\\repo',
@@ -33,8 +44,91 @@ describe('spawnTerminalPtyRuntime', () => {
 
     expect(result.ok).toBe(true)
     expect(spawnMock).toHaveBeenCalledWith(
-      'C:\\Windows\\System32\\cmd.exe',
-      [],
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      ['-NoLogo'],
+      expect.objectContaining({ cwd: 'C:\\repo' }),
+    )
+  })
+
+  test('falls back when the preferred Windows shell cannot be spawned', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      {
+        kind: 'powershell-core',
+        command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        args: ['-NoLogo'],
+      },
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockImplementationOnce(() => {
+      throw new Error('pwsh disappeared')
+    })
+    spawnMock.mockReturnValueOnce(terminalPty('powershell.exe'))
+
+    const result = spawnTerminalPtyRuntime({
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      1,
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      ['-NoLogo'],
+      expect.objectContaining({ cwd: 'C:\\repo' }),
+    )
+    expect(spawnMock).toHaveBeenNthCalledWith(
+      2,
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ['-NoLogo'],
+      expect.objectContaining({ cwd: 'C:\\repo' }),
+    )
+  })
+
+  test('returns the final spawn error when every Windows shell candidate fails', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      { kind: 'powershell-core', command: 'C:\\Tools\\pwsh.exe', args: ['-NoLogo'] },
+      { kind: 'cmd', command: 'C:\\Windows\\System32\\cmd.exe', args: [] },
+    ])
+    spawnMock.mockImplementationOnce(() => {
+      throw new Error('pwsh failed')
+    })
+    spawnMock.mockImplementationOnce(() => {
+      throw new Error('cmd failed')
+    })
+
+    expect(
+      spawnTerminalPtyRuntime({
+        cwd: 'C:\\repo',
+        cols: 80,
+        rows: 24,
+      }),
+    ).toEqual({ ok: false, message: 'cmd failed' })
+  })
+
+  test('preserves an explicit trusted Windows command without resolving fallbacks', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    spawnMock.mockReturnValue(terminalPty('custom-shell.exe'))
+
+    const result = spawnTerminalPtyRuntime({
+      command: 'C:\\Tools\\custom-shell.exe',
+      args: ['--interactive'],
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(resolveWindowsShellCandidatesMock).not.toHaveBeenCalled()
+    expect(spawnMock).toHaveBeenCalledWith(
+      'C:\\Tools\\custom-shell.exe',
+      ['--interactive'],
       expect.objectContaining({ cwd: 'C:\\repo' }),
     )
   })
@@ -128,9 +222,9 @@ describe('spawnTerminalPtyRuntime', () => {
   })
 })
 
-function terminalPty() {
+function terminalPty(processName = 'cmd.exe') {
   return {
-    process: 'cmd.exe',
+    process: processName,
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(),

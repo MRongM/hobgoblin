@@ -61,6 +61,7 @@ jobs:
           src/main/terminal.test.ts
           src/server/terminal/terminal-pty-runtime.test.ts
           src/server/terminal/terminal-scope.test.ts
+          src/server/terminal/windows-terminal-shell.test.ts
           src/shared/file-path-target.test.ts
           src/shared/path-semantics.test.ts
           src/shared/worktree-guards.test.ts
@@ -152,7 +153,7 @@ jobs:
               $segment = [System.ArraySegment[byte]]::new($buffer)
               $result = $Socket.ReceiveAsync($segment, $Token).GetAwaiter().GetResult()
               if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-                throw "Terminal WebSocket closed before create response"
+                throw "Terminal WebSocket closed before smoke transaction completed"
               }
               [void]$builder.Append([System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count))
             } while (-not $result.EndOfMessage)
@@ -160,7 +161,54 @@ jobs:
             return $builder.ToString() | ConvertFrom-Json
           }
 
-          function Invoke-TerminalCreateSmoke {
+          function Add-TerminalOutput {
+            param(
+              [Parameter(Mandatory = $true)][object]$Message,
+              [Parameter(Mandatory = $true)][System.Text.StringBuilder]$Output
+            )
+
+            if ($Message.type -eq "output" -and $Message.event -and $null -ne $Message.event.data) {
+              [void]$Output.Append([string]$Message.event.data)
+            }
+          }
+
+          function Wait-TerminalResponse {
+            param(
+              [Parameter(Mandatory = $true)][System.Net.WebSockets.ClientWebSocket]$Socket,
+              [Parameter(Mandatory = $true)][System.Threading.CancellationToken]$Token,
+              [Parameter(Mandatory = $true)][string]$RequestId,
+              [Parameter(Mandatory = $true)][System.Text.StringBuilder]$Output
+            )
+
+            while ($true) {
+              $message = Receive-WebSocketJson -Socket $Socket -Token $Token
+              Add-TerminalOutput -Message $message -Output $Output
+              if ($message.type -eq "response" -and $message.requestId -eq $RequestId) {
+                return $message
+              }
+            }
+          }
+
+          function Wait-TerminalOutput {
+            param(
+              [Parameter(Mandatory = $true)][System.Net.WebSockets.ClientWebSocket]$Socket,
+              [Parameter(Mandatory = $true)][System.Threading.CancellationToken]$Token,
+              [Parameter(Mandatory = $true)][System.Text.StringBuilder]$Output,
+              [Parameter(Mandatory = $true)][string[]]$Expected
+            )
+
+            while ($true) {
+              $text = $Output.ToString()
+              $missing = @($Expected | Where-Object { -not $text.Contains($_) })
+              if ($missing.Count -eq 0) {
+                return
+              }
+              $message = Receive-WebSocketJson -Socket $Socket -Token $Token
+              Add-TerminalOutput -Message $message -Output $Output
+            }
+          }
+
+          function Invoke-TerminalSmoke {
             param(
               [Parameter(Mandatory = $true)][string]$ServerUrl,
               [Parameter(Mandatory = $true)][string]$WorkspacePath
@@ -177,9 +225,10 @@ jobs:
             $socketUrl = ConvertTo-TerminalWebSocketUrl -ServerUrl $server.url -Secret $server.secret -ClientId $server.clientId -AttachmentId $attachmentId
             $socket = [System.Net.WebSockets.ClientWebSocket]::new()
             $cts = [System.Threading.CancellationTokenSource]::new()
-            $cts.CancelAfter([TimeSpan]::FromSeconds(20))
+            $cts.CancelAfter([TimeSpan]::FromSeconds(40))
             try {
               $socket.ConnectAsync([Uri]$socketUrl, $cts.Token).GetAwaiter().GetResult()
+              $terminalOutput = [System.Text.StringBuilder]::new()
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_create"
@@ -195,13 +244,7 @@ jobs:
                 }
               }
 
-              $createResponse = $null
-              while (-not $createResponse) {
-                $message = Receive-WebSocketJson -Socket $socket -Token $cts.Token
-                if ($message.type -eq "response" -and $message.requestId -eq "terminal_smoke_create") {
-                  $createResponse = $message
-                }
-              }
+              $createResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_create" -Output $terminalOutput
               if ($createResponse.ok -ne $true) {
                 throw "Terminal create WebSocket request failed: $($createResponse.error)"
               }
@@ -210,13 +253,82 @@ jobs:
               }
 
               $sessionId = $createResponse.payload.sessionId
+              $processName = [string]$createResponse.payload.processName
+              if ($processName -notmatch '(?i)(?:^|[\\/])(pwsh|powershell)(?:\.exe)?$') {
+                throw "Packaged terminal selected unexpected Windows shell: $processName"
+              }
+              if ($createResponse.payload.windowsPty.backend -ne "conpty") {
+                throw "Packaged terminal did not select ConPTY: $($createResponse.payload.windowsPty.backend)"
+              }
+              if ($null -eq $createResponse.payload.windowsPty.buildNumber) {
+                throw "Packaged terminal did not report a Windows build number"
+              }
+
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_attach"
+                action = "attach"
+                input = @{
+                  sessionId = $sessionId
+                  cols = 90
+                  rows = 28
+                  attachmentId = $attachmentId
+                }
+              }
+              $attachResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_attach" -Output $terminalOutput
+              if ($attachResponse.ok -ne $true) {
+                throw "Terminal attach WebSocket request failed: $($attachResponse.error)"
+              }
+              if ($attachResponse.payload.ok -ne $true) {
+                throw "Terminal attach returned failure: $($attachResponse.payload.message)"
+              }
+
+              [void]$terminalOutput.Clear()
+              $marker = "__HOBGOBLIN_终端_IO_OK__"
+              $command = "[Console]::WriteLine(('__HOBGOBLIN_' + '终端_IO_OK__')); [Console]::WriteLine((Get-Location).Path)`r"
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_write"
+                action = "write"
+                input = @{
+                  sessionId = $sessionId
+                  data = $command
+                  attachmentId = $attachmentId
+                }
+              }
+              $writeResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_write" -Output $terminalOutput
+              if ($writeResponse.ok -ne $true -or $writeResponse.payload -ne $true) {
+                throw "Terminal write failed"
+              }
+              Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $WorkspacePath)
+
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_resize"
+                action = "resize"
+                input = @{
+                  sessionId = $sessionId
+                  cols = 100
+                  rows = 32
+                  attachmentId = $attachmentId
+                }
+              }
+              $resizeResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_resize" -Output $terminalOutput
+              if ($resizeResponse.ok -ne $true -or $resizeResponse.payload -ne $true) {
+                throw "Terminal resize failed"
+              }
+
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_close"
                 action = "close"
                 input = @{ sessionId = $sessionId }
               }
-              Write-Host "Terminal smoke created session $sessionId"
+              $closeResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_close" -Output $terminalOutput
+              if ($closeResponse.ok -ne $true -or $closeResponse.payload.ok -ne $true) {
+                throw "Terminal close failed"
+              }
+              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId"
             } finally {
               try {
                 if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
@@ -276,7 +388,7 @@ jobs:
             try {
               $serverUrl = Get-SmokeServerUrl -LogPath $logPath
               $terminalWorkspace = Join-Path $env:RUNNER_TEMP "Hobgoblin Terminal 路径 Workspace"
-              Invoke-TerminalCreateSmoke -ServerUrl $serverUrl -WorkspacePath $terminalWorkspace
+              Invoke-TerminalSmoke -ServerUrl $serverUrl -WorkspacePath $terminalWorkspace
             } catch {
               $terminalSmokeError = $_
             }

@@ -104,6 +104,10 @@ _Avoid_: Mobile Web terminal command deck, read-only status overlay, loading too
 A Hobgoblin-managed terminal session rendered inside the selected worktree's terminal area.
 _Avoid_: New terminal, embedded terminal
 
+**Internal terminal shell**:
+The interactive command interpreter running inside one internal terminal session. It is attached to Hobgoblin's PTY and rendered by the existing terminal surface; it is distinct from the terminal host, the PTY transport, and an external terminal application.
+_Avoid_: Windows Terminal, terminal emulator, external terminal
+
 **Mobile Web terminal vertical scroll gesture**:
 A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a controller tap retains ordinary terminal focus behavior, while a read-only tap never invokes the input method.
 _Avoid_: Page scroll, terminal input gesture, takeover gesture, history-only gesture
