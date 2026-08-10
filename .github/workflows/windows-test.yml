@@ -138,7 +138,7 @@ jobs:
             $json = $Payload | ConvertTo-Json -Depth 8 -Compress
             $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
             $segment = [System.ArraySegment[byte]]::new($bytes)
-            $Socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $Token).GetAwaiter().GetResult()
+            [void]$Socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $Token).GetAwaiter().GetResult()
           }
 
           function Receive-WebSocketJson {
@@ -203,7 +203,13 @@ jobs:
               if ($missing.Count -eq 0) {
                 return
               }
-              $message = Receive-WebSocketJson -Socket $Socket -Token $Token
+              try {
+                $message = Receive-WebSocketJson -Socket $Socket -Token $Token
+              } catch {
+                $outputText = $Output.ToString()
+                $outputBase64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($outputText))
+                throw "Terminal output wait failed; missing=$($missing -join ','); outputChars=$($outputText.Length); outputUtf8Base64=$outputBase64; cause=$($_.Exception.Message)"
+              }
               Add-TerminalOutput -Message $message -Output $Output
             }
           }
@@ -227,7 +233,7 @@ jobs:
             $cts = [System.Threading.CancellationTokenSource]::new()
             $cts.CancelAfter([TimeSpan]::FromSeconds(40))
             try {
-              $socket.ConnectAsync([Uri]$socketUrl, $cts.Token).GetAwaiter().GetResult()
+              [void]$socket.ConnectAsync([Uri]$socketUrl, $cts.Token).GetAwaiter().GetResult()
               $terminalOutput = [System.Text.StringBuilder]::new()
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
@@ -263,6 +269,7 @@ jobs:
               if ($null -eq $createResponse.payload.windowsPty.buildNumber) {
                 throw "Packaged terminal did not report a Windows build number"
               }
+              Write-Host "Terminal smoke create shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber)"
 
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
@@ -282,6 +289,7 @@ jobs:
               if ($attachResponse.payload.ok -ne $true) {
                 throw "Terminal attach returned failure: $($attachResponse.payload.message)"
               }
+              Write-Host "Terminal smoke attach session=$sessionId"
 
               [void]$terminalOutput.Clear()
               $marker = "__HOBGOBLIN_终端_IO_OK__"
@@ -300,6 +308,7 @@ jobs:
               if ($writeResponse.ok -ne $true -or $writeResponse.payload -ne $true) {
                 throw "Terminal write failed"
               }
+              Write-Host "Terminal smoke write accepted"
               Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $WorkspacePath)
 
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
@@ -328,11 +337,11 @@ jobs:
               if ($closeResponse.ok -ne $true -or $closeResponse.payload.ok -ne $true) {
                 throw "Terminal close failed"
               }
-              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId"
+              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId marker=$marker cwd=$WorkspacePath"
             } finally {
               try {
                 if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
-                  $socket.CloseAsync(
+                  [void]$socket.CloseAsync(
                     [System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure,
                     "terminal smoke complete",
                     [System.Threading.CancellationToken]::None
