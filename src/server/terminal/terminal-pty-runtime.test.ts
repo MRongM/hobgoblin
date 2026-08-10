@@ -162,6 +162,8 @@ describe('spawnTerminalPtyRuntime', () => {
     })
 
     const result = spawnTerminalPtyRuntime({
+      command: '/bin/zsh',
+      args: ['-l'],
       cwd: '/repo',
       cols: 80,
       rows: 24,
@@ -185,6 +187,8 @@ describe('spawnTerminalPtyRuntime', () => {
     })
 
     const result = spawnTerminalPtyRuntime({
+      command: '/bin/zsh',
+      args: ['-l'],
       cwd: '/repo',
       cols: 80,
       rows: 24,
@@ -210,6 +214,8 @@ describe('spawnTerminalPtyRuntime', () => {
     })
 
     const result = spawnTerminalPtyRuntime({
+      command: '/bin/zsh',
+      args: ['-l'],
       cwd: '/repo',
       cols: 80,
       rows: 24,
