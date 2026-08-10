@@ -154,6 +154,7 @@ describe('spawnTerminalPtyRuntime', () => {
   })
 
   test('returns a trimmed process name when node-pty exposes a string', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     spawnMock.mockReturnValue({
       process: ' zsh ',
       write: vi.fn(),
@@ -177,6 +178,7 @@ describe('spawnTerminalPtyRuntime', () => {
   })
 
   test('falls back to terminal when the process getter throws', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     spawnMock.mockReturnValue({
       get process() {
         throw new Error('process unavailable')
@@ -202,6 +204,7 @@ describe('spawnTerminalPtyRuntime', () => {
   })
 
   test('reads the process getter only once per lookup', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     let reads = 0
     spawnMock.mockReturnValue({
       get process() {
