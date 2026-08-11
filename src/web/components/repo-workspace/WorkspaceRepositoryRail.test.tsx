@@ -1030,6 +1030,25 @@ describe('WorkspaceRepositoryRail', () => {
     expect(status?.className).not.toContain('border-separator')
   })
 
+  test('keeps the branch workspace titlebar outside the scrolling content', () => {
+    useReposStore.setState({
+      activeId: ROOT,
+      workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
+    })
+    renderRail({ currentRepoId: ROOT, fill: true })
+
+    const section = container?.querySelector<HTMLElement>('section[aria-label="workspace.branch-workspace.list"]')
+    const scrollBody = section?.querySelector<HTMLElement>('[data-testid="branch-workspace-scroll-body"]')
+    const titlebar = scrollBody?.previousElementSibling as HTMLElement | null
+
+    expect(section?.className).not.toContain('overflow-y-auto')
+    expect(titlebar?.className).toContain('shrink-0')
+    expect(titlebar?.querySelector('[aria-label="workspace.branch-workspace.create"]')).not.toBeNull()
+    expect(titlebar?.querySelector('[aria-label="workspace.branch-workspace.reload"]')).not.toBeNull()
+    expect(scrollBody?.className).toContain('overflow-y-auto')
+    expect(scrollBody?.querySelector('[data-testid="branch-workspace-list"]')).not.toBeNull()
+  })
+
   test('identifies Overview with the workspace root folder icon and name', () => {
     renderRail()
 
@@ -1842,6 +1861,7 @@ function renderRail({
   fileAreaCollapsed,
   onToggleFileArea,
   onOpenDetailArea,
+  fill,
 }: {
   terminalCount?: number
   outputActive?: boolean
@@ -1853,6 +1873,7 @@ function renderRail({
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
+  fill?: boolean
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
   const terminalCommands = terminalCommandContext()
@@ -1892,6 +1913,7 @@ function renderRail({
           <WorkspaceRepositoryRail
             workspaceRootId={ROOT}
             currentRepoId={currentRepoId}
+            fill={fill}
             onOpenFileArea={onOpenFileArea}
             onCollapseFileArea={onCollapseFileArea}
             fileAreaCollapsed={fileAreaCollapsed}

@@ -617,9 +617,9 @@ export function WorkspaceRepositoryRail({
         {branchListVisible ? (
           <section
             aria-label={t('workspace.branch-workspace.list')}
-            className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
+            className={cn(fill && 'flex min-h-0 flex-1 flex-col')}
           >
-            <div className="flex h-7 items-center gap-1 px-2 pt-1">
+            <div className="flex h-7 shrink-0 items-center gap-1 px-3 pt-1">
               <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('workspace.branch-workspace.list')}
               </span>
@@ -627,84 +627,89 @@ export function WorkspaceRepositoryRail({
               {branchListRefreshAction}
               {!repositoryListVisible ? hiddenRepositoryActions : null}
             </div>
-            {branchQuery.isPending ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
-            ) : branchQuery.data && !branchQuery.data.ok ? (
-              <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
-                <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={branchReloadPending}
-                  aria-label={t('workspace.branch-workspace.reload')}
-                  onClick={() => void reloadBranchWorkspaces()}
-                >
-                  {branchReloadPending ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <RefreshCw aria-hidden="true" />
-                  )}
-                  {t('workspace.branch-workspace.reload')}
-                </Button>
-                {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+            <div
+              className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
+              data-testid="branch-workspace-scroll-body"
+            >
+              {branchQuery.isPending ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
+              ) : branchQuery.data && !branchQuery.data.ok ? (
+                <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
+                  <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
                   <Button
                     type="button"
-                    variant="destructive-soft"
+                    variant="outline"
                     size="sm"
-                    aria-label={t('workspace.branch-workspace.cleanup')}
-                    onClick={() => setRegistryCleanupOpen(true)}
+                    disabled={branchReloadPending}
+                    aria-label={t('workspace.branch-workspace.reload')}
+                    onClick={() => void reloadBranchWorkspaces()}
                   >
-                    {t('workspace.branch-workspace.cleanup')}
+                    {branchReloadPending ? (
+                      <LoaderCircle className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCw aria-hidden="true" />
+                    )}
+                    {t('workspace.branch-workspace.reload')}
                   </Button>
-                ) : null}
-              </div>
-            ) : branchItems.length === 0 ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
-            ) : (
-              <BranchWorkspaceList
-                rootId={workspaceRootId}
-                items={branchItems}
-                activeId={selectedBranchWorkspaceId}
-                activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
-                disabled={branchActions.pending || branchDependencyActions.pending}
-                fileAreaCollapsed={fileAreaCollapsed}
-                gitActionsDisabled={branchGitActions.pending}
-                onGitAction={openGitAction}
-                gitActionPanel={gitActionPanel}
-                changeCountById={branchWorkspaceChangeCountById}
-                onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
-                onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
-                onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
-                onInspect={(item) =>
-                  openBranchDialog(
-                    item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
-                      ? 'remove'
-                      : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
-                        ? 'reduce'
-                        : 'repair',
-                    item,
-                  )
-                }
-                onExtend={(item) => openBranchDialog('extend', item)}
-                onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
-                onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
-                onAddDependencies={(item) => openDependencyDialog('add', item)}
-                onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
-                onRepair={(item) => openBranchDialog('repair', item, true)}
-                onRemove={(item) =>
-                  openBranchDialog(
-                    'remove',
-                    item,
-                    item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
-                  )
-                }
-                getMemberPresentation={(_item, member) => getMemberPresentation(member)}
-                onOpenRepositoryMember={openRepositoryMember}
-                onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
-                onCancel={() => branchGitActions.cancel()}
-              />
-            )}
+                  {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+                    <Button
+                      type="button"
+                      variant="destructive-soft"
+                      size="sm"
+                      aria-label={t('workspace.branch-workspace.cleanup')}
+                      onClick={() => setRegistryCleanupOpen(true)}
+                    >
+                      {t('workspace.branch-workspace.cleanup')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : branchItems.length === 0 ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
+              ) : (
+                <BranchWorkspaceList
+                  rootId={workspaceRootId}
+                  items={branchItems}
+                  activeId={selectedBranchWorkspaceId}
+                  activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
+                  disabled={branchActions.pending || branchDependencyActions.pending}
+                  fileAreaCollapsed={fileAreaCollapsed}
+                  gitActionsDisabled={branchGitActions.pending}
+                  onGitAction={openGitAction}
+                  gitActionPanel={gitActionPanel}
+                  changeCountById={branchWorkspaceChangeCountById}
+                  onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
+                  onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
+                  onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
+                  onInspect={(item) =>
+                    openBranchDialog(
+                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
+                        ? 'remove'
+                        : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
+                          ? 'reduce'
+                          : 'repair',
+                      item,
+                    )
+                  }
+                  onExtend={(item) => openBranchDialog('extend', item)}
+                  onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
+                  onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
+                  onAddDependencies={(item) => openDependencyDialog('add', item)}
+                  onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
+                  onRepair={(item) => openBranchDialog('repair', item, true)}
+                  onRemove={(item) =>
+                    openBranchDialog(
+                      'remove',
+                      item,
+                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
+                    )
+                  }
+                  getMemberPresentation={(_item, member) => getMemberPresentation(member)}
+                  onOpenRepositoryMember={openRepositoryMember}
+                  onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
+                  onCancel={() => branchGitActions.cancel()}
+                />
+              )}
+            </div>
           </section>
         ) : null}
         {reorderError ? (
