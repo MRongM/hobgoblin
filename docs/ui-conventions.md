@@ -21,6 +21,7 @@ Use this doc for UI language and presentation rules.
 - Show exactly one selected row. When a member is selected, use a subtle parent scope marker instead of a second selected state.
 - Place actions that affect every member or change membership in the branch workspace item's More menu, keep them grouped together, and label their parent-scope impact explicitly. Adding or removing members opens a branch workspace dialog; do not put removal on an individual member row.
 - Reuse the ordinary repository worktree explorer and detail surfaces for a selected member worktree.
+- A selected branch workspace item's parent file area exposes Status, Files, Changes, History, Local, and Remote in that order. Its tab bar stays fixed while panel content scrolls. Files browses the branch workspace root; Status, Changes, and History aggregate member worktrees in manifest order; Local and Remote aggregate member repositories while preserving each repository as an independent Git boundary. Opening the parent file area selects Files, and its tab state never replaces a member repository's remembered file-area tab.
 - Reuse the ordinary worktree action model for member worktree items. Keep repository-scoped worktree creation and refresh available, but omit drag, checkout, and individual worktree or branch removal. Keep unavailable member actions visible and disabled.
 - In Chinese UI copy, use “子工作区” and “成员工作树”; avoid “子仓库”. In English copy, use “branch workspace” and “member worktree”.
 
@@ -38,8 +39,8 @@ Use this doc for UI language and presentation rules.
 
 ## Detached file area windows
 
-- Keep the source file area tab in place when it is dragged into a detached file area window; detaching creates a live copy rather than moving navigation state.
-- Bind the detached window to the repository and branch or worktree context captured when the drag starts. Main-window navigation must not silently retarget it.
+- Keep the source file area and its active tab in place when its toolbar is dragged into a detached file area window; detaching creates a live copy rather than moving navigation state. Individual tabs are not draggable.
+- Bind the detached window to the active tab, repository, and branch or worktree context captured when the toolbar drag starts. Main-window navigation must not silently retarget it.
 - Use the compact context topbar to identify the repository, branch or worktree, current file area panel, and live state. Do not repeat the full file area tab bar inside a one-panel window.
 - Keep detached window bounds, internal panel navigation, and open/closed state local and ephemeral. Do not persist or restore them.
 - Offer the same drag-out and `Shift+Enter` interaction in Electron and Web. In Web, open a same-origin browser window and show an actionable failure toast when the browser blocks it.

@@ -342,7 +342,9 @@ describe('RepoExplorerPane', () => {
     })
 
     const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
-    expect(filesTab?.draggable).toBe(true)
+    const fileAreaToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
+    expect(filesTab?.draggable).toBe(false)
+    expect(fileAreaToolbar?.draggable).toBe(true)
     const dataTransfer = { effectAllowed: '', setData: vi.fn() }
     const dragStart = new Event('dragstart', { bubbles: true })
     Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer })
@@ -355,12 +357,13 @@ describe('RepoExplorerPane', () => {
     })
 
     await act(async () => {
-      filesTab?.dispatchEvent(dragStart)
-      filesTab?.dispatchEvent(dragEnd)
+      fileAreaToolbar?.dispatchEvent(dragStart)
+      fileAreaToolbar?.dispatchEvent(dragEnd)
     })
 
     expect(dataTransfer.effectAllowed).toBe('copy')
     expect(detachedWindowMocks.open).toHaveBeenCalledWith({
+      kind: 'git-worktree',
       repo: { kind: 'local', id: REPO_ID },
       branch: 'main',
       tab: 'files',
@@ -379,6 +382,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    const fileAreaToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
     const dragEnd = new Event('dragend', { bubbles: true })
     Object.defineProperties(dragEnd, {
       clientX: { value: 100 },
@@ -386,7 +390,8 @@ describe('RepoExplorerPane', () => {
       screenX: { value: 500 },
       screenY: { value: 300 },
     })
-    await act(async () => filesTab?.dispatchEvent(dragEnd))
+    expect(filesTab?.draggable).toBe(false)
+    await act(async () => fileAreaToolbar?.dispatchEvent(dragEnd))
 
     expect(detachedWindowMocks.open).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
@@ -407,6 +412,7 @@ describe('RepoExplorerPane', () => {
       filesTab?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', shiftKey: true }))
     })
     expect(detachedWindowMocks.open).toHaveBeenCalledWith({
+      kind: 'git-worktree',
       repo: { kind: 'local', id: REPO_ID },
       branch: 'main',
       tab: 'files',
@@ -558,7 +564,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="branch-area-toolbar"]')).toBeNull()
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs).toEqual([])
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]?.textContent).toContain('file-tree.title')
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="plain-workspace-terminal"]')?.getAttribute('data-repo-id')).toBe(
       REPO_ID,
@@ -773,7 +780,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs).toEqual([])
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]?.textContent).toContain('file-tree.title')
     await act(async () => root.unmount())
   })
 

@@ -14,9 +14,11 @@ export interface BranchWorkspaceFolderContext {
 export function BranchWorkspaceFileTree({
   context,
   toolbarLeading,
+  revealRequest,
 }: {
   context: BranchWorkspaceFolderContext
   toolbarLeading?: ReactNode
+  revealRequest?: { id: number; relativePath: string } | null
 }) {
   const folderContext: ProjectFileTreeContext = {
     repoId: context.rootId,
@@ -25,5 +27,12 @@ export function BranchWorkspaceFileTree({
     isGitRepo: false,
     status: [],
   }
-  return <ProjectFileTree repoId={context.rootId} folderContext={folderContext} toolbarLeading={toolbarLeading} />
+  return (
+    <ProjectFileTree
+      repoId={context.rootId}
+      folderContext={folderContext}
+      toolbarLeading={toolbarLeading}
+      revealRequest={revealRequest}
+    />
+  )
 }

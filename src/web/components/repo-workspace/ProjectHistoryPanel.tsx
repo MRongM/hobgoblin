@@ -30,6 +30,7 @@ const HISTORY_PAGE_SIZE = 100
 
 interface ProjectHistoryPanelProps {
   repoId: string
+  target?: HistoryView
   onRevealPath?: (relativePath: string) => void
 }
 
@@ -52,9 +53,10 @@ function commitFilePathsClipboardText(files: CommitFileChange[]): string {
   return files.map((file) => file.path).join('\n')
 }
 
-export function ProjectHistoryPanel({ repoId, onRevealPath }: ProjectHistoryPanelProps) {
+export function ProjectHistoryPanel({ repoId, target, onRevealPath }: ProjectHistoryPanelProps) {
   const t = useT()
-  const view = useProjectHistoryView(repoId)
+  const selectedView = useProjectHistoryView(repoId)
+  const view = target ?? selectedView
   const [commits, setCommits] = useState<CommitHistoryEntry[]>([])
   const [selectedHash, setSelectedHash] = useState<string | null>(null)
   const [detailByHash, setDetailByHash] = useState<Record<string, CommitDetail | null>>({})
@@ -235,7 +237,8 @@ function HistoryList({
   const t = useT()
   const isSearching = searchQuery.trim().length > 0
 
-  if (error && commits.length === 0 && !isSearching) return <EmptyState title={t('history.load-error')} body={t(error)} />
+  if (error && commits.length === 0 && !isSearching)
+    return <EmptyState title={t('history.load-error')} body={t(error)} />
   if (!loading && allCommitsCount === 0)
     return <EmptyState title={t('history.empty-title')} body={t('history.empty-body')} />
 

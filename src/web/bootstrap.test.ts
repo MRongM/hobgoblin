@@ -267,6 +267,7 @@ describe('renderer bootstrap', () => {
       surface: {
         kind: 'detached-file-area',
         request: {
+          kind: 'git-worktree',
           repo: { kind: 'local', id: '/repo' },
           branch: 'main',
           tab: 'files',

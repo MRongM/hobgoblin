@@ -88,6 +88,7 @@ vi.mock('#/main/settings-server-client.ts', () => ({
 }))
 
 const request: DetachedFileAreaWindowRequest = {
+  kind: 'git-worktree',
   repo: { kind: 'local', id: '/workspace/repo' },
   branch: 'feature/detached-window',
   tab: 'history',

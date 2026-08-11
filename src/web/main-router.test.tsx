@@ -47,8 +47,8 @@ vi.mock('#/web/App.tsx', () => ({
 }))
 
 vi.mock('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx', () => ({
-  DetachedFileAreaWindow: ({ request }: { request: { branch: string; tab: string } }) => (
-    <output data-testid="detached-file-area-route">{`${request.branch}:${request.tab}`}</output>
+  DetachedFileAreaWindow: ({ request }: { request: { kind: string; branch?: string; tab: string } }) => (
+    <output data-testid="detached-file-area-route">{`${request.branch ?? request.kind}:${request.tab}`}</output>
   ),
 }))
 
@@ -94,6 +94,7 @@ describe('mainRouter', () => {
     routerBootstrap.surface = {
       kind: 'detached-file-area',
       request: {
+        kind: 'git-worktree',
         repo: { kind: 'local', id: '/repo' },
         branch: 'main',
         tab: 'history',

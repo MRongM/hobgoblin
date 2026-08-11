@@ -82,6 +82,7 @@ describe('app shell client', () => {
   test('opens a detached file area window only through the native capability', async () => {
     const bridgeModule = await import('#/web/renderer-bridge.ts')
     const request = {
+      kind: 'git-worktree' as const,
       repo: { kind: 'local' as const, id: '/repo' },
       branch: 'feature/a',
       tab: 'history' as const,
@@ -111,6 +112,7 @@ describe('app shell client', () => {
   test('opens a detached file area browser window in Web mode', async () => {
     const client = await import('#/web/app-shell-client.ts')
     const request = {
+      kind: 'git-worktree' as const,
       repo: { kind: 'local' as const, id: '/repo' },
       branch: 'feature/a',
       tab: 'history' as const,
@@ -132,6 +134,7 @@ describe('app shell client', () => {
     expect(client.canOpenDetachedFileAreaWindow()).toBe(false)
     await expect(
       client.openDetachedFileAreaWindow({
+        kind: 'git-worktree',
         repo: { kind: 'local', id: '/repo' },
         branch: 'feature/a',
         tab: 'history',

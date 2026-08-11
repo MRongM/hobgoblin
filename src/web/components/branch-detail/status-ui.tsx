@@ -1,11 +1,28 @@
-import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { createContext, forwardRef, useContext, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import { cn } from '#/web/lib/cn.ts'
 import { STATUS_TONE_CHIP_CLASS, STATUS_TONE_TEXT_CLASS, type StatusTone } from '#/web/components/ui/status-tones.ts'
 export type Tone = StatusTone
 export type StatusRowValueLayout = 'inline' | 'fill' | 'chips'
 
-const ROW_CLASS = 'grid h-9 grid-cols-[1.25rem_5.75rem_minmax(0,1fr)] items-center gap-3 px-4'
-const ROW_ICON_CLASS = 'flex size-5 items-center justify-center'
+export type StatusRowsDensity = 'default' | 'compact'
+
+const StatusRowsDensityContext = createContext<StatusRowsDensity>('default')
+const ROW_CLASS: Record<StatusRowsDensity, string> = {
+  default: 'grid h-9 grid-cols-[1.25rem_5.75rem_minmax(0,1fr)] items-center gap-3 px-4',
+  compact: 'grid h-8 grid-cols-[1rem_5rem_minmax(0,1fr)] items-center gap-1.5 px-2',
+}
+const ROW_ICON_CLASS: Record<StatusRowsDensity, string> = {
+  default: 'flex size-5 items-center justify-center',
+  compact: 'flex size-4 items-center justify-center',
+}
+const ROW_VALUE_GAP_CLASS: Record<StatusRowsDensity, string> = {
+  default: 'gap-2',
+  compact: 'gap-1',
+}
+const ROW_AFTER_GAP_CLASS: Record<StatusRowsDensity, string> = {
+  default: 'gap-1.5',
+  compact: 'gap-1',
+}
 const ROW_LABEL_CLASS = 'truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'
 const MONO_VALUE_CLASS = 'font-mono'
 const INLINE_TRUNCATE_CLASS = 'block min-w-0 flex-1 truncate'
@@ -31,8 +48,12 @@ export const StatusChip = forwardRef<HTMLSpanElement, StatusChipProps>(function 
   )
 })
 
-export function StatusRows({ children }: { children: ReactNode }) {
-  return <div role="list">{children}</div>
+export function StatusRows({ children, density = 'default' }: { children: ReactNode; density?: StatusRowsDensity }) {
+  return (
+    <StatusRowsDensityContext.Provider value={density}>
+      <div role="list">{children}</div>
+    </StatusRowsDensityContext.Provider>
+  )
 }
 
 type StatusRowProps = Omit<ComponentPropsWithoutRef<'div'>, 'value'> & {
@@ -48,13 +69,14 @@ export const StatusRow = forwardRef<HTMLDivElement, StatusRowProps>(function Sta
   { icon, label, value, valueLayout = 'inline', after, tone = 'neutral', className, ...props },
   ref,
 ) {
+  const density = useContext(StatusRowsDensityContext)
   return (
-    <div ref={ref} role="listitem" className={cn(ROW_CLASS, className)} {...props}>
-      <span className={cn(ROW_ICON_CLASS, STATUS_TONE_TEXT_CLASS[tone])}>{icon}</span>
+    <div ref={ref} role="listitem" className={cn(ROW_CLASS[density], className)} {...props}>
+      <span className={cn(ROW_ICON_CLASS[density], STATUS_TONE_TEXT_CLASS[tone])}>{icon}</span>
       <span className={ROW_LABEL_CLASS}>{label}</span>
-      <div className="flex min-w-0 items-center gap-2">
+      <div data-status-row-value className={cn('flex min-w-0 items-center', ROW_VALUE_GAP_CLASS[density])}>
         <div className={ROW_VALUE_CLASS[valueLayout]}>{value}</div>
-        {after && <div className="flex shrink-0 items-center gap-1.5">{after}</div>}
+        {after && <div className={cn('flex shrink-0 items-center', ROW_AFTER_GAP_CLASS[density])}>{after}</div>}
       </div>
     </div>
   )

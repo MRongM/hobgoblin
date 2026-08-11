@@ -16,7 +16,14 @@ import {
 } from 'lucide-react'
 import { useT } from '#/web/stores/i18n.ts'
 import { EmptyState } from '#/web/components/Layout.tsx'
-import { MonoValue, StatusChip, StatusRow, StatusRows, type Tone } from '#/web/components/branch-detail/status-ui.tsx'
+import {
+  MonoValue,
+  StatusChip,
+  StatusRow,
+  StatusRows,
+  type StatusRowsDensity,
+  type Tone,
+} from '#/web/components/branch-detail/status-ui.tsx'
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import type { SelectedBranchDetail } from '#/web/components/branch-detail/model.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -33,6 +40,7 @@ interface Props {
   detail: SelectedBranchDetail
   repoName: string
   repoId: string
+  density?: StatusRowsDensity
 }
 
 function SyncValue({
@@ -159,7 +167,7 @@ function CommitMetadataValue({
   )
 }
 
-export function BranchStatus({ detail, repoName, repoId }: Props) {
+export function BranchStatus({ detail, repoName, repoId, density = 'default' }: Props) {
   const t = useT()
   const { branch, statusCount } = detail
   if (!branch) return <EmptyState title={t('branches.empty')} />
@@ -211,7 +219,7 @@ export function BranchStatus({ detail, repoName, repoId }: Props) {
     </>
   ) : undefined
   return (
-    <StatusRows>
+    <StatusRows density={density}>
       <StatusRow
         icon={<FolderOpen size={14} />}
         label={t('branch-status.signal.folder')}

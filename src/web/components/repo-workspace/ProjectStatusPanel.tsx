@@ -3,12 +3,17 @@ import { EmptyState, ScrollPane, Toolbar } from '#/web/components/Layout.tsx'
 import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { BranchStatus, branchStatusClipboardText } from '#/web/components/branch-detail/BranchStatus.tsx'
 import type { BranchDetailRepo } from '#/web/components/branch-detail/model.ts'
-import { getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
+import {
+  getBranchDetailPresentation,
+  getSelectedBranchDetailPresentation,
+  type BranchDetailTarget,
+} from '#/web/components/branch-detail/model.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface ProjectStatusPanelProps {
   repoId: string
+  target?: BranchDetailTarget
 }
 
 type ProjectStatusRepo = BranchDetailRepo & {
@@ -43,7 +48,7 @@ function projectStatusRepoEqual(a: ProjectStatusRepo | undefined, b: ProjectStat
   )
 }
 
-export function ProjectStatusPanel({ repoId }: ProjectStatusPanelProps) {
+export function ProjectStatusPanel({ repoId, target }: ProjectStatusPanelProps) {
   const t = useT()
   const repo = useStoreWithEqualityFn(
     useReposStore,
@@ -89,7 +94,7 @@ export function ProjectStatusPanel({ repoId }: ProjectStatusPanelProps) {
 
   if (!repo) return null
 
-  const detail = getSelectedBranchDetailPresentation(repo)
+  const detail = target ? getBranchDetailPresentation(repo, target) : getSelectedBranchDetailPresentation(repo)
   if (!detail.branch) {
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
   }
@@ -100,7 +105,7 @@ export function ProjectStatusPanel({ repoId }: ProjectStatusPanelProps) {
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <ProjectStatusToolbar copyAllValue={copyAllValue} />
       <ScrollPane>
-        <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} />
+        <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} density="compact" />
       </ScrollPane>
     </section>
   )

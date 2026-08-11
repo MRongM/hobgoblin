@@ -57,6 +57,7 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPanel.tsx', () => ({
 }))
 
 const request: DetachedFileAreaWindowRequest = {
+  kind: 'git-worktree',
   repo: { kind: 'local', id: '/repo' },
   branch: 'main',
   tab: 'changes',

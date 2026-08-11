@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
+import { PlainWorkspaceFileArea } from '#/web/components/repo-workspace/PlainWorkspaceFileArea.tsx'
 import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
 import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
 import { StatusBar } from '#/web/components/StatusBar.tsx'
@@ -59,7 +59,7 @@ export function PlainWorkspacePane({
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
   const desktopWorkspaceOverview = !compact && multiRepositoryWorkspace
   const focusMode = !compact && !repoUnavailable && terminalFocusMode
-  const fileBrowser = <ProjectFileTree repoId={repoId} revealRequest={revealRequest ?? null} toolbarHeight="detail" />
+  const fileBrowser = <PlainWorkspaceFileArea repoId={repoId} revealRequest={revealRequest ?? null} />
 
   if (compact) {
     const surface = compactSurface ?? (multiRepositoryWorkspace ? 'scope' : 'files')

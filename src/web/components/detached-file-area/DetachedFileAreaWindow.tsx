@@ -1,15 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, ChevronRight, RefreshCw } from 'lucide-react'
-import type { DetachedFileAreaWindowRequest, FileAreaTabId } from '#/shared/file-area.ts'
+import type {
+  DetachedBranchWorkspaceFileAreaRequest,
+  DetachedFileAreaWindowRequest,
+  DetachedGitWorktreeFileAreaRequest,
+  DetachedPlainProjectFileAreaRequest,
+  FileAreaTabId,
+} from '#/shared/file-area.ts'
 import { EffectiveProjectThemeBridge } from '#/web/components/EffectiveProjectThemeBridge.tsx'
 import { ErrorBoundary } from '#/web/components/ErrorBoundary.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { RepoExplorerPanel } from '#/web/components/repo-workspace/RepoExplorerPanel.tsx'
+import {
+  BranchWorkspaceFileArea,
+  type BranchWorkspaceFileAreaTab,
+} from '#/web/components/repo-workspace/BranchWorkspaceFileArea.tsx'
+import { branchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import { Topbar } from '#/web/components/Topbar.tsx'
 import { Toaster } from '#/web/components/ui/sonner.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import { useBranchWorkspaceInvalidationSync } from '#/web/branch-workspace-queries.ts'
+import { useBranchWorkspaceInvalidationSync, useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalidationRefresh.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
@@ -32,13 +43,26 @@ interface DetachedFileAreaWindowProps {
 }
 
 export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps) {
+  return request.kind === 'branch-workspace' ? (
+    <DetachedBranchWorkspaceFileArea request={request} />
+  ) : (
+    <DetachedRepositoryFileArea request={request} />
+  )
+}
+
+function DetachedRepositoryFileArea({
+  request,
+}: {
+  request: DetachedGitWorktreeFileAreaRequest | DetachedPlainProjectFileAreaRequest
+}) {
   const t = useT()
   const bootstrappedRef = useRef(false)
   const [hydrated, setHydrated] = useState(false)
   const [activeTab, setActiveTab] = useState<FileAreaTabId>(request.tab)
   const [revealRequest, setRevealRequest] = useState<{ id: number; relativePath: string } | null>(null)
   const repo = useReposStore((state) => state.repos[request.repo.id])
-  const branchAvailable = !!repo?.data.branches.some((branch) => branch.name === request.branch)
+  const capturedBranch = request.kind === 'git-worktree' ? request.branch : null
+  const branchAvailable = !capturedBranch || !!repo?.data.branches.some((branch) => branch.name === capturedBranch)
   const surfaceAvailable =
     hydrated &&
     !!repo &&
@@ -59,8 +83,8 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
         await useReposStore.getState().hydrateSession([request.repo], request.repo.id)
         const state = useReposStore.getState()
         const hydratedRepo = state.repos[request.repo.id]
-        if (hydratedRepo?.data.branches.some((branch) => branch.name === request.branch)) {
-          state.selectBranch(request.repo.id, request.branch)
+        if (capturedBranch && hydratedRepo?.data.branches.some((branch) => branch.name === capturedBranch)) {
+          state.selectBranch(request.repo.id, capturedBranch)
         }
       } catch (error) {
         console.warn('[detached-file-area] failed to hydrate captured context', error)
@@ -68,12 +92,12 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
         setHydrated(true)
       }
     })()
-  }, [request])
+  }, [capturedBranch, request])
 
   useEffect(() => {
-    if (!surfaceAvailable || repo.ui.selectedBranch === request.branch) return
-    useReposStore.getState().selectBranch(request.repo.id, request.branch)
-  }, [repo, request.branch, request.repo.id, surfaceAvailable])
+    if (!capturedBranch || !surfaceAvailable || repo.ui.selectedBranch === capturedBranch) return
+    useReposStore.getState().selectBranch(request.repo.id, capturedBranch)
+  }, [capturedBranch, repo, request.repo.id, surfaceAvailable])
 
   function revealPath(relativePath: string) {
     setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
@@ -99,8 +123,8 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
         await useReposStore.getState().hydrateSession([request.repo], request.repo.id)
         const state = useReposStore.getState()
         const refreshedRepo = state.repos[request.repo.id]
-        if (refreshedRepo?.data.branches.some((branch) => branch.name === request.branch)) {
-          state.selectBranch(request.repo.id, request.branch)
+        if (capturedBranch && refreshedRepo?.data.branches.some((branch) => branch.name === capturedBranch)) {
+          state.selectBranch(request.repo.id, capturedBranch)
         }
       } catch (error) {
         console.warn('[detached-file-area] failed to retry captured context', error)
@@ -111,7 +135,7 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
   }
 
   return (
-    <ErrorBoundary resetKey={`${request.repo.id}:${request.branch}:${request.tab}`}>
+    <ErrorBoundary resetKey={`${request.kind}:${request.repo.id}:${capturedBranch ?? ''}:${request.tab}`}>
       <div className="project-file-area-tone flex h-full min-h-0 flex-col bg-background text-foreground">
         <EffectiveProjectThemeBridge />
         <Topbar
@@ -135,10 +159,14 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
               {repoName}
             </span>
             <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="max-w-52 truncate font-mono text-muted-foreground" title={request.branch}>
-              {request.branch}
-            </span>
-            <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+            {capturedBranch ? (
+              <>
+                <span className="max-w-52 truncate font-mono text-muted-foreground" title={capturedBranch}>
+                  {capturedBranch}
+                </span>
+                <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+              </>
+            ) : null}
             <span className="truncate">{activeTabLabel}</span>
             <Badge data-testid="detached-live" variant="secondary" className="ml-1 gap-1 font-normal">
               <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
@@ -174,6 +202,66 @@ export function DetachedFileAreaWindow({ request }: DetachedFileAreaWindowProps)
               onRevealPath={revealPath}
             />
           </main>
+        )}
+        <Toaster />
+      </div>
+    </ErrorBoundary>
+  )
+}
+
+function DetachedBranchWorkspaceFileArea({ request }: { request: DetachedBranchWorkspaceFileAreaRequest }) {
+  const t = useT()
+  const [activeTab, setActiveTab] = useState<BranchWorkspaceFileAreaTab>(request.tab)
+  const [hydrated, setHydrated] = useState(false)
+  const query = useBranchWorkspaceQuery(request.root.id)
+  const workspace = query.data?.ok ? query.data.items.find((item) => item.id === request.branchWorkspaceId) : undefined
+
+  useRepoStoreInvalidationRefresh()
+  useSettingsQueryInvalidationSync()
+  useBranchWorkspaceInvalidationSync()
+
+  useEffect(() => {
+    void Promise.all([
+      useThemeStore.getState().hydrate(),
+      useI18nStore.getState().hydrate(),
+      useReposStore.getState().hydrateSession([request.root], request.root.id),
+    ]).finally(() => setHydrated(true))
+  }, [request.root])
+
+  useEffect(() => {
+    document.title = `${t(TAB_LABEL_KEYS[activeTab])} — ${workspace?.branch ?? request.branchWorkspaceId}`
+  }, [activeTab, request.branchWorkspaceId, t, workspace?.branch])
+
+  return (
+    <ErrorBoundary resetKey={`${request.root.id}:${request.branchWorkspaceId}:${request.tab}`}>
+      <div className="project-file-area-tone flex h-full min-h-0 flex-col bg-background text-foreground">
+        <EffectiveProjectThemeBridge />
+        <Topbar>
+          <div data-testid="detached-context" className="flex min-w-0 items-center gap-1.5 text-xs">
+            <span className="truncate font-medium">{workspace?.branch ?? request.branchWorkspaceId}</span>
+            <Badge data-testid="detached-live" variant="secondary" className="gap-1 font-normal">
+              <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
+              {t('file-area.detached.live')}
+            </Badge>
+          </div>
+        </Topbar>
+        {!hydrated || query.isLoading ? (
+          <div className="flex min-h-0 flex-1 animate-pulse bg-pane" aria-busy="true" />
+        ) : !workspace ? (
+          <ScrollPane>
+            <EmptyState
+              icon={<AlertCircle size={18} />}
+              title={t('file-area.detached.unavailable-title')}
+              body={t('file-area.detached.unavailable-body')}
+            />
+          </ScrollPane>
+        ) : (
+          <BranchWorkspaceFileArea
+            workspace={workspace}
+            context={branchWorkspaceFolderContext(request.root.id, workspace)}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+          />
         )}
         <Toaster />
       </div>
