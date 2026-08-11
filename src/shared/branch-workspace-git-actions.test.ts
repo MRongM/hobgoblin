@@ -40,6 +40,28 @@ describe('branch workspace Git action inputs', () => {
     })
   })
 
+  test('normalizes batch discard without accepting a client path scope', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionPlanRequest({
+        kind: 'batch-discard',
+        branchWorkspaceId: ' branch-1 ',
+      }),
+    ).toEqual({
+      ok: true,
+      request: { kind: 'batch-discard', branchWorkspaceId: 'branch-1' },
+    })
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-discard',
+        planToken: ' sha256:plan ',
+        paths: ['client-controlled.ts'],
+      }),
+    ).toEqual({
+      ok: true,
+      input: { kind: 'batch-discard', planToken: 'sha256:plan' },
+    })
+  })
+
   test('normalizes both batch merge directions and execution modes with explicit branches', () => {
     for (const mode of ['merge', 'pull-merge-push'] as const) {
       expect(
@@ -146,6 +168,7 @@ describe('branch workspace Git action inputs', () => {
     null,
     {},
     { kind: 'batch-commit', planToken: '', messages: [] },
+    { kind: 'batch-discard', planToken: '' },
     {
       kind: 'batch-commit',
       planToken: 'sha256:plan',

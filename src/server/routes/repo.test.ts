@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   deleteRepositoryRemoteTag: vi.fn(),
   buildRepositoryBranchMergeOutPlan: vi.fn(),
   executeRepositoryBranchMergeOut: vi.fn(),
+  setRepositoryBranchUpstream: vi.fn(),
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -74,6 +75,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   replaceRepositoryFileTreeTextFile: mocks.replaceRepositoryFileTreeTextFile,
   removeRepositoryWorktree: mocks.removeRepositoryWorktree,
   resetRepositoryHard: vi.fn(),
+  setRepositoryBranchUpstream: mocks.setRepositoryBranchUpstream,
   trackRepositoryRemoteBranch: vi.fn(),
 }))
 
@@ -171,6 +173,54 @@ describe('repo routes', () => {
       },
     })
     mocks.executeRepositoryBranchMergeOut.mockResolvedValue({ ok: true, message: 'merged' })
+    mocks.setRepositoryBranchUpstream.mockResolvedValue({ ok: true, message: 'updated' })
+  })
+
+  test('routes setting and removing a branch upstream', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const setResponse = await app.request('http://localhost/set-branch-upstream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/repo',
+        branch: 'feature/local',
+        remoteRef: 'origin/release',
+        sourceToken: 'client_123',
+      }),
+    })
+    const unsetResponse = await app.request('http://localhost/set-branch-upstream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/repo',
+        branch: 'feature/local',
+        remoteRef: null,
+        sourceToken: 'client_456',
+      }),
+    })
+
+    expect(setResponse.status).toBe(200)
+    expect(unsetResponse.status).toBe(200)
+    await expect(setResponse.json()).resolves.toEqual({ ok: true, message: 'updated' })
+    await expect(unsetResponse.json()).resolves.toEqual({ ok: true, message: 'updated' })
+    expect(mocks.setRepositoryBranchUpstream).toHaveBeenNthCalledWith(
+      1,
+      '/repo',
+      'feature/local',
+      'origin/release',
+      expect.any(AbortSignal),
+      'client_123',
+    )
+    expect(mocks.setRepositoryBranchUpstream).toHaveBeenNthCalledWith(
+      2,
+      '/repo',
+      'feature/local',
+      null,
+      expect.any(AbortSignal),
+      'client_456',
+    )
   })
 
   test('passes the raw merge-out plan request and abort signal to the authoritative planner', async () => {

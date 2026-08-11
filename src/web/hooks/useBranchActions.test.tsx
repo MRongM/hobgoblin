@@ -40,7 +40,8 @@ vi.mock('#/web/main-window-navigation.tsx', () => ({
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string) => key,
+  useT: () => (key: string, values?: { branch?: string }) =>
+    values?.branch ? `${key}:${values.branch}` : key,
 }))
 
 const REPO_ID = '/tmp/gbl-use-branch-actions-test-repo'
@@ -100,6 +101,74 @@ describe('useBranchActions', () => {
     })
 
     expect(mocks.openRepositoryRemote).toHaveBeenCalledWith(REPO_ID)
+  })
+
+  test('submits setting and removing the selected branch upstream', async () => {
+    const branch = createRepoBranch('feature/local', { worktree: { path: '/tmp/repo-feature' } })
+    const repo = seedRepoState({ id: REPO_ID, branches: [branch] })
+    const runBranchAction = vi.fn(async () => ({ ok: true as const, message: 'ok' }))
+    useReposStore.setState({ runBranchAction })
+
+    let actions: ReturnType<typeof useBranchActions>['actions'] | null = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchActionsHarness repo={repo} onReady={(value) => (actions = value)} />)
+    })
+    const setUpstream = (actions as unknown as Record<string, unknown>)?.setUpstream
+    expect(setUpstream).toBeTypeOf('function')
+
+    await act(async () => {
+      await (setUpstream as (remoteRef: string | null) => Promise<void>)('origin/release')
+      await (setUpstream as (remoteRef: string | null) => Promise<void>)(null)
+    })
+
+    expect(runBranchAction).toHaveBeenNthCalledWith(
+      1,
+      REPO_ID,
+      { kind: 'setBranchUpstream', branch: 'feature/local', remoteRef: 'origin/release' },
+      expect.objectContaining({ token: repo.instanceToken }),
+    )
+    expect(runBranchAction).toHaveBeenNthCalledWith(
+      2,
+      REPO_ID,
+      { kind: 'setBranchUpstream', branch: 'feature/local', remoteRef: null },
+      expect.objectContaining({ token: repo.instanceToken }),
+    )
+  })
+
+  test('confirms the actual protected upstream target before pushing a differently named local branch', async () => {
+    const branch = createRepoBranch('feature/local', {
+      tracking: 'origin/main',
+      worktree: { path: '/tmp/repo-feature' },
+    })
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [branch],
+      remote: { remotes: ['origin'], hasRemotes: true },
+    })
+    const runBranchAction = vi.fn(async () => ({ ok: true as const, message: 'ok' }))
+    useReposStore.setState({ runBranchAction })
+
+    let actions: ReturnType<typeof useBranchActions>['actions'] | null = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchActionsDialogHarness repo={repo} onReady={(value) => (actions = value)} />)
+    })
+
+    act(() => actions?.push())
+    expect(runBranchAction).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('origin/main')
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-slot="alert-dialog-footer"] button:last-child')?.click()
+      await Promise.resolve()
+    })
+
+    expect(runBranchAction).toHaveBeenCalledWith(
+      REPO_ID,
+      { kind: 'push', branch: 'feature/local' },
+      expect.objectContaining({ token: repo.instanceToken }),
+    )
   })
 
   test('resets and submits explicit force removal independently from branch force', async () => {

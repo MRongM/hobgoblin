@@ -59,6 +59,7 @@ export class ManagedTerminalSession {
   private pendingResize: { cols: number; rows: number } | null = null
   private pendingOutput: string[] = []
   private pendingWriteBuffer = ''
+  private pendingWriteHasUserIntent = false
   private inputFlushScheduled = false
   // One-shot bypass of Hobgoblin's frame queue for authoritative output after user intent.
   private prioritizeNextOutput = false
@@ -213,9 +214,12 @@ export class ManagedTerminalSession {
     if (!isUserIntentInput && this.runtime.isReplaying()) return
     const data = typeof input === 'string' ? input : input.data
     const sessionId = this.runtime.currentSessionId()
-    if (!sessionId || !this.runtime.canWrite()) return
-    if (isUserIntentInput && data) this.prioritizeNextOutput = true
-    this.onInput?.(this.descriptor)
+    if (!data || !sessionId || !this.runtime.canWrite()) return
+    if (isUserIntentInput) {
+      this.prioritizeNextOutput = true
+      this.pendingWriteHasUserIntent = true
+      this.onInput?.(this.descriptor)
+    }
     this.pendingWriteBuffer += data
     this.scheduleInputFlush()
   }
@@ -232,10 +236,13 @@ export class ManagedTerminalSession {
   private flushInput(): void {
     if (this.disposed) return
     const data = this.pendingWriteBuffer
+    const userIntent = this.pendingWriteHasUserIntent
     this.pendingWriteBuffer = ''
+    this.pendingWriteHasUserIntent = false
     if (!data || !this.runtime.currentSessionId() || !this.runtime.canWrite()) return
     void writeWithTerminalAuthority({
       data,
+      ...(userIntent ? {} : { userIntent: false }),
       getSessionId: () => this.runtime.currentSessionId(),
       getAttachment: () => this.runtime.snapshot().attachment,
       bridge: terminalBridge,
@@ -670,6 +677,7 @@ export class ManagedTerminalSession {
       this.cancelResizeFlush()
       this.pendingResize = null
       this.pendingWriteBuffer = ''
+      this.pendingWriteHasUserIntent = false
       this.prioritizeNextOutput = false
       this.applyCanonicalSizeToView()
     }
@@ -730,6 +738,7 @@ export class ManagedTerminalSession {
     this.pendingResize = null
     this.pendingOutput = []
     this.pendingWriteBuffer = ''
+    this.pendingWriteHasUserIntent = false
     this.inputFlushScheduled = false
     this.prioritizeNextOutput = false
     // The xterm view was parsing the stream up to now; scanning resumes from a

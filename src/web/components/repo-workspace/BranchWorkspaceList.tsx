@@ -355,6 +355,13 @@ function BranchWorkspaceRow({
             onSelect: () => onGitAction(item, 'batch-commit'),
           },
           {
+            label: 'workspace.branch-workspace.git-action.batch-discard',
+            icon: <RotateCcw aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            destructive: true,
+            onSelect: () => onGitAction(item, 'batch-discard'),
+          },
+          {
             label: 'workspace.branch-workspace.git-action.pull',
             icon: <ArrowDown aria-hidden="true" />,
             disabled: disabled || gitActionsDisabled,

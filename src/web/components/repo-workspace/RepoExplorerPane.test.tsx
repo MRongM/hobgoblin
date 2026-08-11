@@ -1355,7 +1355,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('opens a collapsed worktree file area on the Files tab when its item is double-clicked', async () => {
+  test('restores a remembered tab when a collapsed worktree File area is reopened', async () => {
     const onToggleFileArea = vi.fn()
     useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
     const container = document.createElement('div')
@@ -1379,14 +1379,19 @@ describe('RepoExplorerPane', () => {
         ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
     })
 
-    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('changes')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
 
-  test('opens a collapsed project file area on the Files tab when its item is double-clicked', async () => {
+  test('keeps the Status fallback when a collapsed project File area has no remembered tab', async () => {
     const onToggleFileArea = vi.fn()
-    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1408,8 +1413,38 @@ describe('RepoExplorerPane', () => {
         ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
     })
 
-    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('status')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('restores a remembered tab when compact worktree navigation opens the File area', async () => {
+    compactUi = true
+    const onShowCompactFiles = vi.fn()
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          compactSurface="scope"
+          onShowCompactFiles={onShowCompactFiles}
+        />,
+      )
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-worktree"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('changes')
+    expect(onShowCompactFiles).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
 

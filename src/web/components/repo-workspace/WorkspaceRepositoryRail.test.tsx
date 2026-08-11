@@ -4,13 +4,16 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
-import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import type {
   BranchWorkspacePlan,
   BranchWorkspaceReadResult,
@@ -1678,6 +1681,25 @@ describe('WorkspaceRepositoryRail', () => {
     expect(bell?.getAttribute('aria-label')).toBe('terminal.bell-unread')
   })
 
+  test('routes an Overview aggregate terminal click to its child workspace terminal', () => {
+    useReposStore.setState({ detailCollapsed: true })
+    const branchPath = '/workspace/goblin-feature-auth'
+    const branchKey = `${ROOT}\0${branchPath}`
+    const terminalKey = `${branchKey}\0terminal-1`
+    const { terminalCommands } = renderRail({
+      currentRepoId: ROOT,
+      terminalStateByPath: { [branchPath]: { count: 1 } },
+    })
+
+    act(() => overviewButton()?.click())
+
+    expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+    expect(activateBranchWorkspace).toHaveBeenCalledWith(ROOT, 'branch-1')
+    expect(terminalCommands.selectTerminal).toHaveBeenCalledWith(branchKey, terminalKey)
+    expect(terminalCommands.focusTerminal).toHaveBeenCalledWith(terminalKey)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+  })
+
   test('activates Overview and child repositories through one explicit action', () => {
     renderRail()
     const buttons = Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
@@ -1688,6 +1710,7 @@ describe('WorkspaceRepositoryRail', () => {
     act(() => web?.click())
 
     expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+    expect(activateBranchWorkspace).not.toHaveBeenCalled()
     expect(activateWorkspaceRepository).toHaveBeenCalledWith(ROOT, WEB)
   })
 
@@ -1828,6 +1851,7 @@ function renderRail({
   onOpenDetailArea?: () => void
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
+  const terminalCommands = terminalCommandContext()
   const readContext: TerminalSessionReadContextValue = {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const terminalPath = worktreeTerminalKey.slice(worktreeTerminalKey.indexOf('\0') + 1)
@@ -1859,17 +1883,54 @@ function renderRail({
   }
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>
-        <WorkspaceRepositoryRail
-          workspaceRootId={ROOT}
-          currentRepoId={currentRepoId}
-          onOpenFileArea={onOpenFileArea}
-          onCollapseFileArea={onCollapseFileArea}
-          fileAreaCollapsed={fileAreaCollapsed}
-          onToggleFileArea={onToggleFileArea}
-          onOpenDetailArea={onOpenDetailArea}
-        />
-      </TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommands}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <WorkspaceRepositoryRail
+            workspaceRootId={ROOT}
+            currentRepoId={currentRepoId}
+            onOpenFileArea={onOpenFileArea}
+            onCollapseFileArea={onCollapseFileArea}
+            fileAreaCollapsed={fileAreaCollapsed}
+            onToggleFileArea={onToggleFileArea}
+            onOpenDetailArea={onOpenDetailArea}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
+  return { terminalCommands }
+}
+
+function terminalCommandContext(): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    scrollByTouch: vi.fn(),
+    beginMobileSelection: vi.fn(() => false),
+    extendMobileSelection: vi.fn(),
+    finishMobileSelection: vi.fn(),
+    cancelMobileSelection: vi.fn(),
+    mobileSelectionText: vi.fn(() => ''),
+    clearMobileSelection: vi.fn(),
+    writeExtraKey: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
 }

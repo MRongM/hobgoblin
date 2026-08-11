@@ -56,6 +56,7 @@ function makeServerSession(
     phase: 'opening' | 'restarting' | 'open' | 'error' | 'closed'
     message: string | null
     tmuxBacked: boolean
+    hasUserInput: boolean
   }> = {},
 ) {
   return {
@@ -71,6 +72,7 @@ function makeServerSession(
     phase: overrides.phase ?? 'open',
     message: overrides.message ?? null,
     tmuxBacked: overrides.tmuxBacked ?? false,
+    ...(overrides.hasUserInput === undefined ? {} : { hasUserInput: overrides.hasUserInput }),
   }
 }
 
@@ -134,6 +136,71 @@ describe('TerminalSessionRegistry', () => {
       targetKind: 'branch-workspace',
       branchWorkspaceId: 'branch-workspace-1',
     })
+  })
+
+  test('projects explicit no-input state and updates immediately after local user input', () => {
+    registry.setRepoIndex(makeRepoIndex())
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [
+        makeServerSession('session-a', 'terminal-1', {
+          controller: { attachmentId: 'attachment_local', status: 'connected' },
+          hasUserInput: false,
+        }),
+      ],
+      'attachment_local',
+      new Map(),
+    )
+    const key = registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]!.key
+
+    expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.hasUserInput).toBe(false)
+    registry.writeInput(key, 'a')
+    expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.hasUserInput).toBe(true)
+  })
+
+  test('keeps protocol replies untouched and treats missing input history as unknown', () => {
+    registry.setRepoIndex(makeRepoIndex())
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [
+        makeServerSession('session-a', 'terminal-1', {
+          controller: { attachmentId: 'attachment_local', status: 'connected' },
+          hasUserInput: false,
+        }),
+        makeServerSession('session-b', 'terminal-2'),
+      ],
+      'attachment_local',
+      new Map(),
+    )
+    const sessions = registry.worktreeSnapshot(WORKTREE_KEY).sessions
+    const untouchedKey = sessions.find((session) => session.terminalId === 'terminal-1')!.key
+    const managedSession = (registry as any).sessions.get(untouchedKey)
+
+    managedSession.writeInput({ origin: 'terminal-emulator', source: 'data', data: '\x1b[1;1R' })
+
+    const next = registry.worktreeSnapshot(WORKTREE_KEY).sessions
+    expect(next.find((session) => session.terminalId === 'terminal-1')?.hasUserInput).toBe(false)
+    expect(next.find((session) => session.terminalId === 'terminal-2')?.hasUserInput).toBe(true)
+  })
+
+  test('resets input projection when the server replaces a session under the same key', () => {
+    registry.setRepoIndex(makeRepoIndex())
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [makeServerSession('session-a', 'terminal-1', { hasUserInput: true })],
+      'attachment_local',
+      new Map(),
+    )
+    expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.hasUserInput).toBe(true)
+
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [makeServerSession('session-b', 'terminal-1', { hasUserInput: false })],
+      'attachment_local',
+      new Map(),
+    )
+
+    expect(registry.worktreeSnapshot(WORKTREE_KEY).sessions[0]?.hasUserInput).toBe(false)
   })
 
   test('delegates tmux page navigation to the selected managed session', async () => {

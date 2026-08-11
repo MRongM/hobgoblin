@@ -24,6 +24,27 @@ function batchPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPl
   }
 }
 
+function discardPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
+  return {
+    kind: 'batch-discard',
+    token: 'sha256:discard',
+    rootId: ROOT,
+    branchWorkspaceId: 'ws-1',
+    members: repositoryNames.map((repositoryName) => {
+      const paths = repositoryName === 'web' ? [] : [`src/${repositoryName}.ts`, `scratch/${repositoryName}.txt`]
+      return {
+        repositoryName,
+        repoId: `${ROOT}/${repositoryName}`,
+        targetBranch: 'feature/a',
+        targetWorktreePath: `${ROOT}/goblin-feature-a/${repositoryName}`,
+        paths,
+        changeCount: paths.length,
+        fingerprint: `sha256:${repositoryName}`,
+      }
+    }),
+  }
+}
+
 function mergeOutPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
   return {
     kind: 'batch-merge-out',
@@ -399,6 +420,65 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       ],
     })
     expect(commit).toHaveBeenCalledTimes(2)
+  })
+
+  test('discards exact dirty-member paths serially while isolating failures and skipping clean members', async () => {
+    const plan = discardPlan(['api', 'web', 'docs'])
+    const discard = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, message: 'api discard failed' })
+      .mockResolvedValueOnce({ ok: true, message: 'discarded docs' })
+    const publishRepoInvalidation = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      discard,
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-discard', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-discard', planToken: plan.token })).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.members-failed',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'discard',
+          message: 'api discard failed',
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        { repositoryName: 'web', phase: 'satisfied' },
+        { repositoryName: 'docs', phase: 'succeeded' },
+      ],
+    })
+    expect(discard.mock.calls.map((call) => call.slice(0, 3))).toEqual([
+      ['/workspace/api', '/workspace/goblin-feature-a/api', ['src/api.ts', 'scratch/api.txt']],
+      ['/workspace/docs', '/workspace/goblin-feature-a/docs', ['src/docs.ts', 'scratch/docs.txt']],
+    ])
+    expect(discard.mock.calls.every((call) => call.at(-1)?.publishInvalidation === false)).toBe(true)
+    expect(publishRepoInvalidation.mock.calls.map((call) => call[0])).toEqual(['/workspace/api', '/workspace/docs'])
+  })
+
+  test('stops batch discard before the next member after cancellation', async () => {
+    const plan = discardPlan(['api', 'docs'])
+    let service: ReturnType<typeof createBranchWorkspaceGitActionWriteService>
+    const discard = vi.fn(async () => {
+      service.abort(ROOT)
+      return { ok: false as const, message: 'cancelled' }
+    })
+    service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      discard,
+    })
+    await service.plan(ROOT, { kind: 'batch-discard', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-discard', planToken: plan.token })).resolves.toMatchObject({
+      ok: false,
+      message: 'cancelled',
+    })
+    expect(discard).toHaveBeenCalledTimes(1)
   })
 
   test('merges selected sources into member targets in manifest order without temporary worktrees', async () => {

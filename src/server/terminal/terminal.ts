@@ -85,6 +85,10 @@ const manager = new TerminalSessionManager<string>({
   onOwnership(clientId, event) {
     broker.broadcast(clientId, { type: 'ownership', event })
   },
+  onUserInput(clientId, event) {
+    const repoRoot = manager.getSession(clientId, event.sessionId)?.scope
+    if (repoRoot) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
+  },
 })
 const connectionState = new TerminalConnectionState({
   ownershipGraceMs: TERMINAL_OWNERSHIP_GRACE_MS,
@@ -279,11 +283,12 @@ export function writeServerTerminal(clientId: string, input: TerminalWriteInput)
   if (
     !isValidTerminalSessionId(input?.sessionId) ||
     !isValidTerminalWriteData(input?.data) ||
-    !isValidTerminalAttachmentId(input?.attachmentId)
+    !isValidTerminalAttachmentId(input?.attachmentId) ||
+    (input.userIntent !== undefined && typeof input.userIntent !== 'boolean')
   ) {
     return false
   }
-  return manager.writeSession(clientId, input.sessionId, input.data, input.attachmentId)
+  return manager.writeSession(clientId, input.sessionId, input.data, input.attachmentId, input.userIntent !== false)
 }
 
 export function resizeServerTerminal(clientId: string, input: TerminalResizeInput): TerminalMutationResult {

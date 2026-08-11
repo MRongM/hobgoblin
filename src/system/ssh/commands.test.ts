@@ -1035,6 +1035,26 @@ describe('remote command scripts', () => {
     )
   })
 
+  test('renders quoted remote branch upstream commands', () => {
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitBranchSetUpstream',
+        path: '/srv/repo',
+        branch: "feature/user's-work",
+        remoteRef: 'origin/release',
+      } as Parameters<typeof buildRemoteCommandInvocation>[1]).script,
+    ).toBe("git -C '/srv/repo' branch --set-upstream-to='origin/release' -- 'feature/user'\\''s-work'")
+
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitBranchSetUpstream',
+        path: '/srv/repo',
+        branch: "feature/user's-work",
+        remoteRef: null,
+      } as Parameters<typeof buildRemoteCommandInvocation>[1]).script,
+    ).toBe("git -C '/srv/repo' branch --unset-upstream -- 'feature/user'\\''s-work'")
+  })
+
   test('builds structured git history command', () => {
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'gitHistory',

@@ -87,6 +87,12 @@ describe('isBranchWorkspaceOperationUpdatedEvent', () => {
 
   test('accepts an active operation and an explicit clear event', () => {
     expect(isBranchWorkspaceOperationUpdatedEvent(validEvent)).toBe(true)
+    expect(
+      isBranchWorkspaceOperationUpdatedEvent({
+        ...validEvent,
+        operation: { ...validEvent.operation, kind: 'batch-discard', step: 'discard' },
+      }),
+    ).toBe(true)
     expect(isBranchWorkspaceOperationUpdatedEvent({ ...validEvent, operation: null })).toBe(true)
   })
 

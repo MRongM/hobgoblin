@@ -108,14 +108,11 @@ export function RepoExplorerPane({
   const desktopFileAreaCollapsed = !compact && fileAreaCollapsed
   const handleWorktreeDoubleClick = useCallback(() => {
     if (compact) {
-      handleTabChange('files')
       onShowCompactFiles?.()
       return
     }
-    if (!onToggleFileArea) return
-    if (desktopFileAreaCollapsed) handleTabChange('files')
-    onToggleFileArea()
-  }, [compact, desktopFileAreaCollapsed, handleTabChange, onShowCompactFiles, onToggleFileArea])
+    onToggleFileArea?.()
+  }, [compact, onShowCompactFiles, onToggleFileArea])
 
   if (isPlainWorkspace) {
     return (

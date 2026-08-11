@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
 import { Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
@@ -27,6 +27,10 @@ import {
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import {
   useTerminalAggregateCount,
   useTerminalAggregateHasBell,
   useTerminalAggregateHasOutputActivity,
@@ -48,6 +52,10 @@ import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
+import {
+  activateWorkspaceParentTerminalTarget,
+  resolveWorkspaceParentTerminalTarget,
+} from '#/web/components/repo-workspace/workspace-parent-terminal-navigation.ts'
 
 interface Props {
   workspaceRootId: string
@@ -71,6 +79,8 @@ export function WorkspaceRepositoryRail({
   onOpenDetailArea,
 }: Props) {
   const t = useT()
+  const terminalReadContext = useContext(TerminalSessionReadContext)
+  const terminalCommands = useContext(TerminalSessionContext)
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
   const repos = useReposStore((state) => state.repos)
   const activeContext = useReposStore(
@@ -90,6 +100,7 @@ export function WorkspaceRepositoryRail({
   const activateWorkspaceRepository = useReposStore((state) => state.activateWorkspaceRepository)
   const selectBranch = useReposStore((state) => state.selectBranch)
   const setDetailTab = useReposStore((state) => state.setDetailTab)
+  const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
   const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const configureWorkspace = useReposStore((state) => state.configureWorkspace)
@@ -145,6 +156,26 @@ export function WorkspaceRepositoryRail({
   const overviewTerminalCount = useTerminalAggregateCount(overviewTerminalWorktreeKeys)
   const overviewHasTerminalBell = useTerminalAggregateHasBell(overviewTerminalWorktreeKeys)
   const overviewHasTerminalOutputActivity = useTerminalAggregateHasOutputActivity(overviewTerminalWorktreeKeys)
+  const handleOverviewActivate = () => {
+    if (!terminalReadContext || !terminalCommands) {
+      activateWorkspaceOverview(workspaceRootId)
+      return
+    }
+    const target = resolveWorkspaceParentTerminalTarget({
+      rootId: workspaceRootId,
+      rootPath: overviewRootPath,
+      activeBranchWorkspaceId: activeContext.kind === 'branch-workspace' ? activeContext.branchWorkspaceId : null,
+      branchWorkspaces: branchItems,
+      worktreeSnapshot: terminalReadContext.worktreeSnapshot,
+    })
+    activateWorkspaceParentTerminalTarget(target, {
+      activateOverview: () => activateWorkspaceOverview(workspaceRootId),
+      activateBranchWorkspace: (branchWorkspaceId) => activateBranchWorkspace(workspaceRootId, branchWorkspaceId),
+      selectTerminal: terminalCommands.selectTerminal,
+      focusTerminal: terminalCommands.focusTerminal,
+      revealTerminal: () => setDetailCollapsed(false),
+    })
+  }
   const candidateNameById = useMemo(
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
@@ -415,6 +446,7 @@ export function WorkspaceRepositoryRail({
               }}
               onBatchCommit={branchGitActions.executeBatchCommit}
               onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
+              onBatchDiscard={branchGitActions.executeBatchDiscard}
               onBatchMergeIn={branchGitActions.executeBatchMergeIn}
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
@@ -575,7 +607,7 @@ export function WorkspaceRepositoryRail({
               terminalCount={overviewTerminalCount}
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
-              onActivate={() => activateWorkspaceOverview(workspaceRootId)}
+              onActivate={handleOverviewActivate}
               onToggleFileArea={onToggleFileArea}
             />
             <WorkspaceRepositoryList

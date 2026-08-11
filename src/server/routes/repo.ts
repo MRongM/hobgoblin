@@ -53,6 +53,7 @@ import {
   replaceRepositoryFileTreeTextFile,
   removeRepositoryWorktree,
   resetRepositoryHard,
+  setRepositoryBranchUpstream,
   trackRepositoryRemoteBranch,
 } from '#/server/modules/repo-write-paths.ts'
 import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
@@ -495,6 +496,20 @@ export function createRepoRoutes() {
         () => trackRepositoryRemoteBranch(cwd, localBranch, remoteRef, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'track-remote-branch',
+      ),
+    )
+  })
+  app.post('/set-branch-upstream', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const remoteRef = body?.remoteRef === null ? null : typeof body?.remoteRef === 'string' ? body.remoteRef : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => setRepositoryBranchUpstream(cwd, branch, remoteRef, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'set-branch-upstream',
       ),
     )
   })

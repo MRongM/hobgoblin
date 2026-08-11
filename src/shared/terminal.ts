@@ -156,6 +156,7 @@ export interface TerminalWriteInput {
   sessionId: string
   data: string
   attachmentId?: string
+  userIntent?: boolean
 }
 
 export interface TerminalResizeInput {
@@ -227,6 +228,7 @@ export interface TerminalSessionSummary {
   displayOrder: number
   phase: TerminalSessionPhase
   message: string | null
+  hasUserInput?: boolean
   windowsPty?: TerminalWindowsPty
   tmuxBacked?: boolean
   tmuxSessionName?: string
@@ -409,6 +411,7 @@ const TerminalWriteInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
   data: v.pipe(v.string(), v.maxLength(MAX_TERMINAL_WRITE_CHARS)),
   attachmentId: TerminalOptionalAttachmentIdSchema,
+  userIntent: v.optional(v.boolean()),
 })
 const TerminalResizeInputSchema = TerminalAttachInputSchema
 const TerminalReturnToBottomInputSchema = v.object({
@@ -472,6 +475,7 @@ const TerminalSessionSummarySchema = v.object({
   displayOrder: v.number(),
   phase: TerminalSessionPhaseSchema,
   message: v.nullable(v.string()),
+  hasUserInput: v.optional(v.boolean()),
   windowsPty: v.optional(TerminalWindowsPtySchema),
   tmuxBacked: v.optional(v.boolean()),
   tmuxSessionName: v.optional(v.string()),

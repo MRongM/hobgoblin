@@ -1650,7 +1650,7 @@ describe('ManagedTerminalSession', () => {
     await flushTerminalStart()
     await flushUntil(() => session.snapshot().phase === 'open')
 
-    xtermMocks.terminals[0]!.emitData('input')
+    xtermMocks.terminals[0]!.emitCoreUserData('input')
     await flushTerminalStart()
 
     expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'input' })
@@ -1667,11 +1667,11 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
 
     const term = xtermMocks.terminals[0]!
-    term.emitData('c')
-    term.emitData('l')
-    term.emitData('e')
-    term.emitData('a')
-    term.emitData('r')
+    term.emitCoreUserData('c')
+    term.emitCoreUserData('l')
+    term.emitCoreUserData('e')
+    term.emitCoreUserData('a')
+    term.emitCoreUserData('r')
     await flushTerminalStart()
 
     expect(terminalCalls.write).toHaveBeenCalledTimes(1)
@@ -2094,7 +2094,7 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
     notify.mockClear()
 
-    xtermMocks.terminals[0]!.emitData('hello')
+    xtermMocks.terminals[0]!.emitCoreUserData('hello')
     await flushUntil(() => terminalCalls.write.mock.calls.length > 0)
 
     expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'hello' })
@@ -2129,7 +2129,8 @@ describe('ManagedTerminalSession', () => {
   test('forwards terminal-emulator replies outside replay', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)
-    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    const onInput = vi.fn()
+    const session = new ManagedTerminalSession(descriptor, vi.fn(), null, undefined, undefined, undefined, onInput)
     hydrateManagedSession(session)
     session.attach(host)
     await flushTerminalStart()
@@ -2138,7 +2139,32 @@ describe('ManagedTerminalSession', () => {
     session.writeInput({ origin: 'terminal-emulator', source: 'data', data: '\x1b[1;1R' })
     await flushTerminalStart()
 
-    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: '\x1b[1;1R' })
+    expect(terminalCalls.write).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      data: '\x1b[1;1R',
+      userIntent: false,
+    })
+    expect(onInput).not.toHaveBeenCalled()
+  })
+
+  test('attributes a mixed write batch as user input and ignores empty input', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const onInput = vi.fn()
+    const session = new ManagedTerminalSession(descriptor, vi.fn(), null, undefined, undefined, undefined, onInput)
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    session.writeInput({ origin: 'terminal-emulator', source: 'data', data: '\x1b[1;1R' })
+    session.writeInput('pwd')
+    session.writeInput('')
+    await flushTerminalStart()
+
+    expect(terminalCalls.write).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: '\x1b[1;1Rpwd' })
+    expect(onInput).toHaveBeenCalledTimes(1)
   })
 
   test('translates command-deck extra keys through the current cursor mode', async () => {

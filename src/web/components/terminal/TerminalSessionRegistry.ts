@@ -106,6 +106,7 @@ export class TerminalSessionRegistry {
   private readonly outputActiveKeys = new Set<string>()
   private readonly outputActiveIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly lastTerminalInputAt = new Map<string, number>()
+  private readonly hasUserInputByKey = new Map<string, boolean>()
   private readonly outputBurstStartAt = new Map<string, number>()
   private readonly outputBurstLastAt = new Map<string, number>()
   private readonly outputBurstLastSeq = new Map<string, number>()
@@ -180,6 +181,7 @@ export class TerminalSessionRegistry {
     for (const timer of this.outputActiveIdleTimers.values()) clearTimeout(timer)
     this.outputActiveIdleTimers.clear()
     this.lastTerminalInputAt.clear()
+    this.hasUserInputByKey.clear()
     this.outputBurstStartAt.clear()
     this.outputBurstLastAt.clear()
     this.outputBurstLastSeq.clear()
@@ -251,6 +253,7 @@ export class TerminalSessionRegistry {
     const serverSessionsByKey = new Map(serverSessions.map((session) => [session.key, session]))
     const controllerKeyByWorktree = new Map<string, string>()
     const touchedWorktrees = new Set<string>()
+    const inputStateChangedWorktrees = new Set<string>()
     const localKeys = Array.from(this.sessions.entries())
       .filter(([, session]) => session.descriptor.repoRoot === repoRoot)
       .map(([key]) => key)
@@ -276,6 +279,17 @@ export class TerminalSessionRegistry {
         tmuxCloseSupported: serverSession.tmuxCloseSupported,
         ...(branchWorkspaceId ? { targetKind: 'branch-workspace' as const, branchWorkspaceId } : {}),
       }
+      const previousSessionId = this.sessionIdByKey.get(descriptor.key)
+      const previousHasUserInput = this.hasUserInputByKey.get(descriptor.key)
+      const hasUserInput =
+        serverSession.hasUserInput === true ||
+        (previousSessionId === serverSession.sessionId && previousHasUserInput === true)
+          ? true
+          : serverSession.hasUserInput === false
+            ? false
+            : true
+      this.hasUserInputByKey.set(descriptor.key, hasUserInput)
+      if (previousHasUserInput !== hasUserInput) inputStateChangedWorktrees.add(terminalWorktreeKey)
       if (!this.sessions.has(descriptor.key)) {
         missingLocalCount += 1
         this.ensureSession(descriptor)
@@ -343,6 +357,7 @@ export class TerminalSessionRegistry {
         controllerKeyByWorktree.get(worktreeTerminalKey) ?? null,
       )
       this.selectTerminalKey(worktreeTerminalKey, next)
+      if (inputStateChangedWorktrees.has(worktreeTerminalKey)) this.notifyWorktree(worktreeTerminalKey)
     }
   }
 
@@ -491,6 +506,7 @@ export class TerminalSessionRegistry {
         originalTitle: terminalOriginalTitle(snapshot),
         phase: snapshot.phase,
         isOutputActive: this.outputActiveKeys.has(session.descriptor.key),
+        hasUserInput: this.hasUserInputByKey.get(session.descriptor.key) !== false,
         selected: session.descriptor.key === selectedKey,
         hasBell: this.bellController.hasBell(session.descriptor.key),
         tmuxBacked: session.descriptor.tmuxBacked === true,
@@ -772,6 +788,10 @@ export class TerminalSessionRegistry {
 
   private noteTerminalInput(key: string): void {
     this.lastTerminalInputAt.set(key, Date.now())
+    if (this.hasUserInputByKey.get(key) === true) return
+    this.hasUserInputByKey.set(key, true)
+    const worktreeTerminalKey = this.sessions.get(key)?.descriptor.worktreeTerminalKey
+    if (worktreeTerminalKey) this.notifyWorktree(worktreeTerminalKey)
   }
 
   private isSustainedOutput(key: string): boolean {
@@ -912,6 +932,7 @@ export class TerminalSessionRegistry {
     this.snapshotCache.delete(key)
     this.reattachSnapshotCache.delete(key)
     this.displayOrderByKey.delete(key)
+    this.hasUserInputByKey.delete(key)
     this.clearOutputActive(key)
     this.notifySnapshot(key)
     this.bellController.remove(key)

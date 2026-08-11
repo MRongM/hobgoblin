@@ -1,3 +1,4 @@
+import { useContext } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -39,6 +40,16 @@ import {
 import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useRepositoryCreationActions } from '#/web/hooks/useRepositoryCreationActions.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
+import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
+import {
+  activateWorkspaceParentTerminalTarget,
+  resolveWorkspaceParentTerminalTarget,
+} from '#/web/components/repo-workspace/workspace-parent-terminal-navigation.ts'
 
 const restrictToVerticalProjectList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -110,6 +121,8 @@ function SortableProjectRow({
   onToggleFileArea?: () => void
 }) {
   const t = useT()
+  const terminalReadContext = useContext(TerminalSessionReadContext)
+  const terminalCommands = useContext(TerminalSessionContext)
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: project.id,
   })
@@ -124,6 +137,11 @@ function SortableProjectRow({
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
   const repo = useReposStore((state) => state.repos[project.id])
   const workspace = useReposStore((state) => state.workspaceProjects[project.id])
+  const activeWorkspaceContext = useReposStore((state) => state.workspaceActiveContextByRoot[project.id])
+  const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
+  const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspace?.configured ? project.id : '')
+  const branchWorkspaces = branchWorkspaceQuery.data?.ok ? branchWorkspaceQuery.data.items : []
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const creation = useRepositoryCreationActions(repo, { forceDisabled: project.unavailable })
   const tmuxCleanup = useAssociatedTmuxCleanup({
@@ -198,6 +216,27 @@ function SortableProjectRow({
     disabled: project.unavailable,
     onSelect: () => rescanWorkspace(project.id),
   }
+  const handleActivate = () => {
+    if (!workspace?.configured || !terminalReadContext || !terminalCommands) {
+      onActivate(project.id)
+      return
+    }
+    const target = resolveWorkspaceParentTerminalTarget({
+      rootId: project.id,
+      rootPath: repoPlainWorkspacePath(repo) ?? project.id,
+      activeBranchWorkspaceId:
+        activeWorkspaceContext?.kind === 'branch-workspace' ? activeWorkspaceContext.branchWorkspaceId : null,
+      branchWorkspaces,
+      worktreeSnapshot: terminalReadContext.worktreeSnapshot,
+    })
+    activateWorkspaceParentTerminalTarget(target, {
+      activateOverview: () => onActivate(project.id),
+      activateBranchWorkspace: (branchWorkspaceId) => activateBranchWorkspace(project.id, branchWorkspaceId),
+      selectTerminal: terminalCommands.selectTerminal,
+      focusTerminal: terminalCommands.focusTerminal,
+      revealTerminal: () => setDetailCollapsed(false),
+    })
+  }
 
   return (
     <>
@@ -247,7 +286,7 @@ function SortableProjectRow({
             props: { ...attributes, ...listeners },
           }}
           buttonProps={{
-            onClick: () => onActivate(project.id),
+            onClick: handleActivate,
             onDoubleClick: onToggleFileArea,
             'data-project-kind': projectKind,
             'aria-current': active ? 'page' : undefined,

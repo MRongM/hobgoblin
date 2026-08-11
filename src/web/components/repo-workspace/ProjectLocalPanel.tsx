@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Trans } from 'react-i18next'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { GitBranch, Loader2, Search, Tag, Trash2, X, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
@@ -15,8 +16,12 @@ import {
 } from '#/web/repo-client.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import { isPushProtected } from '#/web/stores/repos/branch-action-write-paths.ts'
+import {
+  getBranchPushTarget,
+  type BranchPushTarget,
+} from '#/web/stores/repos/branch-action-write-paths.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
+import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 
 type LocalTab = 'branches' | 'tags'
 
@@ -102,7 +107,7 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [unmergedDeleteTarget, setUnmergedDeleteTarget] = useState<string | null>(null)
   const submitBranchAction = useReposStore((s) => s.submitBranchAction)
-  const [pushTarget, setPushTarget] = useState<string | null>(null)
+  const [pushTarget, setPushTarget] = useState<BranchPushTarget | null>(null)
 
   const repo = useStoreWithEqualityFn(
     useReposStore,
@@ -161,19 +166,20 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
     submitBranchAction(repoId, { kind: 'pull', branch: branchName })
   }
 
-  function handlePush(branchName: string) {
-    if (isPushProtected(branchName)) {
-      setPushTarget(branchName)
+  function handlePush(branch: RepoBranchState) {
+    const target = getBranchPushTarget(branch)
+    if (target.protected) {
+      setPushTarget(target)
       return
     }
-    submitBranchAction(repoId, { kind: 'push', branch: branchName })
+    submitBranchAction(repoId, { kind: 'push', branch: branch.name })
   }
 
   function confirmPush() {
     if (!pushTarget) return
-    const target = pushTarget
+    const branch = pushTarget.branch
     setPushTarget(null)
-    submitBranchAction(repoId, { kind: 'push', branch: target })
+    submitBranchAction(repoId, { kind: 'push', branch })
   }
 
   return (
@@ -213,7 +219,7 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
                   disabled={isPending}
                   aria-label={t('local.branch-push')}
                   title={t('local.branch-push')}
-                  onClick={() => handlePush(branch.name)}
+                  onClick={() => handlePush(branch)}
                   className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
                 >
                   {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <ArrowUpFromLine className="size-3.5" />}
@@ -250,9 +256,22 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
       />
       <ConfirmDialog
         open={pushTarget !== null}
-        title={pushTarget ? t('branch-menu.push-protected-title', { name: pushTarget }) : ''}
-        message={t('branch-menu.push-protected-body')}
-        confirmLabel={t('branch-menu.push-protected-confirm')}
+        title={pushTarget ? t('action.confirm-push-protected-title', { branch: pushTarget.display }) : ''}
+        message={
+          pushTarget ? (
+            <div className="space-y-2">
+              <Trans
+                i18nKey="action.confirm-push-protected-body"
+                values={{ branch: pushTarget.display }}
+                components={{ branch: <b className="text-foreground" /> }}
+              />
+              <span className="block break-all font-mono text-foreground">{pushTarget.display}</span>
+            </div>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel={t('action.confirm-push-confirm')}
         onCancel={() => setPushTarget(null)}
         onConfirm={confirmPush}
       />

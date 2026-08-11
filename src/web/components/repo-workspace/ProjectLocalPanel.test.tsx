@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalPanel.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
@@ -173,6 +174,53 @@ describe('ProjectLocalPanel branch deletion', () => {
 
     expect(mocks.deleteRepositoryBranch).toHaveBeenCalledTimes(1)
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
+})
+
+describe('ProjectLocalPanel branch push', () => {
+  test('confirms the protected upstream and pushes the local branch', async () => {
+    const submitBranchAction = vi.fn()
+    seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('main'),
+        createRepoBranch('feature/local', { tracking: 'origin/main' }),
+      ],
+      currentBranch: 'main',
+      selectedBranch: 'feature/local',
+    })
+    useReposStore.setState({ submitBranchAction })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<ProjectLocalPanel repoId={REPO_ID} />)
+    })
+
+    const branchRow = Array.from(container.querySelectorAll<HTMLDivElement>('div.group')).find((row) =>
+      row.textContent?.includes('feature/local'),
+    )
+    const pushButton = branchRow?.querySelector<HTMLButtonElement>('button[aria-label="local.branch-push"]')
+    expect(pushButton).not.toBeNull()
+
+    await act(async () => {
+      pushButton!.click()
+    })
+
+    expect(submitBranchAction).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('origin/main')
+
+    const confirmButton = findButtonByText(document.body, 'action.confirm-push-confirm')
+    expect(confirmButton).not.toBeNull()
+    await act(async () => {
+      confirmButton!.click()
+    })
+
+    expect(submitBranchAction).toHaveBeenCalledWith(REPO_ID, {
+      kind: 'push',
+      branch: 'feature/local',
+    })
     await act(async () => root.unmount())
   })
 })

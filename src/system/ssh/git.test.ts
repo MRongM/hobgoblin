@@ -62,6 +62,22 @@ async function pruneRemoteWorktrees(input: { worktreePath: string; signal?: Abor
   )(TARGET, input)
 }
 
+async function setRemoteBranchUpstream(input: {
+  branch: string
+  remoteRef: string | null
+  signal?: AbortSignal
+  run?: unknown
+}) {
+  const setUpstream = (remoteGitOperations as Record<string, unknown>).setRemoteBranchUpstream
+  expect(setUpstream).toBeTypeOf('function')
+  return await (
+    setUpstream as (
+      target: typeof TARGET,
+      input: { branch: string; remoteRef: string | null; signal?: AbortSignal; run?: unknown },
+    ) => Promise<unknown>
+  )(TARGET, input)
+}
+
 describe('remote git helpers', () => {
   test('builds browser and pull request URLs from remote verbose output', async () => {
     const run = async (command: { type: string }) => {
@@ -1040,6 +1056,48 @@ describe('remote git helpers', () => {
       TARGET,
       { signal: undefined, timeoutMs: 180_000 },
     )
+  })
+
+  test('setRemoteBranchUpstream sets and removes tracking for an existing branch', async () => {
+    const run = vi.fn(async () => okRemoteResult('updated'))
+
+    await expect(
+      setRemoteBranchUpstream({ branch: 'feature/local', remoteRef: 'origin/release', run: run as any }),
+    ).resolves.toEqual({ ok: true, message: 'updated' })
+    await expect(
+      setRemoteBranchUpstream({ branch: 'feature/local', remoteRef: null, run: run as any }),
+    ).resolves.toEqual({ ok: true, message: 'updated' })
+
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      {
+        type: 'gitBranchSetUpstream',
+        path: '/srv/repo',
+        branch: 'feature/local',
+        remoteRef: 'origin/release',
+      },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      { type: 'gitBranchSetUpstream', path: '/srv/repo', branch: 'feature/local', remoteRef: null },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('setRemoteBranchUpstream rejects invalid refs before running remote commands', async () => {
+    const run = vi.fn()
+
+    await expect(
+      setRemoteBranchUpstream({ branch: '-bad', remoteRef: 'origin/release', run: run as any }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    await expect(
+      setRemoteBranchUpstream({ branch: 'feature/local', remoteRef: 'origin/HEAD', run: run as any }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+    expect(run).not.toHaveBeenCalled()
   })
 
   test('remote branch creation rejects invalid branch refs before running remote commands', async () => {

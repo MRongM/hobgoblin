@@ -169,6 +169,7 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.dependency.add.action',
       'workspace.branch-workspace.dependency.remove.action',
       'workspace.branch-workspace.git-action.batch-commit',
+      'workspace.branch-workspace.git-action.batch-discard',
       'workspace.branch-workspace.git-action.pull',
       'workspace.branch-workspace.git-action.push',
       'workspace.branch-workspace.git-action.batch-merge-in',
@@ -219,6 +220,15 @@ describe('BranchWorkspaceList', () => {
       await Promise.resolve()
     })
     expect(onGitAction).toHaveBeenCalledWith(item, 'batch-commit')
+    const batchDiscardItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.git-action.batch-discard',
+    )
+    expect(batchDiscardItem?.getAttribute('data-variant')).toBe('destructive')
+    await act(async () => {
+      batchDiscardItem?.click()
+      await Promise.resolve()
+    })
+    expect(onGitAction).toHaveBeenLastCalledWith(item, 'batch-discard')
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()

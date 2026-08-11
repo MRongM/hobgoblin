@@ -1965,6 +1965,40 @@ describe('server terminal sessions', () => {
 
     unregisterTerminalSocket('client_1', 'attachment_a', socket)
   })
+
+  test('broadcasts one catalog invalidation on first user input', async () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socket)
+    const sessionId = await createTerminalSession('client_1', { cols: 80, rows: 24 })
+    await attachServerTerminal('client_1', {
+      sessionId,
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_a',
+    })
+    socket.send.mockClear()
+
+    expect(
+      writeServerTerminal('client_1', {
+        sessionId,
+        data: '\x1b[1;1R',
+        attachmentId: 'attachment_a',
+        userIntent: false,
+      }),
+    ).toBe(true)
+    const invalidations = () =>
+      socket.send.mock.calls.filter(([payload]) => {
+        const parsed = JSON.parse(String(payload))
+        return parsed.type === 'sessions-changed' && parsed.repoRoot === '/repo'
+      })
+    expect(invalidations()).toHaveLength(0)
+
+    expect(writeServerTerminal('client_1', { sessionId, data: 'p', attachmentId: 'attachment_a' })).toBe(true)
+    expect(writeServerTerminal('client_1', { sessionId, data: 'wd', attachmentId: 'attachment_a' })).toBe(true)
+    expect(invalidations()).toHaveLength(1)
+
+    unregisterTerminalSocket('client_1', 'attachment_a', socket)
+  })
 })
 
 function branchWorkspaceManifest(rootId: string, workspacePath: string) {

@@ -36,6 +36,7 @@ import {
   pullRepositoryBranch,
   pushRepositoryBranch,
   removeRepositoryWorktree,
+  setRepositoryBranchUpstream,
   trackRepositoryRemoteBranch,
 } from '#/web/repo-client.ts'
 const BRANCH_NETWORK_OPERATION_KEY = 'branch-network-action'
@@ -48,6 +49,7 @@ const BRANCH_ACTION_REASON_BY_KIND: Record<RepoBranchActionKind, RepoBranchActio
   createWorktree: 'branch:createWorktree',
   createBranch: 'branch:createBranch',
   trackRemoteBranch: 'branch:trackRemoteBranch',
+  setBranchUpstream: 'branch:setBranchUpstream',
   deleteBranch: 'branch:deleteBranch',
   cleanupWorktree: 'branch:cleanupWorktree',
   removeWorktree: 'branch:removeWorktree',
@@ -90,6 +92,7 @@ function branchActionOperationTarget(action: RepoBranchAction): string | null {
     case 'deleteBranch':
     case 'cleanupWorktree':
     case 'removeWorktree':
+    case 'setBranchUpstream':
       return action.branch
     case 'createWorktree':
       return createWorktreeEventBranch(action.input)
@@ -117,6 +120,8 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
       return { kind: action.kind, branch: action.branch, baseBranch: action.baseBranch }
     case 'trackRemoteBranch':
       return { kind: action.kind, branch: action.localBranch, remoteRef: action.remoteRef }
+    case 'setBranchUpstream':
+      return { kind: action.kind, branch: action.branch, remoteRef: action.remoteRef }
     case 'createWorktree':
       return {
         kind: action.kind,
@@ -250,6 +255,8 @@ function runBranchActionRpc(
       return createRepositoryBranch(repoId, action.branch, action.baseBranch, signal, sourceToken)
     case 'trackRemoteBranch':
       return trackRepositoryRemoteBranch(repoId, action.localBranch, action.remoteRef, signal, sourceToken)
+    case 'setBranchUpstream':
+      return setRepositoryBranchUpstream(repoId, action.branch, action.remoteRef, signal, sourceToken)
     case 'deleteBranch':
       return deleteRepositoryBranch(
         repoId,

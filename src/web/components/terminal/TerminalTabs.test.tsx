@@ -217,6 +217,32 @@ describe('TerminalTabs', () => {
     expect(document.body.textContent).toContain('terminal.close-confirm-title')
   })
 
+  test('closes an untouched compact terminal without confirmation', () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        panelActive
+        sessions={[session({ key: 't1', selected: true, title: 'term-1', hasUserInput: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    const chrome = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
+    const closeButton = chrome?.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+    if (!closeButton) throw new Error('missing compact terminal close button')
+    act(() => closeButton.click())
+
+    expect(onClose).toHaveBeenCalledWith('t1')
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
   test('requires confirmation before closing all compact dropdown terminals', async () => {
     const onClose = vi.fn()
 
@@ -318,6 +344,41 @@ describe('TerminalTabs', () => {
     expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
     clickElementByText('terminal.close-all-confirm-confirm')
     expect(onClose.mock.calls).toEqual([['t1'], ['t2'], ['t3']])
+  })
+
+  test('closes only the untouched current terminal immediately while preserving bulk confirmation', async () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1', hasUserInput: false }),
+          session({ key: 't2', selected: false, title: 'term-2', hasUserInput: false }),
+          session({ key: 't3', selected: false, title: 'term-3', hasUserInput: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await clickTabContextMenuItem('t2', 'terminal.close-current')
+    expect(onClose).toHaveBeenCalledWith('t2')
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+
+    onClose.mockClear()
+    await clickTabContextMenuItem('t2', 'terminal.close-others')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-others-confirm-title')
+    clickElementByText('dialog.cancel')
+
+    await clickTabContextMenuItem('t2', 'terminal.close-all')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
   })
 
   test('cancels terminal tab context-menu close without closing sessions', async () => {
@@ -905,6 +966,60 @@ describe('TerminalTabs', () => {
     expect(onClose).toHaveBeenCalledWith('t1')
   })
 
+  test('closes an untouched terminal immediately and focuses its adjacent tab', async () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', title: 'term-1', hasUserInput: false }),
+          session({ key: 't2', title: 'term-2', selected: false, hasUserInput: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    await flushTimers()
+
+    const adjacentTab = document.body.querySelector<HTMLButtonElement>(
+      '[data-terminal-tab-tooltip-id="t2"] button[role="tab"]',
+    )
+    expect(onClose).toHaveBeenCalledWith('t1')
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+    expect(document.activeElement).toBe(adjacentTab)
+  })
+
+  test('closes an untouched tmux-backed terminal without requesting exact tmux shutdown', () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true, hasUserInput: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+
+    expect(onClose).toHaveBeenCalledWith('t1')
+    expect(onClose).not.toHaveBeenCalledWith('t1', { closeTmuxSession: true })
+    expect(document.body.querySelector('[role="checkbox"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
   test('offers an unchecked exact tmux close option for a tmux-backed terminal', async () => {
     const onClose = vi.fn(async () => ({ ok: true as const }))
     render(
@@ -941,9 +1056,7 @@ describe('TerminalTabs', () => {
         worktreeTerminalKey="/repo\0/repo/worktree"
         detailId="detail"
         panelActive
-        sessions={[
-          session({ key: 't1', title: 'term-1', tmuxBacked: true, tmuxCloseSupported: false }),
-        ]}
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true, tmuxCloseSupported: false })]}
         onNew={() => {}}
         onSelect={() => {}}
         onScrollToBottom={() => {}}

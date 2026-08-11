@@ -13,7 +13,7 @@ Use this doc for UI language and presentation rules.
 
 ## Branch workspace scope navigation
 
-- Activating a top-level multi-repository workspace starts at its workspace overview rather than restoring a repository or branch-workspace member. Hiding the workspace repository list also returns to that overview and collapses the desktop file area; showing the list does not reopen files or restore the prior member context.
+- Activating a top-level multi-repository workspace starts at its workspace overview rather than restoring a repository or branch-workspace member. A direct click on its project row or workspace-root row may instead reveal an aggregated root or branch-workspace terminal: prefer the workspace root's own terminal, then the previously selected branch workspace when it still has a viable root terminal, then the first viable branch workspace in sidebar order; never route this parent click to a repository-member worktree terminal. With no viable terminal target, the click keeps the ordinary overview behavior. Hiding the workspace repository list also returns to that overview and collapses the desktop file area; showing the list does not reopen files or restore the prior member context.
 - On desktop, double-clicking an ordinary worktree main item toggles the file area. Opening the file area selects the Files tab; double-clicking again closes it.
 - Treat a branch workspace and its member worktrees as one parent scope. Selecting a member must keep the branch workspace active.
 - Double-clicking a navigable branch workspace member worktree toggles the desktop file area without changing member-summary expansion; compact presentation opens the files surface.

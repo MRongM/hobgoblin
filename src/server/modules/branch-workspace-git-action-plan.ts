@@ -11,6 +11,7 @@ import { getRepositoryPatch, getRepositorySnapshot, getRepositoryStatus } from '
 import {
   normalizeBranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceBatchCommitMemberPlan,
+  type BranchWorkspaceBatchDiscardMemberPlan,
   type BranchWorkspaceBatchMergeInMemberPlan,
   type BranchWorkspaceBatchMergeInSourcePlan,
   type BranchWorkspaceBatchMergeOutDestinationPlan,
@@ -55,6 +56,9 @@ export async function buildBranchWorkspaceGitActionPlan(
 
     if (normalized.request.kind === 'batch-commit') {
       return await buildBatchCommitPlan(normalizedRootId, manifest, dependencies, signal)
+    }
+    if (normalized.request.kind === 'batch-discard') {
+      return await buildBatchDiscardPlan(normalizedRootId, manifest, dependencies, signal)
     }
     if (normalized.request.kind === 'batch-merge-in') {
       return await buildBatchMergeInPlan(normalizedRootId, manifest, dependencies, signal)
@@ -153,6 +157,52 @@ async function buildBatchCommitPlan(
   }
   const planWithoutToken = {
     kind: 'batch-commit' as const,
+    rootId,
+    branchWorkspaceId: manifest.id,
+    members,
+  }
+  return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
+}
+
+async function buildBatchDiscardPlan(
+  rootId: string,
+  manifest: BranchWorkspaceManifest,
+  dependencies: BranchWorkspaceGitActionPlanDependencies,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceGitActionPlanResult> {
+  const members: BranchWorkspaceBatchDiscardMemberPlan[] = []
+  for (const member of manifest.repositories) {
+    signal?.throwIfAborted()
+    const facts = await readMemberFacts(
+      rootId,
+      member.repositoryName,
+      member.targetBranch,
+      member.worktreePath,
+      dependencies,
+      signal,
+    )
+    if (!facts.ok) return facts
+    const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
+    if (!patch.ok) {
+      return {
+        ok: false,
+        message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
+        repositoryName: member.repositoryName,
+      }
+    }
+    const entries = normalizedStatusEntries(facts.status.entries)
+    members.push({
+      repositoryName: member.repositoryName,
+      repoId: facts.repoId,
+      targetBranch: member.targetBranch,
+      targetWorktreePath: member.worktreePath,
+      paths: entries.map((entry) => entry.path),
+      changeCount: entries.length,
+      fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
+    })
+  }
+  const planWithoutToken = {
+    kind: 'batch-discard' as const,
     rootId,
     branchWorkspaceId: manifest.id,
     members,

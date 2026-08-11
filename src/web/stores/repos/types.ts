@@ -34,6 +34,7 @@ export type RepoEventAction =
   | { kind: 'createWorktree'; branch: string; worktreePath: string }
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; branch: string; remoteRef: string }
+  | { kind: 'setBranchUpstream'; branch: string; remoteRef: string | null }
   | { kind: 'deleteBranch'; branch: string }
   | { kind: 'cleanupWorktree'; branch: string; worktreePath: string }
   | { kind: 'removeWorktree'; branch: string; worktreePath: string; alsoDeleteBranch: boolean }

@@ -10,7 +10,7 @@ export const DEFAULT_DETAIL_FOCUS_MODE = false
 // The detail pane owns the width — the sidebar (branch list + file area)
 // stays narrow, roughly a quarter of the window.
 export const DEFAULT_DETAIL_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 74.2 }
-export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 66.7 }
+export const DEFAULT_FILE_TREE_PANE_SIZES: WorkspaceDetailPaneSizes = { 'left-right': 30 }
 export const DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT = 160
 export const MIN_WORKSPACE_REPOSITORY_LIST_HEIGHT = 96
 export const MAX_WORKSPACE_REPOSITORY_LIST_HEIGHT = 4096

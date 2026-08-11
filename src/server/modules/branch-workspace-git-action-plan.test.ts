@@ -179,6 +179,81 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     })
   })
 
+  test('plans exact changed paths for every branch workspace member in manifest order', async () => {
+    const deps = dependencies({
+      getStatus: vi.fn(async (repoId: string) => {
+        const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+        const entries =
+          repositoryName === 'api'
+            ? [
+                { x: '?', y: '?', path: 'scratch/new.txt' },
+                { x: 'M', y: ' ', path: 'src/a.ts' },
+              ]
+            : []
+        return [
+          status(`/workspace/${repositoryName}`),
+          status(`/workspace/goblin-feature-a/${repositoryName}`, entries),
+        ]
+      }),
+    })
+
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-discard', branchWorkspaceId: WORKSPACE_ID },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-discard',
+        members: [
+          {
+            repositoryName: 'api',
+            targetWorktreePath: '/workspace/goblin-feature-a/api',
+            paths: ['scratch/new.txt', 'src/a.ts'],
+            changeCount: 2,
+          },
+          {
+            repositoryName: 'web',
+            targetWorktreePath: '/workspace/goblin-feature-a/web',
+            paths: [],
+            changeCount: 0,
+          },
+        ],
+      },
+    })
+    expect(deps.getPatch).toHaveBeenNthCalledWith(1, '/workspace/api', '/workspace/goblin-feature-a/api', undefined)
+    expect(deps.getPatch).toHaveBeenNthCalledWith(2, '/workspace/web', '/workspace/goblin-feature-a/web', undefined)
+  })
+
+  test('rejects a batch discard plan when full patch content changes under the same status', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-discard', branchWorkspaceId: WORKSPACE_ID },
+      dependencies(),
+    )
+    expect(original.ok).toBe(true)
+    if (!original.ok) return
+
+    const result = await validateBranchWorkspaceGitActionPlan(
+      original.plan,
+      new Set(),
+      dependencies({
+        getPatch: vi.fn(async (repoId: string) => ({
+          ok: true,
+          message: repoId.endsWith('/api') ? 'same status, newer content' : 'diff --git a/src/a.ts b/src/a.ts\n+change',
+        })),
+      }),
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.repository-changed',
+      repositoryName: 'api',
+    })
+  })
+
   test('changes the plan token when a status column or full patch changes', async () => {
     const first = await buildBranchWorkspaceGitActionPlan(
       ROOT,

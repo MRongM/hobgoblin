@@ -418,6 +418,63 @@ describe('repo-client', () => {
     )
   })
 
+  test('requests setting and removing a branch upstream through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'ok' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const repoClient = await import('#/web/repo-client.ts')
+    const setRepositoryBranchUpstream = (repoClient as Record<string, unknown>).setRepositoryBranchUpstream
+    expect(setRepositoryBranchUpstream).toBeTypeOf('function')
+    const setUpstream = setRepositoryBranchUpstream as (
+      cwd: string,
+      branch: string,
+      remoteRef: string | null,
+      signal?: AbortSignal,
+      sourceToken?: string,
+    ) => Promise<unknown>
+
+    await expect(setUpstream('/repo', 'feature/local', 'origin/release', undefined, 'source_1')).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+    await expect(setUpstream('/repo', 'feature/local', null, undefined, 'source_2')).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/set-branch-upstream',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          cwd: '/repo',
+          branch: 'feature/local',
+          remoteRef: 'origin/release',
+          sourceToken: 'source_1',
+        }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/set-branch-upstream',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          cwd: '/repo',
+          branch: 'feature/local',
+          remoteRef: null,
+          sourceToken: 'source_2',
+        }),
+      }),
+    )
+  })
+
   test('requests repository file transfer', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

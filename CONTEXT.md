@@ -296,6 +296,10 @@ _Avoid_: Active branch, current branch
 The exact local or remote branch ref selected when Hobgoblin creates a local branch. It is immutable creation provenance recorded beside that local branch, may be unknown for branches created outside Hobgoblin or before provenance recording existed, and is distinct from current commit ancestry, upstream tracking, the repository default branch, and a branch workspace creation base.
 _Avoid_: Baseline, inferred parent branch, merge destination
 
+**Branch upstream**:
+The optional Git upstream configured for one local branch and shared by every Hobgoblin presentation of that branch. Multiple local branches may share one upstream; it remains distinct from the worktree, branch creation source, and branch workspace creation base.
+_Avoid_: Worktree upstream, creation source, creation base
+
 **File area**:
 The explorer surface for the selected project or branch context. In a repository worktree context, it contains the file area tab bar and the selected explorer panel; in a plain workspace, it contains the file browser without repository explorer tabs. It is distinct from the navigation area and the detail pane.
 _Avoid_: Detail area, file tab area
@@ -424,6 +428,10 @@ _Avoid_: Delete branch workspace, worktree cleanup, repository cleanup
 **Branch workspace batch commit**:
 An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it attempts exactly one commit per dirty member sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed commits are never rolled back.
 _Avoid_: AI commit handoff, shared commit message, automatic commit
+
+**Branch workspace batch discard**:
+An application-coordinated destructive action that binds every dirty repository member's exact staged, unstaged, and untracked change paths to a reviewed plan, then discards those paths sequentially after one explicit confirmation. A repository-member failure does not block later members, completed discards are never rolled back, and changed member plans must be reviewed again.
+_Avoid_: Batch reset, workspace reset, atomic discard
 
 **Branch workspace batch AI commit-and-push**:
 An explicit, per-open opt-in mode of branch workspace batch commit that hides manual message and submit controls, generates one repository-specific message for every dirty member with the selected AI provider, commits only after every generation succeeds, then obtains a fresh batch-push plan and pushes only after every commit succeeds. A failed stage prevents the next stage, while repository-member failures inside a Git stage are accumulated without blocking its remaining members. It preserves completed Git writes without rollback and never becomes a saved preference or background automation.

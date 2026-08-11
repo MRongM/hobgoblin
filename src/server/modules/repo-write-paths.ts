@@ -459,6 +459,23 @@ export async function trackRepositoryRemoteBranch(
   })
 }
 
+export async function setRepositoryBranchUpstream(
+  cwd: string,
+  branch: string,
+  remoteRef: string | null,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  return await runWithRepoBackend(cwd, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.setBranchUpstream(branch, remoteRef, signal),
+      sourceToken,
+    )
+  })
+}
+
 function isWorktreePathInputAbsolute(input: CreateWorktreeInput): boolean {
   return isAbsoluteWorktreePath(typeof input.worktreePath === 'string' ? input.worktreePath.trim() : '')
 }
@@ -870,6 +887,7 @@ export async function discardRepositoryChanges(
   paths: unknown,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   const normalizedPaths = normalizeDiscardPaths(paths)
   if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath) || !normalizedPaths) {
@@ -880,6 +898,7 @@ export async function discardRepositoryChanges(
       repoId,
       await backend.discardChanges(worktreePath, normalizedPaths, signal),
       sourceToken,
+      options,
     )
   })
 }

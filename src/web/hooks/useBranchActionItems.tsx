@@ -4,6 +4,7 @@ import {
   ClipboardCopy,
   ExternalLink,
   GitBranch,
+  GitFork,
   RefreshCw,
   Tag,
   Terminal,
@@ -18,6 +19,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { CreateTagDialog } from '#/web/components/CreateTagDialog.tsx'
+import { BranchUpstreamDialog } from '#/web/components/branch-list/BranchUpstreamDialog.tsx'
 import { useBranchActions, type BranchActionItemId } from '#/web/hooks/useBranchActions.tsx'
 import { branchActionDisplayPhase, type BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { BrowserRemoteProvider } from '#/web/types.ts'
@@ -106,6 +108,7 @@ export function useBranchActionItems(
     forceDisabled: blocked,
   })
   const createTagDialog = useRetainedDialogState<string>()
+  const upstreamDialog = useRetainedDialogState<string>()
   const { createTerminal, restoreTmuxSessions } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
@@ -208,6 +211,20 @@ export function useBranchActionItems(
       shortcut: '⇧P',
       icon: createElement(ArrowUp),
       onSelect: actions.push,
+    },
+    {
+      id: 'upstream',
+      label: branchActionLabel(
+        'upstream',
+        branch.tracking ? 'action.branch-upstream-change' : 'action.branch-upstream-set',
+        'action.branch-upstream-updating',
+        'action.branch-upstream-queued',
+      ),
+      disabled: disabled || (!repo.remote.hasRemotes && !branch.tracking),
+      busy: busy('upstream'),
+      visible: !!branch.worktree?.path,
+      icon: createElement(GitFork),
+      onSelect: () => upstreamDialog.openWith(branch.name),
     },
     createWorktree.item,
     {
@@ -365,6 +382,14 @@ export function useBranchActionItems(
           const result = await createRepositoryLocalTag(repo.id, name, ref, undefined, String(repo.instanceToken))
           if (!result.ok) throw new Error(t(result.message))
         },
+      }),
+      createElement(BranchUpstreamDialog, {
+        open: upstreamDialog.open,
+        repoId: repo.id,
+        branch,
+        busy: blocked,
+        onClose: upstreamDialog.close,
+        onSubmit: actions.setUpstream,
       }),
       closeTerminalScope.dialog,
       createWorktree.dialog,

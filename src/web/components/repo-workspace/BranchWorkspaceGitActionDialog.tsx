@@ -7,6 +7,7 @@ import {
   CircleX,
   GitMerge,
   LoaderCircle,
+  RotateCcw,
   SendHorizontal,
   Sparkles,
 } from 'lucide-react'
@@ -15,6 +16,7 @@ import type {
   BranchWorkspaceBatchMergeInSourceInput,
   BranchWorkspaceBatchMergeOutTargetInput,
   BranchWorkspaceBatchCommitPlan,
+  BranchWorkspaceBatchDiscardPlan,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionKind,
   BranchWorkspaceGitActionPlan,
@@ -59,6 +61,7 @@ interface BranchWorkspaceGitActionPanelProps {
   onBatchCommitAndPush: (
     messages: BranchWorkspaceCommitMessageInput[],
   ) => Promise<BranchWorkspaceGitActionResult | null>
+  onBatchDiscard: () => Promise<BranchWorkspaceGitActionResult | null>
   onBatchMergeIn: (
     mode: BranchWorkspaceMergeMode,
     sources: BranchWorkspaceBatchMergeInSourceInput[],
@@ -91,6 +94,7 @@ export function BranchWorkspaceGitActionPanel({
   onOpenChange,
   onBatchCommit,
   onBatchCommitAndPush,
+  onBatchDiscard,
   onBatchMergeIn,
   onBatchMergeOut,
   onSync,
@@ -287,6 +291,8 @@ export function BranchWorkspaceGitActionPanel({
             )
           }
         />
+      ) : plan.kind === 'batch-discard' ? (
+        <BatchDiscardContent plan={plan} result={result} activeOperation={activeOperation} />
       ) : plan.kind === 'pull' || plan.kind === 'push' ? (
         <SyncContent plan={plan} result={result} activeOperation={activeOperation} />
       ) : null}
@@ -326,6 +332,22 @@ export function BranchWorkspaceGitActionPanel({
                 result && !result.ok
                   ? 'workspace.branch-workspace.retry'
                   : 'workspace.branch-workspace.git-action.batch-commit',
+              )}
+            </Button>
+          ) : null}
+          {plan?.kind === 'batch-discard' ? (
+            <Button
+              type="button"
+              variant="destructive"
+              data-action="batch-discard"
+              disabled={pending || !plan.members.some((member) => member.paths.length > 0)}
+              onClick={() => void runAndClose(onBatchDiscard)}
+            >
+              <RotateCcw className="size-4" aria-hidden="true" />
+              {t(
+                result && !result.ok
+                  ? 'workspace.branch-workspace.retry'
+                  : 'workspace.branch-workspace.git-action.batch-discard',
               )}
             </Button>
           ) : null}
@@ -1128,6 +1150,45 @@ function BranchWorkspaceBatchErrorAiActions({
         onHandoff={(provider) => onHandoff({ provider, kind: result.kind, failures })}
         onHandoffComplete={onHandoffComplete}
       />
+    </div>
+  )
+}
+
+function BatchDiscardContent({
+  plan,
+  result,
+  activeOperation,
+}: {
+  plan: BranchWorkspaceBatchDiscardPlan
+  result: BranchWorkspaceGitActionResult | null
+  activeOperation: BranchWorkspaceActiveOperation | null
+}) {
+  const t = useT()
+  return (
+    <div className="overflow-hidden rounded-md border border-separator">
+      {plan.members.map((member, index) => {
+        const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+        const active = activeOperation?.repositoryName === member.repositoryName
+        return (
+          <div
+            key={member.repositoryName}
+            className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1.4fr)_7rem] items-center gap-2 border-b border-separator/60 px-3 py-2.5 text-xs last:border-b-0"
+          >
+            <span className="font-mono text-[10px] text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+            <span className="truncate font-medium">{member.repositoryName}</span>
+            <span className="truncate font-mono text-[10px] text-muted-foreground">{member.targetBranch}</span>
+            <span className="text-[10px] text-muted-foreground">
+              {active && activeOperation.step
+                ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                : memberResult
+                  ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                  : member.paths.length > 0
+                    ? t('workspace.branch-workspace.git-action.change-count', { count: member.changeCount })
+                    : t('workspace.branch-workspace.git-action.clean-skipped')}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }

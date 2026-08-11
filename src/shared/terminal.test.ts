@@ -34,7 +34,7 @@ describe('terminal protocol normalization', () => {
     })
   })
 
-  test('preserves phase, message, and tmux close capability on session summaries', () => {
+  test('preserves phase, message, input state, and tmux close capability on session summaries', () => {
     const summaries = normalizeTerminalSessionSummaryList([
       {
         sessionId: 'term_abcdefghijklmnop',
@@ -48,6 +48,7 @@ describe('terminal protocol normalization', () => {
         displayOrder: 0,
         phase: 'open',
         message: null,
+        hasUserInput: false,
         tmuxBacked: true,
         tmuxCloseSupported: false,
       },
@@ -57,6 +58,7 @@ describe('terminal protocol normalization', () => {
     expect(summaries?.[0]).toMatchObject({
       phase: 'open',
       message: null,
+      hasUserInput: false,
       tmuxBacked: true,
       tmuxCloseSupported: false,
     })
@@ -220,6 +222,31 @@ describe('terminal protocol normalization', () => {
       normalizeTerminalClientMessage({
         ...base,
         input: { ...base.input, closeTmuxSession: 'true' },
+      }),
+    ).toBeNull()
+  })
+
+  test('accepts only a boolean terminal write attribution', () => {
+    const request = {
+      type: 'request' as const,
+      requestId: 'request_write',
+      action: 'write' as const,
+      input: {
+        sessionId: 'term_abcdefghijklmnop',
+        data: '\x1b[1;1R',
+        attachmentId: 'attachment_a',
+        userIntent: false,
+      },
+    }
+
+    expect(normalizeTerminalClientMessage(request)).toMatchObject({
+      action: 'write',
+      input: { userIntent: false },
+    })
+    expect(
+      normalizeTerminalClientMessage({
+        ...request,
+        input: { ...request.input, userIntent: 'false' },
       }),
     ).toBeNull()
   })

@@ -147,6 +147,16 @@ export async function trackRepositoryRemoteBranch(
   return await postServerJson('/api/repo/track-remote-branch', { cwd, localBranch, remoteRef, sourceToken }, { signal })
 }
 
+export async function setRepositoryBranchUpstream(
+  cwd: string,
+  branch: string,
+  remoteRef: string | null,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  return await postServerJson('/api/repo/set-branch-upstream', { cwd, branch, remoteRef, sourceToken }, { signal })
+}
+
 export async function deleteRepositoryBranch(
   cwd: string,
   branch: string,

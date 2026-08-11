@@ -1,9 +1,15 @@
 import type { GitConflictWorktree, GitFailureReason } from '#/shared/git-types.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
-export type BranchWorkspaceGitActionKind = 'batch-commit' | 'batch-merge-in' | 'batch-merge-out' | 'pull' | 'push'
+export type BranchWorkspaceGitActionKind =
+  | 'batch-commit'
+  | 'batch-discard'
+  | 'batch-merge-in'
+  | 'batch-merge-out'
+  | 'pull'
+  | 'push'
 export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
-export type BranchWorkspaceGitActionStep = 'commit' | 'prepare' | 'pull' | 'merge' | 'push' | 'cleanup'
+export type BranchWorkspaceGitActionStep = 'commit' | 'discard' | 'prepare' | 'pull' | 'merge' | 'push' | 'cleanup'
 export type BranchWorkspaceGitActionMemberPhase = 'ready' | 'satisfied' | 'succeeded' | 'failed' | 'not-started'
 
 export interface BranchWorkspaceBatchCommitMemberPlan {
@@ -12,6 +18,16 @@ export interface BranchWorkspaceBatchCommitMemberPlan {
   targetBranch: string
   targetWorktreePath: string
   dirty: boolean
+  changeCount: number
+  fingerprint: string
+}
+
+export interface BranchWorkspaceBatchDiscardMemberPlan {
+  repositoryName: string
+  repoId: string
+  targetBranch: string
+  targetWorktreePath: string
+  paths: string[]
   changeCount: number
   fingerprint: string
 }
@@ -78,6 +94,11 @@ export interface BranchWorkspaceBatchCommitPlan extends BranchWorkspaceGitAction
   members: BranchWorkspaceBatchCommitMemberPlan[]
 }
 
+export interface BranchWorkspaceBatchDiscardPlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'batch-discard'
+  members: BranchWorkspaceBatchDiscardMemberPlan[]
+}
+
 export interface BranchWorkspaceBatchMergeInPlan extends BranchWorkspaceGitActionPlanBase {
   kind: 'batch-merge-in'
   members: BranchWorkspaceBatchMergeInMemberPlan[]
@@ -96,6 +117,7 @@ export interface BranchWorkspaceSyncPlan extends BranchWorkspaceGitActionPlanBas
 
 export type BranchWorkspaceGitActionPlan =
   | BranchWorkspaceBatchCommitPlan
+  | BranchWorkspaceBatchDiscardPlan
   | BranchWorkspaceBatchMergeInPlan
   | BranchWorkspaceBatchMergeOutPlan
   | BranchWorkspaceSyncPlan
@@ -133,6 +155,10 @@ export type BranchWorkspaceGitActionExecuteInput =
       kind: 'batch-commit'
       planToken: string
       messages: BranchWorkspaceCommitMessageInput[]
+    }
+  | {
+      kind: 'batch-discard'
+      planToken: string
     }
   | {
       kind: 'batch-merge-in'
@@ -182,6 +208,7 @@ export function normalizeBranchWorkspaceGitActionPlanRequest(
   if (
     !branchWorkspaceId ||
     (input?.kind !== 'batch-commit' &&
+      input?.kind !== 'batch-discard' &&
       input?.kind !== 'batch-merge-in' &&
       input?.kind !== 'batch-merge-out' &&
       input?.kind !== 'pull' &&
@@ -198,6 +225,10 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
   const input = asRecord(value)
   const planToken = normalizedText(input?.planToken)
   if (!planToken) return invalidArguments()
+
+  if (input?.kind === 'batch-discard') {
+    return { ok: true, input: { kind: 'batch-discard', planToken } }
+  }
 
   if (input?.kind === 'batch-merge-in') {
     if (input.mode !== 'merge' && input.mode !== 'pull-merge-push') return invalidArguments()

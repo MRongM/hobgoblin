@@ -103,6 +103,7 @@ export type RemoteCommandKind =
   | { type: 'gitDiscardChanges'; path: string; paths: string[] }
   | { type: 'gitBranchCreate'; path: string; branch: string; baseBranch: string }
   | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
+  | { type: 'gitBranchSetUpstream'; path: string; branch: string; remoteRef: string | null }
   | { type: 'gitFetchBranch'; path: string; remote: string; remoteBranch: string; branch: string }
   | { type: 'gitPush'; path: string; remote: string; branch: string; targetBranch: string; setUpstream: boolean }
   | { type: 'gitTags'; path: string }
@@ -547,6 +548,10 @@ function scriptForCommand(command: RemoteCommandKind): string {
         command.localBranch,
         command.remoteRef,
       )
+    case 'gitBranchSetUpstream':
+      return command.remoteRef === null
+        ? `git -C ${shellQuote(command.path)} branch --unset-upstream -- ${shellQuote(command.branch)}`
+        : `git -C ${shellQuote(command.path)} branch --set-upstream-to=${shellQuote(command.remoteRef)} -- ${shellQuote(command.branch)}`
     case 'gitFetchBranch':
       return `git -C ${shellQuote(command.path)} fetch -- ${shellQuote(command.remote)} ${shellQuote(
         `${command.remoteBranch}:${command.branch}`,

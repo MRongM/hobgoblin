@@ -33,6 +33,27 @@ const batchPlan: BranchWorkspaceGitActionPlan = {
   })),
 }
 
+function discardPlan(dirty = true): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-discard' }> {
+  return {
+    kind: 'batch-discard',
+    token: 'sha256:discard',
+    rootId: '/workspace',
+    branchWorkspaceId: 'ws-1',
+    members: ['api', 'web'].map((repositoryName, index) => {
+      const paths = dirty && index === 0 ? ['src/api.ts', 'scratch/new.txt'] : []
+      return {
+        repositoryName,
+        repoId: `/workspace/${repositoryName}`,
+        targetBranch: 'feature/a',
+        targetWorktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
+        paths,
+        changeCount: paths.length,
+        fingerprint: `sha256:${repositoryName}`,
+      }
+    }),
+  }
+}
+
 function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitActionPlan {
   return {
     kind,
@@ -210,6 +231,78 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector('[data-slot="dialog-portal"]')).toBeNull()
     expect(commit?.querySelector('.lucide-send-horizontal')).not.toBeNull()
     expect(commit?.querySelector('.lucide-git-commit-horizontal')).toBeNull()
+  })
+
+  test('reviews dirty and clean members inline before confirming batch discard', async () => {
+    const plan = discardPlan()
+    const onBatchDiscard = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'batch-discard' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    const onOpenChange = vi.fn()
+    render({ kind: 'batch-discard', plan, onBatchDiscard, onOpenChange })
+
+    const panel = document.querySelector('[data-testid="branch-workspace-git-action-panel"]')
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-discard"]')
+    expect(panel?.textContent).toContain('api')
+    expect(panel?.textContent).toContain('web')
+    expect(panel?.textContent).toContain('workspace.branch-workspace.git-action.change-count')
+    expect(panel?.textContent).toContain('workspace.branch-workspace.git-action.clean-skipped')
+    expect(action?.getAttribute('data-variant')).toBe('destructive')
+    expect(action?.querySelector('.lucide-rotate-ccw')).not.toBeNull()
+
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+
+    expect(onBatchDiscard).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('disables batch discard when every member worktree is clean', () => {
+    render({ kind: 'batch-discard', plan: discardPlan(false) })
+
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-discard"]')?.disabled).toBe(true)
+  })
+
+  test('keeps failed batch discard available for retry and shows the discard failure step', async () => {
+    const plan = discardPlan()
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-discard',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'workspace.branch-workspace.git-action.members-failed',
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'discard',
+          message: 'discard failed',
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        { repositoryName: 'web', phase: 'satisfied' },
+      ],
+    }
+    const onBatchDiscard = vi.fn(async () => result)
+    render({ kind: 'batch-discard', plan, result, error: result.message, onBatchDiscard })
+
+    expect(document.querySelector('[data-slot="branch-workspace-batch-error-summary"]')?.textContent).toContain(
+      'workspace.branch-workspace.git-action.failure-step.discard',
+    )
+    expect(document.querySelector('[data-action="batch-discard"]')?.textContent).toContain(
+      'workspace.branch-workspace.retry',
+    )
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="batch-discard"]')?.click()
+      await Promise.resolve()
+    })
+    expect(onBatchDiscard).toHaveBeenCalledTimes(1)
   })
 
   test('keeps both generate-all providers in one right-aligned action group', async () => {
@@ -851,6 +944,7 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         onOpenChange={() => {}}
         onBatchCommit={async () => null}
         onBatchCommitAndPush={async () => null}
+        onBatchDiscard={async () => null}
         onBatchMergeIn={async () => null}
         onBatchMergeOut={async () => null}
         onSync={async () => null}

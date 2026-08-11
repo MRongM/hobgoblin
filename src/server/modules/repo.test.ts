@@ -94,6 +94,8 @@ const mocks = vi.hoisted(() => ({
   generateCommitMessageFromPatch: vi.fn(),
   resetHardToCurrentHead: vi.fn(),
   resetRemoteHard: vi.fn(),
+  setBranchUpstream: vi.fn(),
+  setRemoteBranchUpstream: vi.fn(),
   assertBranchWorkspaceFileMutationAllowed: vi.fn(),
   testRemoteRepository: vi.fn(),
 }))
@@ -113,6 +115,7 @@ vi.mock('#/system/git/branches.ts', () => ({
   getUpstream: mocks.getUpstream,
   isAncestor: mocks.isAncestor,
   isGitRepo: mocks.isGitRepo,
+  setBranchUpstream: mocks.setBranchUpstream,
 }))
 
 vi.mock('#/server/modules/branch-workspace-protected-paths.ts', () => ({
@@ -268,6 +271,7 @@ vi.mock('#/system/ssh/git.ts', () => ({
   replaceRemoteFileTreeTextFile: mocks.replaceRemoteFileTreeTextFile,
   removeRemoteWorktree: mocks.removeRemoteWorktree,
   resetRemoteHard: mocks.resetRemoteHard,
+  setRemoteBranchUpstream: mocks.setRemoteBranchUpstream,
 }))
 
 vi.mock('#/server/common/network-ops.ts', () => ({
@@ -370,6 +374,8 @@ beforeEach(() => {
   mocks.removeRemoteWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.resetHardToCurrentHead.mockResolvedValue({ ok: true, message: 'reset local' })
   mocks.resetRemoteHard.mockResolvedValue({ ok: true, message: 'reset remote' })
+  mocks.setBranchUpstream.mockResolvedValue({ ok: true, message: 'updated local upstream' })
+  mocks.setRemoteBranchUpstream.mockResolvedValue({ ok: true, message: 'updated remote upstream' })
   mocks.discardChangesForPaths.mockResolvedValue({ ok: true, message: '' })
   mocks.discardRemoteChangesForPaths.mockResolvedValue({ ok: true, message: '' })
   mocks.getRemoteBrowserUrl.mockResolvedValue(null)
@@ -539,7 +545,6 @@ describe('getRepositorySnapshot', () => {
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 })
-
 
 describe('repository history read paths', () => {
   test('getRepositoryHistory delegates to local backend history reads', async () => {
@@ -1544,6 +1549,59 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('setRepositoryBranchUpstream updates a local branch and publishes source-token invalidation', async () => {
+    const module = await import('#/server/modules/repo-write-paths.ts')
+    const setRepositoryBranchUpstream = (module as Record<string, unknown>).setRepositoryBranchUpstream
+    expect(setRepositoryBranchUpstream).toBeTypeOf('function')
+
+    const result = await (
+      setRepositoryBranchUpstream as (
+        cwd: string,
+        branch: string,
+        remoteRef: string | null,
+        signal?: AbortSignal,
+        sourceToken?: string,
+      ) => Promise<unknown>
+    )('/tmp/repo', 'feature/local', 'origin/release', undefined, 'repo_branch_test')
+
+    expect(result).toEqual({ ok: true, message: 'updated local upstream' })
+    expect(mocks.setBranchUpstream).toHaveBeenCalledWith('/tmp/repo', 'feature/local', 'origin/release', undefined)
+    expect(mocks.setRemoteBranchUpstream).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'repo_branch_test',
+    })
+  })
+
+  test('setRepositoryBranchUpstream removes an SSH branch upstream through the remote backend', async () => {
+    const module = await import('#/server/modules/repo-write-paths.ts')
+    const setRepositoryBranchUpstream = (module as Record<string, unknown>).setRepositoryBranchUpstream
+    expect(setRepositoryBranchUpstream).toBeTypeOf('function')
+
+    const result = await (
+      setRepositoryBranchUpstream as (
+        cwd: string,
+        branch: string,
+        remoteRef: string | null,
+        signal?: AbortSignal,
+        sourceToken?: string,
+      ) => Promise<unknown>
+    )('ssh-config://prod/srv/repo', 'feature/local', null, undefined, 'repo_branch_test')
+
+    expect(result).toEqual({ ok: true, message: 'updated remote upstream' })
+    expect(mocks.setBranchUpstream).not.toHaveBeenCalled()
+    expect(mocks.setRemoteBranchUpstream).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { branch: 'feature/local', remoteRef: null, signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+      sourceToken: 'repo_branch_test',
+    })
+  })
+
   test('getRepositoryRemoteBranches returns local remote-tracking refs', async () => {
     mocks.getRemoteTrackingBranches.mockResolvedValueOnce(['origin/main', 'origin/feature/a'])
     const { getRepositoryRemoteBranches } = await import('#/server/modules/repo-write-paths.ts')
@@ -2064,6 +2122,98 @@ describe('repo mutation invalidation publishing', () => {
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 
+  test('deleteRepositoryBranch refuses to delete a protected upstream before deleting the local branch', async () => {
+    mocks.getCurrentBranch.mockResolvedValueOnce('feature/current')
+    mocks.getUpstream.mockResolvedValueOnce('origin/main')
+    const { deleteRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await deleteRepositoryBranch('/tmp/repo', 'feature/local', {
+      force: true,
+      alsoDeleteUpstream: true,
+    })
+
+    expect(result).toEqual({ ok: false, message: 'error.cannot-delete-protected-branch' })
+    expect(mocks.deleteBranch).not.toHaveBeenCalled()
+    expect(mocks.deleteUpstreamBranch).not.toHaveBeenCalled()
+  })
+
+  test('deleteRepositoryBranch keeps a shared upstream and the selected local branch', async () => {
+    mocks.getCurrentBranch.mockResolvedValueOnce('feature/current')
+    mocks.getUpstream.mockResolvedValueOnce('origin/release')
+    mocks.getBranches.mockResolvedValueOnce([
+      { ...repoSnapshot('feature/local').branches[0]!, tracking: 'origin/release' },
+      { ...repoSnapshot('feature/other').branches[0]!, tracking: 'origin/release' },
+    ])
+    const { deleteRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await deleteRepositoryBranch('/tmp/repo', 'feature/local', {
+      force: true,
+      alsoDeleteUpstream: true,
+    })
+
+    expect(result).toEqual({ ok: false, message: 'error.upstream-shared' })
+    expect(mocks.deleteBranch).not.toHaveBeenCalled()
+    expect(mocks.deleteUpstreamBranch).not.toHaveBeenCalled()
+  })
+
+  test('deleteRepositoryBranch deletes a unique upstream after deleting the local branch', async () => {
+    mocks.getCurrentBranch.mockResolvedValueOnce('feature/current')
+    mocks.getUpstream.mockResolvedValueOnce('origin/release')
+    mocks.getBranches.mockResolvedValueOnce([
+      { ...repoSnapshot('feature/local').branches[0]!, tracking: 'origin/release' },
+    ])
+    const { deleteRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await deleteRepositoryBranch('/tmp/repo', 'feature/local', {
+      force: true,
+      alsoDeleteUpstream: true,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'ok' })
+    expect(mocks.deleteBranch).toHaveBeenCalled()
+    expect(mocks.deleteUpstreamBranch).toHaveBeenCalledWith('/tmp/repo', 'origin', 'release', undefined)
+  })
+
+  test('deleteRepositoryBranch enforces shared-upstream safety for SSH repositories', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValueOnce({
+      branches: [
+        { ...repoSnapshot('feature/local').branches[0]!, tracking: 'origin/release' },
+        { ...repoSnapshot('feature/other').branches[0]!, tracking: 'origin/release' },
+      ],
+      current: 'main',
+    })
+    const { deleteRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await deleteRepositoryBranch('ssh-config://prod/srv/repo', 'feature/local', {
+      force: true,
+      alsoDeleteUpstream: true,
+    })
+
+    expect(result).toEqual({ ok: false, message: 'error.upstream-shared' })
+    expect(mocks.deleteRemoteBranch).not.toHaveBeenCalled()
+    expect(mocks.deleteSshRemoteServerBranch).not.toHaveBeenCalled()
+  })
+
+  test('deleteRepositoryBranch deletes a unique upstream for SSH repositories', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValueOnce({
+      branches: [{ ...repoSnapshot('feature/local').branches[0]!, tracking: 'origin/release' }],
+      current: 'main',
+    })
+    const { deleteRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await deleteRepositoryBranch('ssh-config://prod/srv/repo', 'feature/local', {
+      force: true,
+      alsoDeleteUpstream: true,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'deleted ssh remote' })
+    expect(mocks.deleteRemoteBranch).toHaveBeenCalled()
+    expect(mocks.deleteSshRemoteServerBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ remotePath: '/srv/repo' }),
+      { remote: 'origin', branch: 'release', signal: undefined },
+    )
+  })
+
   test('deleteRepositoryBranch uses current HEAD semantics for safe deletes', async () => {
     mocks.getCurrentBranch.mockResolvedValueOnce('release/1.0')
     mocks.getWorktrees.mockResolvedValueOnce([])
@@ -2193,6 +2343,38 @@ describe('repo mutation invalidation publishing', () => {
 
     expect(result).toEqual({ ok: true, message: 'ok' })
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledTimes(1)
+  })
+
+  test('removeRepositoryWorktree checks shared upstream safety before removing the worktree', async () => {
+    mocks.getWorktrees.mockResolvedValue([
+      {
+        path: '/tmp/repo-worktree',
+        branch: 'feature/local',
+        isBare: false,
+        isPrimary: false,
+        isDirty: false,
+        changeCount: 0,
+      },
+    ])
+    mocks.getCurrentBranch.mockResolvedValueOnce('main')
+    mocks.getUpstream.mockResolvedValueOnce('origin/release')
+    mocks.getBranches.mockResolvedValueOnce([
+      { ...repoSnapshot('feature/local').branches[0]!, tracking: 'origin/release' },
+      { ...repoSnapshot('feature/other').branches[0]!, tracking: 'origin/release' },
+    ])
+    const { removeRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await removeRepositoryWorktree('/tmp/repo', {
+      branch: 'feature/local',
+      worktreePath: '/tmp/repo-worktree',
+      alsoDeleteBranch: true,
+      forceDeleteBranch: true,
+      alsoDeleteUpstream: true,
+    })
+
+    expect(result).toEqual({ ok: false, message: 'error.upstream-shared' })
+    expect(mocks.removeWorktree).not.toHaveBeenCalled()
+    expect(mocks.deleteBranch).not.toHaveBeenCalled()
   })
 
   test('removeRepositoryWorktree refuses before removing when branch deletion would fail', async () => {
@@ -2436,6 +2618,23 @@ describe('repo mutation invalidation publishing', () => {
       repoId: '/tmp/repo',
       query: 'repo-snapshot',
     })
+  })
+
+  test('discardRepositoryChanges can defer invalidation for a coordinated batch', async () => {
+    const { discardRepositoryChanges } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await discardRepositoryChanges(
+      '/tmp/repo',
+      '/tmp/repo-worktree',
+      ['src/app.ts'],
+      undefined,
+      undefined,
+      { publishInvalidation: false },
+    )
+
+    expect(result).toEqual({ ok: true, message: '' })
+    expect(mocks.discardChangesForPaths).toHaveBeenCalledWith('/tmp/repo-worktree', ['src/app.ts'], undefined)
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 
   test.each([[[]], [['']], [['/absolute/path']], [['../outside']], [['src/../outside']]])(

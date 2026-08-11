@@ -153,43 +153,66 @@ export function TerminalTabs({
     [sessions, onSelect, onScrollToBottom, onFocusTerminal, worktreeTerminalKey, panelActive],
   )
 
-  const handleClose = useCallback((event: React.MouseEvent, key: string) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setCloseTmuxSession(false)
-    setPendingCloseKey(key)
-  }, [])
+  const closeSingleSession = useCallback(
+    (key: string, options?: TerminalCloseOptions) => {
+      const isActive = sessions.find((s) => s.key === key)?.selected ?? false
+      const idx = sessions.findIndex((s) => s.key === key)
+      const nextKey = sessions[idx + 1]?.key ?? sessions[idx - 1]?.key ?? null
+
+      const finish = () => {
+        setPendingCloseKey(null)
+        setCloseTmuxSession(false)
+        if (isActive && nextKey) focusRegistry.focus(nextKey)
+      }
+      const result = options?.closeTmuxSession === true ? onClose(key, options) : onClose(key)
+      if (!result) {
+        finish()
+        return
+      }
+      return result.then(
+        (closeResult) => {
+          if (!closeResult.ok) {
+            toast.error(t('terminal.close-tmux-session-failed'), { description: t(closeResult.message) })
+            return
+          }
+          finish()
+        },
+        () => {
+          toast.error(t('terminal.close-tmux-session-failed'), { description: t('error.tmux-command-failed') })
+        },
+      )
+    },
+    [focusRegistry, onClose, sessions, t],
+  )
+
+  const requestSingleClose = useCallback(
+    (key: string) => {
+      const session = sessions.find((candidate) => candidate.key === key)
+      if (!session) return
+      if (session.hasUserInput === false) {
+        void closeSingleSession(key)
+        return
+      }
+      setCloseTmuxSession(false)
+      setPendingCloseKey(key)
+    },
+    [closeSingleSession, sessions],
+  )
+
+  const handleClose = useCallback(
+    (event: React.MouseEvent, key: string) => {
+      event.preventDefault()
+      event.stopPropagation()
+      requestSingleClose(key)
+    },
+    [requestSingleClose],
+  )
 
   const confirmClose = useCallback(() => {
     const key = pendingCloseKey
     if (!key) return
-    const isActive = sessions.find((s) => s.key === key)?.selected ?? false
-    const idx = sessions.findIndex((s) => s.key === key)
-    const nextKey = sessions[idx + 1]?.key ?? sessions[idx - 1]?.key ?? null
-
-    const finish = () => {
-      setPendingCloseKey(null)
-      setCloseTmuxSession(false)
-      if (isActive && nextKey) focusRegistry.focus(nextKey)
-    }
-    const result = closeTmuxSession ? onClose(key, { closeTmuxSession: true }) : onClose(key)
-    if (!result) {
-      finish()
-      return
-    }
-    return result.then(
-      (closeResult) => {
-        if (!closeResult.ok) {
-          toast.error(t('terminal.close-tmux-session-failed'), { description: t(closeResult.message) })
-          return
-        }
-        finish()
-      },
-      () => {
-        toast.error(t('terminal.close-tmux-session-failed'), { description: t('error.tmux-command-failed') })
-      },
-    )
-  }, [closeTmuxSession, focusRegistry, onClose, pendingCloseKey, sessions, t])
+    return closeSingleSession(key, closeTmuxSession ? { closeTmuxSession: true } : undefined)
+  }, [closeSingleSession, closeTmuxSession, pendingCloseKey])
 
   const confirmBulkClose = useCallback(() => {
     setPendingBulkClose(null)
@@ -198,14 +221,16 @@ export function TerminalTabs({
     }
   }, [onClose, pendingBulkCloseKeys])
 
-  const requestContextClose = useCallback((scope: TerminalCloseScope, targetKey: string) => {
-    if (scope === 'current') {
-      setCloseTmuxSession(false)
-      setPendingCloseKey(targetKey)
-      return
-    }
-    setPendingBulkClose(scope === 'others' ? { kind: 'others', targetKey } : { kind: 'all' })
-  }, [])
+  const requestContextClose = useCallback(
+    (scope: TerminalCloseScope, targetKey: string) => {
+      if (scope === 'current') {
+        requestSingleClose(targetKey)
+        return
+      }
+      setPendingBulkClose(scope === 'others' ? { kind: 'others', targetKey } : { kind: 'all' })
+    },
+    [requestSingleClose],
+  )
 
   const handleTabKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => {
@@ -432,9 +457,7 @@ export function TerminalTabs({
           <div className="flex flex-col gap-3">
             <p>{t('terminal.close-confirm-body', { name: pendingCloseSession?.title ?? '' })}</p>
             {pendingCloseSession?.tmuxBacked === true && pendingCloseSession.tmuxCloseSupported === false && (
-              <p className="text-xs text-muted-foreground">
-                {t('terminal.close-tmux-session-exit-required')}
-              </p>
+              <p className="text-xs text-muted-foreground">{t('terminal.close-tmux-session-exit-required')}</p>
             )}
             {pendingCloseSession?.tmuxBacked === true && pendingCloseSession.tmuxCloseSupported !== false && (
               <ConfirmCheckbox checked={closeTmuxSession} onCheckedChange={setCloseTmuxSession} destructive>

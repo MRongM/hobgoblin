@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
 const repoClientMocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   getRepositoryFileTree: vi.fn(),
+  getRepositoryRemoteBranches: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   commitRepositoryChanges: vi.fn(),
 }))
@@ -70,6 +71,7 @@ vi.mock('#/web/repo-client.ts', async () => {
     ...actual,
     getCommitMessageProviders: repoClientMocks.getCommitMessageProviders,
     getRepositoryFileTree: repoClientMocks.getRepositoryFileTree,
+    getRepositoryRemoteBranches: repoClientMocks.getRepositoryRemoteBranches,
     generateRepositoryCommitMessage: repoClientMocks.generateRepositoryCommitMessage,
     commitRepositoryChanges: repoClientMocks.commitRepositoryChanges,
   }
@@ -118,6 +120,7 @@ describe('useBranchActionItems', () => {
         checkout: vi.fn(),
         pull: vi.fn(),
         push: vi.fn(),
+        setUpstream: vi.fn(),
         openExternalTerminal,
         openEditor: vi.fn(),
         openRemote: vi.fn(),
@@ -134,6 +137,7 @@ describe('useBranchActionItems', () => {
       dirPath: '/tmp/repo',
       entries: [],
     })
+    repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue([])
     settingsQueryMocks.useSettingsSnapshotQuery.mockReturnValue({
       data: { repoSettings: [] },
       isLoading: false,
@@ -186,6 +190,46 @@ describe('useBranchActionItems', () => {
     expect(itemIds).toContain('externalTerminal')
     expect(itemIds).toContain('editor')
     expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(false)
+  })
+
+  test('shows upstream management only in a worktree branch menu', async () => {
+    repoClientMocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'origin/release'])
+    const worktreeBranch = createRepoBranch('feature/worktree', {
+      tracking: 'origin/main',
+      worktree: { path: '/tmp/repo-worktree' },
+    })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [worktreeBranch],
+      remote: { hasRemotes: true, remotes: ['origin'] },
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, worktreeBranch)
+    const upstream = groups.mainItems.find((item) => item.id === 'upstream')
+
+    expect(upstream).toMatchObject({
+      visible: true,
+      disabled: false,
+      label: 'action.branch-upstream-change',
+    })
+    act(() => upstream?.onSelect())
+    expect(document.body.textContent).toContain('action.branch-upstream-title')
+    expect(document.body.textContent).toContain('origin/main')
+  })
+
+  test('hides upstream management for a branch without a worktree', async () => {
+    const branch = createRepoBranch('feature/no-worktree')
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      remote: { hasRemotes: true, remotes: ['origin'] },
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+
+    expect(groups.mainItems.find((item) => item.id === 'upstream')?.visible).toBe(false)
   })
 
   test('adds cleanup beside the retained remove action only for prunable worktrees', async () => {
@@ -449,6 +493,7 @@ describe('useBranchActionItems', () => {
     expect(groups.mainItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'pull',
       'push',
+      'upstream',
       'createWorktree',
       'sync',
       'createBranch',

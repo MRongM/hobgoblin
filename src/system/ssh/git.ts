@@ -881,6 +881,27 @@ export async function createRemoteTrackingBranch(
   return remoteExecResult(result)
 }
 
+export async function setRemoteBranchUpstream(
+  target: RemoteRepoTarget,
+  input: { branch: string; remoteRef: string | null; signal?: AbortSignal; run?: RemoteGitRunner },
+): Promise<ExecResult> {
+  if (!isSafeBranchName(input.branch) || (input.remoteRef !== null && !isRemoteTrackingRef(input.remoteRef))) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run(
+    {
+      type: 'gitBranchSetUpstream',
+      path: target.remotePath,
+      branch: input.branch,
+      remoteRef: input.remoteRef,
+    },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
 export async function getRemoteTrackingBranches(
   target: RemoteRepoTarget,
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},

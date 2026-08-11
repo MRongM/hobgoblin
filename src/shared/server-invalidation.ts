@@ -124,6 +124,7 @@ function isBranchWorkspaceActiveOperation(value: unknown): value is BranchWorksp
 function isBranchWorkspaceGitActionKind(value: unknown): boolean {
   return (
     value === 'batch-commit' ||
+    value === 'batch-discard' ||
     value === 'batch-merge-in' ||
     value === 'batch-merge-out' ||
     value === 'pull' ||
@@ -134,6 +135,7 @@ function isBranchWorkspaceGitActionKind(value: unknown): boolean {
 function isBranchWorkspaceGitActionStep(value: unknown): boolean {
   return (
     value === 'commit' ||
+    value === 'discard' ||
     value === 'prepare' ||
     value === 'pull' ||
     value === 'merge' ||

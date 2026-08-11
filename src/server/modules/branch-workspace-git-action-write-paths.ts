@@ -8,6 +8,7 @@ import { publishBranchWorkspaceOperationUpdate } from '#/server/modules/invalida
 import {
   commitRepositoryChanges,
   createRepositoryWorktree,
+  discardRepositoryChanges,
   mergeRepositoryBranch,
   publishRepositorySnapshotInvalidation,
   pullRepositoryBranch,
@@ -82,6 +83,7 @@ export interface BranchWorkspaceGitActionWriteDependencies {
   buildPlan?: typeof buildBranchWorkspaceGitActionPlan
   validatePlan?: typeof validateBranchWorkspaceGitActionPlan
   commit?: typeof commitRepositoryChanges
+  discard?: typeof discardRepositoryChanges
   pull?: typeof pullRepositoryBranch
   merge?: typeof mergeRepositoryBranch
   push?: typeof pushRepositoryBranch
@@ -113,6 +115,7 @@ export function createBranchWorkspaceGitActionWriteService(
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspaceGitActionPlan
   const validatePlan = dependencies.validatePlan ?? validateBranchWorkspaceGitActionPlan
   const commit = dependencies.commit ?? commitRepositoryChanges
+  const discard = dependencies.discard ?? discardRepositoryChanges
   const pull = dependencies.pull ?? pullRepositoryBranch
   const merge = dependencies.merge ?? mergeRepositoryBranch
   const push = dependencies.push ?? pushRepositoryBranch
@@ -236,6 +239,9 @@ export function createBranchWorkspaceGitActionWriteService(
         publishActiveOperation(executionContext)
         if (input.kind === 'batch-commit') {
           return await executeBatchCommit(state, input, controller.signal, commit, executionContext)
+        }
+        if (input.kind === 'batch-discard') {
+          return await executeBatchDiscard(state, controller.signal, discard, executionContext)
         }
         if (input.kind === 'batch-merge-in') {
           const execution = state.mergeExecution
@@ -434,6 +440,38 @@ async function executeBatchCommit(
     if (!result.ok) {
       if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
       recordActionFailure(failures, member.repositoryName, 'commit', result, member.targetWorktreePath)
+      continue
+    }
+    state.completed.add(member.repositoryName)
+    updateActive(context.active.get(context.rootId), index + 1, state.completed.size)
+    publishActiveOperation(context)
+  }
+  return executionResult(state.plan, state.completed, failures)
+}
+
+async function executeBatchDiscard(
+  state: PendingAction,
+  signal: AbortSignal,
+  discard: typeof discardRepositoryChanges,
+  context: ActionExecutionContext,
+): Promise<BranchWorkspaceGitActionResult> {
+  if (state.plan.kind !== 'batch-discard') {
+    return failureResult(state.plan, state.completed, 'error.invalid-arguments')
+  }
+  const failures: BranchWorkspaceGitActionMemberFailures = new Map()
+  for (let index = 0; index < state.plan.members.length; index += 1) {
+    const member = state.plan.members[index]!
+    if (member.paths.length === 0 || state.completed.has(member.repositoryName)) continue
+    if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+    updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'discard')
+    publishActiveOperation(context)
+    context.touchedRepoIds.add(member.repoId)
+    const result = await attemptMemberOperation(() =>
+      discard(member.repoId, member.targetWorktreePath, member.paths, signal, undefined, DEFER_REPOSITORY_INVALIDATION),
+    )
+    if (!result.ok) {
+      if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+      recordActionFailure(failures, member.repositoryName, 'discard', result, member.targetWorktreePath)
       continue
     }
     state.completed.add(member.repositoryName)
@@ -1091,6 +1129,11 @@ function safeMessage(error: unknown): string {
 }
 
 function isInitiallySatisfied(plan: BranchWorkspaceGitActionPlan, repositoryName: string): boolean {
-  if (plan.kind !== 'batch-commit') return false
-  return plan.members.some((member) => member.repositoryName === repositoryName && !member.dirty)
+  if (plan.kind === 'batch-commit') {
+    return plan.members.some((member) => member.repositoryName === repositoryName && !member.dirty)
+  }
+  if (plan.kind === 'batch-discard') {
+    return plan.members.some((member) => member.repositoryName === repositoryName && member.paths.length === 0)
+  }
+  return false
 }

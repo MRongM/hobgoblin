@@ -30,6 +30,7 @@ function actionGroups(): BranchActionItemGroups {
       action('checkout', { visible: false }),
       action('pull', { disabled: true }),
       action('push'),
+      action('upstream'),
       action('createWorktree'),
       action('sync'),
       action('createBranch'),
@@ -69,6 +70,7 @@ describe('projectWorktreeListItemActions', () => {
       [
         'pull',
         'push',
+        'upstream',
         'createWorktree',
         'sync',
         'createBranch',
@@ -118,6 +120,7 @@ describe('projectWorktreeListItemActions', () => {
         'checkout',
         'pull',
         'push',
+        'upstream',
         'createWorktree',
         'sync',
         'createBranch',
@@ -140,7 +143,18 @@ describe('projectWorktreeListItemActions', () => {
 
     expect(ids(projection.menuGroups)).toEqual([
       ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
-      ['pull', 'push', 'createWorktree', 'sync', 'createBranch', 'pullRemoteBranch', 'merge', 'commit', 'copyPatch'],
+      [
+        'pull',
+        'push',
+        'upstream',
+        'createWorktree',
+        'sync',
+        'createBranch',
+        'pullRemoteBranch',
+        'merge',
+        'commit',
+        'copyPatch',
+      ],
       ['createTag'],
       ['closeAllTerminals', 'resetHard'],
     ])

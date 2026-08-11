@@ -7,6 +7,7 @@ export interface TerminalAuthorityBridge {
 
 export async function writeWithTerminalAuthority(input: {
   data: string
+  userIntent?: boolean
   getSessionId: () => string | null
   getAttachment: () => TerminalAttachmentSnapshot | null | undefined
   bridge: TerminalAuthorityBridge
@@ -17,5 +18,9 @@ export async function writeWithTerminalAuthority(input: {
   const attachment = input.getAttachment()
   if (attachment?.role !== 'controller') return false
 
-  return await input.bridge.write({ sessionId, data: input.data })
+  return await input.bridge.write({
+    sessionId,
+    data: input.data,
+    ...(input.userIntent === false ? { userIntent: false } : {}),
+  })
 }

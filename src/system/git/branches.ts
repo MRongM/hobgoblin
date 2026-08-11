@@ -192,6 +192,20 @@ export async function createTrackingBranch(
   return created
 }
 
+export async function setBranchUpstream(
+  cwd: string,
+  branch: string,
+  remoteRef: string | null,
+  signal?: AbortSignal,
+): Promise<ExecResult> {
+  if (!isSafeBranchName(branch) || (remoteRef !== null && !isRemoteTrackingRef(remoteRef))) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return remoteRef === null
+    ? gitResultWithOptions(cwd, { signal }, 'branch', '--unset-upstream', '--', branch)
+    : gitResultWithOptions(cwd, { signal }, 'branch', `--set-upstream-to=${remoteRef}`, '--', branch)
+}
+
 export async function deleteBranch(
   cwd: string,
   name: string,
