@@ -24,7 +24,12 @@ import {
   prioritizeDefaultBranch,
 } from '#/system/git/branches.ts'
 import { resolvePrunableWorktree } from '#/shared/worktree-guards.ts'
-import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
+import {
+  isProtectedRemoteBranchRef,
+  parseRemoteBranchInput,
+  parseRemoteTrackingBranchInfo,
+  type RemoteTrackingBranchInfo,
+} from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput, remoteTagRefsFromLsRemote, remoteTagSortKey } from '#/shared/remote-tags.ts'
 import {
   getBrowserRemoteUrlForRemotes,
@@ -750,6 +755,33 @@ export async function pushRemoteBranch(
   return remoteExecResult(result)
 }
 
+export async function pushRemoteWorktreeHeadToRemoteBranch(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  remote: string,
+  branch: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  if (!isSafeRemoteName(remote) || !isSafeBranchName(branch)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (!isValidRemotePath(worktreePath)) return { ok: false, message: 'error.invalid-path' }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
+  if ('ok' in known) return known
+  const result = await run(
+    {
+      type: 'gitPushWorktreeHead',
+      path: known.path,
+      remote,
+      targetBranch: branch,
+    },
+    target,
+    { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
 export async function commitRemoteChanges(
   target: RemoteRepoTarget,
   worktreePath: string,
@@ -909,6 +941,17 @@ export async function getRemoteTrackingBranches(
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const result = await run({ type: 'gitRemoteBranches', path: target.remotePath }, target, { signal: options.signal })
   return result.ok ? parseRemoteTrackingRefs(result.stdout) : []
+}
+
+export async function getRemoteTrackingBranchInfo(
+  target: RemoteRepoTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<RemoteTrackingBranchInfo[]> {
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitRemoteBranchInfo', path: target.remotePath }, target, {
+    signal: options.signal,
+  })
+  return result.ok ? parseRemoteTrackingBranchInfo(result.stdout) : []
 }
 
 export async function getLocalTags(

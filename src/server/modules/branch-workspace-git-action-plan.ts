@@ -7,7 +7,12 @@ import {
   repositoryPlanFingerprint,
 } from '#/server/modules/repository-status-plan.ts'
 import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
-import { getRepositoryPatch, getRepositorySnapshot, getRepositoryStatus } from '#/server/modules/repo-read-paths.ts'
+import {
+  getRepositoryPatch,
+  getRepositoryRemoteBranchInfo,
+  getRepositorySnapshot,
+  getRepositoryStatus,
+} from '#/server/modules/repo-read-paths.ts'
 import {
   normalizeBranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceBatchCommitMemberPlan,
@@ -23,6 +28,7 @@ import {
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
 import type { ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 export interface BranchWorkspaceGitActionPlanDependencies {
@@ -30,6 +36,7 @@ export interface BranchWorkspaceGitActionPlanDependencies {
   getSnapshot?: typeof getRepositorySnapshot
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
   getPatch?: (repoId: string, worktreePath: string, signal?: AbortSignal) => Promise<ExecResult>
+  getRemoteBranchInfo?: (repoId: string, signal?: AbortSignal) => Promise<RemoteTrackingBranchInfo[]>
 }
 
 export async function buildBranchWorkspaceGitActionPlan(
@@ -226,6 +233,7 @@ async function buildBatchMergeInPlan(
       member.worktreePath,
       dependencies,
       signal,
+      true,
     )
     if (!facts.ok) return facts
     const targetEntries = normalizedStatusEntries(facts.status.entries)
@@ -234,9 +242,17 @@ async function buildBatchMergeInPlan(
       .filter((branch) => branch.name !== member.targetBranch)
       .map(
         (branch): BranchWorkspaceBatchMergeInSourcePlan => ({
-          branch: branch.name,
+          source: { kind: 'local', branch: branch.name },
           head: branch.worktree?.head ?? branch.lastCommitHash,
         }),
+      )
+      .concat(
+        [...facts.remoteBranches]
+          .sort((left, right) => left.remoteRef.localeCompare(right.remoteRef))
+          .map((branch) => ({
+            source: { kind: 'remote' as const, remoteRef: branch.remoteRef },
+            head: branch.head,
+          })),
       )
     const ready = targetEntries.length === 0 && sourceBranches.length > 0
     const message =
@@ -287,6 +303,7 @@ async function buildBatchMergeOutPlan(
       member.worktreePath,
       dependencies,
       signal,
+      true,
     )
     if (!facts.ok) return facts
     const targetEntries = normalizedStatusEntries(facts.status.entries)
@@ -310,7 +327,7 @@ async function buildBatchMergeOutPlan(
             ? 'workspace.branch-workspace.git-action.destination-worktree-unavailable'
             : undefined
         return {
-          branch: branch.name,
+          destination: { kind: 'local', branch: branch.name },
           head: branch.worktree?.head ?? destinationStatus?.head ?? branch.lastCommitHash,
           ready,
           ...(worktreePath ? { worktreePath } : {}),
@@ -319,6 +336,19 @@ async function buildBatchMergeOutPlan(
           ...(message ? { message } : {}),
         }
       })
+      .concat(
+        [...facts.remoteBranches]
+          .sort((left, right) => left.remoteRef.localeCompare(right.remoteRef))
+          .map(
+            (branch): BranchWorkspaceBatchMergeOutDestinationPlan => ({
+              destination: { kind: 'remote', remoteRef: branch.remoteRef },
+              head: branch.head,
+              ready: true,
+              requiresTemporaryWorktree: true,
+              pullMergePushReady: true,
+            }),
+          ),
+      )
     const ready = targetEntries.length === 0 && destinationBranches.some((branch) => branch.ready)
     const message =
       targetEntries.length > 0
@@ -340,7 +370,7 @@ async function buildBatchMergeOutPlan(
       fingerprint: repositoryPlanFingerprint({
         targetHead: facts.head,
         targetStatus: targetEntries,
-        destinationBranches: destinationBranches.map((branch) => branch.branch),
+        destinationBranches,
       }),
     })
   }
@@ -418,6 +448,7 @@ async function readMemberFacts(
   targetWorktreePath: string,
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
+  includeRemoteBranches = false,
 ): Promise<
   | {
       ok: true
@@ -426,15 +457,26 @@ async function readMemberFacts(
       statuses: WorktreeStatus[]
       status: WorktreeStatus
       head: string
+      remoteBranches: RemoteTrackingBranchInfo[]
     }
   | { ok: false; message: string; repositoryName: string }
 > {
   const repoId = workspaceRepositoryId(rootId, repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable', repositoryName }
-  const [snapshot, statuses] = await Promise.all([
+  const [snapshot, statuses, remoteBranchesResult] = await Promise.all([
     (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, { includeWorktreeStatus: false }),
     (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal),
+    includeRemoteBranches
+      ? readRemoteBranches(repoId, dependencies.getRemoteBranchInfo ?? getRepositoryRemoteBranchInfo, signal)
+      : Promise.resolve({ ok: true as const, branches: [] }),
   ])
+  if (!remoteBranchesResult.ok) {
+    return {
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.remote-branches-unavailable',
+      repositoryName,
+    }
+  }
   if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable', repositoryName }
   const branch = snapshot.branches.find((candidate) => candidate.name === targetBranch)
   if (
@@ -453,6 +495,20 @@ async function readMemberFacts(
     statuses,
     status,
     head: branch.worktree.head ?? status.head ?? branch.lastCommitHash,
+    remoteBranches: remoteBranchesResult.branches,
+  }
+}
+
+async function readRemoteBranches(
+  repoId: string,
+  reader: (repoId: string, signal?: AbortSignal) => Promise<RemoteTrackingBranchInfo[]>,
+  signal?: AbortSignal,
+): Promise<{ ok: true; branches: RemoteTrackingBranchInfo[] } | { ok: false }> {
+  try {
+    return { ok: true, branches: await reader(repoId, signal) }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    return { ok: false }
   }
 }
 

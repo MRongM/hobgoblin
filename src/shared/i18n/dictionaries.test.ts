@@ -505,6 +505,10 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.git-action.push-description',
       'workspace.branch-workspace.git-action.target-upstream-required',
       'workspace.branch-workspace.git-action.remote-required',
+      'workspace.branch-workspace.git-action.step.fetch',
+      'workspace.branch-workspace.git-action.failure-step.fetch',
+      'workspace.branch-workspace.git-action.remote-branches-unavailable',
+      'workspace.branch-workspace.git-action.remote-destination-requires-push',
     ] as const
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()

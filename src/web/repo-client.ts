@@ -25,6 +25,7 @@ import type {
   RepositoryBranchMergeOutResult,
 } from '#/shared/repository-branch-merge.ts'
 import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
+import type { RepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await postServerJson('/api/repo/probe', { cwd })
@@ -402,8 +403,12 @@ export async function commitRepositoryChanges(
   return postServerJson('/api/repo/commit', { repoId, worktreePath, message })
 }
 
-export async function mergeRepositoryBranch(repoId: string, worktreePath: string, branch: string): Promise<ExecResult> {
-  return postServerJson('/api/repo/merge', { repoId, worktreePath, branch })
+export async function mergeRepositoryBranch(
+  repoId: string,
+  worktreePath: string,
+  source: RepositoryMergeBranchSelection,
+): Promise<ExecResult> {
+  return postServerJson('/api/repo/merge', { repoId, worktreePath, source })
 }
 
 export async function getRepositoryBranchMergeOutPlan(

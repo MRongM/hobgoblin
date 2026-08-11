@@ -46,6 +46,8 @@ const mocks = vi.hoisted(() => ({
   getRemoteInfo: vi.fn(),
   getRemoteSnapshot: vi.fn(),
   getRemoteTags: vi.fn(),
+  getLocalRemoteTrackingBranchInfo: vi.fn(),
+  getSshRemoteTrackingBranchInfo: vi.fn(),
   getRemoteTrackingBranches: vi.fn(),
   getRemoteWorktrees: vi.fn(),
   getUpstream: vi.fn(),
@@ -70,7 +72,9 @@ const mocks = vi.hoisted(() => ({
   pullBranch: vi.fn(),
   pullRemoteBranch: vi.fn(),
   pushBranch: vi.fn(),
+  pushWorktreeHeadToRemoteBranch: vi.fn(),
   pushRemoteBranch: vi.fn(),
+  pushRemoteWorktreeHeadToRemoteBranch: vi.fn(),
   pruneWorktrees: vi.fn(),
   pruneRemoteWorktrees: vi.fn(),
   readLocalFileTreeBinaryFile: vi.fn(),
@@ -180,11 +184,13 @@ vi.mock('#/system/git/remote.ts', () => ({
   getRemoteInfo: mocks.getRemoteInfo,
   pullBranch: mocks.pullBranch,
   pushBranch: mocks.pushBranch,
+  pushWorktreeHeadToRemoteBranch: mocks.pushWorktreeHeadToRemoteBranch,
 }))
 
 vi.mock('#/system/git/remote-refs.ts', () => ({
   deleteRemoteServerTag: mocks.deleteLocalRemoteServerTag,
   getRemoteTags: mocks.getRemoteTags,
+  getRemoteTrackingBranchInfo: mocks.getLocalRemoteTrackingBranchInfo,
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
 }))
 
@@ -255,12 +261,14 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemoteHistory: mocks.getRemoteHistory,
   getRemotePatch: vi.fn(),
   getRemoteTags: mocks.getRemoteTags,
+  getRemoteTrackingBranchInfo: mocks.getSshRemoteTrackingBranchInfo,
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
   getRemoteWorktrees: mocks.getRemoteWorktrees,
   getRemoteSnapshot: mocks.getRemoteSnapshot,
   getRemoteStatus: vi.fn(),
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
+  pushRemoteWorktreeHeadToRemoteBranch: mocks.pushRemoteWorktreeHeadToRemoteBranch,
   pruneRemoteWorktrees: mocks.pruneRemoteWorktrees,
   readRemoteFileTreeBinaryFile: mocks.readRemoteFileTreeBinaryFile,
   readRemoteFileTreeTextFile: mocks.readRemoteFileTreeTextFile,
@@ -322,7 +330,12 @@ beforeEach(() => {
   mocks.pullBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pullRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.pushBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.pushWorktreeHeadToRemoteBranch.mockResolvedValue({ ok: true, message: 'pushed exact local remote branch' })
   mocks.pushRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.pushRemoteWorktreeHeadToRemoteBranch.mockResolvedValue({
+    ok: true,
+    message: 'pushed exact ssh remote branch',
+  })
   mocks.pruneWorktrees.mockResolvedValue({ ok: true, message: 'pruned local' })
   mocks.pruneRemoteWorktrees.mockResolvedValue({ ok: true, message: 'pruned remote' })
   mocks.readLocalFileTreeBinaryFile.mockResolvedValue({
@@ -342,6 +355,8 @@ beforeEach(() => {
   mocks.fetchRemoteRepository.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.fetchRemote.mockResolvedValue({ ok: true, message: 'fetched exact remote' })
   mocks.fetchRemoteRepositoryByName.mockResolvedValue({ ok: true, message: 'fetched exact remote' })
+  mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValue([])
+  mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([])
   mocks.createWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteLocalRemoteServerBranch.mockResolvedValue({ ok: true, message: 'deleted local remote' })
@@ -775,6 +790,51 @@ describe('git network settings for local repository network operations', () => {
     })
   })
 
+  test('fetchRepositoryRemote fetches the exact local remote with configured network options', async () => {
+    const { fetchRepositoryRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(fetchRepositoryRemote('/tmp/repo', 'upstream')).resolves.toEqual({
+      ok: true,
+      message: 'fetched exact remote',
+    })
+
+    expect(mocks.fetchRemote).toHaveBeenCalledWith('/tmp/repo', 'upstream', expect.any(AbortSignal), {
+      timeoutMs: 240_000,
+      proxyUrl: 'socks5://127.0.0.1:7890',
+    })
+  })
+
+  test('pushRepositoryWorktreeHeadToRemoteBranch pushes exact local remote ref with configured network options', async () => {
+    const { pushRepositoryWorktreeHeadToRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      pushRepositoryWorktreeHeadToRemoteBranch('/tmp/repo', '/tmp/hobgoblin-merge-out', 'origin/release/v2'),
+    ).resolves.toEqual({ ok: true, message: 'pushed exact local remote branch' })
+
+    expect(mocks.pushWorktreeHeadToRemoteBranch).toHaveBeenCalledWith(
+      '/tmp/hobgoblin-merge-out',
+      'origin',
+      'release/v2',
+      expect.any(AbortSignal),
+      { timeoutMs: 240_000, proxyUrl: 'socks5://127.0.0.1:7890' },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('pushRepositoryWorktreeHeadToRemoteBranch rejects malformed remote refs before dispatch', async () => {
+    const { pushRepositoryWorktreeHeadToRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      pushRepositoryWorktreeHeadToRemoteBranch('/tmp/repo', '/tmp/hobgoblin-merge-out', 'origin/HEAD'),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+    expect(mocks.pushWorktreeHeadToRemoteBranch).not.toHaveBeenCalled()
+    expect(mocks.pushRemoteWorktreeHeadToRemoteBranch).not.toHaveBeenCalled()
+  })
+
   test('deleteRepositoryRemoteBranch passes configured network options to local push delete', async () => {
     const { deleteRepositoryRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
 
@@ -886,6 +946,41 @@ describe('git network settings for SSH repository network operations', () => {
 
     expect(mocks.fetchRemoteRepository).toHaveBeenCalledWith(
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test('fetchRepositoryRemote fetches the exact SSH-side Git remote', async () => {
+    const { fetchRepositoryRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(fetchRepositoryRemote('ssh-config://prod/srv/repo', 'upstream')).resolves.toEqual({
+      ok: true,
+      message: 'fetched exact remote',
+    })
+
+    expect(mocks.fetchRemoteRepositoryByName).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      'upstream',
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test('pushRepositoryWorktreeHeadToRemoteBranch dispatches exact SSH-side push without local network options', async () => {
+    const { pushRepositoryWorktreeHeadToRemoteBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      pushRepositoryWorktreeHeadToRemoteBranch(
+        'ssh-config://prod/srv/repo',
+        '/srv/hobgoblin-merge-out',
+        'origin/release/v2',
+      ),
+    ).resolves.toEqual({ ok: true, message: 'pushed exact ssh remote branch' })
+
+    expect(mocks.pushRemoteWorktreeHeadToRemoteBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/hobgoblin-merge-out',
+      'origin',
+      'release/v2',
       { signal: expect.any(AbortSignal) },
     )
   })
@@ -1608,6 +1703,33 @@ describe('repo mutation invalidation publishing', () => {
 
     await expect(getRepositoryRemoteBranches('/tmp/repo')).resolves.toEqual(['origin/main', 'origin/feature/a'])
     expect(mocks.getRemoteTrackingBranches).toHaveBeenCalledWith('/tmp/repo', undefined)
+  })
+
+  test('getRepositoryRemoteBranchInfo returns local remote-tracking refs with object ids', async () => {
+    const mainHead = 'a'.repeat(40)
+    mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValueOnce([{ remoteRef: 'origin/main', head: mainHead }])
+    const { getRepositoryRemoteBranchInfo } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositoryRemoteBranchInfo('/tmp/repo')).resolves.toEqual([
+      { remoteRef: 'origin/main', head: mainHead },
+    ])
+    expect(mocks.getLocalRemoteTrackingBranchInfo).toHaveBeenCalledWith('/tmp/repo', undefined)
+  })
+
+  test('getRepositoryRemoteBranchInfo returns SSH remote-tracking refs with object ids', async () => {
+    const releaseHead = 'b'.repeat(40)
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValueOnce([
+      { remoteRef: 'upstream/release/v2', head: releaseHead },
+    ])
+    const { getRepositoryRemoteBranchInfo } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositoryRemoteBranchInfo('ssh-config://prod/srv/repo')).resolves.toEqual([
+      { remoteRef: 'upstream/release/v2', head: releaseHead },
+    ])
+    expect(mocks.getSshRemoteTrackingBranchInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { signal: undefined },
+    )
   })
 
   test('getRepositoryRemoteTags returns remote tag refs', async () => {
@@ -2663,6 +2785,75 @@ describe('repo mutation invalidation publishing', () => {
       repoId: '/tmp/repo',
       query: 'repo-snapshot',
     })
+  })
+
+  test('mergeRepositoryBranchSelection merges a local source by its full local ref', async () => {
+    const { mergeRepositoryBranchSelection } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await mergeRepositoryBranchSelection('/tmp/repo', '/tmp/repo-worktree', {
+      kind: 'local',
+      branch: 'feature/a',
+    })
+
+    expect(result).toEqual({ ok: true, message: 'merged local' })
+    expect(mocks.fetchRemote).not.toHaveBeenCalled()
+    expect(mocks.mergeBranch).toHaveBeenCalledWith('/tmp/repo-worktree', 'refs/heads/feature/a', undefined)
+  })
+
+  test('mergeRepositoryBranchSelection fetches and revalidates a remote source before merging its full ref', async () => {
+    const head = 'a'.repeat(40)
+    mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValueOnce([
+      { remoteRef: 'origin/feature/a', head },
+    ])
+    const { mergeRepositoryBranchSelection } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await mergeRepositoryBranchSelection('/tmp/repo', '/tmp/repo-worktree', {
+      kind: 'remote',
+      remoteRef: 'origin/feature/a',
+    })
+
+    expect(result).toEqual({ ok: true, message: 'merged local' })
+    expect(mocks.fetchRemote).toHaveBeenCalledWith('/tmp/repo', 'origin', expect.any(AbortSignal), {
+      timeoutMs: 240_000,
+      proxyUrl: 'socks5://127.0.0.1:7890',
+    })
+    expect(mocks.getLocalRemoteTrackingBranchInfo).toHaveBeenCalledWith('/tmp/repo', undefined)
+    expect(mocks.mergeBranch).toHaveBeenCalledWith('/tmp/repo-worktree', 'refs/remotes/origin/feature/a', undefined)
+    expect(mocks.fetchRemote.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.getLocalRemoteTrackingBranchInfo.mock.invocationCallOrder[0]!,
+    )
+    expect(mocks.getLocalRemoteTrackingBranchInfo.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.mergeBranch.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  test('mergeRepositoryBranchSelection stops when exact remote fetch fails', async () => {
+    mocks.fetchRemote.mockResolvedValueOnce({ ok: false, message: 'offline' })
+    const { mergeRepositoryBranchSelection } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      mergeRepositoryBranchSelection('/tmp/repo', '/tmp/repo-worktree', {
+        kind: 'remote',
+        remoteRef: 'origin/feature/a',
+      }),
+    ).resolves.toEqual({ ok: false, message: 'offline' })
+
+    expect(mocks.getLocalRemoteTrackingBranchInfo).not.toHaveBeenCalled()
+    expect(mocks.mergeBranch).not.toHaveBeenCalled()
+  })
+
+  test('mergeRepositoryBranchSelection stops when the fetched remote source no longer exists', async () => {
+    mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValueOnce([])
+    const { mergeRepositoryBranchSelection } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      mergeRepositoryBranchSelection('/tmp/repo', '/tmp/repo-worktree', {
+        kind: 'remote',
+        remoteRef: 'origin/feature/a',
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.remote-branch-not-found' })
+
+    expect(mocks.mergeBranch).not.toHaveBeenCalled()
   })
 
   test('mergeRepositoryBranch merges remote worktrees through the SSH backend and publishes invalidation', async () => {

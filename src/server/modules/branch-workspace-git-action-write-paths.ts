@@ -9,10 +9,12 @@ import {
   commitRepositoryChanges,
   createRepositoryWorktree,
   discardRepositoryChanges,
+  fetchRepositoryRemote,
   mergeRepositoryBranch,
   publishRepositorySnapshotInvalidation,
   pullRepositoryBranch,
   pushRepositoryBranch,
+  pushRepositoryWorktreeHeadToRemoteBranch,
   removeRepositoryWorktree,
 } from '#/server/modules/repo-write-paths.ts'
 import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
@@ -34,11 +36,17 @@ import {
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 import type { ExecResult, GitConflictWorktree } from '#/shared/git-types.ts'
+import { parseRemoteBranchRef } from '#/shared/remote-branches.ts'
+import {
+  repositoryMergeBranchFullRef,
+  repositoryMergeBranchSelectionKey,
+  type RepositoryMergeBranchSelection,
+} from '#/shared/repository-merge-branch.ts'
 
 interface PendingAction {
   plan: BranchWorkspaceGitActionPlan
   completed: Set<string>
-  mergeProgress: Map<string, 'pulled' | 'merged' | 'pushed'>
+  mergeProgress: Map<string, 'pulled' | 'fetched' | 'verified' | 'merged' | 'pushed'>
   mergeTemporaryWorktrees: Map<string, string>
   mergeExecution?:
     | {
@@ -89,6 +97,8 @@ export interface BranchWorkspaceGitActionWriteDependencies {
   push?: typeof pushRepositoryBranch
   createWorktree?: typeof createRepositoryWorktree
   removeWorktree?: typeof removeRepositoryWorktree
+  fetchRemote?: typeof fetchRepositoryRemote
+  pushWorktreeHead?: typeof pushRepositoryWorktreeHeadToRemoteBranch
   publishOperationUpdate?: typeof publishBranchWorkspaceOperationUpdate
   publishRepoInvalidation?: typeof publishRepositorySnapshotInvalidation
 }
@@ -121,6 +131,8 @@ export function createBranchWorkspaceGitActionWriteService(
   const push = dependencies.push ?? pushRepositoryBranch
   const createWorktree = dependencies.createWorktree ?? createRepositoryWorktree
   const removeWorktree = dependencies.removeWorktree ?? removeRepositoryWorktree
+  const fetchRemote = dependencies.fetchRemote ?? fetchRepositoryRemote
+  const pushWorktreeHead = dependencies.pushWorktreeHead ?? pushRepositoryWorktreeHeadToRemoteBranch
   const publishOperationUpdate = dependencies.publishOperationUpdate ?? publishBranchWorkspaceOperationUpdate
   const publishRepoInvalidation = dependencies.publishRepoInvalidation ?? publishRepositorySnapshotInvalidation
 
@@ -173,7 +185,7 @@ export function createBranchWorkspaceGitActionWriteService(
       if (input.kind === 'batch-merge-in' && mergeInMembers) {
         const sources = mergeInMembers.map((member) => ({
           repositoryName: member.repositoryName,
-          sourceBranch: member.source.branch,
+          source: member.source.source,
         }))
         if (
           state.mergeExecution &&
@@ -188,8 +200,14 @@ export function createBranchWorkspaceGitActionWriteService(
       if (input.kind === 'batch-merge-out' && mergeOutMembers) {
         const targets = mergeOutMembers.map((member) => ({
           repositoryName: member.repositoryName,
-          destinationBranch: member.destination.branch,
+          destination: member.destination.destination,
         }))
+        if (input.mode === 'merge' && targets.some((target) => target.destination.kind === 'remote')) {
+          return {
+            ok: false,
+            message: 'workspace.branch-workspace.git-action.remote-destination-requires-push',
+          }
+        }
         if (
           state.mergeExecution &&
           (state.mergeExecution.kind !== input.kind ||
@@ -261,7 +279,7 @@ export function createBranchWorkspaceGitActionWriteService(
             refreshedSelection.members,
             input.mode,
             controller.signal,
-            { pull, merge, push },
+            { pull, fetchRemote, merge, push },
             async (refreshSignal) =>
               await buildPlan(
                 state.plan.rootId,
@@ -290,7 +308,7 @@ export function createBranchWorkspaceGitActionWriteService(
             refreshedSelection.members,
             input.mode,
             controller.signal,
-            { pull, merge, push, createWorktree, removeWorktree },
+            { pull, fetchRemote, merge, push, pushWorktreeHead, createWorktree, removeWorktree },
             async (refreshSignal) =>
               await buildPlan(
                 state.plan.rootId,
@@ -335,7 +353,9 @@ function sameBatchMergeInSources(
     left.length === right.length &&
     left.every(
       (source, index) =>
-        source.repositoryName === right[index]?.repositoryName && source.sourceBranch === right[index]?.sourceBranch,
+        source.repositoryName === right[index]?.repositoryName &&
+        repositoryMergeBranchSelectionKey(source.source) ===
+          (right[index] ? repositoryMergeBranchSelectionKey(right[index].source) : undefined),
     )
   )
 }
@@ -349,7 +369,8 @@ function sameBatchMergeOutTargets(
     left.every(
       (target, index) =>
         target.repositoryName === right[index]?.repositoryName &&
-        target.destinationBranch === right[index]?.destinationBranch,
+        repositoryMergeBranchSelectionKey(target.destination) ===
+          (right[index] ? repositoryMergeBranchSelectionKey(right[index].destination) : undefined),
     )
   )
 }
@@ -359,15 +380,21 @@ function selectedBatchMergeInMembers(
   sources: BranchWorkspaceBatchMergeInSourceInput[],
 ): { ok: true; members: BranchWorkspaceBatchMergeInExecutionMember[] } | { ok: false; message: string } {
   if (plan.kind !== 'batch-merge-in') return { ok: false, message: 'error.invalid-arguments' }
-  const selected = new Map(sources.map((source) => [source.repositoryName, source.sourceBranch]))
+  const selected = new Map(sources.map((source) => [source.repositoryName, source.source]))
   const members: BranchWorkspaceBatchMergeInExecutionMember[] = []
   for (const member of plan.members) {
-    const sourceBranch = selected.get(member.repositoryName)
-    if (!sourceBranch) continue
-    if (!member.ready || sourceBranch === member.targetBranch) {
+    const sourceSelection = selected.get(member.repositoryName)
+    if (!sourceSelection) continue
+    if (
+      !member.ready ||
+      (sourceSelection.kind === 'local' && sourceSelection.branch === member.targetBranch)
+    ) {
       return { ok: false, message: member.message ?? 'error.invalid-arguments' }
     }
-    const source = member.sourceBranches.find((candidate) => candidate.branch === sourceBranch)
+    const sourceKey = repositoryMergeBranchSelectionKey(sourceSelection)
+    const source = member.sourceBranches.find(
+      (candidate) => repositoryMergeBranchSelectionKey(candidate.source) === sourceKey,
+    )
     if (!source) return { ok: false, message: 'error.invalid-arguments' }
     members.push({ ...member, source })
   }
@@ -381,15 +408,21 @@ function selectedBatchMergeOutMembers(
   targets: BranchWorkspaceBatchMergeOutTargetInput[],
 ): { ok: true; members: BranchWorkspaceBatchMergeOutExecutionMember[] } | { ok: false; message: string } {
   if (plan.kind !== 'batch-merge-out') return { ok: false, message: 'error.invalid-arguments' }
-  const selected = new Map(targets.map((target) => [target.repositoryName, target.destinationBranch]))
+  const selected = new Map(targets.map((target) => [target.repositoryName, target.destination]))
   const members: BranchWorkspaceBatchMergeOutExecutionMember[] = []
   for (const member of plan.members) {
-    const destinationBranch = selected.get(member.repositoryName)
-    if (!destinationBranch) continue
-    if (!member.ready || destinationBranch === member.targetBranch) {
+    const destinationSelection = selected.get(member.repositoryName)
+    if (!destinationSelection) continue
+    if (
+      !member.ready ||
+      (destinationSelection.kind === 'local' && destinationSelection.branch === member.targetBranch)
+    ) {
       return { ok: false, message: member.message ?? 'error.invalid-arguments' }
     }
-    const destination = member.destinationBranches.find((candidate) => candidate.branch === destinationBranch)
+    const destinationKey = repositoryMergeBranchSelectionKey(destinationSelection)
+    const destination = member.destinationBranches.find(
+      (candidate) => repositoryMergeBranchSelectionKey(candidate.destination) === destinationKey,
+    )
     if (!destination || !destination.ready) {
       return { ok: false, message: destination?.message ?? 'error.invalid-arguments' }
     }
@@ -488,6 +521,7 @@ async function executeBatchMergeIn(
   signal: AbortSignal,
   operations: {
     pull: typeof pullRepositoryBranch
+    fetchRemote: typeof fetchRepositoryRemote
     merge: typeof mergeRepositoryBranch
     push: typeof pushRepositoryBranch
   },
@@ -504,6 +538,8 @@ async function executeBatchMergeIn(
     if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
 
     let progress = state.mergeProgress.get(member.repositoryName)
+    const sourceSelection = member.source.source
+    const remoteSource = sourceSelection.kind === 'remote' ? parseRemoteBranchRef(sourceSelection.remoteRef) : null
     if (mode === 'pull-merge-push' && !progress) {
       updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'pull')
       publishActiveOperation(context)
@@ -526,7 +562,38 @@ async function executeBatchMergeIn(
       progress = 'pulled'
       state.mergeProgress.set(member.repositoryName, progress)
     }
-    if (progress === 'pulled') {
+    if (sourceSelection.kind === 'remote' && !remoteSource) {
+      recordActionFailure(
+        failures,
+        member.repositoryName,
+        'fetch',
+        { ok: false, message: 'error.invalid-arguments' },
+        member.targetWorktreePath,
+      )
+      continue
+    }
+    if (remoteSource && (!progress || progress === 'pulled')) {
+      updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'fetch')
+      publishActiveOperation(context)
+      context.touchedRepoIds.add(member.repoId)
+      const fetched = await attemptMemberOperation(() =>
+        operations.fetchRemote(
+          member.repoId,
+          remoteSource.remote,
+          signal,
+          undefined,
+          DEFER_REPOSITORY_INVALIDATION,
+        ),
+      )
+      if (!fetched.ok) {
+        if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+        recordActionFailure(failures, member.repositoryName, 'fetch', fetched, member.targetWorktreePath)
+        continue
+      }
+      progress = 'fetched'
+      state.mergeProgress.set(member.repositoryName, progress)
+    }
+    if (progress === 'pulled' || progress === 'fetched') {
       const refreshed = await attemptMemberPlanRefresh(() => refreshPlan(signal))
       if (!refreshed.ok) {
         if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
@@ -544,7 +611,8 @@ async function executeBatchMergeIn(
           ? refreshed.plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           : undefined
       const refreshedSource = refreshedMember?.sourceBranches.find(
-        (candidate) => candidate.branch === member.source.branch,
+        (candidate) =>
+          repositoryMergeBranchSelectionKey(candidate.source) === repositoryMergeBranchSelectionKey(sourceSelection),
       )
       if (
         !refreshedMember?.ready ||
@@ -560,6 +628,8 @@ async function executeBatchMergeIn(
         )
         continue
       }
+      progress = 'verified'
+      state.mergeProgress.set(member.repositoryName, progress)
     }
     if (progress !== 'merged' && progress !== 'pushed') {
       updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'merge')
@@ -569,7 +639,7 @@ async function executeBatchMergeIn(
         operations.merge(
           member.repoId,
           member.targetWorktreePath,
-          member.source.branch,
+          sourceSelection.kind === 'local' ? sourceSelection.branch : repositoryMergeBranchFullRef(sourceSelection),
           signal,
           undefined,
           DEFER_REPOSITORY_INVALIDATION,
@@ -621,8 +691,10 @@ async function executeBatchMergeOut(
   signal: AbortSignal,
   operations: {
     pull: typeof pullRepositoryBranch
+    fetchRemote: typeof fetchRepositoryRemote
     merge: typeof mergeRepositoryBranch
     push: typeof pushRepositoryBranch
+    pushWorktreeHead: typeof pushRepositoryWorktreeHeadToRemoteBranch
     createWorktree: typeof createRepositoryWorktree
     removeWorktree: typeof removeRepositoryWorktree
   },
@@ -638,18 +710,101 @@ async function executeBatchMergeOut(
     if (state.completed.has(member.repositoryName)) continue
     if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
 
+    let progress = state.mergeProgress.get(member.repositoryName)
+    const destinationSelection = member.destination.destination
+    const remoteDestination =
+      destinationSelection.kind === 'remote' ? parseRemoteBranchRef(destinationSelection.remoteRef) : null
+    if (destinationSelection.kind === 'remote' && !remoteDestination) {
+      recordActionFailure(
+        failures,
+        member.repositoryName,
+        'fetch',
+        { ok: false, message: 'error.invalid-arguments' },
+        member.targetWorktreePath,
+      )
+      continue
+    }
+    if (remoteDestination && !progress) {
+      updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'fetch')
+      publishActiveOperation(context)
+      context.touchedRepoIds.add(member.repoId)
+      const fetched = await attemptMemberOperation(() =>
+        operations.fetchRemote(
+          member.repoId,
+          remoteDestination.remote,
+          signal,
+          undefined,
+          DEFER_REPOSITORY_INVALIDATION,
+        ),
+      )
+      if (!fetched.ok) {
+        if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+        recordActionFailure(failures, member.repositoryName, 'fetch', fetched, member.targetWorktreePath)
+        continue
+      }
+      progress = 'fetched'
+      state.mergeProgress.set(member.repositoryName, progress)
+    }
+    if (remoteDestination && progress === 'fetched') {
+      const refreshed = await attemptMemberPlanRefresh(() => refreshPlan(signal))
+      if (!refreshed.ok) {
+        state.mergeProgress.delete(member.repositoryName)
+        if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+        recordActionFailure(
+          failures,
+          member.repositoryName,
+          'fetch',
+          { ok: false, message: refreshed.message },
+          member.targetWorktreePath,
+        )
+        continue
+      }
+      const refreshedMember =
+        refreshed.plan.kind === 'batch-merge-out'
+          ? refreshed.plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+          : undefined
+      const refreshedDestination = refreshedMember?.destinationBranches.find(
+        (candidate) =>
+          repositoryMergeBranchSelectionKey(candidate.destination) ===
+          repositoryMergeBranchSelectionKey(destinationSelection),
+      )
+      if (
+        !refreshedMember?.ready ||
+        refreshedMember.targetHead !== member.targetHead ||
+        !refreshedDestination?.ready ||
+        refreshedDestination.head !== member.destination.head
+      ) {
+        state.mergeProgress.delete(member.repositoryName)
+        recordActionFailure(
+          failures,
+          member.repositoryName,
+          'fetch',
+          { ok: false, message: 'workspace.branch-workspace.git-action.repository-changed' },
+          member.targetWorktreePath,
+        )
+        continue
+      }
+      progress = 'verified'
+      state.mergeProgress.set(member.repositoryName, progress)
+    }
+
     updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'prepare')
     publishActiveOperation(context)
     const prepared = await prepareBatchMergeDestination(state, member, signal, operations, context)
     if (!prepared.ok) {
-      if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
-      recordActionFailure(
-        failures,
-        member.repositoryName,
+      const failurePath = prepared.worktreePath ?? member.destination.worktreePath ?? member.targetWorktreePath
+      const failure = await batchMergeFailureAfterCleanup(
+        state,
+        member,
+        index,
         'prepare',
         prepared,
-        prepared.worktreePath ?? member.destination.worktreePath ?? member.targetWorktreePath,
+        failurePath,
+        operations.removeWorktree,
+        context,
       )
+      if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+      failures.set(member.repositoryName, failure)
       continue
     }
     const destinationWorktreePath = prepared.worktreePath
@@ -664,15 +819,14 @@ async function executeBatchMergeOut(
       continue
     }
 
-    let progress = state.mergeProgress.get(member.repositoryName)
-    if (mode === 'pull-merge-push' && !progress) {
+    if (destinationSelection.kind === 'local' && mode === 'pull-merge-push' && !progress) {
       updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'pull')
       publishActiveOperation(context)
       context.touchedRepoIds.add(member.repoId)
       const pulled = await attemptMemberOperation(() =>
         operations.pull(
           member.repoId,
-          member.destination.branch,
+          destinationSelection.branch,
           destinationWorktreePath,
           signal,
           undefined,
@@ -697,7 +851,7 @@ async function executeBatchMergeOut(
       progress = 'pulled'
       state.mergeProgress.set(member.repositoryName, progress)
     }
-    if (progress === 'pulled') {
+    if (destinationSelection.kind === 'local' && progress === 'pulled') {
       const refreshed = await attemptMemberPlanRefresh(() => refreshPlan(signal))
       if (!refreshed.ok) {
         const failure = await batchMergeFailureAfterCleanup(
@@ -719,7 +873,9 @@ async function executeBatchMergeOut(
           ? refreshed.plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           : undefined
       const refreshedDestination = refreshedMember?.destinationBranches.find(
-        (candidate) => candidate.branch === member.destination.branch,
+        (candidate) =>
+          repositoryMergeBranchSelectionKey(candidate.destination) ===
+          repositoryMergeBranchSelectionKey(destinationSelection),
       )
       if (
         !refreshedMember?.ready ||
@@ -741,6 +897,8 @@ async function executeBatchMergeOut(
         failures.set(member.repositoryName, failure)
         continue
       }
+      progress = 'verified'
+      state.mergeProgress.set(member.repositoryName, progress)
     }
     if (progress !== 'merged' && progress !== 'pushed') {
       updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'merge')
@@ -750,7 +908,9 @@ async function executeBatchMergeOut(
         operations.merge(
           member.repoId,
           destinationWorktreePath,
-          member.targetBranch,
+          destinationSelection.kind === 'remote'
+            ? repositoryMergeBranchFullRef({ kind: 'local', branch: member.targetBranch })
+            : member.targetBranch,
           signal,
           undefined,
           DEFER_REPOSITORY_INVALIDATION,
@@ -779,7 +939,22 @@ async function executeBatchMergeOut(
       publishActiveOperation(context)
       context.touchedRepoIds.add(member.repoId)
       const pushed = await attemptMemberOperation(() =>
-        operations.push(member.repoId, member.destination.branch, signal, undefined, DEFER_REPOSITORY_INVALIDATION),
+        destinationSelection.kind === 'remote'
+          ? operations.pushWorktreeHead(
+              member.repoId,
+              destinationWorktreePath,
+              destinationSelection.remoteRef,
+              signal,
+              undefined,
+              DEFER_REPOSITORY_INVALIDATION,
+            )
+          : operations.push(
+              member.repoId,
+              destinationSelection.branch,
+              signal,
+              undefined,
+              DEFER_REPOSITORY_INVALIDATION,
+            ),
       )
       if (!pushed.ok) {
         const failure = await batchMergeFailureAfterCleanup(
@@ -843,7 +1018,7 @@ async function prepareBatchMergeDestination(
   const worktreePath = branchWorkspaceBatchMergeTemporaryWorktreePath(
     member.repoId,
     state.plan.token,
-    member.destination.branch,
+    repositoryMergeBranchSelectionKey(member.destination.destination),
   )
   if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
   context.touchedRepoIds.add(member.repoId)
@@ -852,7 +1027,10 @@ async function prepareBatchMergeDestination(
       member.repoId,
       {
         worktreePath,
-        mode: { kind: 'existingBranch', branch: member.destination.branch },
+        mode:
+          member.destination.destination.kind === 'local'
+            ? { kind: 'existingBranch', branch: member.destination.destination.branch }
+            : { kind: 'detached', ref: repositoryMergeBranchFullRef(member.destination.destination) },
         syncBeforeCreate: false,
       },
       { kind: 'skip' },
@@ -861,8 +1039,10 @@ async function prepareBatchMergeDestination(
       DEFER_REPOSITORY_INVALIDATION,
     ),
   )
+  if (created.ok || created.repoChanged === true) {
+    state.mergeTemporaryWorktrees.set(member.repositoryName, worktreePath)
+  }
   if (!created.ok) return { ...created, worktreePath }
-  state.mergeTemporaryWorktrees.set(member.repositoryName, worktreePath)
   return { ...created, worktreePath }
 }
 
@@ -877,9 +1057,18 @@ async function batchMergeFailureAfterCleanup(
   context: ActionExecutionContext,
 ): Promise<BranchWorkspaceGitActionMemberResult> {
   const cleaned = await cleanupBatchMergeTemporaryWorktree(state, member, index, removeWorktree, context)
+  if (cleaned.ok && member.destination.requiresTemporaryWorktree) {
+    state.mergeProgress.delete(member.repositoryName)
+  }
   const conflictWorktree =
-    step === 'merge' && !member.destination.requiresTemporaryWorktree
-      ? retainedConflictWorktree(result, member.destination.branch, member.destination.worktreePath)
+    step === 'merge' &&
+    !member.destination.requiresTemporaryWorktree &&
+    member.destination.destination.kind === 'local'
+      ? retainedConflictWorktree(
+          result,
+          member.destination.destination.branch,
+          member.destination.worktreePath,
+        )
       : undefined
   return cleaned.ok
     ? memberFailure(member.repositoryName, step, result, worktreePath, conflictWorktree)
@@ -913,7 +1102,7 @@ async function removeBatchMergeTemporaryWorktree(
     removeWorktree(
       member.repoId,
       {
-        branch: member.destination.branch,
+        branch: batchMergeDestinationBranch(member.destination.destination),
         worktreePath,
         alsoDeleteBranch: false,
         forceRemoveWorktree: true,
@@ -923,6 +1112,11 @@ async function removeBatchMergeTemporaryWorktree(
       DEFER_REPOSITORY_INVALIDATION,
     ),
   )
+}
+
+function batchMergeDestinationBranch(selection: RepositoryMergeBranchSelection): string {
+  if (selection.kind === 'local') return selection.branch
+  return parseRemoteBranchRef(selection.remoteRef)?.branch ?? selection.remoteRef
 }
 
 async function executeSync(

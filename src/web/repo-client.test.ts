@@ -87,7 +87,7 @@ describe('repo-client', () => {
     const executeInput = {
       ...request,
       planToken: 'sha256:plan',
-      destinationBranch: 'main',
+      destination: { kind: 'local' as const, branch: 'main' },
       mode: 'merge' as const,
     }
 
@@ -106,6 +106,27 @@ describe('repo-client', () => {
         method: 'POST',
         body: JSON.stringify({ ...executeInput, sourceToken: 'client_123' }),
         signal,
+      }),
+    )
+  })
+
+  test('serializes discriminated merge-in source without collapsing remote identity', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'merged' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const source = { kind: 'remote' as const, remoteRef: 'origin/feature/source' }
+    const { mergeRepositoryBranch } = await import('#/web/repo-client.ts')
+
+    await mergeRepositoryBranch('/repo', '/repo-target', source)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/merge',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo-target', source }),
       }),
     )
   })

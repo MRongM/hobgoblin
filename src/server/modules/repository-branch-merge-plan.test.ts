@@ -4,6 +4,7 @@ import {
   projectRepositoryMergeDestinations,
 } from '#/server/modules/repository-branch-merge-plan.ts'
 import type { BranchSnapshotInfo, StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 const REPO_ID = '/workspace/repo'
@@ -41,6 +42,7 @@ function snapshot(branches: BranchSnapshotInfo[]): RepoSnapshot {
 function dependencies(options: {
   branches?: BranchSnapshotInfo[]
   statuses?: WorktreeStatus[]
+  remoteBranches?: RemoteTrackingBranchInfo[]
 } = {}) {
   return {
     getSnapshot: vi.fn(async () =>
@@ -52,6 +54,7 @@ function dependencies(options: {
       ),
     ),
     getStatus: vi.fn(async () => options.statuses ?? [status(SOURCE_PATH)]),
+    getRemoteBranchInfo: vi.fn(async () => options.remoteBranches ?? []),
   }
 }
 
@@ -68,6 +71,7 @@ describe('repository branch merge-out plan', () => {
       includeWorktreeStatus: false,
       includeRemote: false,
     })
+    expect(deps.getRemoteBranchInfo).toHaveBeenCalledWith(REPO_ID, undefined)
   })
 
   test.each([
@@ -124,20 +128,21 @@ describe('repository branch merge-out plan', () => {
         status('/workspace/clean'),
         status('/workspace/dirty', [{ x: 'M', y: ' ', path: 'src/a.ts' }]),
       ],
+      remoteBranches: [],
       isOwnedTemporaryWorktree: () => false,
     })
 
     expect(destinations).toEqual([
       expect.objectContaining({
-        branch: 'clean',
+        destination: { kind: 'local', branch: 'clean' },
         ready: true,
         worktreePath: '/workspace/clean',
         requiresTemporaryWorktree: false,
         pullMergePushReady: true,
       }),
-      expect.objectContaining({ branch: 'dirty', ready: false, blockReason: 'dirty-worktree' }),
-      expect.objectContaining({ branch: 'unavailable', ready: false, blockReason: 'unavailable-worktree' }),
-      expect.objectContaining({ branch: 'unchecked', ready: true, requiresTemporaryWorktree: true }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'dirty' }, ready: false, blockReason: 'dirty-worktree' }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'unavailable' }, ready: false, blockReason: 'unavailable-worktree' }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'unchecked' }, ready: true, requiresTemporaryWorktree: true }),
     ])
   })
 
@@ -151,12 +156,13 @@ describe('repository branch merge-out plan', () => {
         branch('release', { tracking: 'origin/release', trackingGone: true }),
       ],
       statuses: [status(SOURCE_PATH)],
+      remoteBranches: [],
       isOwnedTemporaryWorktree: () => false,
     })
 
-    expect(destinations.map(({ branch, pullMergePushReady }) => ({ branch, pullMergePushReady }))).toEqual([
-      { branch: 'main', pullMergePushReady: false },
-      { branch: 'release', pullMergePushReady: false },
+    expect(destinations.map(({ destination, pullMergePushReady }) => ({ destination, pullMergePushReady }))).toEqual([
+      { destination: { kind: 'local', branch: 'main' }, pullMergePushReady: false },
+      { destination: { kind: 'local', branch: 'release' }, pullMergePushReady: false },
     ])
   })
 
@@ -172,17 +178,43 @@ describe('repository branch merge-out plan', () => {
         branch('release', { worktreePath: locked, worktreeLocked: true }),
       ],
       statuses: [status(SOURCE_PATH)],
+      remoteBranches: [],
       isOwnedTemporaryWorktree: (_repoId, candidatePath) => candidatePath === unlocked || candidatePath === locked,
     })
 
     expect(destinations).toEqual([
-      expect.objectContaining({ branch: 'main', ready: true, requiresTemporaryWorktree: true }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'main' }, ready: true, requiresTemporaryWorktree: true }),
       expect.objectContaining({
-        branch: 'release',
+        destination: { kind: 'local', branch: 'release' },
         ready: false,
         requiresTemporaryWorktree: true,
         blockReason: 'unavailable-worktree',
       }),
+    ])
+  })
+
+  test('preserves same-named local and remote identities and marks remote destinations synchronized-only', () => {
+    const destinations = projectRepositoryMergeDestinations({
+      repoId: REPO_ID,
+      sourceBranch: 'feature/source',
+      branches: [branch('feature/source', { worktreePath: SOURCE_PATH }), branch('origin/main')],
+      statuses: [status(SOURCE_PATH)],
+      remoteBranches: [{ remoteRef: 'origin/main', head: 'a'.repeat(40) }],
+      isOwnedTemporaryWorktree: () => false,
+    })
+
+    expect(destinations).toEqual([
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'origin/main' },
+        head: 'origin/main-head',
+      }),
+      {
+        destination: { kind: 'remote', remoteRef: 'origin/main' },
+        head: 'a'.repeat(40),
+        ready: true,
+        requiresTemporaryWorktree: true,
+        pullMergePushReady: true,
+      },
     ])
   })
 
@@ -213,5 +245,18 @@ describe('repository branch merge-out plan', () => {
     expect(original.ok && changedIdentity.ok && original.plan.token).not.toBe(
       changedIdentity.ok && changedIdentity.plan.token,
     )
+  })
+
+  test('fingerprints remote destination heads so refreshed remote facts invalidate stale plans', async () => {
+    const build = async (head: string) =>
+      await buildRepositoryBranchMergeOutPlan(
+        { repoId: REPO_ID, sourceBranch: 'feature/source', sourceWorktreePath: SOURCE_PATH },
+        dependencies({ remoteBranches: [{ remoteRef: 'origin/main', head }] }),
+      )
+
+    const original = await build('a'.repeat(40))
+    const changed = await build('b'.repeat(40))
+
+    expect(original.ok && changed.ok && original.plan.token).not.toBe(changed.ok && changed.plan.token)
   })
 })

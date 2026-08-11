@@ -19,6 +19,7 @@ import {
   getRemoteCommitDetail,
   getRemoteHistory,
   getRemoteSnapshot,
+  getRemoteTrackingBranchInfo,
   getRemoteTags,
   inventoryRemoteFileTransfer,
   listRemoteFileTreeDirectory,
@@ -28,6 +29,7 @@ import {
   fetchRemoteRepository,
   fetchRemoteRepositoryByName,
   pushRemoteBranch,
+  pushRemoteWorktreeHeadToRemoteBranch,
   readRemoteFileBase64,
   readRemoteFileTreeBinaryFile,
   readRemoteFileTreeTextFile,
@@ -1178,6 +1180,51 @@ describe('remote git helpers', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
+  test('pushRemoteWorktreeHeadToRemoteBranch pushes a known worktree HEAD to the exact remote branch', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitWorktreeList':
+          return okRemoteResult('worktree /srv/repo-worktree\nHEAD f00ba4\ndetached\n')
+        case 'gitPushWorktreeHead':
+          return okRemoteResult('pushed')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await pushRemoteWorktreeHeadToRemoteBranch(TARGET, '/srv/repo-worktree', 'origin', 'release/v2', {
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'pushed' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'gitPushWorktreeHead',
+        path: '/srv/repo-worktree',
+        remote: 'origin',
+        targetBranch: 'release/v2',
+      },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test.each([
+    ['relative/repo', 'origin', 'release/v2', 'error.invalid-path'],
+    ['/srv/repo', 'bad remote', 'release/v2', 'error.invalid-arguments'],
+    ['/srv/repo', 'origin', 'HEAD', 'error.invalid-arguments'],
+  ])(
+    'pushRemoteWorktreeHeadToRemoteBranch rejects invalid path or target',
+    async (worktreePath, remote, branch, message) => {
+      const run = vi.fn()
+
+      await expect(
+        pushRemoteWorktreeHeadToRemoteBranch(TARGET, worktreePath, remote, branch, { run: run as any }),
+      ).resolves.toEqual({ ok: false, message })
+      expect(run).not.toHaveBeenCalled()
+    },
+  )
+
   test('mergeRemoteBranch marks failed merge as merge-conflict when remote status has unmerged entries', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       switch (command.type) {
@@ -1344,6 +1391,25 @@ describe('remote git helpers', () => {
       TARGET,
       { signal: undefined, timeoutMs: 180_000 },
     )
+  })
+
+  test('getRemoteTrackingBranchInfo returns filtered remote refs with object ids', async () => {
+    const mainHead = 'a'.repeat(40)
+    const releaseHead = 'b'.repeat(64)
+    const run = vi.fn(async (command: { type: string }) => {
+      expect(command).toEqual({ type: 'gitRemoteBranchInfo', path: '/srv/repo' })
+      return okRemoteResult(
+        [`upstream/release/v2\0${releaseHead}`, `origin/main\0${mainHead}`, `origin/HEAD\0${mainHead}`].join('\n'),
+      )
+    })
+
+    await expect(getRemoteTrackingBranchInfo(TARGET, { run: run as any })).resolves.toEqual([
+      { remoteRef: 'origin/main', head: mainHead },
+      { remoteRef: 'upstream/release/v2', head: releaseHead },
+    ])
+    expect(run).toHaveBeenCalledWith({ type: 'gitRemoteBranchInfo', path: '/srv/repo' }, TARGET, {
+      signal: undefined,
+    })
   })
 
   test('pushRemoteBranch falls back to origin and sets upstream when no upstream is configured', async () => {

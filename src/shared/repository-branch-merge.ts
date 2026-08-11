@@ -1,11 +1,15 @@
 import type { ExecResult, GitConflictWorktree } from '#/shared/git-types.ts'
+import {
+  normalizeRepositoryMergeBranchSelection,
+  type RepositoryMergeBranchSelection,
+} from '#/shared/repository-merge-branch.ts'
 
 export type RepositoryBranchMergeMode = 'merge' | 'pull-merge-push'
 
 export type RepositoryBranchMergeDestinationBlockReason = 'dirty-worktree' | 'unavailable-worktree'
 
 export interface RepositoryBranchMergeDestinationPlan {
-  branch: string
+  destination: RepositoryMergeBranchSelection
   head: string
   ready: boolean
   worktreePath?: string
@@ -37,7 +41,7 @@ export type RepositoryBranchMergeOutPlanResult =
 
 export interface RepositoryBranchMergeOutExecuteInput extends RepositoryBranchMergeOutPlanRequest {
   planToken: string
-  destinationBranch: string
+  destination: RepositoryMergeBranchSelection
   mode: RepositoryBranchMergeMode
 }
 
@@ -72,13 +76,18 @@ export function normalizeRepositoryBranchMergeOutExecuteInput(
   const request = normalizeRepositoryBranchMergeOutPlanRequest(value)
   const input = asRecord(value)
   const planToken = normalizedText(input?.planToken)
-  const destinationBranch = normalizedText(input?.destinationBranch)
+  const legacyDestinationBranch = normalizedText(input?.destinationBranch)
+  const destination =
+    normalizeRepositoryMergeBranchSelection(input?.destination) ??
+    (legacyDestinationBranch
+      ? normalizeRepositoryMergeBranchSelection({ kind: 'local', branch: legacyDestinationBranch })
+      : null)
   const mode = input?.mode
   if (
     !request.ok ||
     !planToken ||
-    !destinationBranch ||
-    destinationBranch === request.request.sourceBranch ||
+    !destination ||
+    (destination.kind === 'local' && destination.branch === request.request.sourceBranch) ||
     (mode !== 'merge' && mode !== 'pull-merge-push')
   ) {
     return invalidArguments()
@@ -88,7 +97,7 @@ export function normalizeRepositoryBranchMergeOutExecuteInput(
     input: {
       ...request.request,
       planToken,
-      destinationBranch,
+      destination,
       mode,
     },
   }

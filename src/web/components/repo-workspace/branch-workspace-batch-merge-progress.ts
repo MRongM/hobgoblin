@@ -8,6 +8,7 @@ import type {
   BranchWorkspaceMergeMode,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
+import { repositoryMergeBranchSelectionKey } from '#/shared/repository-merge-branch.ts'
 
 export type BranchWorkspaceBatchMergeStepStatus = 'pending' | 'active' | 'complete' | 'failed'
 export type BranchWorkspaceBatchMergeMemberStatus = 'unselected' | BranchWorkspaceBatchMergeStepStatus
@@ -37,11 +38,15 @@ export function projectBranchWorkspaceBatchMergeInProgress(
   activeOperation: BranchWorkspaceActiveOperation | null,
   result: BranchWorkspaceGitActionResult | null,
 ): BranchWorkspaceBatchMergeProgress {
-  const selected = new Set(sources.map((source) => source.repositoryName))
+  const selected = new Map(sources.map((source) => [source.repositoryName, source.source]))
   return projectSelectedBatchMergeProgress(
     plan.members,
-    selected,
-    () => (mode === 'merge' ? ['merge'] : ['pull', 'merge', 'push']),
+    new Set(selected.keys()),
+    (member) => {
+      const source = selected.get(member.repositoryName)
+      const fetchSteps = source?.kind === 'remote' ? (['fetch'] as const) : []
+      return mode === 'merge' ? [...fetchSteps, 'merge'] : ['pull', ...fetchSteps, 'merge', 'push']
+    },
     activeOperation,
     result,
   )
@@ -54,14 +59,23 @@ export function projectBranchWorkspaceBatchMergeOutProgress(
   activeOperation: BranchWorkspaceActiveOperation | null,
   result: BranchWorkspaceGitActionResult | null,
 ): BranchWorkspaceBatchMergeProgress {
-  const selected = new Map(targets.map((target) => [target.repositoryName, target.destinationBranch]))
+  const selected = new Map(targets.map((target) => [target.repositoryName, target.destination]))
   return projectSelectedBatchMergeProgress(
     plan.members,
     new Set(selected.keys()),
     (member) => {
       const destination = member.destinationBranches.find(
-        (candidate) => candidate.branch === selected.get(member.repositoryName),
+        (candidate) => {
+          const selection = selected.get(member.repositoryName)
+          return (
+            selection !== undefined &&
+            repositoryMergeBranchSelectionKey(candidate.destination) === repositoryMergeBranchSelectionKey(selection)
+          )
+        },
       )
+      if (destination?.destination.kind === 'remote') {
+        return ['fetch', 'prepare', 'merge', 'push', 'cleanup']
+      }
       return [
         'prepare',
         ...(mode === 'merge' ? (['merge'] as const) : (['pull', 'merge', 'push'] as const)),

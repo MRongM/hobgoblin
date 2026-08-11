@@ -90,6 +90,12 @@ describe('isBranchWorkspaceOperationUpdatedEvent', () => {
     expect(
       isBranchWorkspaceOperationUpdatedEvent({
         ...validEvent,
+        operation: { ...validEvent.operation, step: 'fetch' },
+      }),
+    ).toBe(true)
+    expect(
+      isBranchWorkspaceOperationUpdatedEvent({
+        ...validEvent,
         operation: { ...validEvent.operation, kind: 'batch-discard', step: 'discard' },
       }),
     ).toBe(true)

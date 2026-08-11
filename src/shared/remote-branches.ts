@@ -7,6 +7,11 @@ export interface RemoteBranchRefParts {
   fullRef: string
 }
 
+export interface RemoteTrackingBranchInfo {
+  remoteRef: string
+  head: string
+}
+
 export function parseRemoteBranchRef(ref: string): RemoteBranchRefParts | null {
   const fullRef = ref.trim()
   if (!isRemoteTrackingRef(fullRef)) return null
@@ -45,4 +50,25 @@ export function remoteBranchRefMatchesQuery(ref: string, query: string): boolean
 export function remoteBranchSortKey(ref: string): string {
   const parsed = parseRemoteBranchRef(ref)
   return parsed ? `${parsed.remote}\0${parsed.branch}` : `\uffff${ref}`
+}
+
+export function parseRemoteTrackingBranchInfo(output: string): RemoteTrackingBranchInfo[] {
+  const seen = new Set<string>()
+  const branches: RemoteTrackingBranchInfo[] = []
+
+  for (const rawLine of output.split('\n')) {
+    const parts = rawLine.trim().split('\0')
+    if (parts.length !== 2) continue
+    const remoteRef = parts[0]?.trim() ?? ''
+    const head = parts[1]?.trim().toLowerCase() ?? ''
+    if (!parseRemoteBranchRef(remoteRef) || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(head) || seen.has(remoteRef)) {
+      continue
+    }
+    seen.add(remoteRef)
+    branches.push({ remoteRef, head })
+  }
+
+  return branches.sort((left, right) =>
+    remoteBranchSortKey(left.remoteRef).localeCompare(remoteBranchSortKey(right.remoteRef)),
+  )
 }

@@ -310,6 +310,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.step.discard': '변경 사항 삭제 중',
   'workspace.branch-workspace.git-action.step.prepare': '준비 중',
   'workspace.branch-workspace.git-action.step.pull': '가져오는 중',
+  'workspace.branch-workspace.git-action.step.fetch': '원격 브랜치 가져오는 중',
   'workspace.branch-workspace.git-action.step.merge': '병합 중',
   'workspace.branch-workspace.git-action.step.push': '푸시 중',
   'workspace.branch-workspace.git-action.step.cleanup': '정리 중',
@@ -317,6 +318,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.failure-step.discard': '변경 사항 삭제',
   'workspace.branch-workspace.git-action.failure-step.prepare': '준비',
   'workspace.branch-workspace.git-action.failure-step.pull': '풀',
+  'workspace.branch-workspace.git-action.failure-step.fetch': '원격 브랜치 가져오기',
   'workspace.branch-workspace.git-action.failure-step.merge': '머지',
   'workspace.branch-workspace.git-action.failure-step.push': '푸시',
   'workspace.branch-workspace.git-action.failure-step.cleanup': '정리',
@@ -339,6 +341,10 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     '이 작업에는 선택한 각 대상 브랜치의 사용 가능한 업스트림이 필요합니다.',
   'workspace.branch-workspace.git-action.remote-required': '일괄 푸시에는 각 저장소의 원격이 필요합니다.',
+  'workspace.branch-workspace.git-action.remote-branches-unavailable':
+    '이 저장소의 원격 브랜치를 읽을 수 없습니다.',
+  'workspace.branch-workspace.git-action.remote-destination-requires-push':
+    '원격 대상에는 가져오기, 병합 및 푸시가 필요합니다.',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable':
     '대상 브랜치 워크트리를 사용할 수 없습니다.',
   'workspace.branch-workspace.git-action.destination-worktree-dirty':
@@ -940,6 +946,12 @@ export const ko: Record<DictKey, string> = {
   'action.merge-in-placeholder': '소스 브랜치 선택',
   'action.merge-in-confirm': '이 브랜치로 병합',
   'action.merge-in-and-push-confirm': '가져오기, 병합 및 푸시',
+  'action.merge-in-remote-loading': '원격 소스 브랜치를 불러오는 중…',
+  'action.merge-in-remote-empty': '사용 가능한 원격 소스 브랜치가 없습니다.',
+  'action.merge-in-remote-load-failed': '원격 소스 브랜치를 불러오지 못했습니다. 로컬 브랜치는 계속 선택할 수 있습니다.',
+  'action.merge-in-remote-fetch-note': '병합 전에 이 원격 브랜치의 최신 상태를 가져옵니다.',
+  'action.merge-in-remote-confirm': '원격 가져오기 및 병합',
+  'action.merge-in-remote-and-push-confirm': '대상 가져오기, 원격 가져오기, 병합 및 푸시',
   'action.merge-out': '이 브랜치를 다른 브랜치로 병합',
   'action.merge-out-title': '{branch} 브랜치를 다른 브랜치로 병합',
   'action.merge-out-source-label': '소스 브랜치',
@@ -949,6 +961,7 @@ export const ko: Record<DictKey, string> = {
   'action.merge-out-destination-dirty': '대상 워크트리에 커밋되지 않은 변경이 있습니다',
   'action.merge-out-destination-unavailable': '대상 워크트리를 사용할 수 없습니다',
   'action.merge-out-destination-upstream-required': '가져오기와 푸시에는 대상 브랜치의 upstream이 필요합니다.',
+  'action.merge-out-remote-push-note': '원격 대상을 가져온 뒤 임시 worktree에서 병합하고 정확히 푸시합니다.',
   'action.merge-out-loading': '대상 확인 중…',
   'action.merge-out-confirm': '대상으로 병합',
   'action.merge-out-pull-merge-push-confirm': '대상 가져오기, 병합 및 푸시',
@@ -1132,6 +1145,8 @@ export const ko: Record<DictKey, string> = {
   'error.merge-out-destination-dirty': '대상 워크트리에 커밋되지 않은 변경이 있습니다.',
   'error.merge-out-destination-worktree-unavailable': '대상 워크트리를 사용할 수 없습니다.',
   'error.merge-out-destination-upstream-required': '가져오기와 푸시에는 대상 브랜치의 upstream이 필요합니다.',
+  'error.merge-out-remote-requires-push': '원격 대상에는 가져오기, 병합 및 푸시 모드가 필요합니다.',
+  'error.remote-branch-not-found': '가져온 뒤 선택한 원격 브랜치를 찾을 수 없습니다. 새로 고친 후 다시 시도하세요.',
   'error.merge-out-temporary-worktree-unavailable': '임시 대상 워크트리를 준비할 수 없습니다.',
   'error.merge-out-plan-changed': '병합 계획이 변경되었습니다. 새 대상을 확인한 후 다시 시도하세요.',
   'error.merge-out-failed': '내보내기 병합에 실패했습니다.',

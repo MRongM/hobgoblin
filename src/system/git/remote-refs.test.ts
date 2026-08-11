@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { getRemoteTags, getRemoteTrackingBranches } from '#/system/git/remote-refs.ts'
+import {
+  getRemoteTags,
+  getRemoteTrackingBranchInfo,
+  getRemoteTrackingBranches,
+} from '#/system/git/remote-refs.ts'
 
 const gitMock = vi.hoisted(() => vi.fn())
 
@@ -20,6 +24,25 @@ describe('getRemoteTrackingBranches', () => {
     expect(gitMock).toHaveBeenCalledWith('/repo', ['for-each-ref', '--format=%(refname:short)', 'refs/remotes/'], {
       signal,
     })
+  })
+
+  test('reads remote-tracking refs with their current object ids', async () => {
+    const signal = new AbortController().signal
+    const mainHead = 'a'.repeat(40)
+    const releaseHead = 'b'.repeat(64)
+    gitMock.mockResolvedValue(
+      [`upstream/release/v2\0${releaseHead}`, `origin/main\0${mainHead}`, `origin/HEAD\0${mainHead}`].join('\n'),
+    )
+
+    await expect(getRemoteTrackingBranchInfo('/repo', signal)).resolves.toEqual([
+      { remoteRef: 'origin/main', head: mainHead },
+      { remoteRef: 'upstream/release/v2', head: releaseHead },
+    ])
+    expect(gitMock).toHaveBeenCalledWith(
+      '/repo',
+      ['for-each-ref', '--format=%(refname:short)%00%(objectname)', 'refs/remotes/'],
+      { signal },
+    )
   })
 
   test('reads remote tags from each configured remote', async () => {

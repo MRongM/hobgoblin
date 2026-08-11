@@ -527,6 +527,24 @@ describe('remote command scripts', () => {
     )
   })
 
+  test('renders remote branch fact listing command with object ids', () => {
+    expect(buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteBranchInfo', path: '/srv/repo' }).script).toContain(
+      "for-each-ref '--format=%(refname:short)%00%(objectname)' refs/remotes/",
+    )
+  })
+
+  test('renders exact detached HEAD push without force', () => {
+    const script = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitPushWorktreeHead',
+      path: '/srv/repo-worktree',
+      remote: 'origin',
+      targetBranch: 'release/v2',
+    }).script
+
+    expect(script).toBe("git -C '/srv/repo-worktree' push -- 'origin' 'HEAD:refs/heads/release/v2'")
+    expect(script).not.toContain('--force')
+  })
+
   test('renders remote tag listing command for a concrete remote', () => {
     expect(
       buildRemoteCommandInvocation(TARGET, { type: 'gitRemoteTags', path: '/srv/repo', remote: 'origin' }).script,

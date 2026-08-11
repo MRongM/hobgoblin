@@ -320,6 +320,7 @@ export const en = {
   'workspace.branch-workspace.git-action.step.discard': 'discarding',
   'workspace.branch-workspace.git-action.step.prepare': 'preparing',
   'workspace.branch-workspace.git-action.step.pull': 'pulling',
+  'workspace.branch-workspace.git-action.step.fetch': 'fetching',
   'workspace.branch-workspace.git-action.step.merge': 'merging',
   'workspace.branch-workspace.git-action.step.push': 'pushing',
   'workspace.branch-workspace.git-action.step.cleanup': 'cleaning up',
@@ -327,6 +328,7 @@ export const en = {
   'workspace.branch-workspace.git-action.failure-step.discard': 'Discard',
   'workspace.branch-workspace.git-action.failure-step.prepare': 'Preparation',
   'workspace.branch-workspace.git-action.failure-step.pull': 'Pull',
+  'workspace.branch-workspace.git-action.failure-step.fetch': 'Fetch',
   'workspace.branch-workspace.git-action.failure-step.merge': 'Merge',
   'workspace.branch-workspace.git-action.failure-step.push': 'Push',
   'workspace.branch-workspace.git-action.failure-step.cleanup': 'Cleanup',
@@ -350,6 +352,10 @@ export const en = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     'This action requires a usable upstream for every selected target branch.',
   'workspace.branch-workspace.git-action.remote-required': 'Every repository needs a remote before batch push.',
+  'workspace.branch-workspace.git-action.remote-branches-unavailable':
+    'Could not read remote branches for this repository.',
+  'workspace.branch-workspace.git-action.remote-destination-requires-push':
+    'Remote destinations require fetch, merge & push.',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable':
     'Could not use the destination branch worktree.',
   'workspace.branch-workspace.git-action.destination-worktree-dirty':
@@ -954,6 +960,12 @@ export const en = {
   'action.merge-in-placeholder': 'Pick a source branch',
   'action.merge-in-confirm': 'Merge into this branch',
   'action.merge-in-and-push-confirm': 'Pull, merge in, and push',
+  'action.merge-in-remote-loading': 'Loading remote source branches…',
+  'action.merge-in-remote-empty': 'No remote source branches are available.',
+  'action.merge-in-remote-load-failed': 'Remote source branches could not be loaded. Local branches remain available.',
+  'action.merge-in-remote-fetch-note': 'This remote branch will be fetched before it is merged.',
+  'action.merge-in-remote-confirm': 'Fetch remote and merge',
+  'action.merge-in-remote-and-push-confirm': 'Pull target, fetch remote, merge, and push',
   'action.merge-out': 'Merge this branch into another',
   'action.merge-out-title': 'Merge {branch} into another branch',
   'action.merge-out-source-label': 'Source branch',
@@ -963,6 +975,7 @@ export const en = {
   'action.merge-out-destination-dirty': 'Destination worktree has changes',
   'action.merge-out-destination-unavailable': 'Destination worktree is unavailable',
   'action.merge-out-destination-upstream-required': 'The destination branch needs an upstream for pull and push.',
+  'action.merge-out-remote-push-note': 'The remote target will be fetched, merged in a temporary worktree, and pushed exactly.',
   'action.merge-out-loading': 'Checking destinations…',
   'action.merge-out-confirm': 'Merge into destination',
   'action.merge-out-pull-merge-push-confirm': 'Pull destination, merge, and push',
@@ -1146,6 +1159,8 @@ export const en = {
   'error.merge-out-destination-dirty': 'The destination worktree has uncommitted changes.',
   'error.merge-out-destination-worktree-unavailable': 'The destination worktree is unavailable.',
   'error.merge-out-destination-upstream-required': 'The destination branch needs an upstream for pull and push.',
+  'error.merge-out-remote-requires-push': 'Remote targets require fetch, merge, and push mode.',
+  'error.remote-branch-not-found': 'The selected remote branch was not found after fetch. Refresh and try again.',
   'error.merge-out-temporary-worktree-unavailable': 'Could not prepare the temporary destination worktree.',
   'error.merge-out-plan-changed': 'The merge plan changed. Review the refreshed destinations and try again.',
   'error.merge-out-failed': 'Merge out failed.',

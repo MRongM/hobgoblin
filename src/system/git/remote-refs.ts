@@ -7,6 +7,10 @@ import {
   type GitOptions,
 } from '#/system/git/helper.ts'
 import { getRemotes } from '#/system/git/remote.ts'
+import {
+  parseRemoteTrackingBranchInfo,
+  type RemoteTrackingBranchInfo,
+} from '#/shared/remote-branches.ts'
 import { parseRemoteTagInput, remoteTagRefsFromLsRemote, remoteTagSortKey } from '#/shared/remote-tags.ts'
 import { parseRemoteTrackingRefs } from '#/shared/worktree-create.ts'
 
@@ -14,6 +18,22 @@ export async function getRemoteTrackingBranches(cwd: string, signal?: AbortSigna
   try {
     const output = await git(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes/'], { signal })
     return parseRemoteTrackingRefs(output)
+  } catch {
+    return []
+  }
+}
+
+export async function getRemoteTrackingBranchInfo(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<RemoteTrackingBranchInfo[]> {
+  try {
+    const output = await git(
+      cwd,
+      ['for-each-ref', '--format=%(refname:short)%00%(objectname)', 'refs/remotes/'],
+      { signal },
+    )
+    return parseRemoteTrackingBranchInfo(output)
   } catch {
     return []
   }

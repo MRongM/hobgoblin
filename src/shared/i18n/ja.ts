@@ -317,6 +317,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.step.discard': '破棄中',
   'workspace.branch-workspace.git-action.step.prepare': '準備中',
   'workspace.branch-workspace.git-action.step.pull': 'プル中',
+  'workspace.branch-workspace.git-action.step.fetch': 'リモートブランチを取得中',
   'workspace.branch-workspace.git-action.step.merge': 'マージ中',
   'workspace.branch-workspace.git-action.step.push': 'プッシュ中',
   'workspace.branch-workspace.git-action.step.cleanup': 'クリーンアップ中',
@@ -324,6 +325,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.failure-step.discard': '破棄',
   'workspace.branch-workspace.git-action.failure-step.prepare': '準備',
   'workspace.branch-workspace.git-action.failure-step.pull': 'プル',
+  'workspace.branch-workspace.git-action.failure-step.fetch': 'リモートブランチの取得',
   'workspace.branch-workspace.git-action.failure-step.merge': 'マージ',
   'workspace.branch-workspace.git-action.failure-step.push': 'プッシュ',
   'workspace.branch-workspace.git-action.failure-step.cleanup': 'クリーンアップ',
@@ -349,6 +351,10 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     'この操作には選択した各対象ブランチの利用可能なアップストリームが必要です。',
   'workspace.branch-workspace.git-action.remote-required': '一括プッシュには各リポジトリのリモートが必要です。',
+  'workspace.branch-workspace.git-action.remote-branches-unavailable':
+    'このリポジトリのリモートブランチを読み込めませんでした。',
+  'workspace.branch-workspace.git-action.remote-destination-requires-push':
+    'リモートの宛先では取得、マージ、プッシュが必要です。',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable':
     'マージ先ブランチの worktree を利用できません。',
   'workspace.branch-workspace.git-action.destination-worktree-dirty':
@@ -957,6 +963,12 @@ export const ja: Record<DictKey, string> = {
   'action.merge-in-placeholder': '取り込み元を選択',
   'action.merge-in-confirm': 'このブランチへ取り込む',
   'action.merge-in-and-push-confirm': 'プル、取り込み、プッシュ',
+  'action.merge-in-remote-loading': 'リモートの取り込み元ブランチを読み込み中…',
+  'action.merge-in-remote-empty': '利用できるリモートの取り込み元ブランチはありません。',
+  'action.merge-in-remote-load-failed': 'リモートブランチを読み込めませんでした。ローカルブランチは選択できます。',
+  'action.merge-in-remote-fetch-note': '取り込む前に、このリモートブランチの最新状態を取得します。',
+  'action.merge-in-remote-confirm': 'リモートを取得して取り込む',
+  'action.merge-in-remote-and-push-confirm': '対象をプル、リモートを取得、取り込み、プッシュ',
   'action.merge-out': 'このブランチを別のブランチへ送る',
   'action.merge-out-title': '{branch} を別のブランチへマージ',
   'action.merge-out-source-label': '取り込み元ブランチ',
@@ -966,6 +978,7 @@ export const ja: Record<DictKey, string> = {
   'action.merge-out-destination-dirty': 'マージ先 worktree に未コミットの変更があります',
   'action.merge-out-destination-unavailable': 'マージ先 worktree を利用できません',
   'action.merge-out-destination-upstream-required': 'プルとプッシュにはマージ先ブランチの upstream が必要です。',
+  'action.merge-out-remote-push-note': 'リモート対象を取得し、一時 worktree でマージして正確にプッシュします。',
   'action.merge-out-loading': 'マージ先を確認中…',
   'action.merge-out-confirm': 'マージ先へマージ',
   'action.merge-out-pull-merge-push-confirm': 'マージ先をプル、マージ、プッシュ',
@@ -1151,6 +1164,8 @@ export const ja: Record<DictKey, string> = {
   'error.merge-out-destination-dirty': 'マージ先 worktree に未コミットの変更があります。',
   'error.merge-out-destination-worktree-unavailable': 'マージ先 worktree を利用できません。',
   'error.merge-out-destination-upstream-required': 'プルとプッシュにはマージ先ブランチの upstream が必要です。',
+  'error.merge-out-remote-requires-push': 'リモート対象では取得、マージ、プッシュのモードが必要です。',
+  'error.remote-branch-not-found': '取得後に選択したリモートブランチが見つかりません。更新して再試行してください。',
   'error.merge-out-temporary-worktree-unavailable': '一時マージ先 worktree を準備できませんでした。',
   'error.merge-out-plan-changed': 'マージ計画が変更されました。更新後のマージ先を確認して再試行してください。',
   'error.merge-out-failed': '送り出しマージに失敗しました。',

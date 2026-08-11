@@ -1,4 +1,8 @@
-import { getRepositorySnapshot, getRepositoryStatus } from '#/server/modules/repo-read-paths.ts'
+import {
+  getRepositoryRemoteBranchInfo,
+  getRepositorySnapshot,
+  getRepositoryStatus,
+} from '#/server/modules/repo-read-paths.ts'
 import { isValidRepositoryWorktreePath, type RepoSnapshotOptions } from '#/server/modules/repo-backend.ts'
 import { isRepositoryTemporaryWorktreePath } from '#/server/modules/repository-temporary-worktree.ts'
 import {
@@ -8,17 +12,23 @@ import {
   repositoryPlanFingerprint,
 } from '#/server/modules/repository-status-plan.ts'
 import type { BranchSnapshotInfo, WorktreeStatus } from '#/shared/git-types.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import { isValidBranch, isValidRepoLocator } from '#/shared/input-validation.ts'
 import {
   normalizeRepositoryBranchMergeOutPlanRequest,
   type RepositoryBranchMergeDestinationPlan,
   type RepositoryBranchMergeOutPlanResult,
 } from '#/shared/repository-branch-merge.ts'
+import {
+  repositoryMergeBranchDisplayName,
+  repositoryMergeBranchSelectionKey,
+} from '#/shared/repository-merge-branch.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 export interface RepositoryBranchMergePlanDependencies {
   getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
+  getRemoteBranchInfo?: (repoId: string, signal?: AbortSignal) => Promise<RemoteTrackingBranchInfo[]>
 }
 
 export interface ProjectRepositoryMergeDestinationsInput {
@@ -26,6 +36,7 @@ export interface ProjectRepositoryMergeDestinationsInput {
   sourceBranch: string
   branches: BranchSnapshotInfo[]
   statuses: WorktreeStatus[]
+  remoteBranches: RemoteTrackingBranchInfo[]
   isOwnedTemporaryWorktree: (repoId: string, candidatePath: string) => boolean
 }
 
@@ -48,12 +59,13 @@ export async function buildRepositoryBranchMergeOutPlan(
   const sourceWorktreePath = normalizeRepositoryPath(repoId, normalized.request.sourceWorktreePath)
   try {
     signal?.throwIfAborted()
-    const [snapshot, statuses] = await Promise.all([
+    const [snapshot, statuses, remoteBranches] = await Promise.all([
       (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
         includeWorktreeStatus: false,
         includeRemote: false,
       }),
       (dependencies.getStatus ?? getRepositoryStatus)(repoId, signal),
+      (dependencies.getRemoteBranchInfo ?? getRepositoryRemoteBranchInfo)(repoId, signal),
     ])
     signal?.throwIfAborted()
     if (!snapshot) return { ok: false, message: 'error.merge-out-repository-unavailable' }
@@ -72,6 +84,7 @@ export async function buildRepositoryBranchMergeOutPlan(
       sourceBranch,
       branches: snapshot.branches,
       statuses,
+      remoteBranches,
       isOwnedTemporaryWorktree: (candidateRepoId, candidatePath) =>
         isRepositoryTemporaryWorktreePath(candidateRepoId, 'merge-out', candidatePath),
     })
@@ -90,7 +103,10 @@ export async function buildRepositoryBranchMergeOutPlan(
       sourceWorktreePath,
       sourceHead,
       sourceStatus: sourceEntries,
-      destinationBranches: destinations.map(({ branch }) => branch),
+      destinations: destinations.map(({ destination, head }) => ({
+        key: repositoryMergeBranchSelectionKey(destination),
+        ...(destination.kind === 'remote' ? { head } : {}),
+      })),
     })
     return {
       ok: true,
@@ -113,7 +129,7 @@ export async function buildRepositoryBranchMergeOutPlan(
 export function projectRepositoryMergeDestinations(
   input: ProjectRepositoryMergeDestinationsInput,
 ): RepositoryBranchMergeDestinationPlan[] {
-  return input.branches
+  const localDestinations = input.branches
     .filter((branch) => branch.name !== input.sourceBranch)
     .map((branch): RepositoryBranchMergeDestinationPlan => {
       const worktreePath = branch.worktree?.path
@@ -132,7 +148,7 @@ export function projectRepositoryMergeDestinations(
           ? ('unavailable-worktree' as const)
           : undefined
       return {
-        branch: branch.name,
+        destination: { kind: 'local', branch: branch.name },
         head: branch.worktree?.head ?? destinationStatus?.head ?? branch.lastCommitHash,
         ready: !blockReason,
         ...(worktreePath ? { worktreePath: normalizeRepositoryPath(input.repoId, worktreePath) } : {}),
@@ -141,7 +157,21 @@ export function projectRepositoryMergeDestinations(
         ...(blockReason ? { blockReason } : {}),
       }
     })
-    .sort((left, right) => left.branch.localeCompare(right.branch))
+  const remoteDestinations = input.remoteBranches.map(
+    ({ remoteRef, head }): RepositoryBranchMergeDestinationPlan => ({
+      destination: { kind: 'remote', remoteRef },
+      head,
+      ready: true,
+      requiresTemporaryWorktree: true,
+      pullMergePushReady: true,
+    }),
+  )
+  return [...localDestinations, ...remoteDestinations].sort((left, right) => {
+    if (left.destination.kind !== right.destination.kind) return left.destination.kind === 'local' ? -1 : 1
+    return repositoryMergeBranchDisplayName(left.destination).localeCompare(
+      repositoryMergeBranchDisplayName(right.destination),
+    )
+  })
 }
 
 function safeMessage(error: unknown): string {

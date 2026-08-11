@@ -106,10 +106,12 @@ export type RemoteCommandKind =
   | { type: 'gitBranchSetUpstream'; path: string; branch: string; remoteRef: string | null }
   | { type: 'gitFetchBranch'; path: string; remote: string; remoteBranch: string; branch: string }
   | { type: 'gitPush'; path: string; remote: string; branch: string; targetBranch: string; setUpstream: boolean }
+  | { type: 'gitPushWorktreeHead'; path: string; remote: string; targetBranch: string }
   | { type: 'gitTags'; path: string }
   | { type: 'gitTagCreate'; path: string; name: string; ref: string }
   | { type: 'gitTagDelete'; path: string; name: string }
   | { type: 'gitRemoteBranches'; path: string }
+  | { type: 'gitRemoteBranchInfo'; path: string }
   | { type: 'gitRemoteTags'; path: string; remote: string }
   | { type: 'gitRemoteBranchDelete'; path: string; remote: string; branch: string }
   | { type: 'gitRemoteTagDelete'; path: string; remote: string; tag: string }
@@ -566,6 +568,10 @@ function scriptForCommand(command: RemoteCommandKind): string {
       ]
         .filter(Boolean)
         .join(' ')
+    case 'gitPushWorktreeHead':
+      return `git -C ${shellQuote(command.path)} push -- ${shellQuote(command.remote)} ${shellQuote(
+        `HEAD:refs/heads/${command.targetBranch}`,
+      )}`
     case 'gitTags':
       return `git -C ${shellQuote(command.path)} tag --sort=-creatordate`
     case 'gitTagCreate':
@@ -574,6 +580,10 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} tag -d ${shellQuote(command.name)}`
     case 'gitRemoteBranches':
       return `git -C ${shellQuote(command.path)} for-each-ref ${shellQuote('--format=%(refname:short)')} refs/remotes/`
+    case 'gitRemoteBranchInfo':
+      return `git -C ${shellQuote(command.path)} for-each-ref ${shellQuote(
+        '--format=%(refname:short)%00%(objectname)',
+      )} refs/remotes/`
     case 'gitRemoteTags':
       return `git -C ${shellQuote(command.path)} ls-remote --tags --refs ${shellQuote(command.remote)}`
     case 'gitRemoteBranchDelete':

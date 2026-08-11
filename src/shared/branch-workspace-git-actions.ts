@@ -1,4 +1,8 @@
 import type { GitConflictWorktree, GitFailureReason } from '#/shared/git-types.ts'
+import {
+  normalizeRepositoryMergeBranchSelection,
+  type RepositoryMergeBranchSelection,
+} from '#/shared/repository-merge-branch.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 export type BranchWorkspaceGitActionKind =
@@ -9,7 +13,15 @@ export type BranchWorkspaceGitActionKind =
   | 'pull'
   | 'push'
 export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
-export type BranchWorkspaceGitActionStep = 'commit' | 'discard' | 'prepare' | 'pull' | 'merge' | 'push' | 'cleanup'
+export type BranchWorkspaceGitActionStep =
+  | 'commit'
+  | 'discard'
+  | 'prepare'
+  | 'pull'
+  | 'fetch'
+  | 'merge'
+  | 'push'
+  | 'cleanup'
 export type BranchWorkspaceGitActionMemberPhase = 'ready' | 'satisfied' | 'succeeded' | 'failed' | 'not-started'
 
 export interface BranchWorkspaceBatchCommitMemberPlan {
@@ -33,7 +45,7 @@ export interface BranchWorkspaceBatchDiscardMemberPlan {
 }
 
 export interface BranchWorkspaceBatchMergeInSourcePlan {
-  branch: string
+  source: RepositoryMergeBranchSelection
   head: string
 }
 
@@ -51,7 +63,7 @@ export interface BranchWorkspaceBatchMergeInMemberPlan {
 }
 
 export interface BranchWorkspaceBatchMergeOutDestinationPlan {
-  branch: string
+  destination: RepositoryMergeBranchSelection
   head: string
   ready: boolean
   worktreePath?: string
@@ -142,12 +154,12 @@ export interface BranchWorkspaceCommitMessageInput {
 
 export interface BranchWorkspaceBatchMergeInSourceInput {
   repositoryName: string
-  sourceBranch: string
+  source: RepositoryMergeBranchSelection
 }
 
 export interface BranchWorkspaceBatchMergeOutTargetInput {
   repositoryName: string
-  destinationBranch: string
+  destination: RepositoryMergeBranchSelection
 }
 
 export type BranchWorkspaceGitActionExecuteInput =
@@ -286,29 +298,37 @@ function normalizedMessage(value: unknown): string | null {
 }
 
 function normalizedBatchMergeInSources(value: unknown): BranchWorkspaceBatchMergeInSourceInput[] | null {
-  const mappings = normalizedBatchMergeMappings(value, 'sourceBranch')
-  return mappings?.map(({ repositoryName, branch }) => ({ repositoryName, sourceBranch: branch })) ?? null
+  const mappings = normalizedBatchMergeMappings(value, 'source', 'sourceBranch')
+  return mappings?.map(({ repositoryName, selection }) => ({ repositoryName, source: selection })) ?? null
 }
 
 function normalizedBatchMergeTargets(value: unknown): BranchWorkspaceBatchMergeOutTargetInput[] | null {
-  const mappings = normalizedBatchMergeMappings(value, 'destinationBranch')
-  return mappings?.map(({ repositoryName, branch }) => ({ repositoryName, destinationBranch: branch })) ?? null
+  const mappings = normalizedBatchMergeMappings(value, 'destination', 'destinationBranch')
+  return mappings?.map(({ repositoryName, selection }) => ({ repositoryName, destination: selection })) ?? null
 }
 
 function normalizedBatchMergeMappings(
   value: unknown,
-  branchKey: 'sourceBranch' | 'destinationBranch',
-): Array<{ repositoryName: string; branch: string }> | null {
+  selectionKey: 'source' | 'destination',
+  legacyBranchKey: 'sourceBranch' | 'destinationBranch',
+): Array<{ repositoryName: string; selection: RepositoryMergeBranchSelection }> | null {
   if (!Array.isArray(value) || value.length === 0) return null
   const names = new Set<string>()
-  const mappings: Array<{ repositoryName: string; branch: string }> = []
+  const mappings: Array<{ repositoryName: string; selection: RepositoryMergeBranchSelection }> = []
   for (const candidate of value) {
     const input = asRecord(candidate)
     const name = normalizedText(input?.repositoryName)
-    const branch = normalizedText(input?.[branchKey])
-    if (!name || !branch || !isWorkspaceRepositoryName(name) || names.has(name)) return null
+    const legacyBranch = normalizedText(input?.[legacyBranchKey])
+    const selection = normalizeRepositoryMergeBranchSelection(
+      input && selectionKey in input
+        ? input[selectionKey]
+        : legacyBranch
+          ? { kind: 'local', branch: legacyBranch }
+          : null,
+    )
+    if (!name || !selection || !isWorkspaceRepositoryName(name) || names.has(name)) return null
     names.add(name)
-    mappings.push({ repositoryName: name, branch })
+    mappings.push({ repositoryName: name, selection })
   }
   return mappings
 }

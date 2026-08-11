@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   fetchRemote,
   getBrowserRemoteUrl,
+  pushWorktreeHeadToRemoteBranch,
   resolveFetchRemoteForRemotes,
   resolvePushTargetForRemotes,
 } from '#/system/git/remote.ts'
@@ -157,6 +158,45 @@ describe('local network git options', () => {
       'origin',
       'feature/a:feature/a',
     )
+  })
+
+  test('pushWorktreeHeadToRemoteBranch pushes detached HEAD to the exact remote branch without force', async () => {
+    const signal = new AbortController().signal
+
+    await expect(
+      pushWorktreeHeadToRemoteBranch('/repo-worktree', 'origin', 'release/v2', signal, {
+        timeoutMs: 180_000,
+        proxyUrl: 'http://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo-worktree',
+      expect.objectContaining({
+        timeoutMs: 180_000,
+        signal,
+        env: expect.objectContaining({ HTTPS_PROXY: 'http://127.0.0.1:7890' }),
+      }),
+      'push',
+      '--',
+      'origin',
+      'HEAD:refs/heads/release/v2',
+    )
+    expect(gitResultWithOptionsMock.mock.calls[0]).not.toContain('--force')
+  })
+
+  test.each([
+    ['bad remote', 'release/v2'],
+    ['-origin', 'release/v2'],
+    ['origin/main', 'release/v2'],
+    ['origin', 'HEAD'],
+    ['origin', '-release'],
+  ])('pushWorktreeHeadToRemoteBranch rejects invalid target %s %s', async (remote, branch) => {
+    await expect(pushWorktreeHeadToRemoteBranch('/repo-worktree', remote, branch)).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
   })
 })
 

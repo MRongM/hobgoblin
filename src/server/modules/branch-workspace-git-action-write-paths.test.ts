@@ -60,7 +60,7 @@ function mergeOutPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActio
       ready: true,
       destinationBranches: [
         {
-          branch: 'main',
+          destination: { kind: 'local', branch: 'main' },
           head: 'main-head',
           ready: true,
           worktreePath: `${ROOT}/${repositoryName}`,
@@ -68,7 +68,7 @@ function mergeOutPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActio
           pullMergePushReady: true,
         },
         {
-          branch: 'release/v2',
+          destination: { kind: 'local', branch: 'release/v2' },
           head: 'release-head',
           ready: true,
           worktreePath: `${ROOT}/${repositoryName}-release`,
@@ -76,7 +76,7 @@ function mergeOutPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActio
           pullMergePushReady: true,
         },
         {
-          branch: 'integration',
+          destination: { kind: 'local', branch: 'integration' },
           head: 'integration-head',
           ready: true,
           worktreePath: `${ROOT}/${repositoryName}-integration`,
@@ -84,7 +84,7 @@ function mergeOutPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActio
           pullMergePushReady: false,
         },
         {
-          branch: 'staging',
+          destination: { kind: 'local', branch: 'staging' },
           head: 'staging-head',
           ready: true,
           requiresTemporaryWorktree: true,
@@ -102,7 +102,10 @@ function mergeOutTargets(
     ['web', 'main'],
   ],
 ) {
-  return entries.map(([repositoryName, destinationBranch]) => ({ repositoryName, destinationBranch }))
+  return entries.map(([repositoryName, branch]) => ({
+    repositoryName,
+    destination: { kind: 'local' as const, branch },
+  }))
 }
 
 function mergeInPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
@@ -120,8 +123,8 @@ function mergeInPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitAction
       ready: true,
       pullMergePushReady: true,
       sourceBranches: [
-        { branch: 'main', head: 'main-head' },
-        { branch: 'release/v2', head: 'release-head' },
+        { source: { kind: 'local', branch: 'main' }, head: 'main-head' },
+        { source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' },
       ],
       fingerprint: `sha256:${repositoryName}`,
     })),
@@ -134,7 +137,33 @@ function mergeInSources(
     ['web', 'main'],
   ],
 ) {
-  return entries.map(([repositoryName, sourceBranch]) => ({ repositoryName, sourceBranch }))
+  return entries.map(([repositoryName, branch]) => ({
+    repositoryName,
+    source: { kind: 'local' as const, branch },
+  }))
+}
+
+function remoteMergeInPlan(): BranchWorkspaceGitActionPlan {
+  const plan = mergeInPlan(['api'])
+  if (plan.kind !== 'batch-merge-in') throw new Error('expected merge-in plan')
+  plan.members[0]!.sourceBranches.push({
+    source: { kind: 'remote', remoteRef: 'origin/release/v2' },
+    head: 'remote-release-head',
+  })
+  return plan
+}
+
+function remoteMergeOutPlan(): BranchWorkspaceGitActionPlan {
+  const plan = mergeOutPlan(['api'])
+  if (plan.kind !== 'batch-merge-out') throw new Error('expected merge-out plan')
+  plan.members[0]!.destinationBranches.push({
+    destination: { kind: 'remote', remoteRef: 'origin/release/v2' },
+    head: 'remote-release-head',
+    ready: true,
+    requiresTemporaryWorktree: true,
+    pullMergePushReady: true,
+  })
+  return plan
 }
 
 function syncPlan(kind: 'pull' | 'push', ready = true, repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
@@ -268,7 +297,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-in',
         planToken: plan.token,
         mode: 'pull-merge-push',
-        sources: [{ repositoryName: 'api', sourceBranch: 'main' }],
+        sources: [{ repositoryName: 'api', source: { kind: 'local', branch: 'main' } }],
       }),
     ).resolves.toMatchObject({ ok: true })
 
@@ -540,7 +569,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-in',
         planToken: plan.token,
         mode: 'pull-merge-push',
-        sources: [{ repositoryName: 'api', sourceBranch: 'release/v2' }],
+        sources: [{ repositoryName: 'api', source: { kind: 'local', branch: 'release/v2' } }],
       }),
     ).resolves.toMatchObject({ ok: true })
     expect(calls).toEqual([
@@ -637,9 +666,9 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'batch-merge-in', branchWorkspaceId: 'ws-1' })
 
     for (const sources of [
-      [{ repositoryName: 'missing', sourceBranch: 'main' }],
-      [{ repositoryName: 'api', sourceBranch: 'feature/a' }],
-      [{ repositoryName: 'web', sourceBranch: 'main' }],
+      [{ repositoryName: 'missing', source: { kind: 'local' as const, branch: 'main' } }],
+      [{ repositoryName: 'api', source: { kind: 'local' as const, branch: 'feature/a' } }],
+      [{ repositoryName: 'web', source: { kind: 'local' as const, branch: 'main' } }],
     ]) {
       await expect(
         service.execute(ROOT, {
@@ -657,7 +686,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-in',
         planToken: plan.token,
         mode: 'pull-merge-push',
-        sources: [{ repositoryName: 'api', sourceBranch: 'main' }],
+        sources: [{ repositoryName: 'api', source: { kind: 'local', branch: 'main' } }],
       }),
     ).resolves.toEqual({
       ok: false,
@@ -688,14 +717,14 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       kind: 'batch-merge-in' as const,
       planToken: plan.token,
       mode: 'pull-merge-push' as const,
-      sources: [{ repositoryName: 'api', sourceBranch: 'main' }],
+      sources: [{ repositoryName: 'api', source: { kind: 'local' as const, branch: 'main' } }],
     }
 
     await expect(service.execute(ROOT, input)).resolves.toMatchObject({ ok: false })
     await expect(
       service.execute(ROOT, {
         ...input,
-        sources: [{ repositoryName: 'api', sourceBranch: 'release/v2' }],
+        sources: [{ repositoryName: 'api', source: { kind: 'local', branch: 'release/v2' } }],
       }),
     ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
     await expect(service.execute(ROOT, input)).resolves.toMatchObject({ ok: true })
@@ -728,7 +757,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-in',
         planToken: plan.token,
         mode: 'pull-merge-push',
-        sources: [{ repositoryName: 'api', sourceBranch: 'main' }],
+        sources: [{ repositoryName: 'api', source: { kind: 'local', branch: 'main' } }],
       }),
     ).resolves.toMatchObject({
       ok: false,
@@ -878,9 +907,9 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'batch-merge-out', branchWorkspaceId: 'ws-1' })
 
     for (const targets of [
-      [{ repositoryName: 'missing', destinationBranch: 'main' }],
-      [{ repositoryName: 'api', destinationBranch: 'feature/a' }],
-      [{ repositoryName: 'web', destinationBranch: 'main' }],
+      [{ repositoryName: 'missing', destination: { kind: 'local' as const, branch: 'main' } }],
+      [{ repositoryName: 'api', destination: { kind: 'local' as const, branch: 'feature/a' } }],
+      [{ repositoryName: 'web', destination: { kind: 'local' as const, branch: 'main' } }],
     ]) {
       await expect(
         service.execute(ROOT, {
@@ -981,7 +1010,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-out',
         planToken: plan.token,
         mode: 'pull-merge-push',
-        targets: [{ repositoryName: 'api', destinationBranch: 'integration' }],
+        targets: [{ repositoryName: 'api', destination: { kind: 'local', branch: 'integration' } }],
       }),
     ).resolves.toEqual({
       ok: false,
@@ -1235,7 +1264,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-out',
         planToken: plan.token,
         mode: 'merge',
-        targets: [{ repositoryName: 'api', destinationBranch: 'staging' }],
+        targets: [{ repositoryName: 'api', destination: { kind: 'local', branch: 'staging' } }],
       }),
     ).resolves.toMatchObject({ ok: true })
 
@@ -1302,7 +1331,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       kind: 'batch-merge-out',
       planToken: plan.token,
       mode: 'merge',
-      targets: [{ repositoryName: 'api', destinationBranch: 'staging' }],
+      targets: [{ repositoryName: 'api', destination: { kind: 'local', branch: 'staging' } }],
     })
     expect(result).toMatchObject({ ok: false })
     if ('members' in result) {
@@ -1331,11 +1360,216 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-merge-out',
         planToken: plan.token,
         mode: 'merge',
-        targets: [{ repositoryName: 'api', destinationBranch: 'main' }],
+        targets: [{ repositoryName: 'api', destination: { kind: 'local', branch: 'main' } }],
       }),
     ).resolves.toMatchObject({ ok: true })
     expect(createWorktree).not.toHaveBeenCalled()
     expect(removeWorktree).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['merge', ['fetch', 'refresh', 'merge']],
+    ['pull-merge-push', ['pull', 'fetch', 'refresh', 'merge', 'push']],
+  ] as const)('fetches and verifies a remote merge-in source in %s mode', async (mode, expectedEvents) => {
+    const plan = remoteMergeInPlan()
+    const events: string[] = []
+    const buildPlan = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, plan })
+      .mockImplementationOnce(async () => {
+        events.push('refresh')
+        return { ok: true as const, plan }
+      })
+    const fetchRemote = vi.fn(async () => {
+      events.push('fetch')
+      return { ok: true as const, message: 'fetched' }
+    })
+    const merge = vi.fn(async () => {
+      events.push('merge')
+      return { ok: true as const, message: 'merged' }
+    })
+    const pull = vi.fn(async () => {
+      events.push('pull')
+      return { ok: true as const, message: 'pulled' }
+    })
+    const push = vi.fn(async () => {
+      events.push('push')
+      return { ok: true as const, message: 'pushed' }
+    })
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan,
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      fetchRemote,
+      merge,
+      pull,
+      push,
+    })
+    await service.plan(ROOT, { kind: 'batch-merge-in', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-merge-in',
+        planToken: plan.token,
+        mode,
+        sources: [{ repositoryName: 'api', source: { kind: 'remote', remoteRef: 'origin/release/v2' } }],
+      }),
+    ).resolves.toMatchObject({ ok: true })
+
+    expect(events).toEqual(expectedEvents)
+    expect(fetchRemote).toHaveBeenCalledWith('/workspace/api', 'origin', expect.any(AbortSignal), undefined, {
+      publishInvalidation: false,
+    })
+    expect(merge).toHaveBeenCalledWith(
+      '/workspace/api',
+      '/workspace/goblin-feature-a/api',
+      'refs/remotes/origin/release/v2',
+      expect.any(AbortSignal),
+      undefined,
+      { publishInvalidation: false },
+    )
+  })
+
+  test('runs a remote merge-out through exact fetch, detached worktree, exact HEAD push, and cleanup', async () => {
+    const plan = remoteMergeOutPlan()
+    const events: string[] = []
+    const buildPlan = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true as const, plan })
+      .mockImplementationOnce(async () => {
+        events.push('refresh')
+        return { ok: true as const, plan }
+      })
+    const fetchRemote = vi.fn(async () => {
+      events.push('fetch')
+      return { ok: true as const, message: 'fetched' }
+    })
+    const createWorktree = vi.fn(async (_repoId: string, _input: CreateWorktreeInput) => {
+      events.push('prepare')
+      return { ok: true as const, message: 'prepared' }
+    })
+    const merge = vi.fn(async () => {
+      events.push('merge')
+      return { ok: true as const, message: 'merged' }
+    })
+    const pushWorktreeHead = vi.fn(async () => {
+      events.push('push')
+      return { ok: true as const, message: 'pushed' }
+    })
+    const removeWorktree = vi.fn(async () => {
+      events.push('cleanup')
+      return { ok: true as const, message: 'removed' }
+    })
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan,
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      fetchRemote,
+      createWorktree,
+      merge,
+      pushWorktreeHead,
+      removeWorktree,
+    })
+    await service.plan(ROOT, { kind: 'batch-merge-out', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-merge-out',
+        planToken: plan.token,
+        mode: 'pull-merge-push',
+        targets: [{ repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'origin/release/v2' } }],
+      }),
+    ).resolves.toMatchObject({ ok: true })
+
+    expect(events).toEqual(['fetch', 'refresh', 'prepare', 'merge', 'push', 'cleanup'])
+    const worktreePath = createWorktree.mock.calls[0]?.[1].worktreePath
+    expect(createWorktree).toHaveBeenCalledWith(
+      '/workspace/api',
+      {
+        worktreePath,
+        mode: { kind: 'detached', ref: 'refs/remotes/origin/release/v2' },
+        syncBeforeCreate: false,
+      },
+      { kind: 'skip' },
+      expect.any(AbortSignal),
+      undefined,
+      { publishInvalidation: false },
+    )
+    expect(merge).toHaveBeenCalledWith(
+      '/workspace/api',
+      worktreePath,
+      'refs/heads/feature/a',
+      expect.any(AbortSignal),
+      undefined,
+      { publishInvalidation: false },
+    )
+    expect(pushWorktreeHead).toHaveBeenCalledWith(
+      '/workspace/api',
+      worktreePath,
+      'origin/release/v2',
+      expect.any(AbortSignal),
+      undefined,
+      { publishInvalidation: false },
+    )
+    expect(removeWorktree).toHaveBeenCalledTimes(1)
+  })
+
+  test('rejects merge-only mode for a remote batch merge-out before Git writes', async () => {
+    const plan = remoteMergeOutPlan()
+    const fetchRemote = vi.fn()
+    const createWorktree = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      fetchRemote,
+      createWorktree,
+    })
+    await service.plan(ROOT, { kind: 'batch-merge-out', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-merge-out',
+        planToken: plan.token,
+        mode: 'merge',
+        targets: [{ repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'origin/release/v2' } }],
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.remote-destination-requires-push',
+    })
+    expect(fetchRemote).not.toHaveBeenCalled()
+    expect(createWorktree).not.toHaveBeenCalled()
+  })
+
+  test('cleans a remote temporary worktree when preparation reports a partial repository change', async () => {
+    const plan = remoteMergeOutPlan()
+    const removeWorktree = vi.fn(async () => ({ ok: true as const, message: 'removed' }))
+    const merge = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      fetchRemote: vi.fn(async () => ({ ok: true as const, message: 'fetched' })),
+      createWorktree: vi.fn(async () => ({
+        ok: false as const,
+        message: 'bootstrap failed',
+        repoChanged: true,
+      })),
+      removeWorktree,
+      merge,
+    })
+    await service.plan(ROOT, { kind: 'batch-merge-out', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-merge-out',
+        planToken: plan.token,
+        mode: 'pull-merge-push',
+        targets: [{ repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'origin/release/v2' } }],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      members: [{ repositoryName: 'api', phase: 'failed', step: 'prepare', message: 'bootstrap failed' }],
+    })
+    expect(removeWorktree).toHaveBeenCalledTimes(1)
+    expect(merge).not.toHaveBeenCalled()
   })
 
   test('pulls target branches serially, continues after a failure, and retries only failed members', async () => {

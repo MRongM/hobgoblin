@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   commitRepositoryChanges: vi.fn(),
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
+  getRepositoryRemoteBranches: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
   getRepositoryBranchMergeOutPlan: vi.fn(),
   mergeRepositoryBranchOut: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('#/web/repo-client.ts', () => ({
   commitRepositoryChanges: mocks.commitRepositoryChanges,
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
+  getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
   mergeRepositoryBranch: mocks.mergeRepositoryBranch,
   getRepositoryBranchMergeOutPlan: mocks.getRepositoryBranchMergeOutPlan,
   mergeRepositoryBranchOut: mocks.mergeRepositoryBranchOut,
@@ -65,6 +67,7 @@ describe('useBranchWriteActions', () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
     resetReposStore()
     vi.clearAllMocks()
+    mocks.getRepositoryRemoteBranches.mockResolvedValue([])
     mocks.getRepositoryBranchMergeOutPlan.mockResolvedValue({
       ok: true,
       plan: {
@@ -76,7 +79,7 @@ describe('useBranchWriteActions', () => {
         ready: true,
         destinations: [
           {
-            branch: 'main',
+            destination: { kind: 'local', branch: 'main' },
             head: 'main-head',
             ready: true,
             requiresTemporaryWorktree: true,
@@ -179,9 +182,50 @@ describe('useBranchWriteActions', () => {
     await flush()
 
     expect(mocks.pullRepositoryBranch).toHaveBeenCalledWith(REPO_ID, 'feature/current', '/tmp/repo-feature')
-    expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', 'main')
+    expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', {
+      kind: 'local',
+      branch: 'main',
+    })
     expect(onPush).toHaveBeenCalled()
     expect(calls).toEqual(['pull', 'merge', 'push'])
+  })
+
+  test('preserves a selected remote merge-in source through the hook', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main'])
+    mocks.mergeRepositoryBranch.mockResolvedValueOnce({ ok: true, message: 'merged' })
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } }),
+        createRepoBranch('main'),
+      ],
+      currentBranch: 'feature/current',
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />)
+    })
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'merge')?.onSelect()
+    })
+    await flush()
+    await flush()
+
+    openSelect('#merge-select')
+    const remoteOption = document.body.querySelector<HTMLElement>('[data-merge-source-key="remote:origin/main"]')
+    if (!remoteOption) throw new Error('Missing remote merge source')
+    act(() => {
+      remoteOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    clickButtonByText('action.merge-in-remote-confirm')
+    await flush()
+
+    expect(mocks.mergeRepositoryBranch).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature', {
+      kind: 'remote',
+      remoteRef: 'origin/main',
+    })
   })
 
   test('interpolates the destination branch in the merge-in dialog title after opening', async () => {
@@ -261,6 +305,64 @@ describe('useBranchWriteActions', () => {
       visible: true,
       disabled: true,
       title: 'action.merge-out-source-dirty',
+    })
+  })
+
+  test('preserves a remote merge-out destination through the hook', async () => {
+    mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: REPO_ID,
+        sourceBranch: 'feature/current',
+        sourceWorktreePath: '/tmp/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: [
+          {
+            destination: { kind: 'remote', remoteRef: 'origin/main' },
+            head: 'remote-head',
+            ready: true,
+            requiresTemporaryWorktree: true,
+            pullMergePushReady: true,
+          },
+        ],
+      },
+    })
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [] }],
+    })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />)
+    })
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'mergeOut')?.onSelect()
+    })
+    await flush()
+
+    openSelect('#merge-out-select')
+    const remoteOption = document.body.querySelector<HTMLElement>(
+      '[data-merge-destination-key="remote:origin/main"]',
+    )
+    if (!remoteOption) throw new Error('Missing remote merge-out destination')
+    act(() => {
+      remoteOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    clickButtonByText('action.merge-out-pull-merge-push-confirm')
+    await flush()
+
+    expect(mocks.mergeRepositoryBranchOut).toHaveBeenCalledWith({
+      repoId: REPO_ID,
+      planToken: 'sha256:plan',
+      sourceBranch: 'feature/current',
+      sourceWorktreePath: '/tmp/repo-feature',
+      destination: { kind: 'remote', remoteRef: 'origin/main' },
+      mode: 'pull-merge-push',
     })
   })
 })

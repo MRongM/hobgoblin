@@ -25,6 +25,10 @@ import type {
   BranchWorkspaceSyncPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
+import {
+  repositoryMergeBranchDisplayName,
+  repositoryMergeBranchSelectionKey,
+} from '#/shared/repository-merge-branch.ts'
 import { Button } from '#/web/components/ui/button.tsx'
 import { MergeConflictAiActions } from '#/web/components/MergeConflictAiActions.tsx'
 import { Checkbox } from '#/web/components/ui/checkbox.tsx'
@@ -182,10 +186,13 @@ export function BranchWorkspaceGitActionPanel({
       const sources =
         mergeInPlan?.members
           .filter((member) => selectedMergeRepositories.includes(member.repositoryName))
-          .map((member) => ({
-            repositoryName: member.repositoryName,
-            sourceBranch: mergeSources[member.repositoryName] ?? '',
-          })) ?? []
+          .flatMap((member) => {
+            const selectedKey = mergeSources[member.repositoryName]
+            const source = member.sourceBranches.find(
+              (candidate) => repositoryMergeBranchSelectionKey(candidate.source) === selectedKey,
+            )
+            return source ? [{ repositoryName: member.repositoryName, source: source.source }] : []
+          }) ?? []
       const response = await onBatchMergeIn(mode, sources)
       if (response?.ok) onOpenChange(false)
     }
@@ -200,8 +207,8 @@ export function BranchWorkspaceGitActionPanel({
         sources={mergeSources}
         startedMode={startedMergeMode}
         onSelectedRepositoriesChange={setSelectedMergeRepositories}
-        onSourceChange={(repositoryName, sourceBranch) =>
-          setMergeSources((current) => ({ ...current, [repositoryName]: sourceBranch }))
+        onSourceChange={(repositoryName, sourceKey) =>
+          setMergeSources((current) => ({ ...current, [repositoryName]: sourceKey }))
         }
         onExecute={executeMerge}
         onClose={close}
@@ -217,10 +224,15 @@ export function BranchWorkspaceGitActionPanel({
       const targets =
         mergeOutPlan?.members
           .filter((member) => selectedMergeRepositories.includes(member.repositoryName))
-          .map((member) => ({
-            repositoryName: member.repositoryName,
-            destinationBranch: mergeDestinations[member.repositoryName] ?? '',
-          })) ?? []
+          .flatMap((member) => {
+            const selectedKey = mergeDestinations[member.repositoryName]
+            const destination = member.destinationBranches.find(
+              (candidate) => repositoryMergeBranchSelectionKey(candidate.destination) === selectedKey,
+            )
+            return destination
+              ? [{ repositoryName: member.repositoryName, destination: destination.destination }]
+              : []
+          }) ?? []
       const response = await onBatchMergeOut(mode, targets)
       if (response?.ok) onOpenChange(false)
     }
@@ -235,8 +247,8 @@ export function BranchWorkspaceGitActionPanel({
         destinations={mergeDestinations}
         startedMode={startedMergeMode}
         onSelectedRepositoriesChange={setSelectedMergeRepositories}
-        onDestinationChange={(repositoryName, destinationBranch) =>
-          setMergeDestinations((current) => ({ ...current, [repositoryName]: destinationBranch }))
+        onDestinationChange={(repositoryName, destinationKey) =>
+          setMergeDestinations((current) => ({ ...current, [repositoryName]: destinationKey }))
         }
         onExecute={executeMerge}
         onClose={close}
@@ -553,7 +565,7 @@ function BranchWorkspaceBatchMergeInDialog({
   sources: Record<string, string>
   startedMode: BranchWorkspaceMergeMode | null
   onSelectedRepositoriesChange: (repositoryNames: string[]) => void
-  onSourceChange: (repositoryName: string, sourceBranch: string) => void
+  onSourceChange: (repositoryName: string, sourceKey: string) => void
   onExecute: (mode: BranchWorkspaceMergeMode) => Promise<void>
   onClose: () => void
   onBatchErrorAiHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
@@ -563,15 +575,15 @@ function BranchWorkspaceBatchMergeInDialog({
   const selectedMembers = plan?.members.filter((member) => selectedRepositories.includes(member.repositoryName)) ?? []
   const hasSelection = selectedMembers.length > 0
   const selectedSources: BranchWorkspaceBatchMergeInSourceInput[] = selectedMembers.flatMap((member) => {
-    const sourceBranch = sources[member.repositoryName]
-    return sourceBranch ? [{ repositoryName: member.repositoryName, sourceBranch }] : []
+    const selectedKey = sources[member.repositoryName]
+    const source = member.sourceBranches.find(
+      (candidate) => repositoryMergeBranchSelectionKey(candidate.source) === selectedKey,
+    )
+    return source ? [{ repositoryName: member.repositoryName, source: source.source }] : []
   })
   const selectionReady =
     hasSelection &&
-    selectedSources.length === selectedMembers.length &&
-    selectedMembers.every((member) =>
-      member.sourceBranches.some((source) => source.branch === sources[member.repositoryName]),
-    )
+    selectedSources.length === selectedMembers.length
   const remoteReady = selectionReady && selectedMembers.every((member) => member.pullMergePushReady)
   const progress =
     plan && startedMode
@@ -641,7 +653,8 @@ function BranchWorkspaceBatchMergeInDialog({
                   (candidate) => candidate.repositoryName === member.repositoryName,
                 )
                 const source = member.sourceBranches.find(
-                  (candidate) => candidate.branch === sources[member.repositoryName],
+                  (candidate) =>
+                    repositoryMergeBranchSelectionKey(candidate.source) === sources[member.repositoryName],
                 )
                 const sourceUnavailable = member.sourceBranches.length === 0
                 const memberResult = result?.members.find(
@@ -668,7 +681,7 @@ function BranchWorkspaceBatchMergeInDialog({
                       </span>
                       <span className="truncate font-medium">{member.repositoryName}</span>
                       <Select
-                        value={sources[member.repositoryName]}
+                        value={sources[member.repositoryName] ?? ''}
                         disabled={locked || !selected || !member.ready || sourceUnavailable}
                         onValueChange={(value) => onSourceChange(member.repositoryName, value)}
                       >
@@ -678,22 +691,30 @@ function BranchWorkspaceBatchMergeInDialog({
                           aria-label={t('workspace.branch-workspace.git-action.source-branch', {
                             repository: member.repositoryName,
                           })}
-                          title={sources[member.repositoryName]}
+                          title={source ? repositoryMergeBranchDisplayName(source.source) : undefined}
                           className="min-w-48 w-full max-w-none font-mono text-[10px] *:data-[slot=select-value]:line-clamp-none"
                         >
                           <SelectValue placeholder={t('workspace.branch-workspace.git-action.select-source')} />
                         </SelectTrigger>
                         <SelectContent className="min-w-[var(--radix-select-trigger-width)] w-max max-w-[min(94vw,37.333rem)]">
-                          {member.sourceBranches.map((candidate) => (
-                            <SelectItem
-                              key={candidate.branch}
-                              value={candidate.branch}
-                              data-merge-source-option={`${member.repositoryName}:${candidate.branch}`}
-                              className="font-mono text-xs whitespace-normal break-all"
-                            >
-                              {candidate.branch}
-                            </SelectItem>
-                          ))}
+                          {member.sourceBranches.map((candidate) => {
+                            const key = repositoryMergeBranchSelectionKey(candidate.source)
+                            const name = repositoryMergeBranchDisplayName(candidate.source)
+                            const text =
+                              candidate.source.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
+                            return (
+                              <SelectItem
+                                key={key}
+                                value={key}
+                                textValue={text}
+                                data-merge-source-option={`${member.repositoryName}:${key}`}
+                                data-merge-source-kind={candidate.source.kind}
+                                className="font-mono text-xs whitespace-normal break-all"
+                              >
+                                {text}
+                              </SelectItem>
+                            )
+                          })}
                         </SelectContent>
                       </Select>
                       <span className="text-muted-foreground/60">→</span>
@@ -826,7 +847,7 @@ function BranchWorkspaceBatchMergeOutDialog({
   destinations: Record<string, string>
   startedMode: BranchWorkspaceMergeMode | null
   onSelectedRepositoriesChange: (repositoryNames: string[]) => void
-  onDestinationChange: (repositoryName: string, destinationBranch: string) => void
+  onDestinationChange: (repositoryName: string, destinationKey: string) => void
   onExecute: (mode: BranchWorkspaceMergeMode) => Promise<void>
   onClose: () => void
   onBatchErrorAiHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
@@ -836,22 +857,31 @@ function BranchWorkspaceBatchMergeOutDialog({
   const selectedMembers = plan?.members.filter((member) => selectedRepositories.includes(member.repositoryName)) ?? []
   const hasSelection = selectedMembers.length > 0
   const selectedTargets: BranchWorkspaceBatchMergeOutTargetInput[] = selectedMembers.flatMap((member) => {
-    const destinationBranch = destinations[member.repositoryName]
-    return destinationBranch ? [{ repositoryName: member.repositoryName, destinationBranch }] : []
+    const selectedKey = destinations[member.repositoryName]
+    const destination = member.destinationBranches.find(
+      (candidate) => repositoryMergeBranchSelectionKey(candidate.destination) === selectedKey,
+    )
+    return destination ? [{ repositoryName: member.repositoryName, destination: destination.destination }] : []
   })
   const selectionReady =
     hasSelection &&
     selectedTargets.length === selectedMembers.length &&
     selectedMembers.every((member) =>
       member.destinationBranches.some(
-        (destination) => destination.branch === destinations[member.repositoryName] && destination.ready,
+        (destination) =>
+          repositoryMergeBranchSelectionKey(destination.destination) === destinations[member.repositoryName] &&
+          destination.ready,
       ),
     )
+  const mergeOnlyReady =
+    selectionReady && selectedTargets.every((target) => target.destination.kind === 'local')
   const remoteReady =
     selectionReady &&
     selectedMembers.every((member) =>
       member.destinationBranches.some(
-        (destination) => destination.branch === destinations[member.repositoryName] && destination.pullMergePushReady,
+        (destination) =>
+          repositoryMergeBranchSelectionKey(destination.destination) === destinations[member.repositoryName] &&
+          destination.pullMergePushReady,
       ),
     )
   const progress =
@@ -926,7 +956,8 @@ function BranchWorkspaceBatchMergeOutDialog({
                   (candidate) => candidate.repositoryName === member.repositoryName,
                 )
                 const destination = member.destinationBranches.find(
-                  (candidate) => candidate.branch === destinations[member.repositoryName],
+                  (candidate) =>
+                    repositoryMergeBranchSelectionKey(candidate.destination) === destinations[member.repositoryName],
                 )
                 const destinationUnavailable = !member.destinationBranches.some((candidate) => candidate.ready)
                 return (
@@ -953,7 +984,7 @@ function BranchWorkspaceBatchMergeOutDialog({
                       </span>
                       <span className="text-muted-foreground/60">→</span>
                       <Select
-                        value={destinations[member.repositoryName]}
+                        value={destinations[member.repositoryName] ?? ''}
                         disabled={locked || !selected || !member.ready || destinationUnavailable}
                         onValueChange={(value) => onDestinationChange(member.repositoryName, value)}
                       >
@@ -963,23 +994,33 @@ function BranchWorkspaceBatchMergeOutDialog({
                           aria-label={t('workspace.branch-workspace.git-action.destination-branch', {
                             repository: member.repositoryName,
                           })}
-                          title={destinations[member.repositoryName]}
+                          title={destination ? repositoryMergeBranchDisplayName(destination.destination) : undefined}
                           className="min-w-48 w-full max-w-none font-mono text-[10px] *:data-[slot=select-value]:line-clamp-none"
                         >
                           <SelectValue placeholder={t('workspace.branch-workspace.git-action.select-destination')} />
                         </SelectTrigger>
                         <SelectContent className="min-w-[var(--radix-select-trigger-width)] w-max max-w-[min(94vw,37.333rem)]">
-                          {member.destinationBranches.map((candidate) => (
-                            <SelectItem
-                              key={candidate.branch}
-                              value={candidate.branch}
-                              disabled={!candidate.ready}
-                              data-merge-destination-option={`${member.repositoryName}:${candidate.branch}`}
-                              className="font-mono text-xs whitespace-normal break-all"
-                            >
-                              {candidate.branch}
-                            </SelectItem>
-                          ))}
+                          {member.destinationBranches.map((candidate) => {
+                            const key = repositoryMergeBranchSelectionKey(candidate.destination)
+                            const name = repositoryMergeBranchDisplayName(candidate.destination)
+                            const text =
+                              candidate.destination.kind === 'remote'
+                                ? `${name} (${t('tab.remote-branches')})`
+                                : name
+                            return (
+                              <SelectItem
+                                key={key}
+                                value={key}
+                                textValue={text}
+                                disabled={!candidate.ready}
+                                data-merge-destination-option={`${member.repositoryName}:${key}`}
+                                data-merge-destination-kind={candidate.destination.kind}
+                                className="font-mono text-xs whitespace-normal break-all"
+                              >
+                                {text}
+                              </SelectItem>
+                            )
+                          })}
                         </SelectContent>
                       </Select>
                       <span
@@ -1063,7 +1104,7 @@ function BranchWorkspaceBatchMergeOutDialog({
                 type="button"
                 variant="outline"
                 data-action="merge"
-                disabled={pending || !selectionReady}
+                disabled={pending || !mergeOnlyReady}
                 onClick={() => void onExecute('merge')}
               >
                 <GitMerge className="size-4" aria-hidden="true" />

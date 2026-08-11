@@ -91,7 +91,9 @@ function mergeOutPlan(): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-me
       mergeOutMember('api'),
       mergeOutMember('web', {
         destinationBranches: mergeOutDestinations('web').map((destination) =>
-          destination.branch === 'main' ? { ...destination, pullMergePushReady: false } : destination,
+          destination.destination.kind === 'local' && destination.destination.branch === 'main'
+            ? { ...destination, pullMergePushReady: false }
+            : destination,
         ),
       }),
       mergeOutMember('docs', { ready: false, message: 'destination unavailable', destinationBranches: [] }),
@@ -119,7 +121,7 @@ function mergeOutMember(
 function mergeOutDestinations(repositoryName: string) {
   return [
     {
-      branch: 'main',
+      destination: { kind: 'local' as const, branch: 'main' },
       head: 'main-head',
       ready: true,
       worktreePath: `/workspace/${repositoryName}`,
@@ -127,7 +129,7 @@ function mergeOutDestinations(repositoryName: string) {
       pullMergePushReady: true,
     },
     {
-      branch: 'release/v2',
+      destination: { kind: 'local' as const, branch: 'release/v2' },
       head: 'release-head',
       ready: true,
       worktreePath: `/workspace/${repositoryName}-release`,
@@ -135,7 +137,7 @@ function mergeOutDestinations(repositoryName: string) {
       pullMergePushReady: true,
     },
     {
-      branch: 'staging',
+      destination: { kind: 'local' as const, branch: 'staging' },
       head: 'staging-head',
       ready: true,
       requiresTemporaryWorktree: true,
@@ -175,8 +177,8 @@ function mergeInMember(
     ready: true,
     pullMergePushReady: true,
     sourceBranches: [
-      { branch: 'main', head: 'main-head' },
-      { branch: 'release/v2', head: 'release-head' },
+      { source: { kind: 'local', branch: 'main' }, head: 'main-head' },
+      { source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' },
     ],
     fingerprint: `sha256:${repositoryName}`,
     ...fields,
@@ -571,15 +573,47 @@ describe('BranchWorkspaceGitActionPanel', () => {
       await Promise.resolve()
     })
 
-    expect(onBatchMergeIn).toHaveBeenCalledWith('merge', [{ repositoryName: 'api', sourceBranch: 'release/v2' }])
+    expect(onBatchMergeIn).toHaveBeenCalledWith('merge', [
+      { repositoryName: 'api', source: { kind: 'local', branch: 'release/v2' } },
+    ])
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('keeps same-named local and remote merge-in sources distinct and submits the remote selection', async () => {
+    const plan = mergeInPlan()
+    plan.members[0]!.sourceBranches.push(
+      { source: { kind: 'local', branch: 'origin/main' }, head: 'local-origin-main' },
+      { source: { kind: 'remote', remoteRef: 'origin/main' }, head: 'remote-origin-main' },
+    )
+    const onBatchMergeIn = vi.fn(async () => null)
+    render({ kind: 'batch-merge-in', plan, onBatchMergeIn })
+
+    await act(async () => mergeCheckbox('web')?.click())
+    const trigger = document.querySelector<HTMLButtonElement>('[data-merge-source="api"]')
+    await act(async () => {
+      trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(document.querySelector('[data-merge-source-option="api:local:origin/main"]')).not.toBeNull()
+    expect(document.querySelector('[data-merge-source-option="api:remote:origin/main"]')).not.toBeNull()
+    expect(document.querySelector('[data-merge-source-kind="remote"]')?.textContent).toContain('tab.remote-branches')
+
+    await selectMergeSource('api', 'origin/main', 'remote')
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(onBatchMergeIn).toHaveBeenCalledWith('merge', [
+      { repositoryName: 'api', source: { kind: 'remote', remoteRef: 'origin/main' } },
+    ])
   })
 
   test('widens destination selection and shows only the complete branch name', async () => {
     const plan = mergeOutPlan()
     const longBranch = 'release/customer-facing/complete-branch-name'
     plan.members[0]!.destinationBranches.push({
-      branch: longBranch,
+      destination: { kind: 'local', branch: longBranch },
       head: 'long-branch-head',
       ready: true,
       requiresTemporaryWorktree: true,
@@ -598,7 +632,9 @@ describe('BranchWorkspaceGitActionPanel', () => {
       trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
       await Promise.resolve()
     })
-    const option = document.querySelector<HTMLElement>(`[data-merge-destination-option="api:${longBranch}"]`)
+    const option = document.querySelector<HTMLElement>(
+      `[data-merge-destination-option="api:local:${longBranch}"]`,
+    )
     expect(option?.className).toContain('break-all')
     expect(option?.textContent).toBe(longBranch)
     expect(document.body.textContent).not.toContain('workspace.branch-workspace.git-action.temporary-worktree')
@@ -655,8 +691,39 @@ describe('BranchWorkspaceGitActionPanel', () => {
       await Promise.resolve()
     })
 
-    expect(onBatchMergeOut).toHaveBeenCalledWith('merge', [{ repositoryName: 'api', destinationBranch: 'release/v2' }])
+    expect(onBatchMergeOut).toHaveBeenCalledWith('merge', [
+      { repositoryName: 'api', destination: { kind: 'local', branch: 'release/v2' } },
+    ])
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('requires synchronized mode for a remote merge-out destination', async () => {
+    const plan = mergeOutPlan()
+    plan.members[0]!.destinationBranches.push({
+      destination: { kind: 'remote', remoteRef: 'origin/release/v2' },
+      head: 'remote-release-head',
+      ready: true,
+      requiresTemporaryWorktree: true,
+      pullMergePushReady: true,
+    })
+    const onBatchMergeOut = vi.fn(async () => null)
+    render({ kind: 'batch-merge-out', plan, onBatchMergeOut })
+
+    await act(async () => mergeCheckbox('web')?.click())
+    await selectMergeDestination('api', 'origin/release/v2', 'remote')
+    const mergeOnly = document.querySelector<HTMLButtonElement>('[data-action="merge"]')
+    const synchronized = document.querySelector<HTMLButtonElement>('[data-action="pull-merge-push"]')
+    expect(mergeOnly?.disabled).toBe(true)
+    expect(synchronized?.disabled).toBe(false)
+    expect(document.querySelector('[data-merge-destination="api"]')?.textContent).toContain('tab.remote-branches')
+
+    await act(async () => {
+      synchronized?.click()
+      await Promise.resolve()
+    })
+    expect(onBatchMergeOut).toHaveBeenCalledWith('pull-merge-push', [
+      { repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'origin/release/v2' } },
+    ])
   })
 
   test('locks selection and projects live member step progress after execution starts', async () => {
@@ -740,8 +807,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
       await Promise.resolve()
     })
     const expectedTargets = [
-      { repositoryName: 'api', destinationBranch: 'main' },
-      { repositoryName: 'web', destinationBranch: 'staging' },
+      { repositoryName: 'api', destination: { kind: 'local', branch: 'main' } },
+      { repositoryName: 'web', destination: { kind: 'local', branch: 'staging' } },
     ]
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(1, 'merge', expectedTargets)
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
@@ -968,7 +1035,11 @@ function mergeCheckbox(repositoryName: string): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>(`[data-merge-repository="${repositoryName}"]`)
 }
 
-async function selectMergeDestination(repositoryName: string, destinationBranch: string) {
+async function selectMergeDestination(
+  repositoryName: string,
+  destinationBranch: string,
+  kind: 'local' | 'remote' = 'local',
+) {
   const trigger = document.querySelector<HTMLButtonElement>(`[data-merge-destination="${repositoryName}"]`)
   if (!trigger) throw new Error(`Missing destination trigger for ${repositoryName}`)
   await act(async () => {
@@ -976,7 +1047,7 @@ async function selectMergeDestination(repositoryName: string, destinationBranch:
     await Promise.resolve()
   })
   const option = document.querySelector<HTMLElement>(
-    `[data-merge-destination-option="${repositoryName}:${destinationBranch}"]`,
+    `[data-merge-destination-option="${repositoryName}:${kind}:${destinationBranch}"]`,
   )
   if (!option) throw new Error(`Missing destination option ${repositoryName}:${destinationBranch}`)
   await act(async () => {
@@ -985,14 +1056,16 @@ async function selectMergeDestination(repositoryName: string, destinationBranch:
   })
 }
 
-async function selectMergeSource(repositoryName: string, sourceBranch: string) {
+async function selectMergeSource(repositoryName: string, sourceBranch: string, kind: 'local' | 'remote' = 'local') {
   const trigger = document.querySelector<HTMLButtonElement>(`[data-merge-source="${repositoryName}"]`)
   if (!trigger) throw new Error(`Missing source trigger for ${repositoryName}`)
   await act(async () => {
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
     await Promise.resolve()
   })
-  const option = document.querySelector<HTMLElement>(`[data-merge-source-option="${repositoryName}:${sourceBranch}"]`)
+  const option = document.querySelector<HTMLElement>(
+    `[data-merge-source-option="${repositoryName}:${kind}:${sourceBranch}"]`,
+  )
   if (!option) throw new Error(`Missing source option ${repositoryName}:${sourceBranch}`)
   await act(async () => {
     option.dispatchEvent(new MouseEvent('click', { bubbles: true }))

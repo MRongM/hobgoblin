@@ -317,12 +317,16 @@ The branch or worktree explicitly targeted by an action. It may differ from the 
 _Avoid_: Active branch, implicitly selected branch
 
 **Branch merge-in**:
-A repository branch action that integrates a user-selected local source branch into the branch action target's checked-out branch. The branch action target is the merge destination.
+A repository branch action that integrates one explicitly selected local branch or remote-tracking branch ref into the branch action target's checked-out branch. A remote source is fetched from its exact remote before merge; the branch action target remains the merge destination and the only branch pulled or pushed by the optional target-owned remote pipeline.
 _Avoid_: Generic merge, merge current branch, source-branch merge
 
 **Branch merge-out**:
-A repository branch action that integrates the branch action target's checked-out branch into a user-selected local destination branch. A clean existing destination worktree is used when available, an unchecked-out destination may use an application temporary worktree, and a dirty destination worktree is ineligible.
+A repository branch action that integrates the branch action target's checked-out branch into one explicitly selected local branch or remote-tracking branch ref. A local destination uses a clean existing worktree or an application temporary worktree; a remote destination is fetched, materialized only as an application-owned detached temporary worktree, merged, pushed non-forcefully to that exact remote branch, and cleaned without creating a local branch.
 _Avoid_: Generic merge, merge-back, merge current branch
+
+**Merge branch selection**:
+The dialog-local, explicit choice of either one local branch or one remote-tracking branch ref in the same repository for a merge-in source or merge-out destination. Its local-or-remote kind and full branch identity remain part of planning and execution identity so a local branch named like `origin/main` is never confused with the remote-tracking ref of that name.
+_Avoid_: Branch name, inferred upstream, implicit tracking branch
 
 **Branch merge-out source**:
 The clean branch action target worktree whose checked-out branch supplies committed history to a merge-out. Uncommitted worktree content is never treated as part of that source and makes the action ineligible until committed or stashed.
@@ -333,7 +337,7 @@ The existing destination worktree in which a merge-out conflict remains for reso
 _Avoid_: Source worktree conflict, hidden temporary conflict
 
 **Branch merge-out remote pipeline**:
-An optional destination-owned sequence that pulls the selected destination branch, merges the branch action target into it, and pushes that destination branch. Its eligibility depends only on the destination branch's usable upstream; the source branch's upstream is irrelevant.
+A destination-owned sequence that synchronizes the selected destination, merges the branch action target into it, and pushes the result. A local destination is fast-forward pulled and pushed through its usable upstream; a remote destination is fetched from its exact remote, merged in a detached temporary worktree, and pushed from detached `HEAD` to that exact remote branch. A remote destination has no merge-only mode because no durable local branch owns an unpushed result; the source branch's upstream is irrelevant.
 _Avoid_: Source pull, source push, merge-in remote pipeline
 
 **Project list**:
@@ -446,11 +450,11 @@ An application-coordinated action that pushes every repository member's target b
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
 **Branch workspace batch merge-in**:
-An application-coordinated action that integrates one explicitly selected local source branch per selected repository member into that member's checked-out target branch. The clean member worktree is the merge destination and conflict site; selected member pipelines retain manifest order, isolate a failed member while later members continue, return all member failures together, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates one explicitly selected local branch or remote-tracking branch ref per selected repository member into that member's checked-out target branch. A remote source is fetched before merge; the clean member worktree remains the merge destination and conflict site. Selected member pipelines retain manifest order, isolate a failed member while later members continue, return all member failures together, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-out, source worktree merge, atomic batch merge
 
 **Branch workspace batch merge-out**:
-An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local destination branch per member. A clean existing destination worktree is reused; an unchecked-out destination uses an application-owned temporary worktree that is cleaned without deleting the branch before the next member is attempted. Selected member pipelines retain manifest order, isolate and aggregate member failures, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local branch or remote-tracking branch ref per member. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Selected member pipelines retain manifest order, isolate and aggregate member failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
 **Plain workspace**:

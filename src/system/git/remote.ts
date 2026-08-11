@@ -330,3 +330,24 @@ export async function pushBranch(
     : ['push', '--', target.remote, `${branch}:${target.branch}`]
   return gitResultWithOptions(cwd, gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal), ...args)
 }
+
+export async function pushWorktreeHeadToRemoteBranch(
+  cwd: string,
+  remote: string,
+  branch: string,
+  signal?: AbortSignal,
+  networkOptions?: GitNetworkOptions,
+): Promise<ExecResult> {
+  if (!isSafeRemoteName(remote) || !isSafeBranchName(branch)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  return gitResultWithOptions(
+    cwd,
+    gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal),
+    'push',
+    '--',
+    remote,
+    `HEAD:refs/heads/${branch}`,
+  )
+}

@@ -41,7 +41,7 @@ import {
   getRepositoryRemoteTags,
   createRepositoryLocalTag,
   initRepository,
-  mergeRepositoryBranch,
+  mergeRepositoryBranchSelection,
   moveRepositoryFileTreeEntries,
   openRepositoryEditor,
   openRepositoryRemote,
@@ -70,6 +70,7 @@ import {
   isRepoFileTreeBinaryFileReplaceRequest,
   normalizeFileTreeSearchLimit,
 } from '#/shared/file-tree.ts'
+import { normalizeRepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 
 export function createRepoRoutes() {
   const app = new Hono()
@@ -722,11 +723,14 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
-    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const source =
+      normalizeRepositoryMergeBranchSelection(body?.source) ??
+      normalizeRepositoryMergeBranchSelection({ kind: 'local', branch: body?.branch })
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    if (!source) return c.json({ ok: false, message: 'error.invalid-arguments' })
     return c.json(
       await jsonOr(
-        () => mergeRepositoryBranch(repoId, worktreePath, branch, c.req.raw.signal, sourceToken),
+        () => mergeRepositoryBranchSelection(repoId, worktreePath, source, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'merge',
       ),

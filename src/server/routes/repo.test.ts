@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   deleteRepositoryRemoteTag: vi.fn(),
   buildRepositoryBranchMergeOutPlan: vi.fn(),
   executeRepositoryBranchMergeOut: vi.fn(),
+  mergeRepositoryBranchSelection: vi.fn(),
   setRepositoryBranchUpstream: vi.fn(),
 }))
 
@@ -64,6 +65,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   createRepositoryLocalTag: mocks.createRepositoryLocalTag,
   deleteRepositoryLocalTag: mocks.deleteRepositoryLocalTag,
   mergeRepositoryBranch: vi.fn(),
+  mergeRepositoryBranchSelection: mocks.mergeRepositoryBranchSelection,
   moveRepositoryFileTreeEntries: vi.fn(),
   openRepositoryEditor: mocks.openRepositoryEditor,
   openRepositoryRemote: vi.fn(),
@@ -173,6 +175,7 @@ describe('repo routes', () => {
       },
     })
     mocks.executeRepositoryBranchMergeOut.mockResolvedValue({ ok: true, message: 'merged' })
+    mocks.mergeRepositoryBranchSelection.mockResolvedValue({ ok: true, message: 'merged in' })
     mocks.setRepositoryBranchUpstream.mockResolvedValue({ ok: true, message: 'updated' })
   })
 
@@ -241,6 +244,53 @@ describe('repo routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ ok: true })
     expect(mocks.buildRepositoryBranchMergeOutPlan).toHaveBeenCalledWith(body, {}, expect.any(AbortSignal))
+  })
+
+  test('passes discriminated remote merge-in source to the authoritative write path', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+    const source = { kind: 'remote' as const, remoteRef: 'origin/feature/source' }
+
+    const response = await app.request('http://localhost/merge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        worktreePath: '/repo-target',
+        source,
+        sourceToken: 'client_123',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'merged in' })
+    expect(mocks.mergeRepositoryBranchSelection).toHaveBeenCalledWith(
+      '/repo',
+      '/repo-target',
+      source,
+      expect.any(AbortSignal),
+      'client_123',
+    )
+  })
+
+  test('keeps legacy merge-in branch payloads as explicit local selections', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/merge', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo-target', branch: 'feature/source' }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(mocks.mergeRepositoryBranchSelection).toHaveBeenCalledWith(
+      '/repo',
+      '/repo-target',
+      { kind: 'local', branch: 'feature/source' },
+      expect.any(AbortSignal),
+      undefined,
+    )
   })
 
   test('passes merge-out execution and source token to the authoritative write path', async () => {

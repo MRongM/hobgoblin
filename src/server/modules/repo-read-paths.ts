@@ -33,6 +33,7 @@ import {
   type WorktreeStatus,
 } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
@@ -54,6 +55,15 @@ export async function getRepositoryWorktrees(cwd: string, signal?: AbortSignal):
 
 export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
   return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getStatus(signal))
+}
+
+export async function getRepositoryRemoteBranchInfo(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<RemoteTrackingBranchInfo[]> {
+  return signal?.aborted
+    ? []
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getRemoteBranchInfo(signal))
 }
 
 export async function getRepositoryHistory(

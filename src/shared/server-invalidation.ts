@@ -138,6 +138,7 @@ function isBranchWorkspaceGitActionStep(value: unknown): boolean {
     value === 'discard' ||
     value === 'prepare' ||
     value === 'pull' ||
+    value === 'fetch' ||
     value === 'merge' ||
     value === 'push' ||
     value === 'cleanup'
