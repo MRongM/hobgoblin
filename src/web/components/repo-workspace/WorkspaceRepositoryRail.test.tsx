@@ -968,9 +968,6 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.textContent).toContain('workspace.scan-skipped:1')
     expect(container?.querySelector('button[aria-current="page"]')?.textContent).toContain('api')
     expect(container?.querySelector('button[aria-label="workspace.rescan"]')).not.toBeNull()
-    const createWorkspace = container?.querySelector('button[aria-label="workspace.branch-workspace.create"]')
-    expect(createWorkspace).not.toBeNull()
-    expect(createWorkspace?.querySelector('.lucide-folder-plus')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.batch.remove-action"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.pull-all"]')).toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.configure"]')).toBeNull()
@@ -1045,7 +1042,7 @@ describe('WorkspaceRepositoryRail', () => {
     expect(overview?.className).toContain('text-[13px]')
   })
 
-  test('keeps hidden workspace actions in the branch workspace titlebar rather than the status bar', () => {
+  test('keeps the create action in the branch workspace titlebar', () => {
     useReposStore.setState({
       activeId: ROOT,
       workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
@@ -1060,10 +1057,12 @@ describe('WorkspaceRepositoryRail', () => {
     expect(repositorySection?.querySelector('[aria-label="workspace.repositories.expand"]')).toBeNull()
     const hide = repositorySection?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.hide"]')
     expect(hide?.querySelector('.lucide-eye-off')).not.toBeNull()
-    for (const label of ['workspace.branch-workspace.create', 'workspace.rescan']) {
-      expect(repositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-      expect(branchWorkspaceSection?.querySelector(`[aria-label="${label}"]`)).toBeNull()
-    }
+    expect(repositorySection?.querySelector('[aria-label="workspace.branch-workspace.create"]')).toBeNull()
+    expect(repositorySection?.querySelector('[aria-label="workspace.rescan"]')).not.toBeNull()
+    const createWorkspace = branchWorkspaceSection?.querySelector('[aria-label="workspace.branch-workspace.create"]')
+    expect(createWorkspace).not.toBeNull()
+    expect(createWorkspace?.querySelector('.lucide-folder-plus')).not.toBeNull()
+    expect(branchWorkspaceSection?.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
     expect(repositorySection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
     expect(repositorySection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
 
@@ -1092,9 +1091,14 @@ describe('WorkspaceRepositoryRail', () => {
 
     const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     expect(restoredRepositorySection).not.toBeNull()
-    for (const label of ['workspace.branch-workspace.create', 'workspace.rescan']) {
-      expect(restoredRepositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-    }
+    const restoredBranchWorkspaceSection = container?.querySelector(
+      'section[aria-label="workspace.branch-workspace.list"]',
+    )
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.branch-workspace.create"]')).toBeNull()
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.rescan"]')).not.toBeNull()
+    expect(
+      restoredBranchWorkspaceSection?.querySelector('[aria-label="workspace.branch-workspace.create"]'),
+    ).not.toBeNull()
     expect(restoredRepositorySection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
     expect(restoredRepositorySection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
   })

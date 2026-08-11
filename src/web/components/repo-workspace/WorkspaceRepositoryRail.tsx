@@ -562,17 +562,11 @@ export function WorkspaceRepositoryRail({
   )
   const repositoryHeaderActions = (
     <>
-      {branchWorkspacePrimaryActions}
       {workspaceRepositoryOnlyActions}
       {repositoryListToggleAction}
     </>
   )
-  const hiddenRepositoryActions = (
-    <>
-      {branchWorkspacePrimaryActions}
-      {repositoryListToggleAction}
-    </>
-  )
+  const hiddenRepositoryActions = <>{repositoryListToggleAction}</>
   const branchListRefreshAction = (
     <Button
       type="button"
@@ -629,6 +623,7 @@ export function WorkspaceRepositoryRail({
               <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('workspace.branch-workspace.list')}
               </span>
+              {branchWorkspacePrimaryActions}
               {branchListRefreshAction}
               {!repositoryListVisible ? hiddenRepositoryActions : null}
             </div>
