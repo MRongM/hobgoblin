@@ -39,9 +39,9 @@ Use this doc for UI language and presentation rules.
 
 ## Detached file area windows
 
-- Keep the source file area and its active tab in place when its toolbar is dragged into a detached file area window; detaching creates a live copy rather than moving navigation state. Individual tabs are not draggable.
+- Keep the source file area and its active tab in place when its toolbar is dragged into a detached file area window; detaching creates a live copy of the complete file area rather than moving navigation state. Individual tabs are not draggable.
 - Bind the detached window to the active tab, repository, and branch or worktree context captured when the toolbar drag starts. Main-window navigation must not silently retarget it.
-- Use the compact context topbar to identify the repository, branch or worktree, current file area panel, and live state. Do not repeat the full file area tab bar inside a one-panel window.
+- Use the compact context topbar to identify the repository, branch or worktree, current file area panel, and live state. Render the complete native file area, including its tab bar, below that context topbar.
 - Keep detached window bounds, internal panel navigation, and open/closed state local and ephemeral. Do not persist or restore them.
 - Offer the same drag-out and `Shift+Enter` interaction in Electron and Web. In Web, open a same-origin browser window and show an actionable failure toast when the browser blocks it.
 - Never place repository paths or branch names in a detached browser window URL; transfer them through a short-lived, consume-once same-origin handoff.

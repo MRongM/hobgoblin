@@ -37,6 +37,7 @@ interface RepoWorktreeExplorerProps {
   revealRequest: FileTreeRevealRequest | null
   onTabChange: (tab: ExplorerTab) => void
   toolbarLeading?: ReactNode
+  allowDetach?: boolean
 }
 
 let lastOverflowExpanded = false
@@ -52,6 +53,7 @@ export function RepoWorktreeExplorer({
   revealRequest: externalRevealRequest,
   onTabChange,
   toolbarLeading,
+  allowDetach = true,
 }: RepoWorktreeExplorerProps) {
   const t = useT()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
@@ -69,7 +71,7 @@ export function RepoWorktreeExplorer({
       branch: repo?.ui.selectedBranch ?? '',
       tab: activeVisibleTab,
     },
-    { enabled: !!repo?.ui.selectedBranch },
+    { enabled: allowDetach && !!repo?.ui.selectedBranch },
   )
 
   const baseTabs = [

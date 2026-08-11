@@ -11,6 +11,7 @@ import { EffectiveProjectThemeBridge } from '#/web/components/EffectiveProjectTh
 import { ErrorBoundary } from '#/web/components/ErrorBoundary.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { RepoExplorerPanel } from '#/web/components/repo-workspace/RepoExplorerPanel.tsx'
+import { RepoWorktreeExplorer } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
 import {
   BranchWorkspaceFileArea,
   type BranchWorkspaceFileAreaTab,
@@ -111,6 +112,12 @@ function DetachedRepositoryFileArea({
       : lastPathSegment(request.repo.id) || request.repo.id)
   const activeTabLabel = t(TAB_LABEL_KEYS[activeTab])
   const sourceTabLabel = t(TAB_LABEL_KEYS[request.tab])
+  const selectedWorktreePath = capturedBranch
+    ? repo?.data.branches.find((branch) => branch.name === capturedBranch)?.worktree?.path
+    : undefined
+  const changeCount = selectedWorktreePath
+    ? (repo?.data.status.find((status) => status.path === selectedWorktreePath)?.entries.length ?? 0)
+    : 0
 
   useEffect(() => {
     document.title = `${activeTabLabel} — ${repoName}`
@@ -140,7 +147,7 @@ function DetachedRepositoryFileArea({
         <EffectiveProjectThemeBridge />
         <Topbar
           actions={
-            activeTab !== request.tab ? (
+            request.kind === 'plain-project' && activeTab !== request.tab ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -195,12 +202,24 @@ function DetachedRepositoryFileArea({
           </ScrollPane>
         ) : (
           <main className="flex min-h-0 flex-1 flex-col bg-pane">
-            <RepoExplorerPanel
-              repoId={request.repo.id}
-              activeTab={activeTab}
-              revealRequest={revealRequest}
-              onRevealPath={revealPath}
-            />
+            {request.kind === 'git-worktree' ? (
+              <RepoWorktreeExplorer
+                repoId={request.repo.id}
+                layout="left-right"
+                activeTab={activeTab}
+                changeCount={changeCount}
+                revealRequest={null}
+                onTabChange={setActiveTab}
+                allowDetach={false}
+              />
+            ) : (
+              <RepoExplorerPanel
+                repoId={request.repo.id}
+                activeTab={activeTab}
+                revealRequest={revealRequest}
+                onRevealPath={revealPath}
+              />
+            )}
           </main>
         )}
         <Toaster />

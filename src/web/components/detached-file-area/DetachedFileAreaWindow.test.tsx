@@ -46,6 +46,11 @@ vi.mock('#/web/components/ui/sonner.tsx', () => ({
   Toaster: () => null,
 }))
 
+vi.mock('#/web/app-shell-client.ts', () => ({
+  canOpenDetachedFileAreaWindow: () => true,
+  openDetachedFileAreaWindow: vi.fn(async () => ({ ok: true, windowKey: 'nested' })),
+}))
+
 vi.mock('#/web/components/repo-workspace/RepoExplorerPanel.tsx', () => ({
   RepoExplorerPanel: ({ activeTab, onRevealPath }: { activeTab: string; onRevealPath: (path: string) => void }) => (
     <div data-testid="detached-panel" data-active-tab={activeTab}>
@@ -92,7 +97,7 @@ afterEach(async () => {
 })
 
 describe('DetachedFileAreaWindow', () => {
-  test('hydrates the captured repository context and keeps reveal navigation inside the detached window', async () => {
+  test('hydrates the captured worktree and renders its complete file area with the captured tab selected', async () => {
     const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
     await act(async () => {
       root.render(<DetachedFileAreaWindow request={request} />)
@@ -110,15 +115,27 @@ describe('DetachedFileAreaWindow', () => {
     expect(document.title).toBe('tab.changes — repo')
     expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('changes')
 
+    const toolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
+    expect(toolbar).not.toBeNull()
+    expect(toolbar?.draggable).toBe(false)
+    expect(container.querySelectorAll('[data-repo-worktree-explorer] [role="tab"]')).toHaveLength(3)
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
+    })
+    expect(container.querySelectorAll('[data-repo-worktree-explorer] [role="tab"]')).toHaveLength(6)
+
+    const statusTab = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-repo-worktree-explorer] [role="tab"]'),
+    ).find((tab) => tab.textContent?.includes('tab.status'))
+    await act(async () => statusTab?.click())
+    expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('status')
+
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="reveal-file"]')?.click()
     })
     expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('files')
 
-    const back = container.querySelector<HTMLButtonElement>('[data-testid="detached-back"]')
-    expect(back?.textContent).toContain('tab.changes')
-    await act(async () => back?.click())
-    expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('changes')
+    expect(container.querySelector('[data-testid="detached-back"]')).toBeNull()
   })
 
   test('shows a stable unavailable state when the captured branch no longer exists', async () => {

@@ -309,8 +309,8 @@ The top row of the repository file area, containing the Status, Files, Changes, 
 _Avoid_: Detail tabs, file tabs
 
 **Detached file area window**:
-A temporary auxiliary window that shows a live copy of one file area tab while keeping the source tab in its captured repository and branch or worktree context. Electron uses a native application window; Web uses a same-origin browser window.
-_Avoid_: File area focus mode, moved file tab, generic secondary window
+A temporary auxiliary window that shows a live copy of the complete file area while keeping the source file area in its captured project and branch or worktree context. The tab active when detachment starts becomes the auxiliary window's initial tab, and its full file area tab bar remains independently navigable. Electron uses a native application window; Web uses a same-origin browser window.
+_Avoid_: File area focus mode, moved file tab, detached single-tab panel, generic secondary window
 
 **Branch action target**:
 The branch or worktree explicitly targeted by an action. It may differ from the selected branch context, and targeting it does not imply navigating to it unless the action opens branch-specific application content.
