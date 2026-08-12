@@ -413,6 +413,62 @@ describe('TerminalSessionRegistry', () => {
       expect(registry.worktreeSnapshot(WORKTREE_KEY).creating).toBe(false)
     })
 
+    test.each([
+      ['Git primary worktree', 'main', 'C:\\Users\\Test\\Repo'],
+      ['Git linked worktree', 'feature/auth', 'C:\\Users\\Test\\Repo-Feature'],
+      ['plain workspace', 'workspace', 'C:\\Users\\Test\\Plain'],
+    ])('reconciles a Windows %s created with canonical server paths', async (_label, branch, rendererPath) => {
+      const rendererRepoRoot = rendererPath.includes('Repo-Feature') ? 'C:\\Users\\Test\\Repo' : rendererPath
+      const serverRepoRoot = rendererRepoRoot.toLowerCase().replaceAll('\\', '/')
+      const serverWorktreePath = rendererPath.toLowerCase().replaceAll('\\', '/')
+      const terminalWorktreeKey = worktreeTerminalKey(rendererRepoRoot, rendererPath)
+      registry.setRepoIndex({
+        [rendererRepoRoot]: {
+          instanceToken: 1,
+          branchByWorktreePath: { [rendererPath]: branch },
+        },
+      })
+      const serverSession = {
+        ...makeServerSession('windows-session', 'terminal-1'),
+        key: `${serverRepoRoot}\0${serverWorktreePath}\0terminal-1`,
+        cwd: serverWorktreePath,
+        controller: { attachmentId: 'attachment_local', status: 'connected' as const },
+      }
+      bridgeMocks.create.mockResolvedValueOnce({
+        ok: true,
+        action: 'created',
+        key: serverSession.key,
+        sessionId: serverSession.sessionId,
+        processName: 'pwsh.exe',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 1,
+        controller: serverSession.controller,
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [serverSession],
+      })
+
+      const key = await registry.createTerminal({
+        repoRoot: rendererRepoRoot,
+        branch,
+        worktreePath: rendererPath,
+      })
+
+      expect(key).toBe(`${terminalWorktreeKey}\0terminal-1`)
+      expect(registry.worktreeSnapshot(terminalWorktreeKey)).toMatchObject({
+        count: 1,
+        selectedDescriptor: {
+          repoRoot: rendererRepoRoot,
+          branch,
+          worktreePath: rendererPath,
+          key: `${terminalWorktreeKey}\0terminal-1`,
+        },
+      })
+    })
+
     test('sends measured geometry and hydrates the created session first frame', async () => {
       registry.setRepoIndex(makeRepoIndex())
       const host = document.createElement('div')

@@ -108,6 +108,10 @@ _Avoid_: New terminal, embedded terminal
 The interactive command interpreter running inside one internal terminal session. It is attached to Hobgoblin's PTY and rendered by the existing terminal surface; it is distinct from the terminal host, the PTY transport, and an external terminal application.
 _Avoid_: Windows Terminal, terminal emulator, external terminal
 
+**Internal terminal path identity**:
+The renderer-and-server-stable identity of an internal terminal's project root or working-directory path. Equivalent Windows drive and UNC paths share one case-insensitive identity with normalized separators and dot segments, while the repository-owned original path remains authoritative for navigation, presentation, and the PTY working directory; symbolic links are never resolved as part of identity. It is distinct from a filesystem real path and from the operational working-directory spelling.
+_Avoid_: Normalized working directory, canonical filesystem path, real path
+
 **Mobile Web terminal vertical scroll gesture**:
 A primary single-touch vertical drag within a Mobile Web internal terminal that scrolls terminal history in an ordinary shell and, for a controlling attachment, preserves foreground full-screen terminal application navigation. It follows the drag directly, continues with decelerating inertia after release, stops without bounce, preserves the existing terminal focus and virtual-keyboard state, and never scrolls the Hobgoblin page or requests terminal input control; a controller tap retains ordinary terminal focus behavior, while a read-only tap never invokes the input method.
 _Avoid_: Page scroll, terminal input gesture, takeover gesture, history-only gesture

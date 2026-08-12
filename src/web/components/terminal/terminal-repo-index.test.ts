@@ -60,6 +60,19 @@ describe('repoIndexFromRepos', () => {
     })
     expect(branchForTerminalWorktree(index, '/workspace', '/workspace/goblin-feature')).toBe('feature/auth')
   })
+
+  test('resolves canonical Windows server paths against renderer-owned path spelling', () => {
+    const repoRoot = 'C:\\Users\\Test\\Repo'
+    const worktreePath = 'C:\\Users\\Test\\Repo-Feature'
+    const index = {
+      [repoRoot]: {
+        instanceToken: 1,
+        branchByWorktreePath: { [worktreePath]: 'feature/auth' },
+      },
+    }
+
+    expect(branchForTerminalWorktree(index, 'c:/users/test/repo', 'c:/users/test/repo-feature')).toBe('feature/auth')
+  })
 })
 
 function branchWorkspace(rootId: string, path: string, stateName: 'ready' | 'delete-incomplete') {

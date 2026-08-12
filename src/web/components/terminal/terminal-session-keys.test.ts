@@ -2,6 +2,12 @@ import { describe, expect, test } from 'vitest'
 import * as terminalSessionKeys from '#/web/components/terminal/terminal-session-keys.ts'
 
 describe('terminal session keys', () => {
+  test('uses one case-insensitive identity for equivalent Windows paths', () => {
+    expect(
+      terminalSessionKeys.worktreeTerminalKey('c:/Users/Test/Repo/.', 'C:\\USERS\\TEST\\Repo-Feature'),
+    ).toBe('C:\\users\\test\\repo\0C:\\users\\test\\repo-feature')
+  })
+
   test('parses a canonical worktree terminal key', () => {
     const parseWorktreeTerminalKey = Reflect.get(terminalSessionKeys, 'parseWorktreeTerminalKey') as (
       key: string,

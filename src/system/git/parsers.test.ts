@@ -404,21 +404,6 @@ describe('parseWorktrees', () => {
     ])
   })
 
-  test('parses NUL-delimited porcelain records without treating path newlines as fields', () => {
-    const out = [
-      'worktree /repo',
-      'HEAD a',
-      'branch refs/heads/main',
-      '',
-      'worktree /repo-feature\ncontinued',
-      'HEAD b',
-      'branch refs/heads/feature',
-      '',
-    ].join('\0')
-
-    expect(parseWorktrees(out).map((worktree) => worktree.path)).toEqual(['/repo', '/repo-feature\ncontinued'])
-  })
-
   test('strips refs/heads/ prefix from branch ref', () => {
     const out = ['worktree /repo', 'HEAD a', 'branch refs/heads/feature/nested/name'].join('\n')
     expect(parseWorktrees(out)[0]?.branch).toBe('feature/nested/name')

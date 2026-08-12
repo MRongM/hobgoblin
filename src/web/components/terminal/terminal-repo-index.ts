@@ -3,6 +3,14 @@ import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { ReposStore } from '#/web/stores/repos/types.ts'
 import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
+import { terminalPathIdentityKey } from '#/web/components/terminal/terminal-session-keys.ts'
+
+export interface ResolvedTerminalRepoWorktree {
+  repoRoot: string
+  worktreePath: string
+  branch: string
+  branchWorkspaceId?: string
+}
 
 function stringRecordEqual(left: Record<string, string> = {}, right: Record<string, string> = {}): boolean {
   const leftKeys = Object.keys(left)
@@ -77,5 +85,35 @@ export function branchForTerminalWorktree(
   repoRoot: string,
   worktreePath: string,
 ): string | null {
-  return repoIndex[repoRoot]?.branchByWorktreePath[worktreePath] ?? null
+  return resolveTerminalRepoWorktree(repoIndex, repoRoot, worktreePath)?.branch ?? null
+}
+
+export function repoRootForTerminalIdentity(repoIndex: TerminalRepoIndex, repoRoot: string): string | null {
+  const targetIdentity = terminalPathIdentityKey(repoRoot)
+  return Object.keys(repoIndex).find((candidate) => terminalPathIdentityKey(candidate) === targetIdentity) ?? null
+}
+
+export function resolveTerminalRepoWorktree(
+  repoIndex: TerminalRepoIndex,
+  repoRoot: string,
+  worktreePath: string,
+): ResolvedTerminalRepoWorktree | null {
+  const resolvedRepoRoot = repoRootForTerminalIdentity(repoIndex, repoRoot)
+  if (!resolvedRepoRoot) return null
+  const snapshot = repoIndex[resolvedRepoRoot]
+  if (!snapshot) return null
+  const targetIdentity = terminalPathIdentityKey(worktreePath)
+  const resolvedWorktreePath = Object.keys(snapshot.branchByWorktreePath).find(
+    (candidate) => terminalPathIdentityKey(candidate) === targetIdentity,
+  )
+  if (!resolvedWorktreePath) return null
+  const branch = snapshot.branchByWorktreePath[resolvedWorktreePath]
+  if (!branch) return null
+  const branchWorkspaceId = snapshot.branchWorkspaceIdByWorktreePath?.[resolvedWorktreePath]
+  return {
+    repoRoot: resolvedRepoRoot,
+    worktreePath: resolvedWorktreePath,
+    branch,
+    ...(branchWorkspaceId ? { branchWorkspaceId } : {}),
+  }
 }

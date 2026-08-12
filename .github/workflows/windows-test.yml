@@ -76,6 +76,9 @@ jobs:
           src/system/open-app.test.ts
           src/system/terminals.test.ts
           src/system/windows-terminal.test.ts
+          src/web/components/terminal/TerminalSessionRegistry.test.ts
+          src/web/components/terminal/terminal-repo-index.test.ts
+          src/web/components/terminal/terminal-session-keys.test.ts
           src/web/components/terminal/terminal-path-links.test.ts
           src/web/lib/editor-open-targets.test.ts
           src/web/lib/paths.test.ts
