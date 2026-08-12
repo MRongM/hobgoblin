@@ -33,6 +33,7 @@ import {
   type WorktreeStatus,
 } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
@@ -54,6 +55,15 @@ export async function getRepositoryWorktrees(cwd: string, signal?: AbortSignal):
 
 export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
   return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getStatus(signal))
+}
+
+export async function getRepositoryRemoteBranchInfo(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<RemoteTrackingBranchInfo[]> {
+  return signal?.aborted
+    ? []
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getRemoteBranchInfo(signal))
 }
 
 export async function getRepositoryHistory(
@@ -83,17 +93,6 @@ export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal):
 
 export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
   return await runWithRepoBackend(cwd, async (backend) => await backend.getPatch(worktreePath, signal))
-}
-
-export async function isRepositoryAncestor(
-  cwd: string,
-  ancestor: string,
-  descendant: string,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  return signal?.aborted
-    ? false
-    : await runWithRepoBackend(cwd, async (backend) => await backend.isAncestor(ancestor, descendant, signal))
 }
 
 export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {

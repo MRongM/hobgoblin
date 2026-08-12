@@ -123,6 +123,37 @@ afterEach(() => {
 })
 
 describe('ProjectHistoryPanel', () => {
+  test('loads an explicit member worktree history without changing the selected branch', async () => {
+    const memberWorktreePath = '/tmp/workspace/hobgoblin-feature-auth/api'
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('main', { worktree: { path: WORKTREE_PATH } }),
+        createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } }),
+      ],
+      selectedBranch: 'main',
+    })
+
+    await act(async () => {
+      root!.render(
+        <ProjectHistoryPanel
+          repoId={REPO_ID}
+          target={{ branchName: 'feature/auth', worktreePath: memberWorktreePath }}
+          onRevealPath={vi.fn()}
+        />,
+      )
+    })
+    await act(async () => {})
+
+    expect(mocks.getRepositoryHistory).toHaveBeenCalledWith(
+      REPO_ID,
+      'feature/auth',
+      { limit: 100, skip: 0 },
+      expect.any(AbortSignal),
+    )
+    expect(repo.ui.selectedBranch).toBe('main')
+  })
+
   test('loads selected branch history and first commit detail', async () => {
     await act(async () => {
       root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
@@ -290,7 +321,9 @@ describe('ProjectHistoryPanel', () => {
       row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
     })
 
-    expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, { path: 'src/app.ts' })
+    expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith(REPO_ID, WORKTREE_PATH, {
+      path: 'src/app.ts',
+    })
   })
 
   test('copies selected commit detail and file paths from the detail toolbar', async () => {
@@ -308,9 +341,7 @@ describe('ProjectHistoryPanel', () => {
     })
 
     await act(async () => {
-      root!.render(
-        <ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />,
-      )
+      root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
     })
     await act(async () => {})
 

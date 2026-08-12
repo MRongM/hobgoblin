@@ -342,7 +342,9 @@ describe('RepoExplorerPane', () => {
     })
 
     const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
-    expect(filesTab?.draggable).toBe(true)
+    const fileAreaToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
+    expect(filesTab?.draggable).toBe(false)
+    expect(fileAreaToolbar?.draggable).toBe(true)
     const dataTransfer = { effectAllowed: '', setData: vi.fn() }
     const dragStart = new Event('dragstart', { bubbles: true })
     Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer })
@@ -355,12 +357,13 @@ describe('RepoExplorerPane', () => {
     })
 
     await act(async () => {
-      filesTab?.dispatchEvent(dragStart)
-      filesTab?.dispatchEvent(dragEnd)
+      fileAreaToolbar?.dispatchEvent(dragStart)
+      fileAreaToolbar?.dispatchEvent(dragEnd)
     })
 
     expect(dataTransfer.effectAllowed).toBe('copy')
     expect(detachedWindowMocks.open).toHaveBeenCalledWith({
+      kind: 'git-worktree',
       repo: { kind: 'local', id: REPO_ID },
       branch: 'main',
       tab: 'files',
@@ -379,6 +382,7 @@ describe('RepoExplorerPane', () => {
     })
 
     const filesTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
+    const fileAreaToolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
     const dragEnd = new Event('dragend', { bubbles: true })
     Object.defineProperties(dragEnd, {
       clientX: { value: 100 },
@@ -386,7 +390,8 @@ describe('RepoExplorerPane', () => {
       screenX: { value: 500 },
       screenY: { value: 300 },
     })
-    await act(async () => filesTab?.dispatchEvent(dragEnd))
+    expect(filesTab?.draggable).toBe(false)
+    await act(async () => fileAreaToolbar?.dispatchEvent(dragEnd))
 
     expect(detachedWindowMocks.open).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
@@ -407,6 +412,7 @@ describe('RepoExplorerPane', () => {
       filesTab?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter', shiftKey: true }))
     })
     expect(detachedWindowMocks.open).toHaveBeenCalledWith({
+      kind: 'git-worktree',
       repo: { kind: 'local', id: REPO_ID },
       branch: 'main',
       tab: 'files',
@@ -558,7 +564,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="branch-area-toolbar"]')).toBeNull()
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs).toEqual([])
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]?.textContent).toContain('file-tree.title')
     expect(container.querySelector('[data-testid="project-file-tree"]')).toBeTruthy()
     expect(container.querySelector('[data-testid="plain-workspace-terminal"]')?.getAttribute('data-repo-id')).toBe(
       REPO_ID,
@@ -773,7 +780,8 @@ describe('RepoExplorerPane', () => {
     expect(container.querySelector('[data-testid="project-tags-panel"]')).toBeNull()
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
-    expect(tabs).toEqual([])
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]?.textContent).toContain('file-tree.title')
     await act(async () => root.unmount())
   })
 
@@ -1355,7 +1363,7 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
-  test('opens a collapsed worktree file area on the Files tab when its item is double-clicked', async () => {
+  test('restores a remembered tab when a collapsed worktree File area is reopened', async () => {
     const onToggleFileArea = vi.fn()
     useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
     const container = document.createElement('div')
@@ -1379,14 +1387,19 @@ describe('RepoExplorerPane', () => {
         ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
     })
 
-    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('changes')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
 
-  test('opens a collapsed project file area on the Files tab when its item is double-clicked', async () => {
+  test('keeps the Status fallback when a collapsed project File area has no remembered tab', async () => {
     const onToggleFileArea = vi.fn()
-    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1408,8 +1421,38 @@ describe('RepoExplorerPane', () => {
         ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
     })
 
-    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('status')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+    await act(async () => root.unmount())
+  })
+
+  test('restores a remembered tab when compact worktree navigation opens the File area', async () => {
+    compactUi = true
+    const onShowCompactFiles = vi.fn()
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <RepoExplorerPane
+          repoId={REPO_ID}
+          layout="left-right"
+          showActions
+          compactSurface="scope"
+          onShowCompactFiles={onShowCompactFiles}
+        />,
+      )
+    })
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-double-click-worktree"]')
+        ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('changes')
+    expect(onShowCompactFiles).toHaveBeenCalledTimes(1)
     await act(async () => root.unmount())
   })
 

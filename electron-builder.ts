@@ -8,7 +8,6 @@ const config: Configuration = {
     output: 'release',
   },
   files: [
-    'dist/server/**/*',
     // Keep these runtime-loaded TS sources in the asar. Main resolves `#/*`
     // imports through Electron's native TS loader, so removing these globs
     // breaks packaged builds even though dev still works.
@@ -58,7 +57,7 @@ const config: Configuration = {
     artifactName: '${productName}-${version}-${arch}.${ext}',
   },
   win: {
-    target: [{ target: 'nsis', arch: ['x64'] }],
+    target: [{ target: 'nsis', arch: ['arm64', 'x64'] }],
     artifactName: '${productName}-${version}-${arch}.${ext}',
   },
   nsis: {

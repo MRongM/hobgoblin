@@ -17,6 +17,7 @@ describe('release documentation', () => {
     expect(content).toContain('Branch workspace')
     expect(content).toContain('Android')
     expect(content).toContain('tmux')
+    expect(content).toContain('Windows x64 / ARM64')
     expect(content).toContain('linux-source.tar.gz')
     expect(content).toContain('scripts/serve-systemd.sh')
   })
@@ -28,37 +29,39 @@ describe('release documentation', () => {
     expect((page.match(/install_linux_title:/g) ?? []).length).toBe(4)
     expect((page.match(/Branch workspace/g) ?? []).length).toBeGreaterThanOrEqual(4)
     expect((page.match(/tmux/g) ?? []).length).toBeGreaterThanOrEqual(4)
+    expect((page.match(/Windows x64 \/ ARM64/g) ?? []).length).toBeGreaterThanOrEqual(4)
     expect(page).toContain('Hobgoblin-&lt;version&gt;-linux-source.tar.gz')
   })
 
-  test('Pages highlights the v2.2.4 terminal and project-opening workflows', () => {
+  test('Pages highlights the v2.2.5 terminal and project-opening workflows', () => {
     const page = readText('docs/index.html')
 
-    expect(page).toContain('v2.2.4')
+    expect(page).toContain('v2.2.5')
     expect(page).toContain('hob .')
     expect(page).toContain('Cmd+Option+Up/Down')
     expect(page).toContain('Ctrl+Alt+Up/Down')
   })
 
-  test('v2.2.4 release identity and English notes cover every published asset', () => {
-    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.2.4' })
-    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 6')
-    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.2.4"')
+  test('v2.2.5 release identity and English notes cover every published asset', () => {
+    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.2.5' })
+    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 7')
+    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.2.5"')
 
-    const relativePath = 'docs/releases/v2.2.4.md'
+    const relativePath = 'docs/releases/v2.2.5.md'
     expect(existsSync(path.join(repoRoot, relativePath))).toBe(true)
     if (!existsSync(path.join(repoRoot, relativePath))) return
 
     const notes = readText(relativePath)
     for (const asset of [
-      'Hobgoblin-2.2.4-arm64.dmg',
-      'Hobgoblin-2.2.4-x64.dmg',
-      'Hobgoblin-2.2.4-x64.exe',
-      'Hobgoblin-2.2.4-android.apk',
-      'Hobgoblin-2.2.4-linux-source.tar.gz',
+      'Hobgoblin-2.2.5-arm64.dmg',
+      'Hobgoblin-2.2.5-x64.dmg',
+      'Hobgoblin-2.2.5-arm64.exe',
+      'Hobgoblin-2.2.5-x64.exe',
+      'Hobgoblin-2.2.5-android.apk',
+      'Hobgoblin-2.2.5-linux-source.tar.gz',
     ]) {
       expect(notes).toContain(asset)
     }
-    expect(notes).toContain('compare/v2.2.3...v2.2.4')
+    expect(notes).toContain('compare/v2.2.4...v2.2.5')
   })
 })

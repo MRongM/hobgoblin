@@ -12,6 +12,11 @@ export interface RemoveConfirm {
   path: string
 }
 
+export interface PushConfirm {
+  branch: string
+  target: string
+}
+
 interface RetainedDialogViewState<T> {
   open: boolean
   payload: T | null
@@ -22,7 +27,7 @@ interface BranchActionDialogsProps {
   branch: RepoBranchState
   remoteTarget?: RemoteRepoTarget
   hasUpstream: boolean
-  pushConfirm: RetainedDialogViewState<string>
+  pushConfirm: RetainedDialogViewState<PushConfirm>
   deleteConfirm: RetainedDialogViewState<string>
   forceDeleteConfirm: RetainedDialogViewState<string>
   removeConfirm: RetainedDialogViewState<RemoveConfirm>
@@ -36,7 +41,7 @@ interface BranchActionDialogsProps {
   setRemoveAlsoDeletes: (checked: boolean) => void
   setRemoveForce: (checked: boolean) => void
   setRemoveAlsoUpstream: (checked: boolean) => void
-  onPushConfirm: (target: string) => void
+  onPushConfirm: (branch: string) => void
   onDeleteBranch: (target: string, force: boolean, alsoDeleteUpstream: boolean) => void
   onRemoveWorktree: (
     target: RemoveConfirm,
@@ -268,12 +273,12 @@ export function BranchActionDialogs({
     <>
       <ConfirmDialog
         open={pushConfirm.open}
-        title={pushConfirm.payload ? t('action.confirm-push-protected-title', { branch: pushConfirm.payload }) : ''}
+        title={pushConfirm.payload ? t('action.confirm-push-protected-title', { branch: pushConfirm.payload.target }) : ''}
         message={
           pushConfirm.payload ? (
             <Trans
               i18nKey="action.confirm-push-protected-body"
-              values={{ branch: pushConfirm.payload }}
+              values={{ branch: pushConfirm.payload.target }}
               components={{ branch: <b className="text-foreground" /> }}
             />
           ) : (
@@ -284,9 +289,9 @@ export function BranchActionDialogs({
         destructive
         onCancel={pushConfirm.close}
         onConfirm={() => {
-          const target = pushConfirm.payload
+          const branch = pushConfirm.payload?.branch
           pushConfirm.close()
-          if (target) onPushConfirm(target)
+          if (branch) onPushConfirm(branch)
         }}
       />
       <ConfirmDialog

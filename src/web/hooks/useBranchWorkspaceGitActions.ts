@@ -123,6 +123,11 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     [executePlan, loadPlan, plan],
   )
 
+  const executeBatchDiscard = useCallback(async () => {
+    if (!plan || plan.kind !== 'batch-discard') return null
+    return await execute({ kind: 'batch-discard', planToken: plan.token })
+  }, [execute, plan])
+
   const executeBatchMergeIn = useCallback(
     async (mode: BranchWorkspaceMergeMode, sources: BranchWorkspaceBatchMergeInSourceInput[]) => {
       if (!plan || plan.kind !== 'batch-merge-in') return null
@@ -166,10 +171,12 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     requestPlan,
     executeBatchCommit,
     executeBatchCommitAndPush,
+    executeBatchDiscard,
     executeBatchMergeIn,
     executeBatchMergeOut,
     executeSync,
     retryBatchCommit: executeBatchCommit,
+    retryBatchDiscard: executeBatchDiscard,
     retryBatchMergeIn: executeBatchMergeIn,
     retryBatchMergeOut: executeBatchMergeOut,
     retrySync: executeSync,

@@ -1,4 +1,5 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
+import { getRepositoryRemoteBranchInfo } from '#/server/modules/repo-read-paths.ts'
 import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
@@ -39,14 +40,23 @@ import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { type CloneRepoResult } from '#/shared/rpc.ts'
-import { isProtectedRemoteBranchRef, parseRemoteBranchInput } from '#/shared/remote-branches.ts'
+import {
+  isProtectedRemoteBranchRef,
+  parseRemoteBranchInput,
+  parseRemoteBranchRef,
+} from '#/shared/remote-branches.ts'
+import {
+  normalizeRepositoryMergeBranchSelection,
+  repositoryMergeBranchFullRef,
+  type RepositoryMergeBranchSelection,
+} from '#/shared/repository-merge-branch.ts'
 import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
-import path from 'node:path'
 import PQueue from 'p-queue'
 import {
   isAbsoluteWorktreePath,
   isRemoteTrackingRef,
+  isSafeRemoteName,
   normalizeCreateWorktreeInput,
   type CreateWorktreeInput,
   type CreateWorktreeMode,
@@ -291,6 +301,27 @@ export async function fetchRepository(
   return await backgroundFetch
 }
 
+export async function fetchRepositoryRemote(
+  cwd: string,
+  remote: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd) || !isSafeRemoteName(remote)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const backend = await resolveRepoBackend(cwd)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await runUserNetworkMutation(
+    cwd,
+    signal,
+    sourceToken,
+    async (mergedSignal) => await backend.fetchRemote(remote, mergedSignal, networkOptions),
+    options,
+  )
+}
+
 export async function checkoutRepositoryBranch(
   cwd: string,
   branch: string,
@@ -335,6 +366,36 @@ export async function pushRepositoryBranch(
     signal,
     sourceToken,
     async (mergedSignal) => await backend.push(branch, mergedSignal, networkOptions),
+    options,
+  )
+}
+
+export async function pushRepositoryWorktreeHeadToRemoteBranch(
+  repoId: string,
+  worktreePath: string,
+  remoteRef: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
+): Promise<ExecResult> {
+  const parsed = parseRemoteBranchRef(remoteRef)
+  if (!isValidRepoLocator(repoId) || !isValidRepositoryWorktreePath(repoId, worktreePath) || !parsed) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const backend = await resolveRepoBackend(repoId)
+  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  return await runUserNetworkMutation(
+    repoId,
+    signal,
+    sourceToken,
+    async (mergedSignal) =>
+      await backend.pushWorktreeHeadToRemoteBranch(
+        worktreePath,
+        parsed.remote,
+        parsed.branch,
+        mergedSignal,
+        networkOptions,
+      ),
     options,
   )
 }
@@ -465,6 +526,23 @@ export async function trackRepositoryRemoteBranch(
   })
 }
 
+export async function setRepositoryBranchUpstream(
+  cwd: string,
+  branch: string,
+  remoteRef: string | null,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
+  return await runWithRepoBackend(cwd, async (backend) => {
+    return await publishSnapshotInvalidationAfterMutation(
+      cwd,
+      await backend.setBranchUpstream(branch, remoteRef, signal),
+      sourceToken,
+    )
+  })
+}
+
 function isWorktreePathInputAbsolute(input: CreateWorktreeInput): boolean {
   return isAbsoluteWorktreePath(typeof input.worktreePath === 'string' ? input.worktreePath.trim() : '')
 }
@@ -589,6 +667,7 @@ export async function removeRepositoryWorktree(
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
+    skipWorktreeStatus?: boolean
     forceDeleteBranch?: boolean
     alsoDeleteUpstream?: boolean
   },
@@ -851,6 +930,39 @@ export async function mergeRepositoryBranch(
   })
 }
 
+export async function mergeRepositoryBranchSelection(
+  repoId: string,
+  worktreePath: string,
+  source: RepositoryMergeBranchSelection,
+  signal?: AbortSignal,
+  sourceToken?: string,
+): Promise<ExecResult> {
+  const normalized = normalizeRepositoryMergeBranchSelection(source)
+  if (!normalized) return { ok: false, message: 'error.invalid-arguments' }
+
+  if (normalized.kind === 'remote') {
+    const parsed = parseRemoteBranchRef(normalized.remoteRef)
+    if (!parsed) return { ok: false, message: 'error.invalid-arguments' }
+    const fetched = await fetchRepositoryRemote(repoId, parsed.remote, signal, sourceToken, {
+      publishInvalidation: false,
+    })
+    if (!fetched.ok) return fetched
+    const remoteBranches = await getRepositoryRemoteBranchInfo(repoId, signal)
+    if (!remoteBranches.some((candidate) => candidate.remoteRef === normalized.remoteRef)) {
+      publishRepoSnapshotInvalidation(repoId, sourceToken)
+      return { ok: false, message: 'error.remote-branch-not-found' }
+    }
+  }
+
+  return await mergeRepositoryBranch(
+    repoId,
+    worktreePath,
+    repositoryMergeBranchFullRef(normalized),
+    signal,
+    sourceToken,
+  )
+}
+
 export async function resetRepositoryHard(
   repoId: string,
   worktreePath: string,
@@ -875,6 +987,7 @@ export async function discardRepositoryChanges(
   paths: unknown,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   const normalizedPaths = normalizeDiscardPaths(paths)
   if (!isValidRepoLocator(repoId) || !isAbsoluteWorktreePath(worktreePath) || !normalizedPaths) {
@@ -885,6 +998,7 @@ export async function discardRepositoryChanges(
       repoId,
       await backend.discardChanges(worktreePath, normalizedPaths, signal),
       sourceToken,
+      options,
     )
   })
 }

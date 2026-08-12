@@ -50,22 +50,6 @@ function activationDetail(event: MouseEvent): number {
   return typeof detail === 'number' ? detail : 0
 }
 
-export function terminalRelativePathLinksForLine(line: string, worktreePath?: string | null): TerminalRelativePathLink[] {
-  return filePathTargetsForText(line, { allowAbsolute: !!worktreePath }).flatMap((span) => {
-    const revealPath = revealPathForTarget(span.target, worktreePath)
-    if (!revealPath) return []
-    return [
-      {
-        text: span.text,
-        target: span.target,
-        revealPath,
-        startColumn: span.startIndex + 1,
-        endColumn: span.endIndex,
-      },
-    ]
-  })
-}
-
 function revealPathForTarget(target: FilePathTarget, worktreePath?: string | null): string | null {
   if (pathStyle(target.path) === 'relative') return target.path
   return worktreePath ? worktreeRelativePathFromAbsolute(worktreePath, target.path) : null

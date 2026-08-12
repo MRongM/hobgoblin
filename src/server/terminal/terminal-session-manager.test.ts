@@ -28,6 +28,40 @@ beforeEach(() => {
 })
 
 describe('terminal session manager administrative close', () => {
+  test('tracks the first accepted user input as a monotonic session fact', async () => {
+    const onUserInput = vi.fn()
+    const manager = new TerminalSessionManager<string>({
+      onOutput: vi.fn(),
+      onExit: vi.fn(),
+      onUserInput,
+    })
+    const created = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/feature\0terminal-1',
+      cwd: '/workspace/feature',
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_local',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    await expect(manager.listSessions('/workspace')).resolves.toEqual([
+      expect.objectContaining({ hasUserInput: false }),
+    ])
+    expect(manager.writeSession('client_a', created.sessionId, '\x1b[1;1R', 'attachment_local', false)).toBe(true)
+    await expect(manager.listSessions('/workspace')).resolves.toEqual([
+      expect.objectContaining({ hasUserInput: false }),
+    ])
+
+    expect(manager.writeSession('client_a', created.sessionId, 'pwd', 'attachment_local')).toBe(true)
+    expect(manager.writeSession('client_a', created.sessionId, '\r', 'attachment_local')).toBe(true)
+    await expect(manager.listSessions('/workspace')).resolves.toEqual([expect.objectContaining({ hasUserInput: true })])
+    expect(onUserInput).toHaveBeenCalledTimes(1)
+    expect(onUserInput).toHaveBeenCalledWith('client_a', { sessionId: created.sessionId })
+  })
+
   test('retains tmux identity and projects close capability for catalog recovery', async () => {
     const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
     const created = manager.ensureSession({

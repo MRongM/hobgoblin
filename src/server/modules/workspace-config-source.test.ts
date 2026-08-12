@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
-import { readWorkspaceConfig, writeWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
+import {
+  cleanupWorkspaceConfig,
+  inspectWorkspaceConfigCleanup,
+  readWorkspaceConfig,
+  writeWorkspaceConfig,
+} from '#/server/modules/workspace-config-source.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 
 const temporaryDirectories: string[] = []
@@ -165,12 +170,88 @@ describe('workspace config source', () => {
     const temporaryFile = path.join(path.dirname(dataFile), '.workspace-configs.json.safe.tmp')
     await writeFile(temporaryFile, 'pre-existing')
 
-    await expect(
-      writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile, randomId: () => 'safe' }),
-    ).rejects.toThrow()
+    await expect(writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile, randomId: () => 'safe' })).rejects.toThrow()
 
     await expect(readdir(path.dirname(dataFile))).resolves.toContain('.workspace-configs.json.safe.tmp')
     await expect(readFile(temporaryFile, 'utf8')).resolves.toBe('pre-existing')
+  })
+
+  test('plans and removes only the selected project configuration from a valid registry', async () => {
+    const { directory, dataFile, root } = await createFixture()
+    const secondRoot = path.join(directory, 'second-workspace')
+    await writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile })
+    await writeWorkspaceConfig(secondRoot, { repo: ['docs'] }, { dataFile })
+
+    const plan = await inspectWorkspaceConfigCleanup(root, { dataFile })
+
+    expect(plan).toMatchObject({ rootId: path.resolve(root), scope: 'project' })
+    expect(plan.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
+    await cleanupWorkspaceConfig(plan, { dataFile })
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({ kind: 'missing' })
+    await expect(readWorkspaceConfig(secondRoot, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      config: { repo: ['docs'] },
+    })
+  })
+
+  test('repairs a structurally recoverable registry while preserving valid other projects', async () => {
+    const { directory, dataFile, root } = await createFixture()
+    const secondRoot = path.join(directory, 'second-workspace')
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(
+      dataFile,
+      JSON.stringify({
+        version: 1,
+        workspaces: [
+          { rootId: path.resolve(root), repo: ['nested/api'] },
+          { rootId: path.resolve(secondRoot), repo: ['docs'] },
+        ],
+      }),
+    )
+
+    const plan = await inspectWorkspaceConfigCleanup(root, { dataFile })
+
+    expect(plan.scope).toBe('registry-repair')
+    await cleanupWorkspaceConfig(plan, { dataFile })
+    await expect(readWorkspaceConfig(root, { dataFile })).resolves.toEqual({ kind: 'missing' })
+    await expect(readWorkspaceConfig(secondRoot, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      config: { repo: ['docs'] },
+    })
+  })
+
+  test('discloses and performs a registry reset when raw data cannot be recovered', async () => {
+    const { dataFile, root } = await createFixture()
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, '{')
+
+    const plan = await inspectWorkspaceConfigCleanup(root, { dataFile })
+
+    expect(plan.scope).toBe('registry-reset')
+    await cleanupWorkspaceConfig(plan, { dataFile })
+    await expect(JSON.parse(await readFile(dataFile, 'utf8'))).toEqual({ version: 1, workspaces: [] })
+  })
+
+  test('rejects a stale cleanup fingerprint before changing the registry', async () => {
+    const { dataFile, root } = await createFixture()
+    await writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile })
+    const plan = await inspectWorkspaceConfigCleanup(root, { dataFile })
+    await writeWorkspaceConfig(root, { repo: ['web'] }, { dataFile })
+    const changed = await readFile(dataFile, 'utf8')
+
+    await expect(cleanupWorkspaceConfig(plan, { dataFile })).rejects.toThrow('workspace.recovery.plan-stale')
+    await expect(readFile(dataFile, 'utf8')).resolves.toBe(changed)
+  })
+
+  test('preserves the registry when an atomic recovery write collides', async () => {
+    const { dataFile, root } = await createFixture()
+    await writeWorkspaceConfig(root, { repo: ['api'] }, { dataFile })
+    const plan = await inspectWorkspaceConfigCleanup(root, { dataFile })
+    const original = await readFile(dataFile, 'utf8')
+    await writeFile(path.join(path.dirname(dataFile), '.workspace-configs.json.safe.tmp'), 'occupied')
+
+    await expect(cleanupWorkspaceConfig(plan, { dataFile, randomId: () => 'safe' })).rejects.toThrow()
+    await expect(readFile(dataFile, 'utf8')).resolves.toBe(original)
   })
 
   test.each([

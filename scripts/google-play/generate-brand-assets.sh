@@ -4,11 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ASSET_ROOT="${1:-$REPO_ROOT/release/google-play/0.1.0/graphics}"
+source "$SCRIPT_DIR/release-assets-lib.sh"
+
+PACKAGE_VERSION="$(package_version "$REPO_ROOT/package.json")"
+ASSET_ROOT="${1:-$REPO_ROOT/release/google-play/$PACKAGE_VERSION/graphics}"
 ICON_SOURCE="$REPO_ROOT/assets/icon.png"
 FEATURE_SOURCE="$ASSET_ROOT/feature-graphic.svg"
-
-source "$SCRIPT_DIR/release-assets-lib.sh"
 
 require_command ffmpeg
 require_command sips

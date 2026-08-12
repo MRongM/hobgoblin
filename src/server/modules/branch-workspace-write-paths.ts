@@ -222,20 +222,29 @@ export function createBranchWorkspaceWriteService(
             if (controller.signal.aborted) {
               return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
-            const result = repository.satisfied
-              ? { ok: true, message: 'satisfied' }
-              : await removeWorktree(
-                  repository.repoId,
-                  {
-                    branch: repository.checkedOutBranch ?? repository.targetBranch,
-                    worktreePath: repository.worktreePath,
-                    alsoDeleteBranch: false,
-                    forceRemoveWorktree: repository.dirty === true,
-                    forceDeleteBranch: false,
-                    alsoDeleteUpstream: false,
-                  },
-                  controller.signal,
-                ).catch((error) => ({ ok: false, message: operationMessage(error) }))
+            let result = { ok: true, message: 'satisfied' }
+            if (!repository.satisfied && repository.action === 'remove-entry') {
+              try {
+                await removeEntry(rootId, repository.worktreePath, controller.signal)
+                result = { ok: true, message: 'removed' }
+              } catch (error) {
+                result = { ok: false, message: operationMessage(error) }
+              }
+            } else if (!repository.satisfied) {
+              result = await removeWorktree(
+                repository.repoId,
+                {
+                  branch: repository.checkedOutBranch ?? repository.targetBranch,
+                  worktreePath: repository.worktreePath,
+                  alsoDeleteBranch: false,
+                  forceRemoveWorktree: true,
+                  skipWorktreeStatus: true,
+                  forceDeleteBranch: false,
+                  alsoDeleteUpstream: false,
+                },
+                controller.signal,
+              ).catch((error) => ({ ok: false, message: operationMessage(error) }))
+            }
             if (!result.ok) {
               await persistMemberProgress(
                 persistExecution,

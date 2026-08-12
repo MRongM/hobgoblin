@@ -36,11 +36,6 @@ class SecureIdentityStore private constructor(
         )
     }
 
-    fun loadProtectedBytes(identityRef: SshIdentityRef): ByteArray {
-        val record = EncryptedIdentityRecord.deserialize(File(identityRef.protectedPath).readText())
-        return decrypt(record)
-    }
-
     override fun loadProtectedBytesById(identityId: String): ByteArray {
         val record = EncryptedIdentityRecord.deserialize(File(filesDir, "$identityId.identity").readText())
         return decrypt(record)

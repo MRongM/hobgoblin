@@ -4,12 +4,12 @@
 
 Hobgoblin は単なるブランチ管理ツールではありません。Git worktree ベースの開発と AI CLI を組み合わせるための高生産性ワークスペースで、デスクトップアプリとしても、ブラウザからアクセスする server mode としても利用できます。
 
-中心になるモデルはシンプルです: **マルチプロジェクト + マルチ worktree / マルチブランチ + マルチターミナル**。複数のリポジトリを開き、並行するブランチを別々の worktree に分離し、適切な文脈にターミナルを紐づけ、Codex や Claude などの AI CLI を Git 状態を見失わずに実行できます。ローカルリポジトリ、Git SSH リモート URL、SSH config alias とリモートパスで開く SSH リモートリポジトリをサポートします。
+中心になるモデルはシンプルです: **マルチプロジェクト + マルチ worktree + マルチターミナル**。複数のリポジトリを開き、並行するブランチを別々の worktree に分離し、適切な文脈にターミナルを紐づけ、Codex や Claude などの AI CLI を Git 状態を見失わずに実行できます。ローカルリポジトリ、Git SSH リモート URL、SSH config alias とリモートパスで開く SSH リモートリポジトリをサポートします。
 
 ## 生産性の式
 
 ```text
-Hobgoblin = マルチプロジェクト x マルチ worktree / マルチブランチ x マルチターミナル
+Hobgoblin = マルチプロジェクト x マルチ worktree x マルチターミナル
 ```
 
 意図しているワークフローは、各プロジェクト、worktree、ブランチ、ターミナル、AI CLI セッションを、Git 状態を理解できる同じワークスペースに結びつけることです。
@@ -75,7 +75,7 @@ Hobgoblin は [Goblin](https://nano-props.github.io/goblin/) から始まりま�
 
 - **macOS Apple Silicon:** `arm64.dmg` ファイルをダウンロードします。
 - **macOS Intel:** `x64.dmg` ファイルをダウンロードします。
-- **Windows x64:** `.exe` インストーラーをダウンロードします。
+- **Windows x64 / ARM64:** デバイスのアーキテクチャに合う `.exe` インストーラーをダウンロードします。
 - **Android:** `android.apk` をダウンロードします。この APK は未署名のため、インストール前に署名が必要です。
 - **Linux Server Mode:** デプロイ用ソースアーカイブ `Hobgoblin-<version>-linux-source.tar.gz` をダウンロードします。
 

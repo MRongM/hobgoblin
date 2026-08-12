@@ -8,7 +8,6 @@ import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktre
 import { pullBranch } from '#/system/git/remote.ts'
 import { registerTrustedAppUrl, registerTrustedWebContents } from '#/main/ipc/trusted-webcontents.ts'
 import { wireRpcIpc } from '#/main/rpc.ts'
-import { getSettingsPrefs } from '#/main/settings-server-client.ts'
 import type { RpcResponse, SettingsPrefs, ThemeState } from '#/shared/rpc.ts'
 
 const ipcHandlers = new Map<string, (_event: unknown, input: any) => Promise<unknown>>()
@@ -192,7 +191,6 @@ vi.mock('#/main/settings-server-client.ts', () => ({
   setSettingsGlobalShortcutState: vi.fn(async () => true),
   getSettingsPrefs: vi.fn(async () => settingsPrefs()),
   getSettingsSnapshot: vi.fn(),
-  updateSettingsPrefs: vi.fn(async (patch: Record<string, unknown>) => ({ ...settingsPrefs(), ...patch })),
 }))
 
 vi.mock('#/main/terminal.ts', () => ({

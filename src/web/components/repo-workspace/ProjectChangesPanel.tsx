@@ -12,7 +12,12 @@ import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import type { BranchDetailRepo, SelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
-import { branchDetailRepoEqual, getSelectedBranchDetailPresentation } from '#/web/components/branch-detail/model.ts'
+import {
+  branchDetailRepoEqual,
+  getBranchDetailPresentation,
+  getSelectedBranchDetailPresentation,
+  type BranchDetailTarget,
+} from '#/web/components/branch-detail/model.ts'
 import { discardRepositoryChanges } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -92,9 +97,11 @@ function discardConfirmTitle(
 
 export function ProjectChangesPanel({
   repoId,
+  target,
   onRevealPath,
 }: {
   repoId: string
+  target?: BranchDetailTarget
   onRevealPath?: (relativePath: string) => void
 }) {
   const t = useT()
@@ -143,7 +150,11 @@ export function ProjectChangesPanel({
     branchDetailRepoEqual,
   )
 
-  const detail = repo ? getSelectedBranchDetailPresentation(repo) : null
+  const detail = repo
+    ? target
+      ? getBranchDetailPresentation(repo, target)
+      : getSelectedBranchDetailPresentation(repo)
+    : null
   const selectedStatus = detail?.selectedStatus ?? []
   const currentChangedFiles = useMemo(() => changedFilePaths(selectedStatus), [selectedStatus])
   const currentChangedDirectories = useMemo(() => changedDirectoryPaths(currentChangedFiles), [currentChangedFiles])

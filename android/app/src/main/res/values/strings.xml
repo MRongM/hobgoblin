@@ -107,8 +107,6 @@
     <string name="host_initializing_ssh_access">Initializing and testing SSH access…</string>
     <string name="host_after_setup_saved_key">After setup, this host will use the saved private key.</string>
     <string name="host_optional">Optional</string>
-    <string name="diagnostics_title">Host diagnostics</string>
-    <string name="diagnostics_failed">Diagnostics failed</string>
     <string name="diagnostics_run">Run diagnostics</string>
     <string name="diagnostics_running">Running diagnostics…</string>
     <string name="diagnostics_status_failed">failed</string>
@@ -189,20 +187,6 @@
     <string name="projects_delete_title">Delete project record?</string>
     <string name="projects_delete_description">This removes %1$s from Hobgoblin Android. It does not delete anything on the SSH server.</string>
     <string name="projects_loading_description">Loading saved projects.</string>
-    <string name="workspace_title">Workspace</string>
-    <string name="placeholder_local_terminal_deferred">Android-local terminal and local Git are deferred from v1; use SSH terminals for emergency work.</string>
-    <string name="placeholder_host_label">Host %1$s</string>
-    <string name="placeholder_run_diagnostics">Run diagnostics</string>
-    <string name="placeholder_ssh">SSH</string>
-    <string name="placeholder_shell">Shell</string>
-    <string name="placeholder_git">Git</string>
-    <string name="placeholder_path">Path</string>
-    <string name="placeholder_repo">Repo</string>
-    <string name="placeholder_terminal_spike">Terminal spike</string>
-    <string name="placeholder_terminal_disconnected">Terminal disconnected. Reconnect or return to diagnostics.</string>
-    <string name="placeholder_product_name">Hobgoblin Android</string>
-    <string name="placeholder_product_description">SSH remote-first emergency operations.</string>
-    <string name="placeholder_local_terminal">Local terminal</string>
     <string name="repository_tab_worktrees">Worktrees</string>
     <string name="repository_tab_commits">Commits</string>
     <string name="repository_terminal_mode_remote_ssh">Remote SSH</string>
@@ -427,7 +411,6 @@
     <string name="host_tmux_session_name">session · %1$s</string>
     <string name="host_tmux_idle">Idle</string>
     <string name="host_tmux_attached_clients">%1$d attached clients</string>
-    <string name="host_tmux_terminal_label">terminal-%1$d</string>
     <string name="host_tmux_close_description">Close the Android connection for %1$s and keep its local record for reconnecting later. The remote tmux session keeps running.</string>
     <string name="host_tmux_delete_title">Delete tmux terminal?</string>
     <string name="host_tmux_delete_local_description">Remove %1$s from the Android terminal list and stop its active connection. The remote tmux session keeps running unless you select the option below.</string>

@@ -25,27 +25,6 @@ export type WorktreeBootstrapDecision =
     }
 
 export type WorktreeBootstrapSelectionMode = 'copy' | 'symlink'
-export type WorktreeBootstrapMaterializationMode = WorktreeBootstrapSelectionMode | 'hardlink'
-
-export type WorktreeBootstrapTargetDecision =
-  | { kind: 'skip' }
-  | { kind: 'materialize'; selections: WorktreeBootstrapSelection[] }
-
-export interface WorktreeBootstrapTargetEntry {
-  path: string
-  mode: WorktreeBootstrapMaterializationMode
-}
-
-export interface WorktreeBootstrapTargetPreflight {
-  pending: WorktreeBootstrapTargetEntry[]
-  satisfied: WorktreeBootstrapTargetEntry[]
-  conflicts: WorktreeBootstrapTargetEntry[]
-  hasSetup: boolean
-}
-
-export type WorktreeBootstrapTargetPreflightResult =
-  | { ok: true; preflight: WorktreeBootstrapTargetPreflight }
-  | { ok: false; message: string }
 
 export interface WorktreeBootstrapSelection {
   path: string
@@ -64,20 +43,6 @@ export function normalizeWorktreeBootstrapSourcePath(value: unknown): string | n
     return null
   }
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) ? value : null
-}
-
-export function isWorktreeBootstrapRootEntryPath(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= MAX_IPC_PATH_LENGTH &&
-    value !== '.' &&
-    value !== '..' &&
-    value !== '.git' &&
-    !value.includes('/') &&
-    !value.includes('\\') &&
-    !/[\0-\x1f\x7f]/.test(value)
-  )
 }
 
 export function normalizeWorktreeDependencyPath(value: unknown): string | null {

@@ -87,7 +87,7 @@ describe('repo-client', () => {
     const executeInput = {
       ...request,
       planToken: 'sha256:plan',
-      destinationBranch: 'main',
+      destination: { kind: 'local' as const, branch: 'main' },
       mode: 'merge' as const,
     }
 
@@ -106,6 +106,27 @@ describe('repo-client', () => {
         method: 'POST',
         body: JSON.stringify({ ...executeInput, sourceToken: 'client_123' }),
         signal,
+      }),
+    )
+  })
+
+  test('serializes discriminated merge-in source without collapsing remote identity', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'merged' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const source = { kind: 'remote' as const, remoteRef: 'origin/feature/source' }
+    const { mergeRepositoryBranch } = await import('#/web/repo-client.ts')
+
+    await mergeRepositoryBranch('/repo', '/repo-target', source)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/merge',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo-target', source }),
       }),
     )
   })
@@ -413,6 +434,63 @@ describe('repo-client', () => {
           localBranch: 'feature/new',
           remoteRef: 'origin/feature/new',
           sourceToken: 'source_1',
+        }),
+      }),
+    )
+  })
+
+  test('requests setting and removing a branch upstream through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'ok' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const repoClient = await import('#/web/repo-client.ts')
+    const setRepositoryBranchUpstream = (repoClient as Record<string, unknown>).setRepositoryBranchUpstream
+    expect(setRepositoryBranchUpstream).toBeTypeOf('function')
+    const setUpstream = setRepositoryBranchUpstream as (
+      cwd: string,
+      branch: string,
+      remoteRef: string | null,
+      signal?: AbortSignal,
+      sourceToken?: string,
+    ) => Promise<unknown>
+
+    await expect(setUpstream('/repo', 'feature/local', 'origin/release', undefined, 'source_1')).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+    await expect(setUpstream('/repo', 'feature/local', null, undefined, 'source_2')).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/set-branch-upstream',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          cwd: '/repo',
+          branch: 'feature/local',
+          remoteRef: 'origin/release',
+          sourceToken: 'source_1',
+        }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/set-branch-upstream',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          cwd: '/repo',
+          branch: 'feature/local',
+          remoteRef: null,
+          sourceToken: 'source_2',
         }),
       }),
     )

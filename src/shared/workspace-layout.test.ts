@@ -11,10 +11,10 @@ import {
 } from '#/shared/workspace-layout.ts'
 
 describe('normalizeWorkspaceSessionLayoutState', () => {
-  test('defaults to left-right layout with the file tree taking two thirds', () => {
+  test('defaults to left-right layout with the file area taking thirty percent', () => {
     expect(WORKSPACE_LAYOUTS).toEqual(['left-right'])
     expect(DEFAULT_WORKSPACE_LAYOUT).toBe('left-right')
-    expect(DEFAULT_FILE_TREE_PANE_SIZES).toEqual({ 'left-right': 66.7 })
+    expect(DEFAULT_FILE_TREE_PANE_SIZES).toEqual({ 'left-right': 30 })
   })
 
   test('normalizes legacy top-bottom layout state to left-right while preserving terminal focus', () => {

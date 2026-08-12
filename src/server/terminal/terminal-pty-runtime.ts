@@ -1,5 +1,7 @@
 import * as pty from 'node-pty'
 import os from 'node:os'
+import path from 'node:path'
+import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 
 export interface TerminalPtyRuntime {
@@ -27,26 +29,70 @@ const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
 
 export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): SpawnTerminalPtyRuntimeResult {
   try {
-    const shell = input.command || process.env.SHELL || (process.platform === 'win32' ? process.env.COMSPEC || 'cmd.exe' : '/bin/zsh')
-    const args = input.args ?? (process.platform === 'win32' ? [] : ['-l'])
+    const candidates = resolveTerminalPtySpawnCandidates(input)
     const env = { ...process.env, TERM: 'xterm-256color' }
-    const term = pty.spawn(shell, args, {
-      name: 'xterm-256color',
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.cwd,
-      env,
-    })
-    const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
-    return windowsPty
-      ? { ok: true, runtime: new NodePtyTerminalRuntime(term), windowsPty }
-      : { ok: true, runtime: new NodePtyTerminalRuntime(term) }
+    let lastError: unknown
+
+    for (const candidate of candidates) {
+      try {
+        const term = pty.spawn(candidate.command, candidate.args, {
+          name: 'xterm-256color',
+          cols: input.cols,
+          rows: input.rows,
+          cwd: input.cwd,
+          env,
+        })
+        const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
+        const runtime = new NodePtyTerminalRuntime(
+          term,
+          process.platform === 'win32' ? path.win32.basename(candidate.command) : undefined,
+        )
+        return windowsPty ? { ok: true, runtime, windowsPty } : { ok: true, runtime }
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    return {
+      ok: false,
+      message:
+        lastError instanceof Error
+          ? lastError.message
+          : process.platform === 'win32' && !input.command
+            ? 'No supported Windows terminal shell found'
+            : 'error.unknown',
+    }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'error.unknown' }
   }
 }
 
-export function detectWindowsPtyCompatibility(platform: NodeJS.Platform | string, release: string): TerminalWindowsPty | null {
+function resolveTerminalPtySpawnCandidates(
+  input: SpawnTerminalPtyRuntimeInput,
+): Array<{ command: string; args: string[] }> {
+  if (input.command) {
+    return [
+      {
+        command: input.command,
+        args: input.args ?? (process.platform === 'win32' ? [] : ['-l']),
+      },
+    ]
+  }
+
+  if (process.platform === 'win32') {
+    return resolveWindowsTerminalShellCandidates().map((candidate) => ({
+      command: candidate.command,
+      args: input.args ?? candidate.args,
+    }))
+  }
+
+  return [{ command: process.env.SHELL || '/bin/zsh', args: input.args ?? ['-l'] }]
+}
+
+export function detectWindowsPtyCompatibility(
+  platform: NodeJS.Platform | string,
+  release: string,
+): TerminalWindowsPty | null {
   if (platform !== 'win32') return null
   const buildNumber = parseWindowsBuildNumber(release)
   const backend = buildNumber !== null && buildNumber < NODE_PTY_CONPTY_DEFAULT_BUILD ? 'winpty' : 'conpty'
@@ -62,9 +108,11 @@ function parseWindowsBuildNumber(release: string): number | null {
 
 class NodePtyTerminalRuntime implements TerminalPtyRuntime {
   private readonly term: pty.IPty
+  private readonly launchedProcessName: string | undefined
 
-  constructor(term: pty.IPty) {
+  constructor(term: pty.IPty, launchedProcessName?: string) {
     this.term = term
+    this.launchedProcessName = launchedProcessName
   }
 
   write(data: string): void {
@@ -88,7 +136,7 @@ class NodePtyTerminalRuntime implements TerminalPtyRuntime {
   }
 
   processName(): string {
-    return readTerminalProcessName(this.term)
+    return this.launchedProcessName ?? readTerminalProcessName(this.term)
   }
 }
 

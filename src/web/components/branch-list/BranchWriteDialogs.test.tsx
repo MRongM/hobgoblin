@@ -12,6 +12,7 @@ import {
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
 import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
+import type { RepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 
 const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
@@ -96,7 +97,7 @@ beforeEach(() => {
       ready: true,
       destinations: [
         {
-          branch: 'main',
+          destination: { kind: 'local', branch: 'main' },
           head: 'main-head',
           ready: true,
           worktreePath: '/repo-main',
@@ -462,8 +463,8 @@ describe('MergeInDialog', () => {
       calls.push('pull')
       return { ok: true, message: 'pulled' }
     })
-    const onMerge = vi.fn(async (sourceBranch: string) => {
-      calls.push(`merge:${sourceBranch}`)
+    const onMerge = vi.fn(async (source: RepositoryMergeBranchSelection) => {
+      calls.push(`merge:${source.kind === 'local' ? source.branch : source.remoteRef}`)
       return { ok: true, message: 'merged' }
     })
     const onPush = vi.fn(async () => {
@@ -489,9 +490,99 @@ describe('MergeInDialog', () => {
     await flush()
 
     expect(onPull).toHaveBeenCalled()
-    expect(onMerge).toHaveBeenCalledWith('main')
+    expect(onMerge).toHaveBeenCalledWith({ kind: 'local', branch: 'main' })
     expect(onPush).toHaveBeenCalled()
     expect(calls).toEqual(['pull', 'merge:main', 'push', 'close'])
+  })
+
+  test('keeps same-named local and remote sources distinct and submits the remote identity', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main'])
+    const onMerge = vi.fn(async () => ({ ok: true, message: 'merged' }))
+
+    render(
+      <MergeInDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('origin/main')]}
+        onClose={vi.fn()}
+        onMerge={onMerge}
+      />,
+    )
+    await flush()
+    await flush()
+
+    openSelect('#merge-select')
+    const localOption = document.body.querySelector<HTMLElement>('[data-merge-source-key="local:origin/main"]')
+    const remoteOption = document.body.querySelector<HTMLElement>('[data-merge-source-key="remote:origin/main"]')
+    expect(localOption).not.toBeNull()
+    expect(remoteOption).not.toBeNull()
+    expect(remoteOption?.textContent).toContain('tab.remote-branches')
+
+    act(() => {
+      remoteOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(document.body.textContent).toContain('action.merge-in-remote-fetch-note')
+    expect(buttonByText('action.merge-in-remote-confirm')).not.toBeNull()
+
+    clickButtonByText('action.merge-in-remote-confirm')
+    await flush()
+
+    expect(onMerge).toHaveBeenCalledWith({ kind: 'remote', remoteRef: 'origin/main' })
+  })
+
+  test('shows remote source loading and empty states without hiding local candidates', async () => {
+    let resolveRemoteBranches!: (branches: string[]) => void
+    mocks.getRepositoryRemoteBranches.mockReturnValueOnce(
+      new Promise<string[]>((resolve) => {
+        resolveRemoteBranches = resolve
+      }),
+    )
+
+    render(
+      <MergeInDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onMerge={vi.fn(async () => ({ ok: true, message: 'merged' }))}
+      />,
+    )
+
+    expect(document.body.textContent).toContain('action.merge-in-remote-loading')
+    openSelect('#merge-select')
+    expect(document.body.querySelector('[data-merge-source-key="local:main"]')).not.toBeNull()
+
+    resolveRemoteBranches([])
+    await flush()
+    await flush()
+
+    expect(document.body.textContent).toContain('action.merge-in-remote-empty')
+  })
+
+  test('shows a remote source load failure while preserving local merge', async () => {
+    mocks.getRepositoryRemoteBranches.mockRejectedValueOnce(new Error('offline'))
+
+    render(
+      <MergeInDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onMerge={vi.fn(async () => ({ ok: true, message: 'merged' }))}
+      />,
+    )
+    await flush()
+    await flush()
+
+    expect(document.body.textContent).toContain('action.merge-in-remote-load-failed')
+    selectFirstMergeCandidate()
+    expect(buttonByText('action.merge-in-confirm').disabled).toBe(false)
   })
 
   test('keeps long merge errors inside a bounded scroll area', async () => {
@@ -568,7 +659,7 @@ describe('MergeOutDialog', () => {
         ready: true,
         destinations: [
           {
-            branch: 'dirty',
+            destination: { kind: 'local', branch: 'dirty' },
             head: 'dirty-head',
             ready: false,
             worktreePath: '/repo-dirty',
@@ -577,7 +668,7 @@ describe('MergeOutDialog', () => {
             blockReason: 'dirty-worktree',
           },
           {
-            branch: 'main',
+            destination: { kind: 'local', branch: 'main' },
             head: 'main-head',
             ready: true,
             requiresTemporaryWorktree: true,
@@ -636,7 +727,7 @@ describe('MergeOutDialog', () => {
       planToken: 'sha256:plan',
       sourceBranch: 'feature/current',
       sourceWorktreePath: '/repo-feature',
-      destinationBranch: 'main',
+      destination: { kind: 'local', branch: 'main' },
       mode: 'merge',
     })
     expect(onClose).toHaveBeenCalled()
@@ -654,7 +745,7 @@ describe('MergeOutDialog', () => {
         ready: true,
         destinations: [
           {
-            branch: 'main',
+            destination: { kind: 'local', branch: 'main' },
             head: 'main-head',
             ready: true,
             requiresTemporaryWorktree: true,
@@ -677,6 +768,75 @@ describe('MergeOutDialog', () => {
 
     selectFirstMergeOutCandidate()
     expect(buttonByText('action.merge-out-pull-merge-push-confirm').disabled).toBe(true)
+  })
+
+  test('keeps same-named remote destinations distinct, disables merge-only, and submits synchronized mode', async () => {
+    const onMergeOut = vi.fn(async () => ({ ok: true, message: 'merged' }))
+    mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: '/repo',
+        sourceBranch: 'feature/current',
+        sourceWorktreePath: '/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: [
+          {
+            destination: { kind: 'local', branch: 'origin/main' },
+            head: 'local-head',
+            ready: true,
+            requiresTemporaryWorktree: true,
+            pullMergePushReady: false,
+          },
+          {
+            destination: { kind: 'remote', remoteRef: 'origin/main' },
+            head: 'remote-head',
+            ready: true,
+            requiresTemporaryWorktree: true,
+            pullMergePushReady: true,
+          },
+        ],
+      },
+    })
+
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={onMergeOut}
+      />,
+    )
+    await flush()
+    openSelect('#merge-out-select')
+
+    expect(document.body.querySelector('[data-merge-destination-key="local:origin/main"]')).not.toBeNull()
+    const remoteOption = document.body.querySelector<HTMLElement>(
+      '[data-merge-destination-key="remote:origin/main"]',
+    )
+    expect(remoteOption?.textContent).toContain('tab.remote-branches')
+    act(() => {
+      remoteOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(buttonByText('action.merge-out-confirm').disabled).toBe(true)
+    expect(buttonByText('action.merge-out-pull-merge-push-confirm').disabled).toBe(false)
+    expect(document.body.textContent).toContain('action.merge-out-remote-push-note')
+
+    clickButtonByText('action.merge-out-pull-merge-push-confirm')
+    await flush()
+
+    expect(onMergeOut).toHaveBeenCalledWith({
+      repoId: '/repo',
+      planToken: 'sha256:plan',
+      sourceBranch: 'feature/current',
+      sourceWorktreePath: '/repo-feature',
+      destination: { kind: 'remote', remoteRef: 'origin/main' },
+      mode: 'pull-merge-push',
+    })
   })
 
   test('refreshes an expired plan without executing again', async () => {

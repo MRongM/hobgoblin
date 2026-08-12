@@ -169,6 +169,7 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.dependency.add.action',
       'workspace.branch-workspace.dependency.remove.action',
       'workspace.branch-workspace.git-action.batch-commit',
+      'workspace.branch-workspace.git-action.batch-discard',
       'workspace.branch-workspace.git-action.pull',
       'workspace.branch-workspace.git-action.push',
       'workspace.branch-workspace.git-action.batch-merge-in',
@@ -219,6 +220,15 @@ describe('BranchWorkspaceList', () => {
       await Promise.resolve()
     })
     expect(onGitAction).toHaveBeenCalledWith(item, 'batch-commit')
+    const batchDiscardItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.git-action.batch-discard',
+    )
+    expect(batchDiscardItem?.getAttribute('data-variant')).toBe('destructive')
+    await act(async () => {
+      batchDiscardItem?.click()
+      await Promise.resolve()
+    })
+    expect(onGitAction).toHaveBeenLastCalledWith(item, 'batch-discard')
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
@@ -780,6 +790,50 @@ describe('BranchWorkspaceList', () => {
     expect(cleanupItem?.hasAttribute('data-disabled')).toBe(false)
   })
 
+  test('exposes member removal without depending on branch workspace or member readiness', async () => {
+    const member = repositoryMember()
+    const otherMember = repositoryMember({
+      repositoryName: 'web',
+      worktreePath: '/workspace/goblin-feature-auth/web',
+    })
+    const item = { ...workspace('ready'), repositories: [member, otherMember] }
+    const onReduceMember = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId="branch-1"
+            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: true })}
+            onReduceMember={onReduceMember}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
+    const memberRow = container
+      .querySelector('[data-testid="branch-workspace-member-api"]')
+      ?.closest<HTMLElement>('[data-workspace-list-item]')
+    if (!memberRow) throw new Error('missing ready member row')
+    const removeMemberItem = (await openMemberMenu(memberRow)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.remove-members',
+    )
+    expect(removeMemberItem?.hasAttribute('data-disabled')).toBe(false)
+    await act(async () => {
+      removeMemberItem?.click()
+      await Promise.resolve()
+    })
+    expect(onReduceMember).toHaveBeenCalledWith(item, member)
+  })
+
   test('does not expose member removal for the final member', async () => {
     const member = repositoryMember({ ready: false })
     act(() =>
@@ -811,6 +865,48 @@ describe('BranchWorkspaceList', () => {
       'workspace.branch-workspace.remove-members',
     )
   })
+
+  test.each(['reduce-incomplete', 'delete-incomplete'] as const)(
+    'does not start a new member removal while %s recovery is pending',
+    async (stateName) => {
+      const member = repositoryMember({ progress: 'failed', ready: false })
+      const item = {
+        ...workspace(stateName),
+        repositories: [
+          member,
+          repositoryMember({ repositoryName: 'web', worktreePath: '/workspace/goblin-feature-auth/web' }),
+        ],
+      }
+      act(() =>
+        root.render(
+          withTerminalContexts(
+            <BranchWorkspaceList
+              rootId="/workspace"
+              items={[item]}
+              activeId="branch-1"
+              getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: false })}
+              onReduceMember={() => {}}
+              onActivate={() => {}}
+              onReorder={() => {}}
+              onInspect={() => {}}
+              onRepair={() => {}}
+              onRemove={() => {}}
+              onCancel={() => {}}
+            />,
+          ),
+        ),
+      )
+
+      act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
+      const memberRow = container
+        .querySelector('[data-testid="branch-workspace-member-api"]')
+        ?.closest<HTMLElement>('[data-workspace-list-item]')
+      if (!memberRow) throw new Error('missing recovering member row')
+      expect((await openMemberMenu(memberRow)).map((entry) => entry.textContent?.trim())).not.toContain(
+        'workspace.branch-workspace.remove-members',
+      )
+    },
+  )
 
   test.each([
     ['active', ['workspace.branch-workspace.cancel'], ['tmux.cleanup.action']],

@@ -4,14 +4,16 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
-import { TerminalSessionReadContext } from '#/web/components/terminal/terminal-session-context.ts'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
 import { setTerminalSessionCommandBridge } from '#/web/components/terminal/terminal-session-command-bridge.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
-import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
-import type { TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import type {
   BranchWorkspacePlan,
   BranchWorkspaceReadResult,
@@ -58,10 +60,6 @@ const repositoryListState = vi.hoisted(() => ({
     onReorder: (fromId: string, toId: string) => void
     onToggleFileArea?: () => void
   },
-}))
-
-const workspaceBatchState = vi.hoisted(() => ({
-  onSettled: null as null | ((result: WorkspacePullResult) => void | Promise<void>),
 }))
 
 const branchWorkspaceState = vi.hoisted(() => ({
@@ -352,26 +350,6 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx', (
   },
 }))
 
-vi.mock('#/web/hooks/useWorkspacePullActions.ts', () => ({
-  useWorkspacePullActions: (
-    _rootId: string,
-    onSettled: ((result: WorkspacePullResult) => void | Promise<void>) | undefined,
-  ) => {
-    workspaceBatchState.onSettled = onSettled ?? null
-    return {
-      plan: null,
-      result: null,
-      pending: false,
-      error: null,
-      requestPlan: vi.fn(),
-      confirm: vi.fn(),
-      retry: vi.fn(),
-      cancel: vi.fn(),
-      reset: vi.fn(),
-    }
-  },
-}))
-
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryList.tsx', () => ({
   WorkspaceRepositoryList: (props: NonNullable<typeof repositoryListState.props>) => {
     repositoryListState.props = props
@@ -512,7 +490,6 @@ beforeEach(() => {
   toastMocks.success.mockReset()
   toastMocks.error.mockReset()
   repositoryListState.props = null
-  workspaceBatchState.onSettled = null
   const overview = replaceRepo(emptyRepo(ROOT, 'workspace'), (repo) => {
     repo.isGitRepo = false
   })
@@ -991,12 +968,27 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.textContent).toContain('workspace.scan-skipped:1')
     expect(container?.querySelector('button[aria-current="page"]')?.textContent).toContain('api')
     expect(container?.querySelector('button[aria-label="workspace.rescan"]')).not.toBeNull()
-    const createWorkspace = container?.querySelector('button[aria-label="workspace.branch-workspace.create"]')
-    expect(createWorkspace).not.toBeNull()
-    expect(createWorkspace?.querySelector('.lucide-folder-plus')).not.toBeNull()
     expect(container?.querySelector('button[aria-label="workspace.batch.remove-action"]')).toBeNull()
-    expect(container?.querySelector('button[aria-label="workspace.pull-all"]')).not.toBeNull()
-    expect(container?.querySelector('button[aria-label="workspace.configure"]')).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="workspace.pull-all"]')).toBeNull()
+    expect(container?.querySelector('button[aria-label="workspace.configure"]')).toBeNull()
+  })
+
+  test('does not ask for manual configuration when repository membership is automatically imported', () => {
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        [ROOT]: {
+          ...state.workspaceProjects[ROOT]!,
+          configured: false,
+          configuredRepositoryNames: undefined,
+          skipped: [],
+        },
+      },
+    }))
+
+    renderRail()
+
+    expect(container?.textContent).not.toContain('workspace.configuration-required')
   })
 
   test('uses the workspace member name when shared repository state keeps a remote project prefix', () => {
@@ -1038,6 +1030,25 @@ describe('WorkspaceRepositoryRail', () => {
     expect(status?.className).not.toContain('border-separator')
   })
 
+  test('keeps the branch workspace titlebar outside the scrolling content', () => {
+    useReposStore.setState({
+      activeId: ROOT,
+      workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
+    })
+    renderRail({ currentRepoId: ROOT, fill: true })
+
+    const section = container?.querySelector<HTMLElement>('section[aria-label="workspace.branch-workspace.list"]')
+    const scrollBody = section?.querySelector<HTMLElement>('[data-testid="branch-workspace-scroll-body"]')
+    const titlebar = scrollBody?.previousElementSibling as HTMLElement | null
+
+    expect(section?.className).not.toContain('overflow-y-auto')
+    expect(titlebar?.className).toContain('shrink-0')
+    expect(titlebar?.querySelector('[aria-label="workspace.branch-workspace.create"]')).not.toBeNull()
+    expect(titlebar?.querySelector('[aria-label="workspace.branch-workspace.reload"]')).not.toBeNull()
+    expect(scrollBody?.className).toContain('overflow-y-auto')
+    expect(scrollBody?.querySelector('[data-testid="branch-workspace-list"]')).not.toBeNull()
+  })
+
   test('identifies Overview with the workspace root folder icon and name', () => {
     renderRail()
 
@@ -1050,7 +1061,7 @@ describe('WorkspaceRepositoryRail', () => {
     expect(overview?.className).toContain('text-[13px]')
   })
 
-  test('keeps hidden workspace actions in the branch workspace titlebar rather than the status bar', () => {
+  test('keeps the create action in the branch workspace titlebar', () => {
     useReposStore.setState({
       activeId: ROOT,
       workspaceActiveContextByRoot: { [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' } },
@@ -1065,15 +1076,14 @@ describe('WorkspaceRepositoryRail', () => {
     expect(repositorySection?.querySelector('[aria-label="workspace.repositories.expand"]')).toBeNull()
     const hide = repositorySection?.querySelector<HTMLButtonElement>('[aria-label="workspace.repositories.hide"]')
     expect(hide?.querySelector('.lucide-eye-off')).not.toBeNull()
-    for (const label of [
-      'workspace.branch-workspace.create',
-      'workspace.pull-all',
-      'workspace.configure',
-      'workspace.rescan',
-    ]) {
-      expect(repositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-      expect(branchWorkspaceSection?.querySelector(`[aria-label="${label}"]`)).toBeNull()
-    }
+    expect(repositorySection?.querySelector('[aria-label="workspace.branch-workspace.create"]')).toBeNull()
+    expect(repositorySection?.querySelector('[aria-label="workspace.rescan"]')).not.toBeNull()
+    const createWorkspace = branchWorkspaceSection?.querySelector('[aria-label="workspace.branch-workspace.create"]')
+    expect(createWorkspace).not.toBeNull()
+    expect(createWorkspace?.querySelector('.lucide-folder-plus')).not.toBeNull()
+    expect(branchWorkspaceSection?.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
+    expect(repositorySection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
+    expect(repositorySection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
 
     act(() => hide?.click())
 
@@ -1087,12 +1097,12 @@ describe('WorkspaceRepositoryRail', () => {
     for (const label of [
       'workspace.branch-workspace.reload',
       'workspace.branch-workspace.create',
-      'workspace.pull-all',
       'workspace.repositories.show',
     ]) {
       expect(migratedSection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
     }
     expect(migratedSection?.querySelector('[aria-label="workspace.repositories.show"] .lucide-eye')).not.toBeNull()
+    expect(migratedSection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
     expect(migratedSection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
     expect(migratedSection?.querySelector('[aria-label="workspace.rescan"]')).toBeNull()
 
@@ -1100,14 +1110,16 @@ describe('WorkspaceRepositoryRail', () => {
 
     const restoredRepositorySection = container?.querySelector('section[aria-label="workspace.repositories"]')
     expect(restoredRepositorySection).not.toBeNull()
-    for (const label of [
-      'workspace.branch-workspace.create',
-      'workspace.pull-all',
-      'workspace.configure',
-      'workspace.rescan',
-    ]) {
-      expect(restoredRepositorySection?.querySelector(`[aria-label="${label}"]`)).not.toBeNull()
-    }
+    const restoredBranchWorkspaceSection = container?.querySelector(
+      'section[aria-label="workspace.branch-workspace.list"]',
+    )
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.branch-workspace.create"]')).toBeNull()
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.rescan"]')).not.toBeNull()
+    expect(
+      restoredBranchWorkspaceSection?.querySelector('[aria-label="workspace.branch-workspace.create"]'),
+    ).not.toBeNull()
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.pull-all"]')).toBeNull()
+    expect(restoredRepositorySection?.querySelector('[aria-label="workspace.configure"]')).toBeNull()
   })
 
   test('shows the branch workspace recovery header while repositories are hidden from a member repository', () => {
@@ -1692,6 +1704,25 @@ describe('WorkspaceRepositoryRail', () => {
     expect(bell?.getAttribute('aria-label')).toBe('terminal.bell-unread')
   })
 
+  test('routes an Overview aggregate terminal click to its child workspace terminal', () => {
+    useReposStore.setState({ detailCollapsed: true })
+    const branchPath = '/workspace/goblin-feature-auth'
+    const branchKey = `${ROOT}\0${branchPath}`
+    const terminalKey = `${branchKey}\0terminal-1`
+    const { terminalCommands } = renderRail({
+      currentRepoId: ROOT,
+      terminalStateByPath: { [branchPath]: { count: 1 } },
+    })
+
+    act(() => overviewButton()?.click())
+
+    expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+    expect(activateBranchWorkspace).toHaveBeenCalledWith(ROOT, 'branch-1')
+    expect(terminalCommands.selectTerminal).toHaveBeenCalledWith(branchKey, terminalKey)
+    expect(terminalCommands.focusTerminal).toHaveBeenCalledWith(terminalKey)
+    expect(useReposStore.getState().detailCollapsed).toBe(false)
+  })
+
   test('activates Overview and child repositories through one explicit action', () => {
     renderRail()
     const buttons = Array.from(container!.querySelectorAll<HTMLButtonElement>('button'))
@@ -1702,6 +1733,7 @@ describe('WorkspaceRepositoryRail', () => {
     act(() => web?.click())
 
     expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+    expect(activateBranchWorkspace).not.toHaveBeenCalled()
     expect(activateWorkspaceRepository).toHaveBeenCalledWith(ROOT, WEB)
   })
 
@@ -1722,75 +1754,6 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
   })
 
-  test('refreshes configured members after a batch operation without rediscovering workspace directories', async () => {
-    renderRail()
-
-    await act(async () =>
-      workspaceBatchState.onSettled?.({
-        ok: true,
-        planToken: 'sha256:plan',
-        members: [],
-      }),
-    )
-
-    expect(refreshCoreData).toHaveBeenCalledTimes(2)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
-    expect(rescanWorkspace).not.toHaveBeenCalled()
-  })
-
-  test('shows a success toast when pulling all repositories completes', async () => {
-    renderRail()
-    const result = {
-      ok: true,
-      planToken: 'sha256:plan',
-      members: [],
-    } satisfies WorkspacePullResult
-
-    await act(async () => await workspaceBatchState.onSettled?.(result))
-
-    expect(toastMocks.success).toHaveBeenCalledWith('workspace.pull-all-success')
-    expect(toastMocks.error).not.toHaveBeenCalled()
-  })
-
-  test('shows an error toast when a batch does not complete every repository', async () => {
-    renderRail()
-    const result = {
-      ok: false,
-      planToken: 'sha256:plan',
-      members: [{ repoId: API, phase: 'failed', message: 'busy' }],
-      message: 'workspace.pull.execute-failed',
-    } satisfies WorkspacePullResult
-
-    await act(async () => await workspaceBatchState.onSettled?.(result))
-
-    expect(toastMocks.error).toHaveBeenCalledWith('workspace.pull-all-incomplete', {
-      description: 'workspace.pull.execute-failed',
-    })
-    expect(toastMocks.success).not.toHaveBeenCalled()
-  })
-
-  test('rescans before opening configuration and saves through the workspace action', async () => {
-    let resolveRescan: (() => void) | undefined
-    const rescanPromise = new Promise<void>((resolve) => {
-      resolveRescan = resolve
-    })
-    rescanWorkspace.mockImplementationOnce(() => rescanPromise)
-    renderRail()
-
-    act(() => container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.click())
-    expect(rescanWorkspace).toHaveBeenCalledWith(ROOT)
-    expect(document.querySelector<HTMLButtonElement>('button[type="submit"]')).toBeNull()
-
-    await act(async () => {
-      resolveRescan?.()
-      await rescanPromise
-    })
-    await act(async () => document.querySelector<HTMLButtonElement>('button[type="submit"]')?.click())
-
-    expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['api', 'web'] })
-  })
-
   test('optimistically reorders configured repositories and persists their names', async () => {
     const web = useReposStore.getState().repos[WEB]!
     useReposStore.setState({
@@ -1804,7 +1767,7 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(repositoryListState.props?.repositories.map((repository) => repository.id)).toEqual([WEB, API])
     expect(repositoryListState.props?.disabled).toBe(true)
-    expect(container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')?.disabled).toBe(true)
+    expect(container?.querySelector<HTMLButtonElement>('button[aria-label="workspace.configure"]')).toBeNull()
     expect(configureWorkspace).toHaveBeenCalledWith(ROOT, { repo: ['web', 'api'] })
     act(() => repositoryListState.props?.onReorder(API, WEB))
     expect(configureWorkspace).toHaveBeenCalledTimes(1)
@@ -1898,6 +1861,7 @@ function renderRail({
   fileAreaCollapsed,
   onToggleFileArea,
   onOpenDetailArea,
+  fill,
 }: {
   terminalCount?: number
   outputActive?: boolean
@@ -1909,8 +1873,10 @@ function renderRail({
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
+  fill?: boolean
 } = {}) {
   const rootTerminalKey = `${ROOT}\0${ROOT}`
+  const terminalCommands = terminalCommandContext()
   const readContext: TerminalSessionReadContextValue = {
     worktreeSnapshot: (worktreeTerminalKey) => {
       const terminalPath = worktreeTerminalKey.slice(worktreeTerminalKey.indexOf('\0') + 1)
@@ -1942,17 +1908,55 @@ function renderRail({
   }
   act(() => {
     root!.render(
-      <TerminalSessionReadContext.Provider value={readContext}>
-        <WorkspaceRepositoryRail
-          workspaceRootId={ROOT}
-          currentRepoId={currentRepoId}
-          onOpenFileArea={onOpenFileArea}
-          onCollapseFileArea={onCollapseFileArea}
-          fileAreaCollapsed={fileAreaCollapsed}
-          onToggleFileArea={onToggleFileArea}
-          onOpenDetailArea={onOpenDetailArea}
-        />
-      </TerminalSessionReadContext.Provider>,
+      <TerminalSessionContext.Provider value={terminalCommands}>
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <WorkspaceRepositoryRail
+            workspaceRootId={ROOT}
+            currentRepoId={currentRepoId}
+            fill={fill}
+            onOpenFileArea={onOpenFileArea}
+            onCollapseFileArea={onCollapseFileArea}
+            fileAreaCollapsed={fileAreaCollapsed}
+            onToggleFileArea={onToggleFileArea}
+            onOpenDetailArea={onOpenDetailArea}
+          />
+        </TerminalSessionReadContext.Provider>
+      </TerminalSessionContext.Provider>,
     )
   })
+  return { terminalCommands }
+}
+
+function terminalCommandContext(): TerminalSessionContextValue {
+  return {
+    createTerminal: vi.fn(async () => ''),
+    restoreTmuxSessions: vi.fn(async () => 0),
+    selectTerminal: vi.fn(),
+    scrollToBottom: vi.fn(),
+    pageTmux: vi.fn(),
+    focusTerminal: vi.fn(),
+    scrollLines: vi.fn(),
+    scrollByTouch: vi.fn(),
+    beginMobileSelection: vi.fn(() => false),
+    extendMobileSelection: vi.fn(),
+    finishMobileSelection: vi.fn(),
+    cancelMobileSelection: vi.fn(),
+    mobileSelectionText: vi.fn(() => ''),
+    clearMobileSelection: vi.fn(),
+    writeExtraKey: vi.fn(),
+    clearBell: vi.fn(() => false),
+    closeTerminalAndDismissDetailIfLast: vi.fn(),
+    registerWorktreeHost: vi.fn(),
+    attach: vi.fn(),
+    detach: vi.fn(),
+    restart: vi.fn(),
+    isTerminalFocusTarget: vi.fn(() => false),
+    findNext: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    findPrevious: vi.fn(() => ({ resultIndex: -1, resultCount: 0, found: false })),
+    clearSearch: vi.fn(),
+    writeInput: vi.fn(),
+    takeover: vi.fn(),
+    reorderSessions: vi.fn(async () => true),
+    serialize: vi.fn(() => ''),
+  }
 }

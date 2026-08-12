@@ -16,6 +16,12 @@ export interface WorkspaceInvalidationEvent {
   sourceToken?: string
 }
 
+export interface WorkspaceConfigurationInvalidationEvent {
+  type: 'workspace-configuration-invalidated'
+  rootId: string
+  sourceToken?: string
+}
+
 export interface BranchWorkspaceOperationUpdatedEvent {
   type: 'branch-workspace-operation-updated'
   rootId: string
@@ -27,6 +33,7 @@ export type ServerInvalidationEvent =
   | BranchWorkspaceOperationUpdatedEvent
   | RepoQueryInvalidationEvent
   | SettingsInvalidationEvent
+  | WorkspaceConfigurationInvalidationEvent
   | WorkspaceInvalidationEvent
 
 export function isSettingsInvalidationScope(value: unknown): value is SettingsInvalidationScope {
@@ -57,9 +64,19 @@ export function isWorkspaceInvalidationEvent(value: unknown): value is Workspace
   )
 }
 
-export function isBranchWorkspaceOperationUpdatedEvent(
+export function isWorkspaceConfigurationInvalidationEvent(
   value: unknown,
-): value is BranchWorkspaceOperationUpdatedEvent {
+): value is WorkspaceConfigurationInvalidationEvent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const event = value as Partial<WorkspaceConfigurationInvalidationEvent>
+  return (
+    event.type === 'workspace-configuration-invalidated' &&
+    isSafeEventText(event.rootId) &&
+    (event.sourceToken === undefined || isInvalidationSourceToken(event.sourceToken))
+  )
+}
+
+export function isBranchWorkspaceOperationUpdatedEvent(value: unknown): value is BranchWorkspaceOperationUpdatedEvent {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const event = value as Partial<BranchWorkspaceOperationUpdatedEvent>
   return (
@@ -75,6 +92,7 @@ export function isServerInvalidationEvent(value: unknown): value is ServerInvali
     isBranchWorkspaceOperationUpdatedEvent(value) ||
     isRepoQueryInvalidationEvent(value) ||
     isSettingsInvalidationEvent(value) ||
+    isWorkspaceConfigurationInvalidationEvent(value) ||
     isWorkspaceInvalidationEvent(value)
   )
 }
@@ -106,6 +124,7 @@ function isBranchWorkspaceActiveOperation(value: unknown): value is BranchWorksp
 function isBranchWorkspaceGitActionKind(value: unknown): boolean {
   return (
     value === 'batch-commit' ||
+    value === 'batch-discard' ||
     value === 'batch-merge-in' ||
     value === 'batch-merge-out' ||
     value === 'pull' ||
@@ -116,8 +135,10 @@ function isBranchWorkspaceGitActionKind(value: unknown): boolean {
 function isBranchWorkspaceGitActionStep(value: unknown): boolean {
   return (
     value === 'commit' ||
+    value === 'discard' ||
     value === 'prepare' ||
     value === 'pull' ||
+    value === 'fetch' ||
     value === 'merge' ||
     value === 'push' ||
     value === 'cleanup'
@@ -129,10 +150,9 @@ function isProgressCount(value: unknown): value is number {
 }
 
 function isSafeEventText(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.trim() === value &&
-    !/[\x00-\x1f\x7f]/.test(value)
-  )
+  return typeof value === 'string' && value.length > 0 && value.trim() === value && !/[\x00-\x1f\x7f]/.test(value)
+}
+
+function isInvalidationSourceToken(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value)
 }

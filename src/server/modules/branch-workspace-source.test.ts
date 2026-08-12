@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 import {
   cleanupBranchWorkspaceRegistry,
+  discardBranchWorkspaceRecords,
   readBranchWorkspaceManifests,
   replaceBranchWorkspaceManifests,
   updateBranchWorkspaceManifests,
@@ -275,6 +276,27 @@ describe('branch workspace source', () => {
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toMatchObject({
       kind: 'ready',
       manifests: [{ branch: 'feature/a' }, { branch: 'feature/b' }],
+    })
+  })
+
+  test('discards selected application records while preserving other records and roots', async () => {
+    const { directory, dataFile, root } = await createFixture()
+    const secondRoot = path.join(directory, 'second-workspace')
+    const retained = manifest(root, 'feature/retained')
+    const discarded = manifest(root, 'feature/discarded')
+    const otherRoot = manifest(secondRoot, 'feature/other')
+    await replaceBranchWorkspaceManifests(root, [retained, discarded], { dataFile })
+    await replaceBranchWorkspaceManifests(secondRoot, [otherRoot], { dataFile })
+
+    await discardBranchWorkspaceRecords(root, [discarded.id], { dataFile })
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [retained],
+    })
+    await expect(readBranchWorkspaceManifests(secondRoot, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [otherRoot],
     })
   })
 

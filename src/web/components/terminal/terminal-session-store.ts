@@ -123,19 +123,6 @@ export function useWorktreeTerminalCount(worktreeTerminalKey: string | null): nu
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
-export function useWorktreeTerminalSelectedDescriptor(worktreeTerminalKey: string | null): TerminalDescriptor | null {
-  const { worktreeSnapshot, subscribeWorktree } = useTerminalSessionReadContext()
-  const subscribe = useCallback(
-    (listener: () => void) => (worktreeTerminalKey ? subscribeWorktree(worktreeTerminalKey, listener) : () => {}),
-    [worktreeTerminalKey, subscribeWorktree],
-  )
-  const getSnapshot = useCallback(
-    () => (worktreeTerminalKey ? worktreeSnapshot(worktreeTerminalKey).selectedDescriptor : null),
-    [worktreeTerminalKey, worktreeSnapshot],
-  )
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-}
-
 export function useTerminalSessionSummaries(worktreeTerminalKey: string | null): TerminalSessionSummary[] {
   const { worktreeSnapshot, subscribeWorktree } = useTerminalSessionReadContext()
   const subscribe = useCallback(

@@ -19,14 +19,6 @@ class ProjectsScreenStateTest {
     }
 
     @Test
-    fun `project item actions match hosts-style bottom action order`() {
-        assertEquals(
-            listOf(R.string.common_open, R.string.common_terminals, R.string.common_delete),
-            projectActionLabelResources(),
-        )
-    }
-
-    @Test
     fun `project terminal target uses repository id and root path`() {
         val repository = RemoteRepositoryProfile.create(
             hostProfileId = "host-1",
@@ -80,13 +72,6 @@ class ProjectsScreenStateTest {
     fun `filtered projects cannot reorder hidden global items`() {
         assertTrue(projectReorderAvailable(hostFilterId = null))
         assertEquals(false, projectReorderAvailable(hostFilterId = "host-1"))
-    }
-
-    @Test
-    fun `only local projects enter local reorder inputs`() {
-        val projects = listOf(project(id = "repo-1", hostId = "host-1"))
-
-        assertEquals(listOf("repo-1"), localProjectReorderIds(projects))
     }
 
     @Test

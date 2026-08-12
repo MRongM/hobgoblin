@@ -3,6 +3,7 @@ import {
   disconnectAllInvalidationSockets,
   publishBranchWorkspaceOperationUpdate,
   publishRepoQueryInvalidation,
+  publishWorkspaceConfigurationInvalidation,
   publishWorkspaceInvalidation,
   registerInvalidationSocket,
 } from '#/server/modules/invalidation-broker.ts'
@@ -47,6 +48,21 @@ describe('invalidation broker', () => {
         type: 'workspace-invalidated',
         rootId: '/workspace',
         sourceToken: 'workspace_create_1',
+      }),
+    )
+  })
+
+  test('publishes a targeted workspace configuration invalidation payload', () => {
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerInvalidationSocket(socket)
+
+    publishWorkspaceConfigurationInvalidation('/workspace', 'workspace_import_1')
+
+    expect(socket.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'workspace-configuration-invalidated',
+        rootId: '/workspace',
+        sourceToken: 'workspace_import_1',
       }),
     )
   })

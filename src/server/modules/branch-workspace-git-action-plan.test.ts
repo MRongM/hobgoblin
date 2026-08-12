@@ -122,6 +122,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
         status(targetPath, repositoryName === 'api' ? [{ x: ' ', y: 'M', path: 'src/a.ts' }] : []),
       ]
     }),
+    getRemoteBranchInfo: vi.fn(async () => []),
     getPatch: vi.fn(async () => ({ ok: true, message: 'diff --git a/src/a.ts b/src/a.ts\n+change' })),
     ...overrides,
   }
@@ -176,6 +177,81 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
           { repositoryName: 'web', dirty: false, changeCount: 0 },
         ],
       },
+    })
+  })
+
+  test('plans exact changed paths for every branch workspace member in manifest order', async () => {
+    const deps = dependencies({
+      getStatus: vi.fn(async (repoId: string) => {
+        const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+        const entries =
+          repositoryName === 'api'
+            ? [
+                { x: '?', y: '?', path: 'scratch/new.txt' },
+                { x: 'M', y: ' ', path: 'src/a.ts' },
+              ]
+            : []
+        return [
+          status(`/workspace/${repositoryName}`),
+          status(`/workspace/goblin-feature-a/${repositoryName}`, entries),
+        ]
+      }),
+    })
+
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-discard', branchWorkspaceId: WORKSPACE_ID },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-discard',
+        members: [
+          {
+            repositoryName: 'api',
+            targetWorktreePath: '/workspace/goblin-feature-a/api',
+            paths: ['scratch/new.txt', 'src/a.ts'],
+            changeCount: 2,
+          },
+          {
+            repositoryName: 'web',
+            targetWorktreePath: '/workspace/goblin-feature-a/web',
+            paths: [],
+            changeCount: 0,
+          },
+        ],
+      },
+    })
+    expect(deps.getPatch).toHaveBeenNthCalledWith(1, '/workspace/api', '/workspace/goblin-feature-a/api', undefined)
+    expect(deps.getPatch).toHaveBeenNthCalledWith(2, '/workspace/web', '/workspace/goblin-feature-a/web', undefined)
+  })
+
+  test('rejects a batch discard plan when full patch content changes under the same status', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-discard', branchWorkspaceId: WORKSPACE_ID },
+      dependencies(),
+    )
+    expect(original.ok).toBe(true)
+    if (!original.ok) return
+
+    const result = await validateBranchWorkspaceGitActionPlan(
+      original.plan,
+      new Set(),
+      dependencies({
+        getPatch: vi.fn(async (repoId: string) => ({
+          ok: true,
+          message: repoId.endsWith('/api') ? 'same status, newer content' : 'diff --git a/src/a.ts b/src/a.ts\n+change',
+        })),
+      }),
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.repository-changed',
+      repositoryName: 'api',
     })
   })
 
@@ -323,13 +399,13 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             ready: true,
             destinationBranches: [
               {
-                branch: 'main',
+                destination: { kind: 'local', branch: 'main' },
                 ready: true,
                 requiresTemporaryWorktree: true,
                 pullMergePushReady: true,
               },
               {
-                branch: 'release/v2',
+                destination: { kind: 'local', branch: 'release/v2' },
                 ready: true,
                 requiresTemporaryWorktree: true,
                 pullMergePushReady: true,
@@ -366,9 +442,9 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     )
 
     expect(result.ok && result.plan.kind === 'batch-merge-out' && result.plan.members[0]?.destinationBranches).toEqual([
-      expect.objectContaining({ branch: 'main', ready: true, requiresTemporaryWorktree: false }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'main' }, ready: true, requiresTemporaryWorktree: false }),
       expect.objectContaining({
-        branch: 'release/v2',
+        destination: { kind: 'local', branch: 'release/v2' },
         ready: false,
         requiresTemporaryWorktree: false,
         message: 'workspace.branch-workspace.git-action.destination-worktree-dirty',
@@ -405,8 +481,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             ready: true,
             pullMergePushReady: true,
             sourceBranches: [
-              { branch: 'main', head: 'base-head' },
-              { branch: 'release/v2', head: 'release-head' },
+              { source: { kind: 'local', branch: 'main' }, head: 'base-head' },
+              { source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' },
             ],
           },
           { repositoryName: 'web', ready: true, pullMergePushReady: true },
@@ -431,11 +507,109 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             repositoryName: 'api',
             ready: false,
             message: 'workspace.branch-workspace.git-action.target-worktree-dirty',
-            sourceBranches: [{ branch: 'main', head: 'base-head' }, { branch: 'release/v2' }],
+            sourceBranches: [
+              { source: { kind: 'local', branch: 'main' }, head: 'base-head' },
+              { source: { kind: 'local', branch: 'release/v2' } },
+            ],
           },
           { repositoryName: 'web', ready: true },
         ],
       },
+    })
+  })
+
+  test('keeps same-named local and remote refs distinct and includes the target remote counterpart', async () => {
+    const cleanStatus = vi.fn(async (repoId: string) => {
+      const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+      return [status(`/workspace/${repositoryName}`), status(`/workspace/goblin-feature-a/${repositoryName}`)]
+    })
+    const getSnapshot = vi.fn(async (repoId: string) => {
+      const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+      const result = snapshot(repositoryName)
+      result.branches.push({
+        ...result.branches[1]!,
+        name: 'origin/main',
+        isCurrent: false,
+        worktree: undefined,
+        lastCommitHash: 'local-origin-main',
+      })
+      return result
+    })
+    const getRemoteBranchInfo = vi.fn(async () => [
+      { remoteRef: 'origin/feature/a', head: 'remote-target-head' },
+      { remoteRef: 'origin/main', head: 'remote-main-head' },
+    ])
+    const deps = dependencies({ getStatus: cleanStatus, getSnapshot, getRemoteBranchInfo })
+
+    const mergeIn = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID },
+      deps,
+    )
+    const mergeOut = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+      deps,
+    )
+
+    expect(mergeIn.ok && mergeIn.plan.kind === 'batch-merge-in' && mergeIn.plan.members[0]?.sourceBranches).toEqual([
+      expect.objectContaining({ source: { kind: 'local', branch: 'main' }, head: 'base-head' }),
+      expect.objectContaining({ source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' }),
+      expect.objectContaining({ source: { kind: 'local', branch: 'origin/main' }, head: 'local-origin-main' }),
+      expect.objectContaining({ source: { kind: 'remote', remoteRef: 'origin/feature/a' }, head: 'remote-target-head' }),
+      expect.objectContaining({ source: { kind: 'remote', remoteRef: 'origin/main' }, head: 'remote-main-head' }),
+    ])
+    expect(
+      mergeOut.ok && mergeOut.plan.kind === 'batch-merge-out' && mergeOut.plan.members[0]?.destinationBranches,
+    ).toEqual([
+      expect.objectContaining({ destination: { kind: 'local', branch: 'main' } }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'release/v2' } }),
+      expect.objectContaining({ destination: { kind: 'local', branch: 'origin/main' } }),
+      expect.objectContaining({
+        destination: { kind: 'remote', remoteRef: 'origin/feature/a' },
+        ready: true,
+        requiresTemporaryWorktree: true,
+        pullMergePushReady: true,
+      }),
+      expect.objectContaining({
+        destination: { kind: 'remote', remoteRef: 'origin/main' },
+        ready: true,
+        requiresTemporaryWorktree: true,
+        pullMergePushReady: true,
+      }),
+    ])
+  })
+
+  test('changes the batch merge plan token when a remote-tracking head changes', async () => {
+    const build = async (head: string) =>
+      await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-merge-in', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({ getRemoteBranchInfo: vi.fn(async () => [{ remoteRef: 'origin/main', head }]) }),
+      )
+
+    const original = await build('remote-head-1')
+    const changed = await build('remote-head-2')
+
+    expect(original.ok && changed.ok && original.plan.token).not.toBe(changed.ok && changed.plan.token)
+  })
+
+  test('attributes an unavailable remote branch read to the affected member', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getRemoteBranchInfo: vi.fn(async (repoId: string) => {
+          if (repoId.endsWith('/api')) throw new Error('remote read failed')
+          return []
+        }),
+      }),
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.remote-branches-unavailable',
+      repositoryName: 'api',
     })
   })
 

@@ -1,11 +1,6 @@
-import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
-
-const require = createRequire(import.meta.url)
-const { PNG } = require('pngjs') as {
-  PNG: { sync: { read: (buffer: Buffer) => { width: number; height: number; data: Uint8Array } } }
-}
+import sharp from 'sharp'
 
 const pngAssets = [
   'assets/icon.png',
@@ -42,9 +37,10 @@ describe('brand assets', () => {
     }
   })
 
-  test('keeps generated icons opaque and full bleed at the macOS dock edge', () => {
+  test('keeps generated icons opaque and full bleed at the macOS dock edge', async () => {
     for (const assetPath of pngAssets) {
-      const png = PNG.sync.read(readFileSync(assetPath))
+      const { data, info } = await sharp(assetPath).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      const png = { width: info.width, height: info.height, data }
 
       expect(readPixel(png, 512, 0)).toEqual(expect.objectContaining({ dark: true }))
       expect(readPixel(png, 0, 512)).toEqual(expect.objectContaining({ dark: true }))

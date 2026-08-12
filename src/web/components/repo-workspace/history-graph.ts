@@ -1,45 +1,4 @@
-import type { CommitFileChangeStatus, CommitHistoryEntry } from '#/web/types.ts'
-
-export interface HistoryGraphRow {
-  commit: CommitHistoryEntry
-  lane: number
-  laneCount: number
-  parentLanes: number[]
-}
-
-export function buildHistoryGraphRows(commits: CommitHistoryEntry[]): HistoryGraphRow[] {
-  const active: Array<string | null> = []
-  const rows: HistoryGraphRow[] = []
-
-  for (const commit of commits) {
-    let lane = active.indexOf(commit.hash)
-    if (lane === -1) {
-      lane = active.indexOf(null)
-      if (lane === -1) {
-        lane = active.length
-        active.push(commit.hash)
-      } else {
-        active[lane] = commit.hash
-      }
-    }
-
-    const parentLanes = commit.parents.map((_parent, index) => lane + index)
-    if (commit.parents.length > 0) {
-      active.splice(lane, 1, ...commit.parents)
-    } else {
-      active[lane] = null
-    }
-
-    rows.push({
-      commit,
-      lane,
-      laneCount: Math.max(1, active.length, lane + 1),
-      parentLanes,
-    })
-  }
-
-  return rows
-}
+import type { CommitFileChangeStatus } from '#/web/types.ts'
 
 export function commitFileStatusLabel(status: CommitFileChangeStatus): string {
   switch (status) {

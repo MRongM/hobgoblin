@@ -1,5 +1,11 @@
+import { windowsPathIdentityKey } from '#/shared/path-semantics.ts'
+
+export function terminalPathIdentityKey(value: string): string {
+  return windowsPathIdentityKey(value) ?? value
+}
+
 export function worktreeTerminalKey(repoRoot: string, worktreePath: string): string {
-  return `${repoRoot}\0${worktreePath}`
+  return `${terminalPathIdentityKey(repoRoot)}\0${terminalPathIdentityKey(worktreePath)}`
 }
 
 export function parseWorktreeTerminalKey(key: string): { repoRoot: string; worktreePath: string } | null {

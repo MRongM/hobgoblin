@@ -1,12 +1,23 @@
 name: Windows Test Build
 
 on:
+  workflow_call:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-test.yml
+      - electron-builder.ts
+      - package.json
+      - bun.lock
+      - scripts/**
+      - src/**
   push:
     branches:
+      - main
       - windows
     paths:
       - .github/workflows/windows-test.yml
+      - electron-builder.ts
       - package.json
       - bun.lock
       - scripts/**
@@ -21,8 +32,16 @@ concurrency:
 
 jobs:
   build-windows:
-    name: Build Windows x64
-    runs-on: windows-latest
+    name: Build Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,13 +62,34 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Test Windows compatibility
+        run: >-
+          bun run test --
+          src/main/external-open.test.ts
+          src/main/terminal.test.ts
+          src/server/terminal/terminal-pty-runtime.test.ts
+          src/server/terminal/terminal-scope.test.ts
+          src/server/terminal/windows-terminal-shell.test.ts
+          src/shared/file-path-target.test.ts
+          src/shared/path-semantics.test.ts
+          src/shared/worktree-guards.test.ts
+          src/system/open-app.test.ts
+          src/system/terminals.test.ts
+          src/system/windows-terminal.test.ts
+          src/web/components/terminal/TerminalSessionRegistry.test.ts
+          src/web/components/terminal/terminal-repo-index.test.ts
+          src/web/components/terminal/terminal-session-keys.test.ts
+          src/web/components/terminal/terminal-path-links.test.ts
+          src/web/lib/editor-open-targets.test.ts
+          src/web/lib/paths.test.ts
+
       - name: Build Windows artifact
-        run: bun scripts/build-release-artifacts.ts --platform windows --arch x64
+        run: bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}
 
       - name: Smoke test packaged Windows app startup
         shell: pwsh
         env:
-          GOBLIN_SMOKE_USER_DATA: ${{ runner.temp }}\hobgoblin-smoke-user-data
+          GOBLIN_SMOKE_USER_DATA: ${{ runner.temp }}\Hobgoblin Smoke 用户 Data
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -109,7 +149,7 @@ jobs:
             $json = $Payload | ConvertTo-Json -Depth 8 -Compress
             $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
             $segment = [System.ArraySegment[byte]]::new($bytes)
-            $Socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $Token).GetAwaiter().GetResult()
+            [void]$Socket.SendAsync($segment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $Token).GetAwaiter().GetResult()
           }
 
           function Receive-WebSocketJson {
@@ -124,7 +164,7 @@ jobs:
               $segment = [System.ArraySegment[byte]]::new($buffer)
               $result = $Socket.ReceiveAsync($segment, $Token).GetAwaiter().GetResult()
               if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-                throw "Terminal WebSocket closed before create response"
+                throw "Terminal WebSocket closed before smoke transaction completed"
               }
               [void]$builder.Append([System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count))
             } while (-not $result.EndOfMessage)
@@ -132,7 +172,60 @@ jobs:
             return $builder.ToString() | ConvertFrom-Json
           }
 
-          function Invoke-TerminalCreateSmoke {
+          function Add-TerminalOutput {
+            param(
+              [Parameter(Mandatory = $true)][object]$Message,
+              [Parameter(Mandatory = $true)][System.Text.StringBuilder]$Output
+            )
+
+            if ($Message.type -eq "output" -and $Message.event -and $null -ne $Message.event.data) {
+              [void]$Output.Append([string]$Message.event.data)
+            }
+          }
+
+          function Wait-TerminalResponse {
+            param(
+              [Parameter(Mandatory = $true)][System.Net.WebSockets.ClientWebSocket]$Socket,
+              [Parameter(Mandatory = $true)][System.Threading.CancellationToken]$Token,
+              [Parameter(Mandatory = $true)][string]$RequestId,
+              [Parameter(Mandatory = $true)][System.Text.StringBuilder]$Output
+            )
+
+            while ($true) {
+              $message = Receive-WebSocketJson -Socket $Socket -Token $Token
+              Add-TerminalOutput -Message $message -Output $Output
+              if ($message.type -eq "response" -and $message.requestId -eq $RequestId) {
+                return $message
+              }
+            }
+          }
+
+          function Wait-TerminalOutput {
+            param(
+              [Parameter(Mandatory = $true)][System.Net.WebSockets.ClientWebSocket]$Socket,
+              [Parameter(Mandatory = $true)][System.Threading.CancellationToken]$Token,
+              [Parameter(Mandatory = $true)][System.Text.StringBuilder]$Output,
+              [Parameter(Mandatory = $true)][string[]]$Expected
+            )
+
+            while ($true) {
+              $text = $Output.ToString()
+              $missing = @($Expected | Where-Object { -not $text.Contains($_) })
+              if ($missing.Count -eq 0) {
+                return
+              }
+              try {
+                $message = Receive-WebSocketJson -Socket $Socket -Token $Token
+              } catch {
+                $outputText = $Output.ToString()
+                $outputBase64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($outputText))
+                throw "Terminal output wait failed; missing=$($missing -join ','); outputChars=$($outputText.Length); outputUtf8Base64=$outputBase64; cause=$($_.Exception.Message)"
+              }
+              Add-TerminalOutput -Message $message -Output $Output
+            }
+          }
+
+          function Invoke-TerminalSmoke {
             param(
               [Parameter(Mandatory = $true)][string]$ServerUrl,
               [Parameter(Mandatory = $true)][string]$WorkspacePath
@@ -149,9 +242,10 @@ jobs:
             $socketUrl = ConvertTo-TerminalWebSocketUrl -ServerUrl $server.url -Secret $server.secret -ClientId $server.clientId -AttachmentId $attachmentId
             $socket = [System.Net.WebSockets.ClientWebSocket]::new()
             $cts = [System.Threading.CancellationTokenSource]::new()
-            $cts.CancelAfter([TimeSpan]::FromSeconds(20))
+            $cts.CancelAfter([TimeSpan]::FromSeconds(40))
             try {
-              $socket.ConnectAsync([Uri]$socketUrl, $cts.Token).GetAwaiter().GetResult()
+              [void]$socket.ConnectAsync([Uri]$socketUrl, $cts.Token).GetAwaiter().GetResult()
+              $terminalOutput = [System.Text.StringBuilder]::new()
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_create"
@@ -167,13 +261,7 @@ jobs:
                 }
               }
 
-              $createResponse = $null
-              while (-not $createResponse) {
-                $message = Receive-WebSocketJson -Socket $socket -Token $cts.Token
-                if ($message.type -eq "response" -and $message.requestId -eq "terminal_smoke_create") {
-                  $createResponse = $message
-                }
-              }
+              $createResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_create" -Output $terminalOutput
               if ($createResponse.ok -ne $true) {
                 throw "Terminal create WebSocket request failed: $($createResponse.error)"
               }
@@ -182,17 +270,89 @@ jobs:
               }
 
               $sessionId = $createResponse.payload.sessionId
+              $processName = [string]$createResponse.payload.processName
+              if ($processName -notmatch '(?i)(?:^|[\\/])(pwsh|powershell)(?:\.exe)?$') {
+                throw "Packaged terminal selected unexpected Windows shell: $processName"
+              }
+              if ($createResponse.payload.windowsPty.backend -ne "conpty") {
+                throw "Packaged terminal did not select ConPTY: $($createResponse.payload.windowsPty.backend)"
+              }
+              if ($null -eq $createResponse.payload.windowsPty.buildNumber) {
+                throw "Packaged terminal did not report a Windows build number"
+              }
+              Write-Host "Terminal smoke create shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber)"
+
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_attach"
+                action = "attach"
+                input = @{
+                  sessionId = $sessionId
+                  cols = 90
+                  rows = 28
+                  attachmentId = $attachmentId
+                }
+              }
+              $attachResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_attach" -Output $terminalOutput
+              if ($attachResponse.ok -ne $true) {
+                throw "Terminal attach WebSocket request failed: $($attachResponse.error)"
+              }
+              if ($attachResponse.payload.ok -ne $true) {
+                throw "Terminal attach returned failure: $($attachResponse.payload.message)"
+              }
+              Write-Host "Terminal smoke attach session=$sessionId"
+
+              [void]$terminalOutput.Clear()
+              $marker = "__HOBGOBLIN_终端_IO_OK__"
+              $command = "Write-Output ('__HOBGOBLIN_' + '终端_IO_OK__'); Write-Output ((Get-Location).Path)`r"
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_write"
+                action = "write"
+                input = @{
+                  sessionId = $sessionId
+                  data = $command
+                  attachmentId = $attachmentId
+                }
+              }
+              $writeResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_write" -Output $terminalOutput
+              if ($writeResponse.ok -ne $true -or $writeResponse.payload -ne $true) {
+                throw "Terminal write failed"
+              }
+              Write-Host "Terminal smoke write accepted"
+              Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $WorkspacePath)
+
+              Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
+                type = "request"
+                requestId = "terminal_smoke_resize"
+                action = "resize"
+                input = @{
+                  sessionId = $sessionId
+                  cols = 100
+                  rows = 32
+                  attachmentId = $attachmentId
+                }
+              }
+              $resizeResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_resize" -Output $terminalOutput
+              if ($resizeResponse.ok -ne $true -or $resizeResponse.payload -ne $true) {
+                throw "Terminal resize failed"
+              }
+
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_close"
                 action = "close"
                 input = @{ sessionId = $sessionId }
               }
-              Write-Host "Terminal smoke created session $sessionId"
+              $closeResponse = Wait-TerminalResponse -Socket $socket -Token $cts.Token -RequestId "terminal_smoke_close" -Output $terminalOutput
+              if ($closeResponse.ok -ne $true -or $closeResponse.payload.ok -ne $true) {
+                throw "Terminal close failed"
+              }
+              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId marker=$marker cwd=$WorkspacePath"
             } finally {
               try {
                 if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
-                  $socket.CloseAsync(
+                  [void]$socket.CloseAsync(
                     [System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure,
                     "terminal smoke complete",
                     [System.Threading.CancellationToken]::None
@@ -247,8 +407,8 @@ jobs:
           if ($ready -and $logPath -and (Test-Path $logPath)) {
             try {
               $serverUrl = Get-SmokeServerUrl -LogPath $logPath
-              $terminalWorkspace = Join-Path $env:RUNNER_TEMP "hobgoblin-terminal-smoke-workspace"
-              Invoke-TerminalCreateSmoke -ServerUrl $serverUrl -WorkspacePath $terminalWorkspace
+              $terminalWorkspace = Join-Path $env:RUNNER_TEMP "Hobgoblin Terminal 路径 Workspace"
+              Invoke-TerminalSmoke -ServerUrl $serverUrl -WorkspacePath $terminalWorkspace
             } catch {
               $terminalSmokeError = $_
             }
@@ -280,15 +440,15 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-startup-logs-${{ github.sha }}
-          path: ${{ runner.temp }}\hobgoblin-smoke-user-data\**\*
+          name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ runner.temp }}\Hobgoblin Smoke 用户 Data\**\*
           if-no-files-found: warn
           retention-days: 7
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-x64-${{ github.sha }}
-          path: release/Hobgoblin-*-x64.exe
+          name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}
+          path: release/Hobgoblin-*-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 7

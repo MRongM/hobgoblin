@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Download, Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Settings2, Terminal } from 'lucide-react'
+import { Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
-import type { WorkspaceConfig } from '#/shared/workspace.ts'
-import type { WorkspacePullResult } from '#/shared/workspace-pull.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -22,14 +20,16 @@ import {
 } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import { branchWorkspaceTerminalBase } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceMemberPresentation } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
-import { WorkspaceConfigurationDialog } from '#/web/components/repo-workspace/WorkspaceConfigurationDialog.tsx'
 import {
   WorkspaceRepositoryList,
   type WorkspaceRepositoryListItem,
 } from '#/web/components/repo-workspace/WorkspaceRepositoryList.tsx'
-import { WorkspacePullDialog } from '#/web/components/repo-workspace/WorkspacePullDialog.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
+import {
+  TerminalSessionContext,
+  TerminalSessionReadContext,
+} from '#/web/components/terminal/terminal-session-context.ts'
 import {
   useTerminalAggregateCount,
   useTerminalAggregateHasBell,
@@ -41,7 +41,6 @@ import { cleanupBranchWorkspaceRegistry } from '#/web/workspace-client.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
 import { useBranchWorkspaceDependencyActions } from '#/web/hooks/useBranchWorkspaceDependencyActions.ts'
 import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
-import { useWorkspacePullActions } from '#/web/hooks/useWorkspacePullActions.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -53,6 +52,10 @@ import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
+import {
+  activateWorkspaceParentTerminalTarget,
+  resolveWorkspaceParentTerminalTarget,
+} from '#/web/components/repo-workspace/workspace-parent-terminal-navigation.ts'
 
 interface Props {
   workspaceRootId: string
@@ -76,6 +79,8 @@ export function WorkspaceRepositoryRail({
   onOpenDetailArea,
 }: Props) {
   const t = useT()
+  const terminalReadContext = useContext(TerminalSessionReadContext)
+  const terminalCommands = useContext(TerminalSessionContext)
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
   const repos = useReposStore((state) => state.repos)
   const activeContext = useReposStore(
@@ -95,6 +100,7 @@ export function WorkspaceRepositoryRail({
   const activateWorkspaceRepository = useReposStore((state) => state.activateWorkspaceRepository)
   const selectBranch = useReposStore((state) => state.selectBranch)
   const setDetailTab = useReposStore((state) => state.setDetailTab)
+  const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
   const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const configureWorkspace = useReposStore((state) => state.configureWorkspace)
@@ -111,7 +117,6 @@ export function WorkspaceRepositoryRail({
   const branchActions = useBranchWorkspaceActions(workspaceRootId)
   const branchDependencyActions = useBranchWorkspaceDependencyActions(workspaceRootId)
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
-  const [configurationOpen, setConfigurationOpen] = useState(false)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
   const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'extend' | 'reduce' | 'repair' | 'remove'>(
     'create',
@@ -121,7 +126,6 @@ export function WorkspaceRepositoryRail({
   const [dependencyDialogOpen, setDependencyDialogOpen] = useState(false)
   const [dependencyDialogMode, setDependencyDialogMode] = useState<'add' | 'remove'>('add')
   const [dependencyBranchWorkspaceId, setDependencyBranchWorkspaceId] = useState('')
-  const [pullOpen, setPullOpen] = useState(false)
   const [optimisticRepositoryIds, setOptimisticRepositoryIds] = useState<string[] | null>(null)
   const [reorderPending, setReorderPending] = useState(false)
   const [reorderError, setReorderError] = useState<string | null>(null)
@@ -152,6 +156,26 @@ export function WorkspaceRepositoryRail({
   const overviewTerminalCount = useTerminalAggregateCount(overviewTerminalWorktreeKeys)
   const overviewHasTerminalBell = useTerminalAggregateHasBell(overviewTerminalWorktreeKeys)
   const overviewHasTerminalOutputActivity = useTerminalAggregateHasOutputActivity(overviewTerminalWorktreeKeys)
+  const handleOverviewActivate = () => {
+    if (!terminalReadContext || !terminalCommands) {
+      activateWorkspaceOverview(workspaceRootId)
+      return
+    }
+    const target = resolveWorkspaceParentTerminalTarget({
+      rootId: workspaceRootId,
+      rootPath: overviewRootPath,
+      activeBranchWorkspaceId: activeContext.kind === 'branch-workspace' ? activeContext.branchWorkspaceId : null,
+      branchWorkspaces: branchItems,
+      worktreeSnapshot: terminalReadContext.worktreeSnapshot,
+    })
+    activateWorkspaceParentTerminalTarget(target, {
+      activateOverview: () => activateWorkspaceOverview(workspaceRootId),
+      activateBranchWorkspace: (branchWorkspaceId) => activateBranchWorkspace(workspaceRootId, branchWorkspaceId),
+      selectTerminal: terminalCommands.selectTerminal,
+      focusTerminal: terminalCommands.focusTerminal,
+      revealTerminal: () => setDetailCollapsed(false),
+    })
+  }
   const candidateNameById = useMemo(
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
@@ -183,14 +207,6 @@ export function WorkspaceRepositoryRail({
         ]),
       ),
     [branchItems, repos, repositoryIdByName],
-  )
-  const configuredRepositoryNames = useMemo(
-    () =>
-      (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
-        const name = candidateNameById.get(repositoryId)
-        return name ? [name] : []
-      }),
-    [candidateNameById, workspace?.repositoryIds],
   )
   const repositoryOptions = useMemo(
     () =>
@@ -241,17 +257,6 @@ export function WorkspaceRepositoryRail({
     const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
     return Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
   }, [workspaceRootId])
-  const settlePull = useCallback(
-    async (result: WorkspacePullResult) => {
-      if (result.ok) toast.success(t('workspace.pull-all-success'))
-      else
-        toast.error(t('workspace.pull-all-incomplete'), result.message ? { description: t(result.message) } : undefined)
-      await refreshWorkspaceMemberCoreData()
-    },
-    [refreshWorkspaceMemberCoreData, t],
-  )
-  const pullActions = useWorkspacePullActions(workspaceRootId, settlePull)
-
   useEffect(() => {
     if (activeContext.kind !== 'branch-workspace' || !activeContext.memberRepositoryName) return
     const branchWorkspace = branchItems.find((item) => item.id === activeContext.branchWorkspaceId)
@@ -441,6 +446,7 @@ export function WorkspaceRepositoryRail({
               }}
               onBatchCommit={branchGitActions.executeBatchCommit}
               onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
+              onBatchDiscard={branchGitActions.executeBatchDiscard}
               onBatchMergeIn={branchGitActions.executeBatchMergeIn}
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
@@ -472,10 +478,6 @@ export function WorkspaceRepositoryRail({
     setOptimisticRepositoryIds(null)
     setReorderPending(false)
     if (!result.ok) setReorderError(result.message)
-  }
-  const openConfiguration = async () => {
-    await rescanWorkspace(workspaceRootId)
-    setConfigurationOpen(true)
   }
   const openBranchDialog = (
     mode: 'create' | 'extend' | 'reduce' | 'repair' | 'remove',
@@ -509,11 +511,6 @@ export function WorkspaceRepositoryRail({
       )
     }
   }
-  const openPull = () => {
-    pullActions.reset()
-    setPullOpen(true)
-    void pullActions.requestPlan()
-  }
   const openDependencyDialog = (mode: 'add' | 'remove', item: BranchWorkspaceSnapshot) => {
     branchDependencyActions.reset()
     setDependencyDialogMode(mode)
@@ -534,32 +531,10 @@ export function WorkspaceRepositoryRail({
       >
         <FolderPlus aria-hidden="true" />
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t('workspace.pull-all')}
-        title={t('workspace.pull-all')}
-        disabled={!batchReady || reorderPending}
-        onClick={openPull}
-      >
-        <Download aria-hidden="true" />
-      </Button>
     </>
   )
   const workspaceRepositoryOnlyActions = (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t('workspace.configure')}
-        title={t('workspace.configure')}
-        disabled={scanning || reorderPending}
-        onClick={() => void openConfiguration()}
-      >
-        <Settings2 aria-hidden="true" />
-      </Button>
       <Button
         type="button"
         variant="ghost"
@@ -587,17 +562,11 @@ export function WorkspaceRepositoryRail({
   )
   const repositoryHeaderActions = (
     <>
-      {branchWorkspacePrimaryActions}
       {workspaceRepositoryOnlyActions}
       {repositoryListToggleAction}
     </>
   )
-  const hiddenRepositoryActions = (
-    <>
-      {branchWorkspacePrimaryActions}
-      {repositoryListToggleAction}
-    </>
-  )
+  const hiddenRepositoryActions = <>{repositoryListToggleAction}</>
   const branchListRefreshAction = (
     <Button
       type="button"
@@ -632,7 +601,7 @@ export function WorkspaceRepositoryRail({
               terminalCount={overviewTerminalCount}
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
-              onActivate={() => activateWorkspaceOverview(workspaceRootId)}
+              onActivate={handleOverviewActivate}
               onToggleFileArea={onToggleFileArea}
             />
             <WorkspaceRepositoryList
@@ -648,93 +617,99 @@ export function WorkspaceRepositoryRail({
         {branchListVisible ? (
           <section
             aria-label={t('workspace.branch-workspace.list')}
-            className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
+            className={cn(fill && 'flex min-h-0 flex-1 flex-col')}
           >
-            <div className="flex h-7 items-center gap-1 px-2 pt-1">
+            <div className="flex h-7 shrink-0 items-center gap-1 px-3 pt-1">
               <span className="min-w-0 flex-1 text-[length:var(--goblin-project-titlebar-font-size)] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('workspace.branch-workspace.list')}
               </span>
+              {branchWorkspacePrimaryActions}
               {branchListRefreshAction}
               {!repositoryListVisible ? hiddenRepositoryActions : null}
             </div>
-            {branchQuery.isPending ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
-            ) : branchQuery.data && !branchQuery.data.ok ? (
-              <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
-                <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={branchReloadPending}
-                  aria-label={t('workspace.branch-workspace.reload')}
-                  onClick={() => void reloadBranchWorkspaces()}
-                >
-                  {branchReloadPending ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <RefreshCw aria-hidden="true" />
-                  )}
-                  {t('workspace.branch-workspace.reload')}
-                </Button>
-                {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+            <div
+              className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
+              data-testid="branch-workspace-scroll-body"
+            >
+              {branchQuery.isPending ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
+              ) : branchQuery.data && !branchQuery.data.ok ? (
+                <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
+                  <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
                   <Button
                     type="button"
-                    variant="destructive-soft"
+                    variant="outline"
                     size="sm"
-                    aria-label={t('workspace.branch-workspace.cleanup')}
-                    onClick={() => setRegistryCleanupOpen(true)}
+                    disabled={branchReloadPending}
+                    aria-label={t('workspace.branch-workspace.reload')}
+                    onClick={() => void reloadBranchWorkspaces()}
                   >
-                    {t('workspace.branch-workspace.cleanup')}
+                    {branchReloadPending ? (
+                      <LoaderCircle className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCw aria-hidden="true" />
+                    )}
+                    {t('workspace.branch-workspace.reload')}
                   </Button>
-                ) : null}
-              </div>
-            ) : branchItems.length === 0 ? (
-              <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
-            ) : (
-              <BranchWorkspaceList
-                rootId={workspaceRootId}
-                items={branchItems}
-                activeId={selectedBranchWorkspaceId}
-                activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
-                disabled={branchActions.pending || branchDependencyActions.pending}
-                fileAreaCollapsed={fileAreaCollapsed}
-                gitActionsDisabled={branchGitActions.pending}
-                onGitAction={openGitAction}
-                gitActionPanel={gitActionPanel}
-                changeCountById={branchWorkspaceChangeCountById}
-                onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
-                onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
-                onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
-                onInspect={(item) =>
-                  openBranchDialog(
-                    item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
-                      ? 'remove'
-                      : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
-                        ? 'reduce'
-                        : 'repair',
-                    item,
-                  )
-                }
-                onExtend={(item) => openBranchDialog('extend', item)}
-                onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
-                onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
-                onAddDependencies={(item) => openDependencyDialog('add', item)}
-                onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
-                onRepair={(item) => openBranchDialog('repair', item, true)}
-                onRemove={(item) =>
-                  openBranchDialog(
-                    'remove',
-                    item,
-                    item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
-                  )
-                }
-                getMemberPresentation={(_item, member) => getMemberPresentation(member)}
-                onOpenRepositoryMember={openRepositoryMember}
-                onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
-                onCancel={() => branchGitActions.cancel()}
-              />
-            )}
+                  {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+                    <Button
+                      type="button"
+                      variant="destructive-soft"
+                      size="sm"
+                      aria-label={t('workspace.branch-workspace.cleanup')}
+                      onClick={() => setRegistryCleanupOpen(true)}
+                    >
+                      {t('workspace.branch-workspace.cleanup')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : branchItems.length === 0 ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
+              ) : (
+                <BranchWorkspaceList
+                  rootId={workspaceRootId}
+                  items={branchItems}
+                  activeId={selectedBranchWorkspaceId}
+                  activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
+                  disabled={branchActions.pending || branchDependencyActions.pending}
+                  fileAreaCollapsed={fileAreaCollapsed}
+                  gitActionsDisabled={branchGitActions.pending}
+                  onGitAction={openGitAction}
+                  gitActionPanel={gitActionPanel}
+                  changeCountById={branchWorkspaceChangeCountById}
+                  onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
+                  onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
+                  onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
+                  onInspect={(item) =>
+                    openBranchDialog(
+                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
+                        ? 'remove'
+                        : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
+                          ? 'reduce'
+                          : 'repair',
+                      item,
+                    )
+                  }
+                  onExtend={(item) => openBranchDialog('extend', item)}
+                  onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
+                  onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
+                  onAddDependencies={(item) => openDependencyDialog('add', item)}
+                  onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
+                  onRepair={(item) => openBranchDialog('repair', item, true)}
+                  onRemove={(item) =>
+                    openBranchDialog(
+                      'remove',
+                      item,
+                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
+                    )
+                  }
+                  getMemberPresentation={(_item, member) => getMemberPresentation(member)}
+                  onOpenRepositoryMember={openRepositoryMember}
+                  onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
+                  onCancel={() => branchGitActions.cancel()}
+                />
+              )}
+            </div>
           </section>
         ) : null}
         {reorderError ? (
@@ -742,25 +717,16 @@ export function WorkspaceRepositoryRail({
             {t(reorderError)}
           </div>
         ) : null}
-        {(workspace.error || workspace.configurationError || !workspace.configured || workspace.skipped.length > 0) && (
+        {(workspace.error || workspace.configurationError || workspace.skipped.length > 0) && (
           <div className="px-3 py-1.5 text-[10px] leading-4 text-warning" role="status">
             {workspace.error
               ? t('workspace.scan-failed')
               : workspace.configurationError
                 ? t('workspace.configuration-invalid')
-                : !workspace.configured
-                  ? t('workspace.configuration-required')
-                  : t('workspace.scan-skipped', { count: workspace.skipped.length })}
+                : t('workspace.scan-skipped', { count: workspace.skipped.length })}
           </div>
         )}
       </div>
-      <WorkspaceConfigurationDialog
-        open={configurationOpen}
-        onOpenChange={setConfigurationOpen}
-        configuredRepositoryNames={configuredRepositoryNames}
-        candidates={workspace.candidates}
-        onSave={(config: WorkspaceConfig) => configureWorkspace(workspaceRootId, config)}
-      />
       <BranchWorkspaceDialog
         open={branchDialogOpen}
         mode={branchDialogMode}
@@ -802,20 +768,6 @@ export function WorkspaceRepositoryRail({
         onPreview={branchDependencyActions.requestPlan}
         onConfirm={branchDependencyActions.confirm}
         onCancel={branchDependencyActions.cancel}
-      />
-      <WorkspacePullDialog
-        open={pullOpen}
-        plan={pullActions.plan}
-        result={pullActions.result}
-        pending={pullActions.pending}
-        error={pullActions.error}
-        onOpenChange={(open) => {
-          setPullOpen(open)
-          if (!open && !pullActions.pending) pullActions.reset()
-        }}
-        onConfirm={pullActions.confirm}
-        onRetry={pullActions.retry}
-        onCancel={pullActions.cancel}
       />
       <ConfirmDialog
         open={registryCleanupOpen}

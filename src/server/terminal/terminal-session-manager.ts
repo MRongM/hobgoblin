@@ -88,6 +88,7 @@ interface TerminalSession<TOwner extends string | number> {
   claimedByOwner: boolean
   phase: TerminalSessionPhase
   message: string | null
+  hasUserInput: boolean
   /** Display order within the worktree for tab strip sorting. */
   displayOrder: number
   /** Input queue ensures ordered PTY writes even with multiple concurrent callers. */
@@ -101,6 +102,7 @@ export interface TerminalEventSink<TOwner extends string | number> {
   onTitle?(ownerId: TOwner, event: { sessionId: string; canonicalTitle: string | null }): void
   onExit(ownerId: TOwner, event: TerminalExitEvent): void
   onOwnership?(ownerId: TOwner, event: TerminalOwnershipEvent): void
+  onUserInput?(ownerId: TOwner, event: { sessionId: string }): void
 }
 
 export class TerminalSessionManager<TOwner extends string | number> {
@@ -154,6 +156,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       claimedByOwner: false,
       phase: 'opening',
       message: null,
+      hasUserInput: false,
       displayOrder: this.nextDisplayOrder(input.scope, parseWorktreePathFromKey(input.key) ?? input.key),
       inputQueue: [],
       inputFlushScheduled: false,
@@ -176,12 +179,16 @@ export class TerminalSessionManager<TOwner extends string | number> {
     return spawnResult
   }
 
-  writeSession(ownerId: TOwner, sessionId: string, data: string, attachmentId?: string): boolean {
+  writeSession(ownerId: TOwner, sessionId: string, data: string, attachmentId?: string, userIntent = true): boolean {
     if (!isValidTerminalSessionId(sessionId) || !isValidTerminalWriteData(data)) return false
     const session = this.getSession(ownerId, sessionId)
     if (!session?.pty) return false
     if (!attachmentId) return false
     if (!authorizeTerminalAttachment(session, attachmentId, 'write').ok) return false
+    if (userIntent && data && !session.hasUserInput) {
+      session.hasUserInput = true
+      this.sink.onUserInput?.(ownerId, { sessionId: session.id })
+    }
     session.inputQueue.push(data)
     this.scheduleInputFlush(session)
     return true
@@ -384,6 +391,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
           displayOrder: session.displayOrder,
           phase: session.phase,
           message: session.message,
+          hasUserInput: session.hasUserInput,
           windowsPty: session.windowsPty,
           tmuxBacked: session.tmuxSessionName !== null,
           ...(session.tmuxSessionName

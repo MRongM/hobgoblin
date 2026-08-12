@@ -66,13 +66,6 @@ const MODIFIER_ALIASES: Record<string, (typeof MODIFIERS)[number]> = {
   shift: 'Shift',
 }
 
-const MODIFIER_LABELS: Record<(typeof MODIFIERS)[number], string> = {
-  Command: '⌘',
-  Control: '⌃',
-  Alt: '⌥',
-  Shift: '⇧',
-}
-
 export function parseGlobalShortcut(value: unknown): string | null {
   if (typeof value !== 'string') return null
   if (value.length > MAX_GLOBAL_SHORTCUT_LENGTH) return null
@@ -108,40 +101,10 @@ export function isReservedGlobalShortcut(accelerator: string): boolean {
   return parsed !== null && RESERVED_GLOBAL_SHORTCUTS.has(parsed)
 }
 
-export function globalShortcutFromKeyboardEvent(e: KeyboardEvent): string | null {
-  const key = keyFromKeyboardEvent(e)
-  if (!key) return null
-  const modifiers = [
-    e.metaKey ? 'Command' : null,
-    e.ctrlKey ? 'Control' : null,
-    e.altKey ? 'Alt' : null,
-    e.shiftKey ? 'Shift' : null,
-  ].filter((modifier): modifier is (typeof MODIFIERS)[number] => modifier !== null)
-  if (!modifiers.some((modifier) => PRIMARY_MODIFIERS.has(modifier))) return null
-  return [...modifiers, key].join('+')
-}
-
-export function formatAccelerator(accelerator: string): string {
-  return acceleratorToKeyLabels(accelerator).join('')
-}
-
-export function acceleratorToKeyLabels(accelerator: string): string[] {
-  const parsed = parseGlobalShortcut(accelerator)
-  if (!parsed) return [accelerator]
-  return parsed.split('+').map((token) => MODIFIER_LABELS[token as (typeof MODIFIERS)[number]] ?? token)
-}
-
 function isAllowedShortcutKey(token: string): boolean {
   return /^[a-z0-9]$/i.test(token) || /^f([1-9]|1[0-9]|2[0-4])$/i.test(token) || SPECIAL_SHORTCUT_KEYS.has(token)
 }
 
 function normalizeShortcutKey(token: string): string {
   return token.toUpperCase()
-}
-
-function keyFromKeyboardEvent(e: KeyboardEvent): string | null {
-  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3)
-  if (/^Digit[0-9]$/.test(e.code)) return e.code.slice(5)
-  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(e.code)) return e.code
-  return null
 }

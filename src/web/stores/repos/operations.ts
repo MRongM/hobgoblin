@@ -8,6 +8,7 @@ export type RepoBranchActionReason =
   | 'branch:createWorktree'
   | 'branch:createBranch'
   | 'branch:trackRemoteBranch'
+  | 'branch:setBranchUpstream'
   | 'branch:deleteBranch'
   | 'branch:cleanupWorktree'
   | 'branch:removeWorktree'

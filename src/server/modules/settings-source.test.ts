@@ -1172,5 +1172,5 @@ test('normalizes missing or invalid file tree pane sizes to defaults', async () 
   const session = defaultSessionState()
   delete session.fileTreePaneSizes
   const saved = await mod.setServerSessionState(session)
-  expect(saved.fileTreePaneSizes).toEqual({ 'left-right': 66.7 })
+  expect(saved.fileTreePaneSizes).toEqual({ 'left-right': 30 })
 })

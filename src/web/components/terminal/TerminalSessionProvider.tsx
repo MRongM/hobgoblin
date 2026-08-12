@@ -20,6 +20,7 @@ import {
   repoIndexEqual,
   repoIndexFromRepos,
   repoIndexWithBranchWorkspaces,
+  repoRootForTerminalIdentity,
 } from '#/web/components/terminal/terminal-repo-index.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
@@ -120,19 +121,21 @@ export function TerminalSessionProvider({
 
   const syncServerSessions = useCallback(
     async (repoRoot: string) => {
-      if (!repoRoot || !repoIndexRef.current[repoRoot]) return
+      if (!repoRoot) return
+      const resolvedRepoRoot = repoRootForTerminalIdentity(repoIndexRef.current, repoRoot)
+      if (!resolvedRepoRoot) return
       try {
         const attachmentId = readOrCreateWebTerminalAttachmentId()
-        const serverSessions = await mainWindowQueryClient.fetchQuery(terminalSessionsQueryOptions(repoRoot))
+        const serverSessions = await mainWindowQueryClient.fetchQuery(terminalSessionsQueryOptions(resolvedRepoRoot))
         const snapshotsBySessionId = await loadMissingSnapshots(serverSessions)
-        if (!repoIndexRef.current[repoRoot]) return
-        registry.reconcileServerSessions(repoRoot, serverSessions, attachmentId, snapshotsBySessionId)
+        if (!repoIndexRef.current[resolvedRepoRoot]) return
+        registry.reconcileServerSessions(resolvedRepoRoot, serverSessions, attachmentId, snapshotsBySessionId)
       } catch (err) {
         console.debug('[TerminalSessionProvider] failed to sync server sessions:', err)
       } finally {
-        const instanceToken = repoIndexRef.current[repoRoot]?.instanceToken
+        const instanceToken = repoIndexRef.current[resolvedRepoRoot]?.instanceToken
         if (typeof instanceToken === 'number') {
-          syncTracker.markReady(repoRoot, instanceToken)
+          syncTracker.markReady(resolvedRepoRoot, instanceToken)
         }
       }
     },
@@ -226,8 +229,13 @@ export function TerminalSessionProvider({
     window.addEventListener('focus', handleFocus)
 
     const offSessionsChanged = terminalBridge.onSessionsChanged((repoRoot) => {
-      void mainWindowQueryClient.invalidateQueries({ queryKey: terminalSessionsQueryKey(repoRoot), exact: true })
-      void syncServerSessions(repoRoot)
+      const resolvedRepoRoot = repoRootForTerminalIdentity(repoIndexRef.current, repoRoot)
+      if (!resolvedRepoRoot) return
+      void mainWindowQueryClient.invalidateQueries({
+        queryKey: terminalSessionsQueryKey(resolvedRepoRoot),
+        exact: true,
+      })
+      void syncServerSessions(resolvedRepoRoot)
     })
 
     return () => {

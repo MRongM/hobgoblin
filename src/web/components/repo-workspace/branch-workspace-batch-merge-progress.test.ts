@@ -261,6 +261,71 @@ describe('branch workspace batch merge progress', () => {
       ['docs', 'unselected', []],
     ])
   })
+
+  test('includes fetch in remote merge-in pipelines', () => {
+    const plan = mergeInPlan()
+    const remoteSource: BranchWorkspaceBatchMergeInSourceInput[] = [
+      { repositoryName: 'api', source: { kind: 'remote', remoteRef: 'origin/release/v2' } },
+    ]
+
+    expect(memberStates(projectBranchWorkspaceBatchMergeInProgress(plan, remoteSource, 'merge', null, null))[0]).toEqual(
+      [
+        'api',
+        'pending',
+        [
+          ['fetch', 'pending'],
+          ['merge', 'pending'],
+        ],
+      ],
+    )
+    expect(
+      memberStates(
+        projectBranchWorkspaceBatchMergeInProgress(
+          plan,
+          remoteSource,
+          'pull-merge-push',
+          activeOperation({ kind: 'batch-merge-in', repositoryName: 'api', step: 'fetch' }),
+          null,
+        ),
+      )[0],
+    ).toEqual([
+      'api',
+      'active',
+      [
+        ['pull', 'complete'],
+        ['fetch', 'active'],
+        ['merge', 'pending'],
+        ['push', 'pending'],
+      ],
+    ])
+  })
+
+  test('projects remote merge-out without a pull step', () => {
+    const plan = mergeOutPlan()
+    const targets: BranchWorkspaceBatchMergeOutTargetInput[] = [
+      { repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'origin/release/v2' } },
+    ]
+
+    const progress = projectBranchWorkspaceBatchMergeOutProgress(
+      plan,
+      targets,
+      'pull-merge-push',
+      activeOperation({ repositoryName: 'api', step: 'prepare' }),
+      null,
+    )
+
+    expect(memberStates(progress)[0]).toEqual([
+      'api',
+      'active',
+      [
+        ['fetch', 'complete'],
+        ['prepare', 'active'],
+        ['merge', 'pending'],
+        ['push', 'pending'],
+        ['cleanup', 'pending'],
+      ],
+    ])
+  })
 })
 
 function mergeInPlan(): BranchWorkspaceBatchMergeInPlan {
@@ -278,8 +343,9 @@ function mergeInPlan(): BranchWorkspaceBatchMergeInPlan {
       ready: true,
       pullMergePushReady: true,
       sourceBranches: [
-        { branch: 'main', head: 'main-head' },
-        { branch: 'release/v2', head: 'release-head' },
+        { source: { kind: 'local', branch: 'main' }, head: 'main-head' },
+        { source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' },
+        { source: { kind: 'remote', remoteRef: 'origin/release/v2' }, head: 'remote-release-head' },
       ],
       fingerprint: `sha256:${repositoryName}`,
     })),
@@ -301,7 +367,7 @@ function mergeOutPlan(): BranchWorkspaceBatchMergeOutPlan {
       ready: true,
       destinationBranches: [
         {
-          branch: 'main',
+          destination: { kind: 'local', branch: 'main' },
           head: 'main-head',
           ready: true,
           worktreePath: `/workspace/${repositoryName}`,
@@ -309,7 +375,7 @@ function mergeOutPlan(): BranchWorkspaceBatchMergeOutPlan {
           pullMergePushReady: true,
         },
         {
-          branch: 'release/v2',
+          destination: { kind: 'local', branch: 'release/v2' },
           head: 'release-head',
           ready: true,
           worktreePath: `/workspace/${repositoryName}-release`,
@@ -317,8 +383,15 @@ function mergeOutPlan(): BranchWorkspaceBatchMergeOutPlan {
           pullMergePushReady: true,
         },
         {
-          branch: 'staging',
+          destination: { kind: 'local', branch: 'staging' },
           head: 'staging-head',
+          ready: true,
+          requiresTemporaryWorktree: true,
+          pullMergePushReady: true,
+        },
+        {
+          destination: { kind: 'remote', remoteRef: 'origin/release/v2' },
+          head: 'remote-release-head',
           ready: true,
           requiresTemporaryWorktree: true,
           pullMergePushReady: true,
@@ -341,11 +414,14 @@ function activeOperation(fields: Partial<BranchWorkspaceActiveOperation>): Branc
 }
 
 function mergeOutTargets(entries: Array<[string, string]>): BranchWorkspaceBatchMergeOutTargetInput[] {
-  return entries.map(([repositoryName, destinationBranch]) => ({ repositoryName, destinationBranch }))
+  return entries.map(([repositoryName, branch]) => ({
+    repositoryName,
+    destination: { kind: 'local', branch },
+  }))
 }
 
 function mergeInSources(entries: Array<[string, string]>): BranchWorkspaceBatchMergeInSourceInput[] {
-  return entries.map(([repositoryName, sourceBranch]) => ({ repositoryName, sourceBranch }))
+  return entries.map(([repositoryName, branch]) => ({ repositoryName, source: { kind: 'local', branch } }))
 }
 
 function memberStates(progress: ReturnType<typeof projectBranchWorkspaceBatchMergeOutProgress>) {

@@ -23,6 +23,14 @@ const plan: BranchWorkspaceGitActionPlan = {
   members: [],
 }
 
+const discardPlan: BranchWorkspaceGitActionPlan = {
+  kind: 'batch-discard',
+  token: 'sha256:discard',
+  rootId: '/workspace',
+  branchWorkspaceId: 'ws-1',
+  members: [],
+}
+
 function syncPlan(kind: 'pull' | 'push'): BranchWorkspaceGitActionPlan {
   return {
     kind,
@@ -111,6 +119,34 @@ describe('useBranchWorkspaceGitActions', () => {
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       kind,
       planToken: expectedPlan.token,
+    })
+  })
+
+  test('plans and executes batch discard with only the server-owned plan token', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan: discardPlan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind: 'batch-discard',
+      planToken: discardPlan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-discard', 'ws-1'))
+    await act(async () => state!.executeBatchDiscard())
+
+    expect(state!.plan).toEqual(discardPlan)
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      kind: 'batch-discard',
+      planToken: discardPlan.token,
     })
   })
 

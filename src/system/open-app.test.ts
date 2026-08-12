@@ -1,16 +1,24 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
+const originalPlatform = process.platform
+
+function setPlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, 'platform', { value: platform })
+}
+
+afterEach(() => {
+  setPlatform(originalPlatform)
+})
+
 const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
   existsSync: vi.fn(),
   hasCommand: vi.fn(),
   homedir: vi.fn(() => '/Users/test'),
-  statSync: vi.fn(
-    (): { isDirectory: () => boolean; isFile: () => boolean } => ({
-      isDirectory: () => true,
-      isFile: () => false,
-    }),
-  ),
+  statSync: vi.fn((): { isDirectory: () => boolean; isFile: () => boolean } => ({
+    isDirectory: () => true,
+    isFile: () => false,
+  })),
 }))
 
 vi.mock('execa', () => ({ execa: mocks.execa }))
@@ -27,9 +35,11 @@ vi.mock('#/system/command.ts', () => ({
 describe('openByAppCli', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.existsSync.mockImplementation((path: string) =>
-      path === '/Applications/Visual Studio Code.app' ||
-      path === '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+    setPlatform('darwin')
+    mocks.existsSync.mockImplementation(
+      (path: string) =>
+        path === '/Applications/Visual Studio Code.app' ||
+        path === '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
     )
     mocks.statSync.mockReturnValue({ isDirectory: () => false, isFile: () => true })
     mocks.execa.mockResolvedValue({ failed: false })
@@ -68,9 +78,11 @@ describe('openByAppCli', () => {
 describe('openRemoteByAppCli', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.existsSync.mockImplementation((path: string) =>
-      path === '/Applications/Visual Studio Code.app' ||
-      path === '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+    setPlatform('darwin')
+    mocks.existsSync.mockImplementation(
+      (path: string) =>
+        path === '/Applications/Visual Studio Code.app' ||
+        path === '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
     )
     mocks.execa.mockResolvedValue({ failed: false })
   })
@@ -145,23 +157,13 @@ describe('openRemoteByAppCli', () => {
   })
 })
 
-describe('openByEditorCli', () => {
-  const originalPlatform = process.platform
-
-  function setPlatform(platform: NodeJS.Platform) {
-    Object.defineProperty(process, 'platform', { value: platform })
-  }
-
+describe('Windows editor CLI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setPlatform('win32')
     mocks.hasCommand.mockImplementation((command: string) => command === 'code.cmd')
     mocks.statSync.mockReturnValue({ isDirectory: () => false, isFile: () => true })
     mocks.execa.mockResolvedValue({ failed: false })
-  })
-
-  afterEach(() => {
-    setPlatform(originalPlatform)
   })
 
   test('detects Windows VS Code-family command candidates', async () => {
@@ -181,6 +183,23 @@ describe('openByEditorCli', () => {
     expect(mocks.execa).toHaveBeenCalledWith(
       'code.cmd',
       ['--goto', 'C:\\repo\\src\\app.ts:12:3'],
+      expect.objectContaining({ timeout: 10_000, reject: false }),
+    )
+  })
+
+  test('opens a remote path through the Windows editor command', async () => {
+    const { openRemoteByAppCli } = await import('#/system/open-app.ts')
+
+    await expect(
+      openRemoteByAppCli('Visual Studio Code', 'code', 'prod', {
+        path: '/srv/repo/src/app.ts',
+        line: 12,
+      }),
+    ).resolves.toEqual({ ok: true, message: '/srv/repo/src/app.ts' })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      'code.cmd',
+      ['--remote', 'ssh-remote+prod', '--goto', '/srv/repo/src/app.ts:12'],
       expect.objectContaining({ timeout: 10_000, reject: false }),
     )
   })

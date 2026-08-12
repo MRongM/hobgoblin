@@ -34,6 +34,7 @@ describe('AboutSettings', () => {
     await render(<AboutSettings />)
 
     expect(document.body.textContent).toContain('v9.8.7')
+    expect(document.body.querySelector('img[alt="Hobgoblin"]')?.getAttribute('src')).toBe('/goblin.png')
   })
 
   test('opens and closes the bundled font license documents offline', async () => {

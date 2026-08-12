@@ -2,7 +2,11 @@ import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
 import { createTerminalBellController } from '#/web/components/terminal/terminal-bell-controller.ts'
 import { terminalDescriptor } from '#/web/components/terminal/terminal-descriptor.ts'
-import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import {
+  parseTerminalSessionKey,
+  terminalSessionKey,
+  worktreeTerminalKey,
+} from '#/web/components/terminal/terminal-session-keys.ts'
 import { compactTerminalProcessName, compactTerminalTitle } from '#/web/components/terminal/terminal-title.ts'
 import { terminalBridge } from '#/web/terminal.ts'
 import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
@@ -15,7 +19,11 @@ import type {
   TerminalSessionSummary as ServerTerminalSessionSummary,
   TerminalTmuxPageDirection,
 } from '#/shared/terminal.ts'
-import { branchForTerminalWorktree } from '#/web/components/terminal/terminal-repo-index.ts'
+import {
+  branchForTerminalWorktree,
+  repoRootForTerminalIdentity,
+  resolveTerminalRepoWorktree,
+} from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TERMINAL_FONT_FAMILY, measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
 import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
@@ -47,12 +55,6 @@ const TERMINAL_OUTPUT_ACTIVE_ECHO_MS = 500
 // Output must flow this long before the activity indicator lights, so brief
 // bursts (TUI redraw on attach/resize, one-shot writes) stay dark.
 const TERMINAL_OUTPUT_ACTIVE_SUSTAIN_MS = 1_000
-
-function parseServerSessionKey(key: string): { repoRoot: string; worktreePath: string; terminalId: string } | null {
-  const parts = key.split('\0')
-  if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null
-  return { repoRoot: parts[0], worktreePath: parts[1], terminalId: parts[2] }
-}
 
 function isValidCreateFirstFrame(result: Extract<TerminalCatalogMutationResult, { ok: true }>): boolean {
   return (
@@ -106,6 +108,7 @@ export class TerminalSessionRegistry {
   private readonly outputActiveKeys = new Set<string>()
   private readonly outputActiveIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly lastTerminalInputAt = new Map<string, number>()
+  private readonly hasUserInputByKey = new Map<string, boolean>()
   private readonly outputBurstStartAt = new Map<string, number>()
   private readonly outputBurstLastAt = new Map<string, number>()
   private readonly outputBurstLastSeq = new Map<string, number>()
@@ -180,6 +183,7 @@ export class TerminalSessionRegistry {
     for (const timer of this.outputActiveIdleTimers.values()) clearTimeout(timer)
     this.outputActiveIdleTimers.clear()
     this.lastTerminalInputAt.clear()
+    this.hasUserInputByKey.clear()
     this.outputBurstStartAt.clear()
     this.outputBurstLastAt.clear()
     this.outputBurstLastSeq.clear()
@@ -247,35 +251,51 @@ export class TerminalSessionRegistry {
     attachmentId: string,
     snapshotsBySessionId: ReadonlyMap<string, TerminalSessionSnapshot>,
   ): void {
-    if (!this.repoIndex[repoRoot]) return
-    const serverSessionsByKey = new Map(serverSessions.map((session) => [session.key, session]))
+    const resolvedRepoRoot = repoRootForTerminalIdentity(this.repoIndex, repoRoot)
+    if (!resolvedRepoRoot) return
+    const serverSessionKeys = new Set(
+      serverSessions.map((session) => canonicalTerminalSessionKey(session.key) ?? session.key),
+    )
     const controllerKeyByWorktree = new Map<string, string>()
     const touchedWorktrees = new Set<string>()
+    const inputStateChangedWorktrees = new Set<string>()
     const localKeys = Array.from(this.sessions.entries())
-      .filter(([, session]) => session.descriptor.repoRoot === repoRoot)
+      .filter(([, session]) => session.descriptor.repoRoot === resolvedRepoRoot)
       .map(([key]) => key)
 
     let missingLocalCount = 0
     let orphanedLocalCount = 0
 
     for (const serverSession of serverSessions) {
-      const parsed = parseServerSessionKey(serverSession.key)
-      if (!parsed || parsed.repoRoot !== repoRoot) continue
-      const branch = branchForTerminalWorktree(this.repoIndex, parsed.repoRoot, parsed.worktreePath)
-      if (!branch) continue
-      const terminalWorktreeKey = worktreeTerminalKey(parsed.repoRoot, parsed.worktreePath)
-      const branchWorkspaceId = this.repoIndex[parsed.repoRoot]?.branchWorkspaceIdByWorktreePath?.[parsed.worktreePath]
+      const parsed = parseTerminalSessionKey(serverSession.key)
+      if (!parsed) continue
+      const target = resolveTerminalRepoWorktree(this.repoIndex, parsed.repoRoot, parsed.worktreePath)
+      if (!target || target.repoRoot !== resolvedRepoRoot) continue
+      const terminalWorktreeKey = worktreeTerminalKey(target.repoRoot, target.worktreePath)
       touchedWorktrees.add(terminalWorktreeKey)
       const descriptor = {
         ...terminalDescriptor(
-          { repoRoot: parsed.repoRoot, branch, worktreePath: parsed.worktreePath },
+          { repoRoot: target.repoRoot, branch: target.branch, worktreePath: target.worktreePath },
           parsed.terminalId,
           parseTerminalIdIndex(parsed.terminalId) ?? 1,
         ),
         tmuxBacked: serverSession.tmuxBacked === true,
         tmuxCloseSupported: serverSession.tmuxCloseSupported,
-        ...(branchWorkspaceId ? { targetKind: 'branch-workspace' as const, branchWorkspaceId } : {}),
+        ...(target.branchWorkspaceId
+          ? { targetKind: 'branch-workspace' as const, branchWorkspaceId: target.branchWorkspaceId }
+          : {}),
       }
+      const previousSessionId = this.sessionIdByKey.get(descriptor.key)
+      const previousHasUserInput = this.hasUserInputByKey.get(descriptor.key)
+      const hasUserInput =
+        serverSession.hasUserInput === true ||
+        (previousSessionId === serverSession.sessionId && previousHasUserInput === true)
+          ? true
+          : serverSession.hasUserInput === false
+            ? false
+            : true
+      this.hasUserInputByKey.set(descriptor.key, hasUserInput)
+      if (previousHasUserInput !== hasUserInput) inputStateChangedWorktrees.add(terminalWorktreeKey)
       if (!this.sessions.has(descriptor.key)) {
         missingLocalCount += 1
         this.ensureSession(descriptor)
@@ -318,7 +338,7 @@ export class TerminalSessionRegistry {
     for (const key of localKeys) {
       const session = this.sessions.get(key)
       if (!session) continue
-      if (serverSessionsByKey.has(key)) continue
+      if (serverSessionKeys.has(key)) continue
       if (!this.sessionIdByKey.has(key)) continue
       orphanedLocalCount += 1
       this.discardLocalSessionAndDismissDetailIfLast(key, session.descriptor)
@@ -343,6 +363,7 @@ export class TerminalSessionRegistry {
         controllerKeyByWorktree.get(worktreeTerminalKey) ?? null,
       )
       this.selectTerminalKey(worktreeTerminalKey, next)
+      if (inputStateChangedWorktrees.has(worktreeTerminalKey)) this.notifyWorktree(worktreeTerminalKey)
     }
   }
 
@@ -373,7 +394,8 @@ export class TerminalSessionRegistry {
       if (!isValidCreateFirstFrame(result)) {
         throw new Error('error.terminal-create-failed')
       }
-      this.setPreferredSelectedTerminalKey(terminalWorktreeKey, result.key)
+      const createdKey = canonicalTerminalSessionKey(result.key) ?? result.key
+      this.setPreferredSelectedTerminalKey(terminalWorktreeKey, createdKey)
       this.reconcileServerSessions(
         base.repoRoot,
         result.sessions,
@@ -385,7 +407,7 @@ export class TerminalSessionRegistry {
           ],
         ]),
       )
-      return result.key
+      return createdKey
     } finally {
       this.endTerminalCreation(terminalWorktreeKey)
     }
@@ -413,7 +435,8 @@ export class TerminalSessionRegistry {
     if (!('sessionId' in result) || !isValidCreateFirstFrame(result)) {
       throw new Error('error.terminal-create-failed')
     }
-    this.setPreferredSelectedTerminalKey(terminalWorktreeKey, result.key)
+    const restoredKey = canonicalTerminalSessionKey(result.key) ?? result.key
+    this.setPreferredSelectedTerminalKey(terminalWorktreeKey, restoredKey)
     this.reconcileServerSessions(
       base.repoRoot,
       result.sessions,
@@ -491,6 +514,7 @@ export class TerminalSessionRegistry {
         originalTitle: terminalOriginalTitle(snapshot),
         phase: snapshot.phase,
         isOutputActive: this.outputActiveKeys.has(session.descriptor.key),
+        hasUserInput: this.hasUserInputByKey.get(session.descriptor.key) !== false,
         selected: session.descriptor.key === selectedKey,
         hasBell: this.bellController.hasBell(session.descriptor.key),
         tmuxBacked: session.descriptor.tmuxBacked === true,
@@ -704,7 +728,7 @@ export class TerminalSessionRegistry {
     if (new Set(orderedKeys).size !== orderedKeys.length) return false
     let parsed: { repoRoot: string; worktreePath: string; terminalId: string } | null = null
     for (const key of orderedKeys) {
-      const item = parseServerSessionKey(key)
+      const item = parseTerminalSessionKey(key)
       if (!item) return false
       if (worktreeTerminalKey(item.repoRoot, item.worktreePath) !== scope) return false
       if (!parsed) parsed = item
@@ -772,6 +796,10 @@ export class TerminalSessionRegistry {
 
   private noteTerminalInput(key: string): void {
     this.lastTerminalInputAt.set(key, Date.now())
+    if (this.hasUserInputByKey.get(key) === true) return
+    this.hasUserInputByKey.set(key, true)
+    const worktreeTerminalKey = this.sessions.get(key)?.descriptor.worktreeTerminalKey
+    if (worktreeTerminalKey) this.notifyWorktree(worktreeTerminalKey)
   }
 
   private isSustainedOutput(key: string): boolean {
@@ -912,6 +940,7 @@ export class TerminalSessionRegistry {
     this.snapshotCache.delete(key)
     this.reattachSnapshotCache.delete(key)
     this.displayOrderByKey.delete(key)
+    this.hasUserInputByKey.delete(key)
     this.clearOutputActive(key)
     this.notifySnapshot(key)
     this.bellController.remove(key)
@@ -1064,6 +1093,11 @@ export class TerminalSessionRegistry {
     if (controllerKey && this.isSelectedKeyValid(worktreeTerminalKey, controllerKey)) return controllerKey
     return this.sortedSessionsForWorktree(worktreeTerminalKey)[0]?.descriptor.key ?? null
   }
+}
+
+function canonicalTerminalSessionKey(key: string): string | null {
+  const parsed = parseTerminalSessionKey(key)
+  return parsed ? terminalSessionKey(parsed.repoRoot, parsed.worktreePath, parsed.terminalId) : null
 }
 
 function formatTerminalSequencePrefix(index: number): string {

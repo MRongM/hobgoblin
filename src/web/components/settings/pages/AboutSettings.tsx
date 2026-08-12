@@ -6,7 +6,8 @@ import { ThirdPartyLicensesDialog } from '#/web/components/settings/pages/ThirdP
 import { openProjectGitHub } from '#/web/app-shell-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
-const appIconUrl = new URL('../../../../../assets/icon.png', import.meta.url).href
+
+const appIconUrl = '/goblin.png'
 
 export function AboutSettings() {
   const t = useT()

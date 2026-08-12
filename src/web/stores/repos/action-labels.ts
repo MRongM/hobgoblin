@@ -12,6 +12,7 @@ const BRANCH_ACTION_LOADING_LABEL_KEYS: Record<RepoBranchActionKind, string> = {
   createWorktree: 'action.create-worktree-creating-title',
   createBranch: 'action.create-branch-loading',
   trackRemoteBranch: 'action.pull-remote-branch-loading',
+  setBranchUpstream: 'action.branch-upstream-updating',
   deleteBranch: 'action.delete-branch-deleting-title',
   cleanupWorktree: 'action.cleanup-invalid-worktree-cleaning-title',
   removeWorktree: 'action.remove-worktree-removing-title',
@@ -24,6 +25,7 @@ const BRANCH_ACTION_QUEUED_LABEL_KEYS: Record<RepoBranchActionKind, string> = {
   createWorktree: 'action.create-worktree-queued-title',
   createBranch: 'action.create-branch-queued',
   trackRemoteBranch: 'action.pull-remote-branch-queued',
+  setBranchUpstream: 'action.branch-upstream-queued',
   deleteBranch: 'action.delete-branch-queued-title',
   cleanupWorktree: 'action.cleanup-invalid-worktree-queued-title',
   removeWorktree: 'action.remove-worktree-queued-title',
@@ -50,6 +52,8 @@ export function repoEventActionSuccessLabel(action: RepoEventAction | undefined)
       return { labelKey: 'action.create-branch-created-title' }
     case 'trackRemoteBranch':
       return { labelKey: 'action.pull-remote-branch-created-title' }
+    case 'setBranchUpstream':
+      return { labelKey: 'action.branch-upstream-updated' }
     case 'removeWorktree':
       return {
         labelKey: action.alsoDeleteBranch

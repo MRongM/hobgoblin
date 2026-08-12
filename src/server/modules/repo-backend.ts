@@ -14,6 +14,7 @@ import {
   getUpstream,
   isAncestor,
   isGitRepo,
+  setBranchUpstream as setLocalBranchUpstream,
 } from '#/system/git/branches.ts'
 import {
   getCommitDetail as getLocalCommitDetail,
@@ -26,6 +27,7 @@ import {
   getRemoteInfo,
   pullBranch,
   pushBranch,
+  pushWorktreeHeadToRemoteBranch,
 } from '#/system/git/remote.ts'
 import {
   createLocalTag as createLocalGitTag,
@@ -36,6 +38,7 @@ import {
 import {
   deleteRemoteServerTag as deleteLocalRemoteServerTag,
   getRemoteTags as getLocalRemoteTags,
+  getRemoteTrackingBranchInfo as getLocalRemoteTrackingBranchInfo,
   getRemoteTrackingBranches as getLocalRemoteTrackingBranches,
 } from '#/system/git/remote-refs.ts'
 import { getWorkingStatus } from '#/system/git/status.ts'
@@ -47,12 +50,18 @@ import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
 import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
 import {
+  type BranchSnapshotInfo,
   type CommitDetail,
   type CommitHistoryEntry,
   type ExecResult,
   type WorktreeInfo,
   type WorktreeStatus,
 } from '#/shared/git-types.ts'
+import {
+  isProtectedRemoteBranchRef,
+  parseRemoteBranchRef,
+  type RemoteTrackingBranchInfo,
+} from '#/shared/remote-branches.ts'
 import { resolveKnownWorktree, resolvePrunableWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
 import { isValidCwd, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
@@ -77,20 +86,22 @@ import {
   getRemoteBrowserUrl,
   getRemoteCommitDetail,
   getRemoteHistory,
-  isRemoteAncestor,
   getRemotePatch,
   getRemoteSnapshot,
   getRemoteStatus,
   getRemoteWorktrees,
   getLocalTags as getRemoteLocalTags,
   getRemoteTags as getSshRemoteTags,
+  getRemoteTrackingBranchInfo as getSshRemoteTrackingBranchInfo,
   getRemoteTrackingBranches as getSshRemoteTrackingBranches,
   mergeRemoteBranch,
   pullRemoteBranch,
   pushRemoteBranch,
+  pushRemoteWorktreeHeadToRemoteBranch,
   pruneRemoteWorktrees,
   resetRemoteHard,
   removeRemoteWorktree,
+  setRemoteBranchUpstream,
 } from '#/system/ssh/git.ts'
 import {
   isRemoteRepoId,
@@ -103,6 +114,20 @@ import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
+type PreparedUpstreamDeletion = { upstream: string | null }
+
+function validateUpstreamDeletion(
+  branch: string,
+  upstream: string,
+  branches: BranchSnapshotInfo[],
+): ExecResult | null {
+  if (isProtectedRemoteBranchRef(upstream)) {
+    return { ok: false, message: 'error.cannot-delete-protected-branch' }
+  }
+  return branches.some((candidate) => candidate.name !== branch && candidate.tracking === upstream)
+    ? { ok: false, message: 'error.upstream-shared' }
+    : null
+}
 
 export interface RepoSnapshotOptions {
   includeWorktreeStatus?: boolean
@@ -127,6 +152,7 @@ export interface RepoBackend {
   ): Promise<CommitHistoryEntry[]>
   getCommitDetail(commit: string, signal?: AbortSignal): Promise<CommitDetail | null>
   getRemoteBranches(signal?: AbortSignal): Promise<string[]>
+  getRemoteBranchInfo(signal?: AbortSignal): Promise<RemoteTrackingBranchInfo[]>
   getRemoteTags(signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<string[]>
   getLocalTags(signal?: AbortSignal): Promise<string[]>
   fetch(signal: AbortSignal, networkOptions?: GitNetworkOptions): Promise<{ ok: boolean; message: string }>
@@ -140,13 +166,20 @@ export interface RepoBackend {
     networkOptions?: GitNetworkOptions,
   ): Promise<ExecResult>
   push(branch: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
+  pushWorktreeHeadToRemoteBranch(
+    worktreePath: string,
+    remote: string,
+    branch: string,
+    signal?: AbortSignal,
+    networkOptions?: GitNetworkOptions,
+  ): Promise<ExecResult>
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
-  isAncestor(ancestor: string, descendant: string, signal?: AbortSignal): Promise<boolean>
   resetHard(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
   discardChanges(worktreePath: string, paths: string[], signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
   trackRemoteBranch(localBranch: string, remoteRef: string, signal?: AbortSignal): Promise<ExecResult>
+  setBranchUpstream(branch: string, remoteRef: string | null, signal?: AbortSignal): Promise<ExecResult>
   createLocalTag(name: string, ref: string, signal?: AbortSignal): Promise<ExecResult>
   deleteRemoteServerBranch(
     remote: string,
@@ -178,6 +211,7 @@ export interface RepoBackend {
       worktreePath: string
       alsoDeleteBranch: boolean
       forceRemoveWorktree?: boolean
+      skipWorktreeStatus?: boolean
       forceDeleteBranch?: boolean
       alsoDeleteUpstream?: boolean
     },
@@ -251,6 +285,24 @@ async function probeGitRepository(cwd: string): Promise<ProbeAvailability> {
 }
 
 function createLocalRepoBackend(repoId: string): RepoBackend {
+  async function prepareUpstreamDeletion(
+    branch: string,
+    requested: boolean,
+    signal?: AbortSignal,
+  ): Promise<PreparedUpstreamDeletion | ExecResult> {
+    if (!requested) return { upstream: null }
+    const upstream = await getUpstream(repoId, branch, signal)
+    if (signal?.aborted) return { ok: false, message: 'cancelled' }
+    if (!upstream) return { upstream: null }
+    if (isProtectedRemoteBranchRef(upstream)) {
+      return { ok: false, message: 'error.cannot-delete-protected-branch' }
+    }
+    const branches = await getBranches(repoId, undefined, { signal })
+    if (signal?.aborted) return { ok: false, message: 'cancelled' }
+    const invalid = validateUpstreamDeletion(branch, upstream, branches)
+    return invalid ?? { upstream }
+  }
+
   async function validateBranchDeletion(
     branch: string,
     options?: {
@@ -285,13 +337,16 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     branch: string,
     options?: { force?: boolean; alsoDeleteUpstream?: boolean },
     signal?: AbortSignal,
+    preparedUpstream?: PreparedUpstreamDeletion,
   ): Promise<ExecResult> {
-    const upstream = options?.alsoDeleteUpstream ? await getUpstream(repoId, branch, signal) : null
+    const preparation =
+      preparedUpstream ?? (await prepareUpstreamDeletion(branch, options?.alsoDeleteUpstream === true, signal))
+    if ('ok' in preparation) return preparation
     const deleted = await deleteBranch(repoId, branch, { force: options?.force, signal })
-    if (!deleted.ok || !upstream) return deleted
-    const slash = upstream.indexOf('/')
-    if (slash <= 0) return deleted
-    return await deleteUpstreamBranch(repoId, upstream.slice(0, slash), upstream.slice(slash + 1), signal)
+    if (!deleted.ok || !preparation.upstream) return deleted
+    const upstream = parseRemoteBranchRef(preparation.upstream)
+    if (!upstream) return deleted
+    return await deleteUpstreamBranch(repoId, upstream.remote, upstream.branch, signal)
   }
 
   return {
@@ -368,6 +423,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return []
       return await getLocalRemoteTrackingBranches(repoId, signal)
     },
+    async getRemoteBranchInfo(signal) {
+      if (!isValidCwd(repoId)) return []
+      return await getLocalRemoteTrackingBranchInfo(repoId, signal)
+    },
     async getRemoteTags(signal, networkOptions) {
       if (!isValidCwd(repoId)) return []
       return await getLocalRemoteTags(repoId, signal, networkOptions)
@@ -406,6 +465,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await pushBranch(repoId, branch, signal, networkOptions)
     },
+    async pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal, networkOptions) {
+      if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+      return await pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal, networkOptions)
+    },
     async commitAll(worktreePath, message, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await commitAllChanges(worktreePath, message, signal)
@@ -413,9 +476,6 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     async merge(worktreePath, branch, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await mergeBranch(worktreePath, branch, signal)
-    },
-    async isAncestor(ancestor, descendant, signal) {
-      return await isAncestor(repoId, ancestor, descendant, signal)
     },
     async resetHard(worktreePath, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
@@ -432,6 +492,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     async trackRemoteBranch(localBranch, remoteRef, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await createTrackingBranch(repoId, localBranch, remoteRef, signal)
+    },
+    async setBranchUpstream(branch, remoteRef, signal) {
+      if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      return await setLocalBranchUpstream(repoId, branch, remoteRef, signal)
     },
     async createLocalTag(name, ref, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
@@ -488,15 +552,26 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       const validation = await validateBranchDeletion(branch, { force: options?.force }, signal)
       if (validation) return validation
-      return await deleteBranchAfterValidation(branch, options, signal)
+      const preparation = await prepareUpstreamDeletion(branch, options?.alsoDeleteUpstream === true, signal)
+      if ('ok' in preparation) return preparation
+      return await deleteBranchAfterValidation(branch, options, signal, preparation)
     },
     async removeWorktree(input, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      const worktrees = await getWorktrees(repoId, { signal })
-      const removable = resolveRemovableWorktree(worktrees, input.branch, input.worktreePath, repoId)
+      const worktrees = await getWorktrees(repoId, {
+        ...(input.skipWorktreeStatus ? { includeStatus: false } : {}),
+        signal,
+      })
+      const removable = resolveRemovableWorktree(
+        worktrees,
+        input.alsoDeleteBranch ? input.branch : undefined,
+        input.worktreePath,
+        repoId,
+      )
       if (!removable.ok) return { ok: false, message: removable.message }
       const invalid = validateRemovableWorktreeState(removable.target, {
         forceRemoveWorktree: input.forceRemoveWorktree,
+        skipWorktreeStatus: input.skipWorktreeStatus,
       })
       if (invalid) return invalid
       if (input.alsoDeleteBranch) {
@@ -508,6 +583,10 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         )
         if (validation) return validation
       }
+      const upstreamPreparation = input.alsoDeleteBranch
+        ? await prepareUpstreamDeletion(input.branch, input.alsoDeleteUpstream === true, signal)
+        : { upstream: null }
+      if ('ok' in upstreamPreparation) return upstreamPreparation
       const removed = await removeWorktree(repoId, removable.target.path, {
         force: input.forceRemoveWorktree,
         signal,
@@ -517,6 +596,7 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         input.branch,
         { force: input.forceDeleteBranch, alsoDeleteUpstream: input.alsoDeleteUpstream },
         signal,
+        upstreamPreparation,
       )
     },
     async cleanupWorktree(worktreePath, signal) {
@@ -560,6 +640,36 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
 
 async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
   const target = await resolveRemoteRepoTarget(repoId)
+
+  async function prepareUpstreamDeletion(
+    branch: string,
+    requested: boolean,
+    signal?: AbortSignal,
+  ): Promise<PreparedUpstreamDeletion | ExecResult> {
+    if (!requested) return { upstream: null }
+    const snapshot = await getRemoteSnapshot(target, { signal, includeWorktreeStatus: false, includeRemote: false })
+    if (signal?.aborted) return { ok: false, message: 'cancelled' }
+    const upstream = snapshot?.branches.find((candidate) => candidate.name === branch)?.tracking
+    if (!upstream) return { upstream: null }
+    const invalid = validateUpstreamDeletion(branch, upstream, snapshot?.branches ?? [])
+    return invalid ?? { upstream }
+  }
+
+  async function deletePreparedUpstream(
+    preparation: PreparedUpstreamDeletion,
+    deleted: ExecResult,
+    signal?: AbortSignal,
+  ): Promise<ExecResult> {
+    if (!deleted.ok || !preparation.upstream) return deleted
+    const upstream = parseRemoteBranchRef(preparation.upstream)
+    if (!upstream) return deleted
+    return await deleteSshRemoteServerBranch(target, {
+      remote: upstream.remote,
+      branch: upstream.branch,
+      signal,
+    })
+  }
+
   return {
     id: repoId,
     kind: 'remote',
@@ -598,6 +708,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getRemoteBranches(signal) {
       return await getSshRemoteTrackingBranches(target, { signal })
     },
+    async getRemoteBranchInfo(signal) {
+      return await getSshRemoteTrackingBranchInfo(target, { signal })
+    },
     async getRemoteTags(signal) {
       return await getSshRemoteTags(target, { signal })
     },
@@ -622,14 +735,14 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async push(branch, signal) {
       return await pushRemoteBranch(target, branch, { signal })
     },
+    async pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal) {
+      return await pushRemoteWorktreeHeadToRemoteBranch(target, worktreePath, remote, branch, { signal })
+    },
     async commitAll(worktreePath, message, signal) {
       return await commitRemoteChanges(target, worktreePath, message, { signal })
     },
     async merge(worktreePath, branch, signal) {
       return await mergeRemoteBranch(target, worktreePath, branch, { signal })
-    },
-    async isAncestor(ancestor, descendant, signal) {
-      return await isRemoteAncestor(target, ancestor, descendant, { signal })
     },
     async resetHard(worktreePath, signal) {
       return await resetRemoteHard(target, worktreePath, { signal })
@@ -642,6 +755,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async trackRemoteBranch(localBranch, remoteRef, signal) {
       return await createRemoteTrackingBranch(target, { localBranch, remoteRef, signal })
+    },
+    async setBranchUpstream(branch, remoteRef, signal) {
+      return await setRemoteBranchUpstream(target, { branch, remoteRef, signal })
     },
     async createLocalTag(name, ref, signal) {
       return await createRemoteLocalTag(target, { name, ref, signal })
@@ -676,9 +792,7 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
         const requestedSourcePath = path.posix.normalize(decision.sourceWorktreePath)
         const source = worktrees.find(
           (worktree) =>
-            !worktree.isBare &&
-            !worktree.isPrunable &&
-            path.posix.normalize(worktree.path) === requestedSourcePath,
+            !worktree.isBare && !worktree.isPrunable && path.posix.normalize(worktree.path) === requestedSourcePath,
         )
         if (!source) return created
         const bootstrapped = await bootstrapRemoteWorktreeSelectionsAfterCreate(
@@ -698,10 +812,18 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
       }
     },
     async deleteBranch(branch, options, signal) {
-      return await deleteRemoteBranch(target, { branch, force: options?.force, signal })
+      const preparation = await prepareUpstreamDeletion(branch, options?.alsoDeleteUpstream === true, signal)
+      if ('ok' in preparation) return preparation
+      const deleted = await deleteRemoteBranch(target, { branch, force: options?.force, signal })
+      return await deletePreparedUpstream(preparation, deleted, signal)
     },
     async removeWorktree(input, signal) {
-      return await removeRemoteWorktree(target, { ...input, signal })
+      const preparation = input.alsoDeleteBranch
+        ? await prepareUpstreamDeletion(input.branch, input.alsoDeleteUpstream === true, signal)
+        : { upstream: null }
+      if ('ok' in preparation) return preparation
+      const removed = await removeRemoteWorktree(target, { ...input, signal })
+      return await deletePreparedUpstream(preparation, removed, signal)
     },
     async cleanupWorktree(worktreePath, signal) {
       return await pruneRemoteWorktrees(target, { worktreePath, signal })

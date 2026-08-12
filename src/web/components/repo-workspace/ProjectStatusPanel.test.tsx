@@ -98,6 +98,7 @@ describe('ProjectStatusPanel', () => {
     expect(container?.textContent).toContain('develop')
     expect(container?.textContent).toContain('2026')
     const statusRows = container?.querySelector<HTMLElement>('[role="list"]')
+    expect(statusRows?.querySelector('[role="listitem"]')?.classList.contains('h-8')).toBe(true)
     const statusRowLabels = Array.from(
       statusRows?.querySelectorAll('[role="listitem"]') ?? [],
       (row) => row.children.item(1)?.textContent,

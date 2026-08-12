@@ -95,10 +95,36 @@ vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
   ),
 }))
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx', () => ({
-  BranchWorkspaceFileTree: ({ context, toolbarLeading }: { context: { path: string }; toolbarLeading?: ReactNode }) => (
+  BranchWorkspaceFileTree: ({
+    context,
+    toolbarLeading,
+    revealRequest,
+  }: {
+    context: { path: string }
+    toolbarLeading?: ReactNode
+    revealRequest?: { relativePath: string } | null
+  }) => (
     <div data-testid="branch-workspace-file-tree">
       {toolbarLeading ? <div data-testid="mock-file-toolbar-leading">{toolbarLeading}</div> : null}
       {context.path}
+      {revealRequest ? <output data-testid="root-file-reveal">{revealRequest.relativePath}</output> : null}
+    </div>
+  ),
+}))
+vi.mock('#/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx', () => ({
+  BranchWorkspaceAggregatePanel: ({
+    kind,
+    onRevealPath,
+  }: {
+    kind: 'status' | 'changes' | 'history' | 'local' | 'remoteBranches'
+    onRevealPath?: (memberName: string, relativePath: string) => void
+  }) => (
+    <div data-testid={`branch-workspace-${kind}-panel`}>
+      {onRevealPath ? (
+        <button type="button" data-testid="aggregate-reveal" onClick={() => onRevealPath('api', 'src/app.ts')}>
+          reveal
+        </button>
+      ) : null}
     </div>
   ),
 }))
@@ -245,6 +271,116 @@ describe('BranchWorkspacePane', () => {
     )
     expect(container.querySelector('[data-testid="branch-workspace-context-bar"]')).toBeNull()
     expect(container.querySelector('[data-testid="branch-workspace-git-action-panel"]')).toBeNull()
+    expect(container.querySelector('[data-branch-workspace-file-area]')?.classList.contains('overflow-hidden')).toBe(
+      true,
+    )
+  })
+
+  test('offers status, files, changes, history, local, and remote for the parent file area', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    const tabs = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
+    )
+    expect(tabs.every((tab) => !tab.draggable)).toBe(true)
+    expect(container.querySelector('[data-testid="branch-workspace-file-area-toolbar"]')).not.toBeNull()
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes'])
+    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false'])
+
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-tabs-overflow-toggle"]')?.click(),
+    )
+    const expandedTabs = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
+    )
+    expect(expandedTabs.map((tab) => tab.textContent)).toEqual([
+      'tab.status',
+      'file-tree.title',
+      'tab.changes',
+      'tab.history',
+      'tab.local',
+      'tab.remote-branches',
+    ])
+
+    act(() => tabs[0]?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-status-panel"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).toBeNull()
+
+    act(() => expandedTabs[2]?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-changes-panel"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-status-panel"]')).toBeNull()
+
+    act(() => expandedTabs[3]?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-history-panel"]')).not.toBeNull()
+
+    act(() => expandedTabs[4]?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-local-panel"]')).not.toBeNull()
+
+    act(() => expandedTabs[5]?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-remoteBranches-panel"]')).not.toBeNull()
+  })
+
+  test('reopens the parent file area on files after another tab was selected', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    const changes = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
+    )[2]
+    act(() => changes?.click())
+    expect(container.querySelector('[data-testid="branch-workspace-changes-panel"]')).not.toBeNull()
+
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="rail-toggle-files"]')
+    act(() => toggle?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+    act(() => toggle?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 })))
+
+    expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).not.toBeNull()
+    expect(
+      container.querySelector('[data-branch-workspace-file-area] [role="tab"][aria-selected="true"]')?.textContent,
+    ).toBe('file-tree.title')
+  })
+
+  test('reopens the parent file area on files from the status bar', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="file-area-toggle"]')?.click())
+    const changes = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
+    )[2]
+    act(() => changes?.click())
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="file-area-toggle"]')?.click())
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="file-area-toggle"]')?.click())
+
+    expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).not.toBeNull()
+  })
+
+  test('opens compact parent files on the files tab from scope navigation', () => {
+    compactUi = true
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="show-scope"]')?.click())
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
+    const changes = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
+    )[2]
+    act(() => changes?.click())
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="show-scope"]')?.click())
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
+
+    expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).not.toBeNull()
+  })
+
+  test('reveals a member change through the branch workspace root file tree', () => {
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+
+    const changes = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
+    )[2]
+    act(() => changes?.click())
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="aggregate-reveal"]')?.click())
+
+    expect(container.querySelector('[data-testid="root-file-reveal"]')?.textContent).toBe('api/src/app.ts')
+    expect(
+      container.querySelector('[data-branch-workspace-file-area] [role="tab"][aria-selected="true"]')?.textContent,
+    ).toBe('file-tree.title')
   })
 
   test('keeps workspace actions out of the status bar composition', () => {

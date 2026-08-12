@@ -31,6 +31,10 @@ import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { RepositoryBranchMergeOutExecuteInput } from '#/shared/repository-branch-merge.ts'
+import {
+  repositoryMergeBranchDisplayName,
+  type RepositoryMergeBranchSelection,
+} from '#/shared/repository-merge-branch.ts'
 import { useTrackRemoteBranchAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
 
 interface BranchWriteActions {
@@ -87,11 +91,16 @@ export function useBranchWriteActions(
     checkoutToDialog.close()
   }
 
-  async function handleMerge(sourceBranch: string): Promise<ExecResult> {
+  async function handleMerge(source: RepositoryMergeBranchSelection): Promise<ExecResult> {
     if (!worktreePath) return { ok: false, message: 'error.invalid-arguments' }
-    const result = await mergeRepositoryBranch(repo.id, worktreePath, sourceBranch)
+    const result = await mergeRepositoryBranch(repo.id, worktreePath, source)
     setLastResult(repo.id, result, repo.instanceToken, {
-      action: { kind: 'merge', branch: branch.name, sourceBranch, worktreePath },
+      action: {
+        kind: 'merge',
+        branch: branch.name,
+        sourceBranch: repositoryMergeBranchDisplayName(source),
+        worktreePath,
+      },
     })
     return result
   }
@@ -103,7 +112,7 @@ export function useBranchWriteActions(
       action: {
         kind: 'mergeOut',
         branch: branch.name,
-        destinationBranch: input.destinationBranch,
+        destinationBranch: repositoryMergeBranchDisplayName(input.destination),
         worktreePath,
       },
     })

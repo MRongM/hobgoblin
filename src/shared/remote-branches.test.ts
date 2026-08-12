@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   isProtectedRemoteBranchRef,
   parseRemoteBranchRef,
+  parseRemoteTrackingBranchInfo,
   remoteBranchRefMatchesQuery,
   remoteBranchSortKey,
 } from '#/shared/remote-branches.ts'
@@ -49,5 +50,38 @@ describe('remote branch helpers', () => {
       'origin/z',
       'upstream/main',
     ])
+  })
+
+  test('parses remote tracking refs with SHA-1 and SHA-256 heads', () => {
+    const sha1 = 'a'.repeat(40)
+    const sha256 = 'b'.repeat(64)
+
+    expect(
+      parseRemoteTrackingBranchInfo(
+        [`upstream/release/v2\0${sha256}`, `origin/main\0${sha1}`, `origin/HEAD\0${sha1}`].join('\n'),
+      ),
+    ).toEqual([
+      { remoteRef: 'origin/main', head: sha1 },
+      { remoteRef: 'upstream/release/v2', head: sha256 },
+    ])
+  })
+
+  test('ignores malformed and duplicate remote tracking ref facts', () => {
+    const firstHead = '1'.repeat(40)
+    const duplicateHead = '2'.repeat(40)
+
+    expect(
+      parseRemoteTrackingBranchInfo(
+        [
+          `origin/main\0${firstHead}`,
+          `origin/main\0${duplicateHead}`,
+          'origin/missing-head',
+          'origin/bad\0not-a-hash',
+          `invalid\0${firstHead}`,
+          `origin/extra\0${firstHead}\0trailing`,
+          '',
+        ].join('\n'),
+      ),
+    ).toEqual([{ remoteRef: 'origin/main', head: firstHead }])
   })
 })

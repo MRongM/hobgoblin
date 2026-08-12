@@ -40,7 +40,29 @@ describe('branch workspace Git action inputs', () => {
     })
   })
 
-  test('normalizes both batch merge directions and execution modes with explicit branches', () => {
+  test('normalizes batch discard without accepting a client path scope', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionPlanRequest({
+        kind: 'batch-discard',
+        branchWorkspaceId: ' branch-1 ',
+      }),
+    ).toEqual({
+      ok: true,
+      request: { kind: 'batch-discard', branchWorkspaceId: 'branch-1' },
+    })
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-discard',
+        planToken: ' sha256:plan ',
+        paths: ['client-controlled.ts'],
+      }),
+    ).toEqual({
+      ok: true,
+      input: { kind: 'batch-discard', planToken: 'sha256:plan' },
+    })
+  })
+
+  test('normalizes legacy local mappings into explicit selections for both merge directions', () => {
     for (const mode of ['merge', 'pull-merge-push'] as const) {
       expect(
         normalizeBranchWorkspaceGitActionPlanRequest({
@@ -68,8 +90,8 @@ describe('branch workspace Git action inputs', () => {
           planToken: 'sha256:plan',
           mode,
           sources: [
-            { repositoryName: 'web', sourceBranch: 'release/web' },
-            { repositoryName: 'api', sourceBranch: 'main' },
+            { repositoryName: 'web', source: { kind: 'local', branch: 'release/web' } },
+            { repositoryName: 'api', source: { kind: 'local', branch: 'main' } },
           ],
         },
       })
@@ -99,12 +121,49 @@ describe('branch workspace Git action inputs', () => {
           planToken: 'sha256:plan',
           mode,
           targets: [
-            { repositoryName: 'web', destinationBranch: 'release/web' },
-            { repositoryName: 'api', destinationBranch: 'main' },
+            { repositoryName: 'web', destination: { kind: 'local', branch: 'release/web' } },
+            { repositoryName: 'api', destination: { kind: 'local', branch: 'main' } },
           ],
         },
       })
     }
+  })
+
+  test('preserves discriminated local and remote selections in non-empty batch mappings', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-merge-in',
+        planToken: 'sha256:plan',
+        mode: 'merge',
+        sources: [
+          { repositoryName: 'api', source: { kind: 'remote', remoteRef: 'origin/main' } },
+          { repositoryName: 'web', source: { kind: 'local', branch: 'main' } },
+        ],
+      }),
+    ).toMatchObject({
+      ok: true,
+      input: {
+        sources: [
+          { repositoryName: 'api', source: { kind: 'remote', remoteRef: 'origin/main' } },
+          { repositoryName: 'web', source: { kind: 'local', branch: 'main' } },
+        ],
+      },
+    })
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-merge-out',
+        planToken: 'sha256:plan',
+        mode: 'pull-merge-push',
+        targets: [{ repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'upstream/release/v2' } }],
+      }),
+    ).toMatchObject({
+      ok: true,
+      input: {
+        targets: [
+          { repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'upstream/release/v2' } },
+        ],
+      },
+    })
   })
 
   test.each(['pull', 'push'] as const)('normalizes a coordinated %s plan and execution input', (kind) => {
@@ -146,6 +205,7 @@ describe('branch workspace Git action inputs', () => {
     null,
     {},
     { kind: 'batch-commit', planToken: '', messages: [] },
+    { kind: 'batch-discard', planToken: '' },
     {
       kind: 'batch-commit',
       planToken: 'sha256:plan',
@@ -213,6 +273,27 @@ describe('branch workspace Git action inputs', () => {
       planToken: 'sha256:plan',
       mode: 'merge',
       targets: [{ repositoryName: 'api', destinationBranch: 'main\u0000release' }],
+    },
+    {
+      kind: 'batch-merge-in',
+      planToken: 'sha256:plan',
+      mode: 'merge',
+      sources: [{ repositoryName: 'api', source: { kind: 'remote', remoteRef: 'origin/HEAD' } }],
+    },
+    {
+      kind: 'batch-merge-out',
+      planToken: 'sha256:plan',
+      mode: 'pull-merge-push',
+      targets: [{ repositoryName: 'api', destination: { kind: 'local', branch: 'HEAD' } }],
+    },
+    {
+      kind: 'batch-merge-out',
+      planToken: 'sha256:plan',
+      mode: 'pull-merge-push',
+      targets: [
+        { repositoryName: 'api', destination: { kind: 'local', branch: 'main' } },
+        { repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'origin/main' } },
+      ],
     },
   ])('rejects invalid execution input: %j', (value) => {
     expect(normalizeBranchWorkspaceGitActionExecuteInput(value)).toEqual({

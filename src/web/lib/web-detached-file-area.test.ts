@@ -5,6 +5,7 @@ import type { DetachedFileAreaWindowRequest } from '#/shared/file-area.ts'
 
 const HANDOFF_ID = '3f4ca5c2-9cb4-4b82-a930-95e19a572db8'
 const request: DetachedFileAreaWindowRequest = {
+  kind: 'git-worktree',
   repo: { kind: 'local', id: '/repo' },
   branch: 'feature/web-window',
   tab: 'history',

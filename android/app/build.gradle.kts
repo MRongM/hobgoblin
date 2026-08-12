@@ -11,8 +11,8 @@ android {
         applicationId = "com.mrongm.hobgoblin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 6
-        versionName = "2.2.4"
+        versionCode = 7
+        versionName = "2.2.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -60,7 +60,10 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
-    implementation(libs.sshj)
+    implementation(libs.sshj) {
+        // AndroidCompatibleSshConfig disables Bouncy Castle; supported key flows use platform JCA.
+        exclude(group = "org.bouncycastle")
+    }
     implementation(libs.termux.terminal.emulator)
     implementation(libs.termux.terminal.view)
 

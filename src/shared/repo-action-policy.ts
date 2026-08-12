@@ -4,10 +4,15 @@ export type BranchDeletionNotMergedMessage = 'error.branch-not-fully-merged' | '
 
 export function validateRemovableWorktreeState(
   worktree: WorktreeInfo,
-  options: { forceRemoveWorktree?: boolean } = {},
+  options: { forceRemoveWorktree?: boolean; skipWorktreeStatus?: boolean } = {},
 ): ExecResult | null {
   if (worktree.isLocked === true) return { ok: false, message: 'error.cannot-remove-locked-worktree' }
-  if (worktree.isDirty === undefined) return { ok: false, message: 'error.cannot-remove-dirty-worktree' }
+  if (
+    worktree.isDirty === undefined &&
+    !(options.forceRemoveWorktree === true && options.skipWorktreeStatus === true)
+  ) {
+    return { ok: false, message: 'error.cannot-remove-dirty-worktree' }
+  }
   if (worktree.isDirty && options.forceRemoveWorktree !== true) {
     return { ok: false, message: 'error.cannot-remove-dirty-worktree' }
   }

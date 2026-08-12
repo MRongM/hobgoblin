@@ -132,6 +132,8 @@ export interface TerminalSessionSummary {
   originalTitle?: string | null
   phase: TerminalPhase
   isOutputActive?: boolean
+  /** False only when the server confirms that no user input was accepted. */
+  hasUserInput?: boolean
   selected: boolean
   hasBell: boolean
   tmuxBacked?: boolean

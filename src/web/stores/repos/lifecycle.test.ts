@@ -23,36 +23,40 @@ vi.mock('#/web/port-forwarding-client.ts', () => ({
 beforeEach(resetLifecycleTest)
 
 describe('repo lifecycle', () => {
-  test('uses configured restoration for automatic open and complete discovery for manual rescan', async () => {
+  test('uses atomic import for automatic open and manual rescan', async () => {
     const root = '/tmp/gbl-workspace'
-    const restoreCalls: string[] = []
-    const discoverCalls: string[] = []
+    const importCalls: string[] = []
+    const legacyReadCalls: string[] = []
     const workspaceResult = {
       ok: true as const,
       rootId: root,
       repositories: [],
       candidates: [],
-      configuration: { kind: 'missing' as const },
+      configuration: { kind: 'ready' as const, config: { repo: [] } },
       skipped: [],
     }
     installGoblin({
       probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
       'workspace.restore': ({ rootPath }: { rootPath: string }) => {
-        restoreCalls.push(rootPath)
+        legacyReadCalls.push(rootPath)
         return workspaceResult
       },
       'workspace.discover': ({ rootPath }: { rootPath: string }) => {
-        discoverCalls.push(rootPath)
+        legacyReadCalls.push(rootPath)
+        return workspaceResult
+      },
+      'workspace.import': ({ rootPath }: { rootPath: string }) => {
+        importCalls.push(rootPath)
         return workspaceResult
       },
     })
 
     await useReposStore.getState().ensureWorkspaceOpen(root)
-    expect(restoreCalls).toEqual([root])
-    expect(discoverCalls).toEqual([])
+    expect(importCalls).toEqual([root])
+    expect(legacyReadCalls).toEqual([])
 
     await useReposStore.getState().rescanWorkspace(root)
-    expect(discoverCalls).toEqual([root])
+    expect(importCalls).toEqual([root, root])
   })
 
   test('opens a remote plain directory as one workspace with remote child repository targets', async () => {

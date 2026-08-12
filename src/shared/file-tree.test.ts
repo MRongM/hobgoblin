@@ -5,8 +5,6 @@ import {
   fileTreeSearchRank,
   isRepoFileTreeBinaryFileReadRequest,
   isRepoFileTreeBinaryFileReplaceRequest,
-  isRepoFileSearchRequest,
-  isRepoFileMoveRequest,
   isRepoFileTransferRequest,
   isValidFileTransferDestinationName,
   normalizeFileTreeSearchLimit,
@@ -53,30 +51,6 @@ describe('file transfer request validation', () => {
     expect(isValidFileTransferDestinationName('nested/report.pdf')).toBe(false)
     expect(isValidFileTransferDestinationName('nested\\report.pdf')).toBe(false)
     expect(isValidFileTransferDestinationName('bad\0name')).toBe(false)
-  })
-})
-
-describe('file move request validation', () => {
-  test('accepts move requests with source paths and a target directory', () => {
-    expect(
-      isRepoFileMoveRequest({
-        repoId: '/repo',
-        worktreePath: '/repo',
-        paths: ['/repo/README.md', '/repo/src'],
-        targetDirPath: '/repo/docs',
-      }),
-    ).toBe(true)
-  })
-
-  test('rejects empty move source lists', () => {
-    expect(
-      isRepoFileMoveRequest({
-        repoId: '/repo',
-        worktreePath: '/repo',
-        paths: [],
-        targetDirPath: '/repo/docs',
-      }),
-    ).toBe(false)
   })
 })
 
@@ -128,20 +102,6 @@ describe('file tree search contract', () => {
     expect(normalizeFileTreeSearchLimit(0)).toBe(1)
     expect(normalizeFileTreeSearchLimit(9999)).toBe(FILE_TREE_SEARCH_LIMIT_MAX)
     expect(normalizeFileTreeSearchLimit(25.8)).toBe(25)
-  })
-
-  test('validates file search requests', () => {
-    expect(
-      isRepoFileSearchRequest({
-        repoId: '/repo',
-        worktreePath: '/repo',
-        query: 'button',
-        limit: 50,
-      }),
-    ).toBe(true)
-    expect(isRepoFileSearchRequest({ repoId: '/repo', worktreePath: '/repo', query: '' })).toBe(false)
-    expect(isRepoFileSearchRequest({ repoId: '/repo', worktreePath: '/repo', query: '   ' })).toBe(false)
-    expect(isRepoFileSearchRequest({ repoId: '/repo', worktreePath: '/repo', query: 'a', limit: '10' })).toBe(false)
   })
 
   test('ranks filename matches before path-only matches', () => {

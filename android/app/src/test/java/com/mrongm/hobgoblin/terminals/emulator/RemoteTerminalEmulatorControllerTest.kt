@@ -18,7 +18,15 @@ class RemoteTerminalEmulatorControllerTest {
 
         controller.appendOutput("hello\r\n".toByteArray(Charsets.UTF_8))
 
-        assertEquals("hello", controller.visibleText())
+        assertEquals(
+            "hello",
+            controller.emulator.getSelectedText(
+                0,
+                0,
+                controller.emulator.mColumns - 1,
+                controller.emulator.mRows - 1,
+            ).trimEnd(),
+        )
         assertEquals(1, notifyCount)
 
         observer.close()

@@ -779,6 +779,38 @@ describe('runBranchAction', () => {
     })
   })
 
+  test.each([
+    ['origin/release', 'origin/release'],
+    [null, undefined],
+  ] as const)('routes branch upstream %s and records the mutation event', async (remoteRef, expectedTracking) => {
+    let request: Record<string, unknown> | null = null
+    installGoblinTestBridge({
+      'repo.setBranchUpstream': async (input) => {
+        request = input
+        return { ok: true, message: 'ok' }
+      },
+      'repo.snapshot': async () => ({
+        branches: [createBranchSnapshot('feature/a', { tracking: expectedTracking })],
+        current: 'feature/a',
+      }),
+      'repo.status': async () => [],
+    })
+
+    await useReposStore.getState().runBranchAction(
+      REPO_ID,
+      { kind: 'setBranchUpstream', branch: 'feature/a', remoteRef } as unknown as RepoBranchAction,
+      { token: 1 },
+    )
+
+    expect(request).toMatchObject({ cwd: REPO_ID, branch: 'feature/a', remoteRef })
+    expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({
+      kind: 'result',
+      result: { ok: true, message: 'ok' },
+      action: { kind: 'setBranchUpstream', branch: 'feature/a', remoteRef },
+    })
+    expect(useReposStore.getState().repos[REPO_ID]?.data.branches[0]?.tracking).toBe(expectedTracking)
+  })
+
   test('selects the new worktree branch after creating a worktree', async () => {
     setSelectionForTest('feature/a')
     installSuccessfulCreateWorktreeBridge()

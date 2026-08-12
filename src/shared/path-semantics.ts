@@ -48,6 +48,22 @@ export function joinWorktreeRelativePath(worktreePath: string, relativePath: str
   return `${trimmedRoot}${separator}${normalizedRelative.split('/').join(separator)}`
 }
 
+export function windowsPathIdentityKey(value: string): string | null {
+  const style = pathStyle(value)
+  if (style === 'windowsDriveAbsolute') {
+    const parsed = windowsDriveParts(value)
+    if (!parsed) return null
+    return `${parsed.drive}:\\${parsed.parts.map((part) => part.toLowerCase()).join('\\')}`
+  }
+  if (style === 'windowsUncAbsolute') {
+    const parts = value.slice(2).split(/[\\/]+/u)
+    const root = parts.slice(0, 2)
+    const tail = normalizeAbsoluteParts(parts.slice(2))
+    return `\\\\${[...root, ...tail].map((part) => part.toLowerCase()).join('\\')}`
+  }
+  return null
+}
+
 function posixRelativeInside(worktreePath: string, candidatePath: string): string | null {
   const rootParts = splitPosix(worktreePath)
   const candidateParts = splitPosix(candidatePath)
@@ -56,7 +72,7 @@ function posixRelativeInside(worktreePath: string, candidatePath: string): strin
 }
 
 function splitPosix(value: string): string[] {
-  return value.split('/').filter(Boolean)
+  return normalizeAbsoluteParts(value.split('/'))
 }
 
 function windowsDriveRelativeInside(worktreePath: string, candidatePath: string): string | null {
@@ -74,8 +90,21 @@ function windowsDriveParts(value: string): WindowsDriveParts | null {
   return {
     drive: (match[1] ?? '').toUpperCase(),
     separator: match[2] === '/' ? '/' : '\\',
-    parts: rawTail.split(/[\\/]+/u).filter(Boolean),
+    parts: normalizeAbsoluteParts(rawTail.split(/[\\/]+/u)),
   }
+}
+
+function normalizeAbsoluteParts(parts: string[]): string[] {
+  const normalized: string[] = []
+  for (const part of parts) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      normalized.pop()
+      continue
+    }
+    normalized.push(part)
+  }
+  return normalized
 }
 
 function partsStartWith(candidate: string[], root: string[], insensitive: boolean): boolean {

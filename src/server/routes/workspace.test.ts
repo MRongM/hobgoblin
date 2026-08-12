@@ -5,15 +5,20 @@ import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 const mocks = vi.hoisted(() => ({
   discoverWorkspaceRepositories: vi.fn(),
   restoreWorkspaceRepositories: vi.fn(),
+  importWorkspaceRepositories: vi.fn(),
   saveWorkspaceConfig: vi.fn(),
   readBranchWorkspaceSnapshot: vi.fn(),
   cleanupBranchWorkspaceRegistryRecords: vi.fn(),
   createBranchWorkspaceWriteService: vi.fn(),
+  createWorkspaceRecoveryWriteService: vi.fn(),
   createBranchWorkspaceDependencyWriteService: vi.fn(),
   createBranchWorkspaceGitActionWriteService: vi.fn(),
   planBranchWorkspace: vi.fn(),
   executeBranchWorkspace: vi.fn(),
   abortBranchWorkspace: vi.fn(),
+  planWorkspaceRecovery: vi.fn(),
+  executeWorkspaceRecovery: vi.fn(),
+  abortWorkspaceRecovery: vi.fn(),
   reorderBranchWorkspaces: vi.fn(),
   readBranchWorkspaceDependencies: vi.fn(),
   planBranchWorkspaceDependencies: vi.fn(),
@@ -37,6 +42,10 @@ vi.mock('#/server/modules/workspace-write-paths.ts', () => ({
   saveWorkspaceConfig: mocks.saveWorkspaceConfig,
 }))
 
+vi.mock('#/server/modules/workspace-import-write-paths.ts', () => ({
+  importWorkspaceRepositories: mocks.importWorkspaceRepositories,
+}))
+
 vi.mock('#/server/modules/branch-workspace-read.ts', () => ({
   readBranchWorkspaceSnapshot: mocks.readBranchWorkspaceSnapshot,
 }))
@@ -47,6 +56,10 @@ vi.mock('#/server/modules/branch-workspace-registry-write-paths.ts', () => ({
 
 vi.mock('#/server/modules/branch-workspace-write-paths.ts', () => ({
   createBranchWorkspaceWriteService: mocks.createBranchWorkspaceWriteService,
+}))
+
+vi.mock('#/server/modules/workspace-recovery-write-paths.ts', () => ({
+  createWorkspaceRecoveryWriteService: mocks.createWorkspaceRecoveryWriteService,
 }))
 
 vi.mock('#/server/modules/branch-workspace-dependency-write-paths.ts', () => ({
@@ -89,14 +102,24 @@ describe('workspace routes', () => {
       abort: mocks.abortBranchWorkspaceDependencies,
       isActive: vi.fn(() => false),
     })
+    mocks.createWorkspaceRecoveryWriteService.mockReset()
+    mocks.createWorkspaceRecoveryWriteService.mockReturnValue({
+      plan: mocks.planWorkspaceRecovery,
+      execute: mocks.executeWorkspaceRecovery,
+      abort: mocks.abortWorkspaceRecovery,
+    })
     mocks.discoverWorkspaceRepositories.mockReset()
     mocks.restoreWorkspaceRepositories.mockReset()
+    mocks.importWorkspaceRepositories.mockReset()
     mocks.saveWorkspaceConfig.mockReset()
     mocks.readBranchWorkspaceSnapshot.mockReset()
     mocks.cleanupBranchWorkspaceRegistryRecords.mockReset()
     mocks.planBranchWorkspace.mockReset()
     mocks.executeBranchWorkspace.mockReset()
     mocks.abortBranchWorkspace.mockReset()
+    mocks.planWorkspaceRecovery.mockReset()
+    mocks.executeWorkspaceRecovery.mockReset()
+    mocks.abortWorkspaceRecovery.mockReset()
     mocks.reorderBranchWorkspaces.mockReset()
     mocks.readBranchWorkspaceDependencies.mockReset()
     mocks.planBranchWorkspaceDependencies.mockReset()
@@ -153,6 +176,31 @@ describe('workspace routes', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual(result)
     expect(mocks.restoreWorkspaceRepositories).toHaveBeenCalledWith('/workspace')
+  })
+
+  test('delegates atomic workspace import with a validated source token', async () => {
+    const result = {
+      ok: true,
+      rootId: '/workspace',
+      repositories: [{ id: '/workspace/api', name: 'api' }],
+      candidates: [{ id: '/workspace/api', name: 'api', selected: true, available: true }],
+      configuration: { kind: 'ready', config: { repo: ['api'] } },
+      skipped: [],
+    }
+    mocks.importWorkspaceRepositories.mockResolvedValue(result)
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+
+    const response = await app.request('/api/workspace/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootPath: '/workspace', sourceToken: 'workspace_import_1' }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(result)
+    expect(mocks.importWorkspaceRepositories).toHaveBeenCalledWith('/workspace', {
+      sourceToken: 'workspace_import_1',
+    })
   })
 
   test('normalizes invalid input to an empty path', async () => {
@@ -325,6 +373,56 @@ describe('workspace routes', () => {
     expect(mocks.abortBranchWorkspace).toHaveBeenCalledWith('/workspace')
     expect(mocks.reorderBranchWorkspaces).toHaveBeenCalledWith('/workspace', ['third', 'first'])
     await expect(abortResponse.json()).resolves.toEqual({ ok: true })
+  })
+
+  test('delegates workspace recovery plan, execute, and abort requests', async () => {
+    mocks.planWorkspaceRecovery.mockResolvedValue({ ok: false, message: 'planned' })
+    mocks.executeWorkspaceRecovery.mockResolvedValue({ ok: false, message: 'executed' })
+    mocks.abortWorkspaceRecovery.mockReturnValue(true)
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+    const token = `sha256:${'1'.repeat(64)}`
+
+    await app.request('/api/workspace/recovery/plan', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace' }),
+    })
+    await app.request('/api/workspace/recovery/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        rootId: '/workspace',
+        input: { planToken: ` ${token} `, sourceToken: ' workspace_recovery_1 ' },
+      }),
+    })
+    const aborted = await app.request('/api/workspace/recovery/abort', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace' }),
+    })
+
+    expect(mocks.createWorkspaceRecoveryWriteService).toHaveBeenCalledWith({
+      branchService: expect.objectContaining({ plan: mocks.planBranchWorkspace }),
+    })
+    expect(mocks.planWorkspaceRecovery).toHaveBeenCalledWith('/workspace')
+    expect(mocks.executeWorkspaceRecovery).toHaveBeenCalledWith('/workspace', {
+      planToken: token,
+      sourceToken: 'workspace_recovery_1',
+    })
+    expect(mocks.abortWorkspaceRecovery).toHaveBeenCalledWith('/workspace')
+    await expect(aborted.json()).resolves.toEqual({ ok: true })
+  })
+
+  test('rejects malformed workspace recovery execution input', async () => {
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+    const response = await app.request('/api/workspace/recovery/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace', input: { planToken: 'stale' } }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.executeWorkspaceRecovery).not.toHaveBeenCalled()
   })
 
   test('rejects malformed branch workspace approvals before execution', async () => {

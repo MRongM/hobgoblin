@@ -151,25 +151,6 @@ class TerminalSessionManagerTest {
     }
 
     @Test
-    fun `catalog recovery reuses its deterministic record with nullable local repository ownership`() {
-        val service = FakeTerminalSessionFactory()
-        val manager = terminalSessionManager(service = service, now = { 500L })
-        val candidate = recoveryCandidate().copy(repositoryId = null)
-
-        val first = manager.recoverOrGetTmuxSession(candidate)
-        val beforeRepeat = manager.sessions().map { it.id }
-        val repeated = manager.recoverOrGetTmuxSession(candidate)
-
-        assertEquals(first?.id, repeated?.id)
-        assertNull(first?.repositoryId)
-        assertEquals("/srv/repo", first?.repositoryRemotePath)
-        assertEquals(FeaturePath, first?.remotePath)
-        assertEquals(beforeRepeat, manager.sessions().map { it.id })
-        assertEquals(1, manager.sessions().size)
-        assertEquals(0, service.openCount)
-    }
-
-    @Test
     fun `host recovery keeps default and named servers as distinct repository independent terminals`() {
         val manager = terminalSessionManager(service = FakeTerminalSessionFactory(), now = { 500L })
         val namedServer = TmuxServerTarget.Named("hobgoblin-project-v1-222222222222222222222222")
@@ -590,8 +571,6 @@ class TerminalSessionManagerTest {
         val workspaceSessions = manager.sessionsForWorkspace(repositoryId = "repo-1", remotePath = "/srv/app")
 
         assertEquals(listOf(newerRunning.id, olderRunning.id, inactive.id), workspaceSessions.map { it.id })
-        assertEquals(newerRunning.id, manager.mostRecentSessionForWorkspace("repo-1", "/srv/app")?.id)
-        assertNull(manager.mostRecentSessionForWorkspace("repo-1", "/srv/missing"))
     }
 
     @Test
@@ -732,7 +711,11 @@ class TerminalSessionManagerTest {
 
         service.emitOutput("\u001B[31mred\u001B[0m")
 
-        assertEquals("red", manager.emulatorController(record.id)?.visibleText())
+        val emulator = manager.emulatorController(record.id)?.emulator
+        assertEquals(
+            "red",
+            emulator?.getSelectedText(0, 0, emulator.mColumns - 1, emulator.mRows - 1)?.trimEnd(),
+        )
         assertEquals("red", manager.session(record.id)?.lastOutputSnapshot)
     }
 

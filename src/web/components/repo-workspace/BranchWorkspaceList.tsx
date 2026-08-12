@@ -355,6 +355,13 @@ function BranchWorkspaceRow({
             onSelect: () => onGitAction(item, 'batch-commit'),
           },
           {
+            label: 'workspace.branch-workspace.git-action.batch-discard',
+            icon: <RotateCcw aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            destructive: true,
+            onSelect: () => onGitAction(item, 'batch-discard'),
+          },
+          {
             label: 'workspace.branch-workspace.git-action.pull',
             icon: <ArrowDown aria-hidden="true" />,
             disabled: disabled || gitActionsDisabled,
@@ -547,8 +554,8 @@ function BranchWorkspaceRow({
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
             onRemoveMember={
-              isRepairableDrift(item) &&
-              !member.ready &&
+              recoveryAction !== 'continue-reduce' &&
+              recoveryAction !== 'continue-delete' &&
               member.progress !== 'removed' &&
               item.repositories.length > 1 &&
               onReduceMember

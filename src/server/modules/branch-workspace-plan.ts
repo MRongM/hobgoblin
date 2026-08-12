@@ -244,7 +244,7 @@ async function buildReducePlan(
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspacePlanResult> {
-  if (manifest.operation && manifest.operation.kind !== 'reduce') {
+  if (manifest.operation?.kind === 'remove') {
     return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
   }
   const requestedNames = new Set(request.repositories)
@@ -262,18 +262,8 @@ async function buildReducePlan(
     if (!sameStringSet(requestedNames, persistedNames)) {
       return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
     }
-  } else if (manifest.repositories.some((member) => member.progress !== 'complete')) {
-    return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
   }
 
-  const root = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
-    manifest.rootId,
-    manifest.path,
-    signal,
-  ).catch(() => null)
-  if (!root?.exists || root.kind !== 'directory') {
-    return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
-  }
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
   const selectedMembers = configuredRepositories.flatMap((repositoryName) => {
     const member = memberByName.get(repositoryName)
@@ -283,67 +273,63 @@ async function buildReducePlan(
     return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   }
 
-  const repositorySnapshots = new Map<string, { repoId: string; snapshot: RepoSnapshot }>()
-  for (const member of manifest.repositories) {
-    signal?.throwIfAborted()
-    if (member.progress === 'removed' && manifest.operation?.kind === 'reduce') continue
-    const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
-    if (!repoId || !configuredRepositories.includes(member.repositoryName)) {
-      return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    }
-    const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
-      includeWorktreeStatus: true,
-      includeRemote: false,
-    }).catch(() => null)
-    if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    repositorySnapshots.set(member.repositoryName, { repoId, snapshot })
-    if (requestedNames.has(member.repositoryName)) continue
-    const worktree = snapshot.branches.find((branch) => branch.name === member.targetBranch)?.worktree
-    if (!worktree) return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
-    if (!sameHostPath(manifest.rootId, worktree.path, member.worktreePath)) {
-      return { ok: false, message: 'workspace.branch-workspace.needs-repair' }
-    }
-  }
-
   const repositories: BranchWorkspaceRepositoryPlan[] = []
   for (const member of selectedMembers) {
     signal?.throwIfAborted()
     const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
     if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
     if (member.progress === 'removed' && manifest.operation?.kind === 'reduce') {
-      repositories.push(reduceRepositoryPlan(member, repoId, false, true))
+      repositories.push(reduceRepositoryPlan(member, repoId, 'satisfied'))
       continue
     }
-    const snapshot = repositorySnapshots.get(member.repositoryName)?.snapshot
+    const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    }).catch(() => null)
     if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
     const registered = registeredWorktreeAtPath(manifest.rootId, snapshot, member.worktreePath)
     if (!registered) {
+      const worktrees = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => null)
+      if (!worktrees) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+      const registeredByPath = worktrees.find(
+        (worktree) => !worktree.isBare && sameHostPath(manifest.rootId, worktree.path, member.worktreePath),
+      )
+      if (registeredByPath) {
+        if (registeredByPath.isPrimary) {
+          return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
+        }
+        if (registeredByPath.isLocked) {
+          return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
+        }
+        repositories.push(reduceRepositoryPlan(member, repoId, 'remove-worktree', registeredByPath.branch))
+        continue
+      }
       const target = await inspect(manifest.rootId, member.worktreePath, signal).catch(() => null)
       if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
       if (target.exists) {
-        return { ok: false, message: 'workspace.branch-workspace.member-path-not-worktree' }
+        repositories.push(reduceRepositoryPlan(member, repoId, 'remove-entry'))
+        continue
       }
-      repositories.push(reduceRepositoryPlan(member, repoId, false, true))
+      repositories.push(reduceRepositoryPlan(member, repoId, 'satisfied'))
       continue
     }
     const { branch: checkedOutBranch, worktree } = registered
     if (worktree.isPrimary) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
     if (worktree.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
-    if (typeof worktree.summary?.dirty !== 'boolean') {
-      return { ok: false, message: 'workspace.branch-workspace.dirty-state-unknown' }
-    }
-    repositories.push(reduceRepositoryPlan(member, repoId, worktree.summary.dirty, false, checkedOutBranch))
+    repositories.push(reduceRepositoryPlan(member, repoId, 'remove-worktree', checkedOutBranch))
   }
 
   const terminalSessionIds = await terminalSessionIdsForPaths(
     manifest,
-    configuredRepositories,
+    selectedMembers.map((member) => member.repositoryName),
     selectedMembers.map((member) => member.worktreePath),
     dependencies,
   )
   if (!terminalSessionIds) return { ok: false, message: 'workspace.branch-workspace.terminal-read-failed' }
   const requiredApprovals: BranchWorkspaceApproval[] = []
-  if (repositories.some((repository) => repository.dirty)) requiredApprovals.push('discard-member-changes')
+  if (repositories.some((repository) => repository.action === 'remove-entry')) {
+    requiredApprovals.push('unmanaged-content')
+  }
   if (terminalSessionIds.length > 0) requiredApprovals.push('close-terminals')
   const reducingManifest: BranchWorkspaceManifest = {
     ...manifest,
@@ -360,9 +346,10 @@ async function buildReducePlan(
       : [
           {
             id: `repository:${repository.repositoryName}`,
-            kind: 'remove-worktree' as const,
+            kind: repository.action === 'remove-entry' ? ('remove-entry' as const) : ('remove-worktree' as const),
             label: repository.repositoryName,
             repositoryName: repository.repositoryName,
+            ...(repository.action === 'remove-entry' ? { entryName: repository.repositoryName } : {}),
           },
         ],
   )
@@ -386,10 +373,10 @@ async function buildReducePlan(
 function reduceRepositoryPlan(
   member: BranchWorkspaceManifest['repositories'][number],
   repoId: string,
-  dirty: boolean,
-  satisfied: boolean,
+  action: 'remove-worktree' | 'remove-entry' | 'satisfied',
   checkedOutBranch?: string,
 ): BranchWorkspaceRepositoryPlan {
+  const satisfied = action === 'satisfied'
   return {
     repositoryName: member.repositoryName,
     repoId,
@@ -403,9 +390,8 @@ function reduceRepositoryPlan(
     worktreeBootstrap: { kind: 'skip' },
     confirmationRequired: false,
     satisfied,
-    action: satisfied ? 'satisfied' : 'remove-worktree',
-    worktreePresent: !satisfied,
-    dirty,
+    action,
+    worktreePresent: action === 'remove-worktree',
   }
 }
 

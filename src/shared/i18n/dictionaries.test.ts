@@ -184,6 +184,34 @@ describe('i18n dictionaries', () => {
     expect(zh['action.delete-branch']).toBe('删除分支')
   })
 
+  test('includes branch upstream management copy in every locale', () => {
+    const keys = [
+      'action.branch-upstream-set',
+      'action.branch-upstream-change',
+      'action.branch-upstream-title',
+      'action.branch-upstream-current',
+      'action.branch-upstream-gone',
+      'action.branch-upstream-remote-label',
+      'action.branch-upstream-remote-placeholder',
+      'action.branch-upstream-loading',
+      'action.branch-upstream-empty',
+      'action.branch-upstream-load-error',
+      'action.branch-upstream-remove',
+      'action.branch-upstream-confirm',
+      'action.branch-upstream-updating',
+      'action.branch-upstream-queued',
+      'action.branch-upstream-updated',
+      'error.upstream-shared',
+    ] as const satisfies readonly DictKey[]
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['action.branch-upstream-set']).toBe('设置上游分支')
+    expect(zh['action.branch-upstream-change']).toBe('更换上游分支')
+    expect(zh['action.branch-upstream-remove']).toBe('取消上游')
+  })
+
   test('includes host tmux inventory and selected-close copy in every locale', () => {
     const keys = [
       'tmux.host-inventory.action',
@@ -235,6 +263,38 @@ describe('i18n dictionaries', () => {
     expect(zh['action.cleanup-invalid-worktree']).toBe('清理无效工作树')
     expect(zh['action.confirm-cleanup-invalid-worktree-body']).toContain('不会删除分支')
     expect(zh['action.confirm-cleanup-invalid-worktree-note']).toContain('磁盘')
+  })
+
+  test('includes workspace configuration recovery disclosure in every locale', () => {
+    const keys = [
+      'workspace.recovery.action',
+      'workspace.recovery.title',
+      'workspace.recovery.planning',
+      'workspace.recovery.confirm-summary',
+      'workspace.recovery.registry-reset-warning',
+      'workspace.recovery.registry-repair-warning',
+      'workspace.recovery.record-only',
+      'workspace.recovery.destructive-warning',
+      'workspace.recovery.abort',
+      'workspace.recovery.confirm',
+      'workspace.recovery.retry',
+      'workspace.recovery.result-success',
+      'workspace.recovery.result-residual',
+      'workspace.recovery.result-failed',
+      'workspace.recovery.plan-failed',
+      'workspace.recovery.cancelled',
+      'workspace.recovery.failed',
+      'workspace.recovery.plan-stale',
+      'workspace.recovery.operation-in-progress',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.recovery.action']).toBe('清理项目配置并重新导入')
+    expect(zh['workspace.recovery.destructive-warning']).toContain('未提交改动')
+    expect(zh['workspace.recovery.destructive-warning']).toContain('仅移除应用记录')
+    expect(zh['workspace.recovery.registry-reset-warning']).toContain('所有项目')
   })
 
   test('warns that branch workspace removal discards uncommitted changes in every locale', () => {
@@ -369,6 +429,26 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.git-action.batch-merge-out-description']).not.toContain('基准分支')
   })
 
+  test('localizes destructive branch workspace batch discard in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.git-action.batch-discard',
+      'workspace.branch-workspace.git-action.batch-discard-description',
+      'workspace.branch-workspace.git-action.step.discard',
+      'workspace.branch-workspace.git-action.failure-step.discard',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en['workspace.branch-workspace.git-action.batch-discard']).toBe('Batch discard changes')
+    expect(zh['workspace.branch-workspace.git-action.batch-discard']).toBe('批量丢弃改动')
+    expect(zh['workspace.branch-workspace.git-action.batch-discard-description']).toContain('成员工作树')
+    expect(zh['workspace.branch-workspace.git-action.batch-discard-description']).toContain('已暂存')
+    expect(zh['workspace.branch-workspace.git-action.batch-discard-description']).toContain('未暂存')
+    expect(zh['workspace.branch-workspace.git-action.batch-discard-description']).toContain('未跟踪')
+    expect(zh['workspace.branch-workspace.git-action.batch-discard-description']).toContain('无法从 Git 恢复')
+  })
+
   test('describes branch workspace registry cleanup without claiming filesystem deletion', () => {
     const keys = [
       'workspace.branch-workspace.cleanup',
@@ -425,6 +505,10 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.git-action.push-description',
       'workspace.branch-workspace.git-action.target-upstream-required',
       'workspace.branch-workspace.git-action.remote-required',
+      'workspace.branch-workspace.git-action.step.fetch',
+      'workspace.branch-workspace.git-action.failure-step.fetch',
+      'workspace.branch-workspace.git-action.remote-branches-unavailable',
+      'workspace.branch-workspace.git-action.remote-destination-requires-push',
     ] as const
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()

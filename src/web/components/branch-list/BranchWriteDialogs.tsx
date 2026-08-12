@@ -25,6 +25,11 @@ import type {
   RepositoryBranchMergeOutResult,
 } from '#/shared/repository-branch-merge.ts'
 import {
+  repositoryMergeBranchDisplayName,
+  repositoryMergeBranchSelectionKey,
+  type RepositoryMergeBranchSelection,
+} from '#/shared/repository-merge-branch.ts'
+import {
   branchNameValidationKey,
   remoteRefMatchesQuery,
   remoteTrackingBranchChoices,
@@ -122,7 +127,7 @@ interface MergeInDialogProps {
   allBranches: RepoBranchState[]
   onClose: () => void
   onPull?: () => Promise<ExecResult>
-  onMerge: (sourceBranch: string) => Promise<ExecResult>
+  onMerge: (source: RepositoryMergeBranchSelection) => Promise<ExecResult>
   onPush?: () => void | Promise<void>
 }
 
@@ -139,22 +144,49 @@ export function MergeInDialog({
 }: MergeInDialogProps) {
   const t = useT()
   const [selected, setSelected] = useState('')
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([])
+  const [remoteState, setRemoteState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [errorReason, setErrorReason] = useState<ExecResult['reason'] | null>(null)
   const { pending, isPending, run } = useAsyncPending<'merge' | 'pullMergePush'>()
 
-  const candidates = allBranches.filter((b) => b.name !== branch.name)
+  const candidates: RepositoryMergeBranchSelection[] = [
+    ...allBranches
+      .filter((candidate) => candidate.name !== branch.name)
+      .map((candidate) => ({ kind: 'local' as const, branch: candidate.name })),
+    ...remoteBranches.map((remoteRef) => ({ kind: 'remote' as const, remoteRef })),
+  ]
+  const selectedSource = candidates.find((candidate) => repositoryMergeBranchSelectionKey(candidate) === selected)
+  const remoteSelected = selectedSource?.kind === 'remote'
 
   useEffect(() => {
     if (!open) {
       setSelected('')
+      setRemoteBranches([])
+      setRemoteState('idle')
       setError(null)
       setErrorReason(null)
+      return
     }
-  }, [open])
+
+    const controller = new AbortController()
+    setSelected('')
+    setRemoteBranches([])
+    setRemoteState('loading')
+    void getRepositoryRemoteBranches(repoId, controller.signal)
+      .then((branches) => {
+        if (controller.signal.aborted) return
+        setRemoteBranches(branches)
+        setRemoteState('loaded')
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRemoteState('error')
+      })
+    return () => controller.abort()
+  }, [open, repoId])
 
   async function handleConfirm(mode: 'merge' | 'pullMergePush' = 'merge') {
-    if (!selected) return
+    if (!selectedSource) return
     setError(null)
     setErrorReason(null)
     await run(mode, async () => {
@@ -167,7 +199,7 @@ export function MergeInDialog({
             return
           }
         }
-        const result = await onMerge(selected)
+        const result = await onMerge(selectedSource)
         if (!result.ok) {
           setError(result.message)
           setErrorReason(result.reason ?? null)
@@ -205,13 +237,34 @@ export function MergeInDialog({
               <SelectValue placeholder={t('action.merge-in-placeholder')} />
             </SelectTrigger>
             <SelectContent>
-              {candidates.map((b) => (
-                <SelectItem key={b.name} value={b.name} textValue={b.name}>
-                  {b.name}
-                </SelectItem>
-              ))}
+              {candidates.map((candidate) => {
+                const key = repositoryMergeBranchSelectionKey(candidate)
+                const name = candidate.kind === 'local' ? candidate.branch : candidate.remoteRef
+                const text = candidate.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
+                return (
+                  <SelectItem
+                    key={key}
+                    value={key}
+                    textValue={text}
+                    data-merge-source-key={key}
+                    data-merge-source-kind={candidate.kind}
+                  >
+                    {text}
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
+          {remoteState === 'loading' && (
+            <FieldDescription>{t('action.merge-in-remote-loading')}</FieldDescription>
+          )}
+          {remoteState === 'loaded' && remoteBranches.length === 0 && (
+            <FieldDescription>{t('action.merge-in-remote-empty')}</FieldDescription>
+          )}
+          {remoteState === 'error' && (
+            <FieldDescription>{t('action.merge-in-remote-load-failed')}</FieldDescription>
+          )}
+          {remoteSelected && <FieldDescription>{t('action.merge-in-remote-fetch-note')}</FieldDescription>}
         </Field>
         {error && <MergeDialogError>{error.startsWith('error.merge-out') ? t(error) : error}</MergeDialogError>}
         {errorReason === 'merge-conflict' && (
@@ -231,16 +284,16 @@ export function MergeInDialog({
               type="button"
               variant="outline"
               size="sm"
-              disabled={!selected || isPending}
+              disabled={!selectedSource || isPending}
               onClick={() => void handleConfirm('pullMergePush')}
             >
               {pending === 'pullMergePush' && <Loader2 className="animate-spin" />}
-              {t('action.merge-in-and-push-confirm')}
+              {t(remoteSelected ? 'action.merge-in-remote-and-push-confirm' : 'action.merge-in-and-push-confirm')}
             </Button>
           )}
-          <Button type="submit" size="sm" disabled={!selected || isPending}>
+          <Button type="submit" size="sm" disabled={!selectedSource || isPending}>
             {pending === 'merge' && <Loader2 className="animate-spin" />}
-            {t('action.merge-in-confirm')}
+            {t(remoteSelected ? 'action.merge-in-remote-confirm' : 'action.merge-in-confirm')}
           </Button>
         </DialogFooter>
       </form>
@@ -322,7 +375,9 @@ export function MergeOutDialog({
     }
   }, [open, repoId, sourceBranch, sourceWorktreePath])
 
-  const destination = plan?.destinations.find((candidate) => candidate.branch === selected)
+  const destination = plan?.destinations.find(
+    (candidate) => repositoryMergeBranchSelectionKey(candidate.destination) === selected,
+  )
 
   async function handleConfirm(mode: 'merge' | 'pullMergePush') {
     if (!plan || !destination?.ready) return
@@ -335,7 +390,7 @@ export function MergeOutDialog({
           planToken: plan.token,
           sourceBranch: plan.sourceBranch,
           sourceWorktreePath: plan.sourceWorktreePath,
-          destinationBranch: destination.branch,
+          destination: destination.destination,
           mode: mode === 'merge' ? 'merge' : 'pull-merge-push',
         })
         if (!result.ok) {
@@ -380,30 +435,40 @@ export function MergeOutDialog({
               />
             </SelectTrigger>
             <SelectContent>
-              {plan?.destinations.map((candidate) => (
-                <SelectItem
-                  key={candidate.branch}
-                  value={candidate.branch}
-                  textValue={candidate.branch}
-                  disabled={!candidate.ready}
-                >
-                  <span className="flex min-w-0 items-center justify-between gap-3">
-                    <span className="truncate">{candidate.branch}</span>
-                    {candidate.blockReason ? (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {t(
-                          candidate.blockReason === 'dirty-worktree'
-                            ? 'action.merge-out-destination-dirty'
-                            : 'action.merge-out-destination-unavailable',
-                        )}
-                      </span>
-                    ) : null}
-                  </span>
-                </SelectItem>
-              ))}
+              {plan?.destinations.map((candidate) => {
+                const key = repositoryMergeBranchSelectionKey(candidate.destination)
+                const name = repositoryMergeBranchDisplayName(candidate.destination)
+                const text =
+                  candidate.destination.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
+                return (
+                  <SelectItem
+                    key={key}
+                    value={key}
+                    textValue={text}
+                    disabled={!candidate.ready}
+                    data-merge-destination-key={key}
+                    data-merge-destination-kind={candidate.destination.kind}
+                  >
+                    <span className="flex min-w-0 items-center justify-between gap-3">
+                      <span className="truncate">{text}</span>
+                      {candidate.blockReason ? (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {t(
+                            candidate.blockReason === 'dirty-worktree'
+                              ? 'action.merge-out-destination-dirty'
+                              : 'action.merge-out-destination-unavailable',
+                          )}
+                        </span>
+                      ) : null}
+                    </span>
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
-          {destination && !destination.pullMergePushReady ? (
+          {destination?.destination.kind === 'remote' ? (
+            <FieldDescription>{t('action.merge-out-remote-push-note')}</FieldDescription>
+          ) : destination && !destination.pullMergePushReady ? (
             <FieldDescription>{t('action.merge-out-destination-upstream-required')}</FieldDescription>
           ) : null}
         </Field>
@@ -430,7 +495,11 @@ export function MergeOutDialog({
             {pending === 'pullMergePush' && <Loader2 className="animate-spin" />}
             {t('action.merge-out-pull-merge-push-confirm')}
           </Button>
-          <Button type="submit" size="sm" disabled={!destination?.ready || isPending}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!destination?.ready || destination.destination.kind === 'remote' || isPending}
+          >
             {pending === 'merge' && <Loader2 className="animate-spin" />}
             {t('action.merge-out-confirm')}
           </Button>

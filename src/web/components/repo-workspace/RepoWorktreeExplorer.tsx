@@ -11,16 +11,14 @@ import {
   RadioTower,
   type LucideIcon,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { isRemoteRepoId, localRepoSessionEntry, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
-import { canOpenDetachedFileAreaWindow, openDetachedFileAreaWindow } from '#/web/app-shell-client.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { RepoExplorerPanel } from '#/web/components/repo-workspace/RepoExplorerPanel.tsx'
 import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { isFileAreaTabDropOutsideViewport } from '#/web/lib/detached-file-area.ts'
+import { useDetachFileArea } from '#/web/hooks/useDetachFileArea.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
@@ -39,6 +37,7 @@ interface RepoWorktreeExplorerProps {
   revealRequest: FileTreeRevealRequest | null
   onTabChange: (tab: ExplorerTab) => void
   toolbarLeading?: ReactNode
+  allowDetach?: boolean
 }
 
 let lastOverflowExpanded = false
@@ -54,17 +53,26 @@ export function RepoWorktreeExplorer({
   revealRequest: externalRevealRequest,
   onTabChange,
   toolbarLeading,
+  allowDetach = true,
 }: RepoWorktreeExplorerProps) {
   const t = useT()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
-  const [draggingTab, setDraggingTab] = useState<ExplorerTab | null>(null)
   const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const isRemoteRepo = isRemoteRepoId(repoId)
   const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
   const repo = useReposStore((state) => state.repos[repoId])
   const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
   const hasWorktree = !!selected?.worktree?.path
-  const canDetach = canOpenDetachedFileAreaWindow()
+  const sessionEntry = repo?.remote.target ? remoteRepoSessionEntry(repo.remote.target) : localRepoSessionEntry(repoId)
+  const detach = useDetachFileArea(
+    {
+      kind: 'git-worktree',
+      repo: sessionEntry,
+      branch: repo?.ui.selectedBranch ?? '',
+      tab: activeVisibleTab,
+    },
+    { enabled: allowDetach && !!repo?.ui.selectedBranch },
+  )
 
   const baseTabs = [
     { id: 'files' as const, label: t('file-tree.title'), icon: FolderTree },
@@ -99,45 +107,13 @@ export function RepoWorktreeExplorer({
         role="tab"
         aria-selected={selected}
         aria-controls={`repo-explorer-${tab.id}-panel`}
-        aria-keyshortcuts={canDetach ? 'Shift+Enter' : undefined}
         tabIndex={selected ? 0 : -1}
-        draggable={canDetach}
-        title={canDetach ? t('file-area.detach-hint') : undefined}
         onClick={() => onTabChange(tab.id)}
-        onDragStart={(event) => {
-          if (!canDetach) {
-            event.preventDefault()
-            return
-          }
-          event.dataTransfer.effectAllowed = 'copy'
-          event.dataTransfer.setData('application/x-hobgoblin-file-area-tab', tab.id)
-          setDraggingTab(tab.id)
-        }}
-        onDragEnd={(event) => {
-          setDraggingTab(null)
-          if (
-            !canDetach ||
-            !isFileAreaTabDropOutsideViewport(event, { width: window.innerWidth, height: window.innerHeight })
-          ) {
-            return
-          }
-          const releasePoint =
-            Number.isFinite(event.screenX) && Number.isFinite(event.screenY)
-              ? { x: event.screenX, y: event.screenY }
-              : undefined
-          detachTab(tab.id, releasePoint)
-        }}
-        onKeyDown={(event) => {
-          if (!canDetach || !event.shiftKey || event.key !== 'Enter') return
-          event.preventDefault()
-          detachTab(tab.id)
-        }}
         className={cn(
           'h-7 gap-1 border px-2 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
           selected
             ? 'border-input bg-tab-active text-foreground'
             : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
-          draggingTab === tab.id && 'opacity-70 ring-1 ring-ring',
         )}
       >
         <Icon className="size-3.5 shrink-0" aria-hidden="true" />
@@ -149,22 +125,6 @@ export function RepoWorktreeExplorer({
         ) : null}
       </Button>
     )
-  }
-
-  function detachTab(tab: ExplorerTab, releasePoint?: { x: number; y: number }) {
-    const branch = repo?.ui.selectedBranch
-    if (!canDetach || !branch) return
-    const sessionEntry = repo.remote.target ? remoteRepoSessionEntry(repo.remote.target) : localRepoSessionEntry(repoId)
-    void openDetachedFileAreaWindow({
-      repo: sessionEntry,
-      branch,
-      tab,
-      ...(releasePoint ? { releasePoint } : {}),
-    })
-      .then((result) => {
-        if (!result.ok) toast.error(t(result.message))
-      })
-      .catch(() => toast.error(t('error.failed-open-window')))
   }
 
   function handleRevealPath(relativePath: string) {
@@ -183,7 +143,13 @@ export function RepoWorktreeExplorer({
       data-repo-worktree-explorer={repoId}
       className="project-file-area-tone flex min-h-0 flex-1 flex-col bg-pane"
     >
-      <Toolbar data-testid="repo-explorer-toolbar" className="border-y-0 px-2" variant="detail">
+      <Toolbar
+        data-testid="repo-explorer-toolbar"
+        className={cn('border-y-0 px-2', detach.dragging && 'opacity-70 ring-1 ring-ring')}
+        variant="detail"
+        tabIndex={detach.enabled ? 0 : undefined}
+        {...detach.bindings}
+      >
         {toolbarLeading}
         <ToolbarTabStrip
           compact={false}

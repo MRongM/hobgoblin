@@ -4,6 +4,24 @@ import type { BranchSnapshotInfo } from '#/shared/git-types.ts'
 
 const { createBranch, createTrackingBranch, deleteRemoteServerBranch } = branchOperations
 
+async function setBranchUpstream(
+  cwd: string,
+  branch: string,
+  remoteRef: string | null,
+  signal?: AbortSignal,
+) {
+  const setUpstream = (branchOperations as Record<string, unknown>).setBranchUpstream
+  expect(setUpstream).toBeTypeOf('function')
+  return await (
+    setUpstream as (
+      cwd: string,
+      branch: string,
+      remoteRef: string | null,
+      signal?: AbortSignal,
+    ) => Promise<unknown>
+  )(cwd, branch, remoteRef, signal)
+}
+
 const gitResultWithOptionsMock = vi.hoisted(() => vi.fn())
 const gitMock = vi.hoisted(() => vi.fn())
 
@@ -138,6 +156,55 @@ describe('branch creation helpers', () => {
       ['config', '--local', 'branch.feature/new.hobgoblin-created-from', 'origin/feature/new'],
       { signal },
     )
+  })
+
+  test('sets an existing local branch upstream to a remote ref', async () => {
+    const signal = new AbortController().signal
+
+    await expect(setBranchUpstream('/repo', 'feature/local', 'origin/release', signal)).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      { signal },
+      'branch',
+      '--set-upstream-to=origin/release',
+      '--',
+      'feature/local',
+    )
+  })
+
+  test('removes an existing local branch upstream', async () => {
+    const signal = new AbortController().signal
+
+    await expect(setBranchUpstream('/repo', 'feature/local', null, signal)).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      { signal },
+      'branch',
+      '--unset-upstream',
+      '--',
+      'feature/local',
+    )
+  })
+
+  test('rejects invalid upstream changes before running git', async () => {
+    await expect(setBranchUpstream('/repo', '-bad', 'origin/release')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(setBranchUpstream('/repo', 'feature/local', 'origin/HEAD')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
   })
 
   test('keeps successful branch creation when source metadata cannot be recorded', async () => {

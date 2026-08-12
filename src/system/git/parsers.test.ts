@@ -373,6 +373,37 @@ describe('parseWorktrees', () => {
     expect(result.map((w) => w.isPrimary)).toEqual([true, false])
   })
 
+  test('parses Windows CRLF records without merging worktrees', () => {
+    const out = [
+      'worktree C:/repo',
+      'HEAD a',
+      'branch refs/heads/main',
+      '',
+      'worktree C:/repo-feature',
+      'HEAD b',
+      'branch refs/heads/feature',
+    ].join('\r\n')
+
+    expect(parseWorktrees(out)).toEqual([
+      {
+        path: 'C:/repo',
+        branch: 'main',
+        head: 'a',
+        isBare: false,
+        isPrimary: true,
+        isLocked: false,
+      },
+      {
+        path: 'C:/repo-feature',
+        branch: 'feature',
+        head: 'b',
+        isBare: false,
+        isPrimary: false,
+        isLocked: false,
+      },
+    ])
+  })
+
   test('strips refs/heads/ prefix from branch ref', () => {
     const out = ['worktree /repo', 'HEAD a', 'branch refs/heads/feature/nested/name'].join('\n')
     expect(parseWorktrees(out)[0]?.branch).toBe('feature/nested/name')

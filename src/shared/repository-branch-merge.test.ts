@@ -29,7 +29,7 @@ describe('repository branch merge-out protocol', () => {
         planToken: 'sha256:plan',
         sourceBranch: 'feature/source',
         sourceWorktreePath: '/workspace/source',
-        destinationBranch: 'main',
+        destination: { kind: 'local', branch: 'main' },
         mode: 'pull-merge-push',
       }),
     ).toEqual({
@@ -39,10 +39,46 @@ describe('repository branch merge-out protocol', () => {
         planToken: 'sha256:plan',
         sourceBranch: 'feature/source',
         sourceWorktreePath: '/workspace/source',
-        destinationBranch: 'main',
+        destination: { kind: 'local', branch: 'main' },
         mode: 'pull-merge-push',
       },
     })
+  })
+
+  test('normalizes remote destinations without collapsing them into local branch names', () => {
+    expect(
+      normalizeRepositoryBranchMergeOutExecuteInput({
+        repoId: '/workspace/repo',
+        planToken: 'sha256:plan',
+        sourceBranch: 'feature/source',
+        sourceWorktreePath: '/workspace/source',
+        destination: { kind: 'remote', remoteRef: 'origin/main' },
+        mode: 'pull-merge-push',
+      }),
+    ).toEqual({
+      ok: true,
+      input: {
+        repoId: '/workspace/repo',
+        planToken: 'sha256:plan',
+        sourceBranch: 'feature/source',
+        sourceWorktreePath: '/workspace/source',
+        destination: { kind: 'remote', remoteRef: 'origin/main' },
+        mode: 'pull-merge-push',
+      },
+    })
+  })
+
+  test('normalizes legacy destinationBranch as an explicit local destination', () => {
+    expect(
+      normalizeRepositoryBranchMergeOutExecuteInput({
+        repoId: '/workspace/repo',
+        planToken: 'sha256:plan',
+        sourceBranch: 'feature/source',
+        sourceWorktreePath: '/workspace/source',
+        destinationBranch: 'main',
+        mode: 'merge',
+      }),
+    ).toMatchObject({ ok: true, input: { destination: { kind: 'local', branch: 'main' } } })
   })
 
   test.each([

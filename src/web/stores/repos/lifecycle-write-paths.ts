@@ -16,11 +16,8 @@ import { abortRepositoryOperation, initRepository as initRepositoryRpc, probeRep
 import { resolveRemoteRepositoryTarget } from '#/web/remote-client.ts'
 import { stopPortForwardSessionsForRepo } from '#/web/port-forwarding-client.ts'
 import { recordRecentRepo } from '#/web/settings-write-paths.ts'
-import {
-  configureWorkspace as configureWorkspaceClient,
-  discoverWorkspace,
-  restoreWorkspace,
-} from '#/web/workspace-client.ts'
+import { configureWorkspace as configureWorkspaceClient, importWorkspace } from '#/web/workspace-client.ts'
+import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import type { OpenRepoResult, ReposGet, ReposSet, ReposStore } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
@@ -323,7 +320,7 @@ export function createRuntimeRepoLifecycleActions(
     },
 
     async rescanWorkspace(rootId: string): Promise<void> {
-      await reconcileWorkspaceProject(set, get, rootId, discoverWorkspace)
+      await reconcileWorkspaceProject(set, get, rootId)
     },
 
     async configureWorkspace(
@@ -452,7 +449,7 @@ export async function reconcileWorkspaceProject(
   set: ReposSet,
   get: ReposGet,
   rootId: string,
-  readWorkspace: (rootPath: string) => Promise<WorkspaceDiscoveryResult> = restoreWorkspace,
+  readWorkspace: (rootPath: string) => Promise<WorkspaceDiscoveryResult> = importWorkspaceProject,
 ): Promise<void> {
   const root = get().repos[rootId]
   if (!root || root.isGitRepo !== false) return
@@ -484,6 +481,7 @@ export async function reconcileWorkspaceProject(
           repositoryIds: state.workspaceProjects[rootId]?.repositoryIds ?? [],
           candidates: state.workspaceProjects[rootId]?.candidates ?? [],
           configured: state.workspaceProjects[rootId]?.configured ?? false,
+          configuredRepositoryNames: state.workspaceProjects[rootId]?.configuredRepositoryNames,
           configurationError: state.workspaceProjects[rootId]?.configurationError ?? null,
           phase: 'error',
           skipped: state.workspaceProjects[rootId]?.skipped ?? [],
@@ -497,7 +495,11 @@ export async function reconcileWorkspaceProject(
   applyWorkspaceDiscoveryResult(set, get, rootId, result)
 }
 
-function applyWorkspaceDiscoveryResult(
+async function importWorkspaceProject(rootPath: string): Promise<WorkspaceDiscoveryResult> {
+  return await runWithRepoInvalidationSource('workspace', async (sourceToken) => importWorkspace(rootPath, sourceToken))
+}
+
+export function applyWorkspaceDiscoveryResult(
   set: ReposSet,
   get: ReposGet,
   rootId: string,
@@ -618,6 +620,8 @@ function applyWorkspaceDiscoveryResult(
       repositoryIds,
       candidates: result.candidates,
       configured: result.configuration.kind === 'ready',
+      configuredRepositoryNames:
+        result.configuration.kind === 'ready' ? [...result.configuration.config.repo] : undefined,
       configurationError: result.configuration.kind === 'invalid' ? result.configuration.message : null,
       phase: 'ready',
       skipped: result.skipped,

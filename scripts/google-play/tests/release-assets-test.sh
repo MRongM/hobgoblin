@@ -20,6 +20,10 @@ assert_eq "420" "$(profile_density phone)"
 assert_eq "288" "$(profile_density tablet-7)"
 assert_eq "216" "$(profile_density tablet-10)"
 
+PACKAGE_VERSION="$(package_version "$SCRIPT_DIR/../../../package.json")"
+[[ "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]] ||
+    fail "package_version returned an invalid version: $PACKAGE_VERSION"
+
 if profile_density unsupported >/dev/null 2>&1; then
     fail "unsupported profile unexpectedly passed"
 fi

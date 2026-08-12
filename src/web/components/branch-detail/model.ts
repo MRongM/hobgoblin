@@ -5,6 +5,11 @@ import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 export type SelectedBranchDetail = ReturnType<typeof getSelectedBranchDetail>
 export type SelectedBranchDetailPresentation = ReturnType<typeof getSelectedBranchDetailPresentation>
 
+export interface BranchDetailTarget {
+  branchName: string
+  worktreePath: string
+}
+
 export interface BranchDetailRepo extends BranchActionRepo {
   data: BranchActionRepo['data'] & Pick<RepoState['data'], 'branches' | 'statusLoaded'>
   ui: Pick<RepoState['ui'], 'selectedBranch' | 'detailTab'>
@@ -50,7 +55,31 @@ export function getSelectedBranchDetail(repo: BranchDetailRepo) {
 }
 
 export function getSelectedBranchDetailPresentation(repo: BranchDetailRepo) {
-  const detail = getSelectedBranchDetail(repo)
+  return presentBranchDetail(repo, getSelectedBranchDetail(repo))
+}
+
+export function getBranchDetailPresentation(repo: BranchDetailRepo, target: BranchDetailTarget) {
+  const branch =
+    repo.data.branches.find((candidate) => candidate.worktree?.path === target.worktreePath) ??
+    repo.data.branches.find((candidate) => candidate.name === target.branchName) ??
+    null
+  const selectedStatus = branch?.worktree
+    ? repo.data.status.filter((status) => status.path === target.worktreePath)
+    : []
+  const worktreeState = branch ? getBranchWorktreeState(repo, branch) : null
+  const statusCount =
+    worktreeState?.changeCount ?? selectedStatus.reduce((count, status) => count + status.entries.length, 0)
+
+  return presentBranchDetail(repo, {
+    branch,
+    selectedStatus,
+    statusCount,
+    worktreeState,
+    remoteTarget: repo.remote.target,
+  })
+}
+
+function presentBranchDetail(repo: BranchDetailRepo, detail: SelectedBranchDetail) {
   const statusLoading = resourceBusy(repo.resources.status)
 
   return {

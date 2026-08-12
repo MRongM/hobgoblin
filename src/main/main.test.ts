@@ -31,9 +31,7 @@ const mocks = vi.hoisted(() => {
     initTheme: vi.fn(() => Promise.resolve()),
     resolveLang: vi.fn(() => 'en'),
     setCurrentLang: vi.fn(),
-    syncGlobalShortcuts: vi.fn(),
     enqueueExternalOpenPath: vi.fn(() => true),
-    unregisterAppShortcuts: vi.fn(),
     wireRpcIpc: vi.fn(),
     diagnosticsLog: vi.fn(),
     broadcastRendererEffectIntent: vi.fn(),
@@ -140,11 +138,6 @@ vi.mock('#/main/startup-diagnostics.ts', () => ({
   createStartupDiagnostics: () => ({ logPath: '/tmp/goblin/startup.log', log: mocks.diagnosticsLog }),
 }))
 
-vi.mock('#/main/shortcuts.ts', () => ({
-  syncGlobalShortcuts: mocks.syncGlobalShortcuts,
-  unregisterAppShortcuts: mocks.unregisterAppShortcuts,
-}))
-
 vi.mock('#/main/external-open.ts', () => ({
   enqueueExternalOpenPath: mocks.enqueueExternalOpenPath,
 }))
@@ -183,7 +176,7 @@ describe('main process startup lifecycle', () => {
     expect(mocks.appendSwitch.mock.invocationCallOrder[0]).toBeLessThan(mocks.whenReady.mock.invocationCallOrder[0]!)
   })
 
-  test('flushes settings before exiting without global shortcut cleanup', async () => {
+  test('flushes settings before exiting', async () => {
     await import('#/main/main.ts')
 
     const event = { preventDefault: vi.fn() }
@@ -195,7 +188,6 @@ describe('main process startup lifecycle', () => {
     expect(mocks.broadcastRendererEffectIntent).toHaveBeenCalledWith({ type: 'app-quitting' })
     expect(mocks.closeDetachedFileAreaWindows).toHaveBeenCalledTimes(1)
     expect(mocks.flushWindowState).toHaveBeenCalledTimes(1)
-    expect(mocks.unregisterAppShortcuts).not.toHaveBeenCalled()
     expect(mocks.exit).toHaveBeenCalledWith(0)
     expect(mocks.quit).not.toHaveBeenCalled()
     expect(secondPassEvent.preventDefault).not.toHaveBeenCalled()
@@ -263,7 +255,6 @@ describe('main process startup lifecycle', () => {
     await vi.waitFor(() => {
       expect(mocks.buildAppMenu).toHaveBeenCalled()
     })
-    expect(mocks.syncGlobalShortcuts).not.toHaveBeenCalled()
     expect(mocks.setSettingsGlobalShortcutState).not.toHaveBeenCalled()
   })
 

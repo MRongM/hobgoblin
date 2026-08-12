@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
-import { BranchActionDialogs, type RemoveConfirm } from '#/web/components/BranchActionDialogs.tsx'
+import {
+  BranchActionDialogs,
+  type PushConfirm,
+  type RemoveConfirm,
+} from '#/web/components/BranchActionDialogs.tsx'
 import type { ExecResult } from '#/web/types.ts'
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import { getRepositoryPatch, openRepositoryEditor, openRepositoryTerminal } from '#/web/repo-client.ts'
@@ -20,7 +24,7 @@ import {
   deleteBranchNeedsForceConfirm,
   dispatchRepoBranchAction,
   dispatchRepoUiAction,
-  isPushProtected,
+  getBranchPushTarget,
   removeWorktreeNeedsForceConfirm,
 } from '#/web/stores/repos/branch-action-write-paths.ts'
 
@@ -81,7 +85,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     hasPending: hasPendingLocalAction,
     run: runPendingLocalAction,
   } = useAsyncPending<LocalBranchActionItemId>()
-  const pushConfirm = useRetainedDialogState<string>()
+  const pushConfirm = useRetainedDialogState<PushConfirm>()
   const deleteConfirm = useRetainedDialogState<string>()
   const forceDeleteConfirm = useRetainedDialogState<string>()
   const removeConfirm = useRetainedDialogState<RemoveConfirm>()
@@ -149,11 +153,16 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
 
   function push() {
     if (guardBusy()) return
-    if (isPushProtected(branch.name)) {
-      pushConfirm.openWith(branch.name)
+    const target = getBranchPushTarget(branch)
+    if (target.protected) {
+      pushConfirm.openWith({ branch: target.branch, target: target.display })
       return
     }
     void runRepoAction({ kind: 'push', branch: branch.name })
+  }
+
+  function setUpstream(remoteRef: string | null) {
+    return runRepoAction({ kind: 'setBranchUpstream', branch: branch.name, remoteRef })
   }
 
   function openExternalTerminal() {
@@ -298,6 +307,7 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
       checkout,
       pull,
       push,
+      setUpstream,
       openExternalTerminal,
       openEditor,
       openRemote,

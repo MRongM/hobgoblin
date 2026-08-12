@@ -32,6 +32,28 @@ describe('writeWithTerminalAuthority', () => {
     expect(bridge.write).toHaveBeenCalledWith({ sessionId: 'session-1', data: 'ls' })
   })
 
+  test('forwards terminal-emulator-only attribution for a controller', async () => {
+    const bridge = {
+      write: vi.fn(async () => true),
+    }
+
+    await expect(
+      writeWithTerminalAuthority({
+        data: '\x1b[1;1R',
+        userIntent: false,
+        getSessionId: () => 'session-1',
+        getAttachment: () => attachment(),
+        bridge,
+      }),
+    ).resolves.toBe(true)
+
+    expect(bridge.write).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      data: '\x1b[1;1R',
+      userIntent: false,
+    })
+  })
+
   test.each(['viewer', 'unowned'] as const)('does not write for a %s attachment', async (role) => {
     const bridge = {
       write: vi.fn(async () => true),

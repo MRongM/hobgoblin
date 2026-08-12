@@ -133,15 +133,6 @@ class RemoteWorktreeServiceTest {
         )
     }
 
-    @Test
-    fun `remove confirmation says remote server worktree is removed`() {
-        val text = worktreeRemovalConfirmationText(safeWorktree())
-
-        assertTrue(text.contains("remote worktree"))
-        assertTrue(text.contains("SSH server"))
-        assertTrue(text.contains("/srv/app-feature"))
-    }
-
     private fun target(): RemoteTarget = RemoteTarget(
         id = "lee@example.com:22/srv/app",
         alias = "Dev",

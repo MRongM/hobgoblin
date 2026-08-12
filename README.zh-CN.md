@@ -4,12 +4,12 @@
 
 Hobgoblin 不只是一个分支管理工具。它是一个基于 Git worktree 开发方式、配合 AI CLI 使用的高生产力工作区，既可以作为桌面应用使用，也可以通过 server mode 在 Web 浏览器中访问。
 
-它的核心模型很简单：**多项目 + 多 worktree / 多分支 + 多终端**。你可以同时打开多个仓库，把并行分支隔离到不同 worktree，把终端绑定到正确上下文，并在其中运行 Codex、Claude 等 AI CLI，而不会丢失当前 Git 状态。它支持本地仓库、Git SSH 远程地址，也支持通过 SSH config alias 和远程路径打开 SSH 远程仓库。
+它的核心模型很简单：**多项目 + 多 worktree + 多终端**。你可以同时打开多个仓库，把并行分支隔离到不同 worktree，把终端绑定到正确上下文，并在其中运行 Codex、Claude 等 AI CLI，而不会丢失当前 Git 状态。它支持本地仓库、Git SSH 远程地址，也支持通过 SSH config alias 和远程路径打开 SSH 远程仓库。
 
 ## 生产力公式
 
 ```text
-Hobgoblin = 多项目 x 多 worktree / 多分支 x 多终端
+Hobgoblin = 多项目 x 多 worktree x 多终端
 ```
 
 这就是 Hobgoblin 的目标工作流：每个项目、worktree、分支、终端和 AI CLI 会话，都保持在同一个可理解 Git 状态的工作区里。
@@ -75,7 +75,7 @@ Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是�
 
 - **macOS Apple Silicon：** 下载 `arm64.dmg` 文件。
 - **macOS Intel：** 下载 `x64.dmg` 文件。
-- **Windows x64：** 下载 `.exe` 安装程序。
+- **Windows x64 / ARM64：** 下载与设备架构匹配的 `.exe` 安装程序。
 - **Android：** 下载 `android.apk` 文件。该 APK 未签名，安装前必须先完成签名。
 - **Linux Server Mode：** 下载面向部署的源码包 `Hobgoblin-<version>-linux-source.tar.gz`。
 

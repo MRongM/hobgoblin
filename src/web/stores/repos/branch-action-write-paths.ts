@@ -1,9 +1,21 @@
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
+import { parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 import type { ExecResult } from '#/web/types.ts'
 import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repos/branch-action-types.ts'
 
-export function isPushProtected(branch: string): boolean {
-  return PROTECTED_BRANCHES.has(branch)
+export interface BranchPushTarget {
+  branch: string
+  display: string
+  protected: boolean
+}
+
+export function getBranchPushTarget(branch: { name: string; tracking?: string }): BranchPushTarget {
+  const upstream = branch.tracking ? parseRemoteBranchRef(branch.tracking) : null
+  return {
+    branch: branch.name,
+    display: upstream?.fullRef ?? branch.name,
+    protected: PROTECTED_BRANCHES.has(upstream?.branch ?? branch.name),
+  }
 }
 
 export function deleteBranchNeedsForceConfirm(result: ExecResult, force: boolean): boolean {

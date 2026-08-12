@@ -23,10 +23,10 @@ import type {
 } from '#/shared/branch-workspace-dependencies.ts'
 import { postServerJson } from '#/web/lib/server-fetch.ts'
 import type {
-  WorkspacePullExecuteInput,
-  WorkspacePullPlanResult,
-  WorkspacePullResult,
-} from '#/shared/workspace-pull.ts'
+  WorkspaceRecoveryExecuteInput,
+  WorkspaceRecoveryExecuteResult,
+  WorkspaceRecoveryPlanResult,
+} from '#/shared/workspace-recovery.ts'
 
 export async function discoverWorkspace(rootPath: string): Promise<WorkspaceDiscoveryResult> {
   return await postServerJson('/api/workspace/discover', { rootPath })
@@ -36,17 +36,37 @@ export async function restoreWorkspace(rootPath: string): Promise<WorkspaceDisco
   return await postServerJson('/api/workspace/restore', { rootPath })
 }
 
+export async function importWorkspace(rootPath: string, sourceToken?: string): Promise<WorkspaceDiscoveryResult> {
+  return await postServerJson('/api/workspace/import', {
+    rootPath,
+    ...(sourceToken ? { sourceToken } : {}),
+  })
+}
+
 export async function configureWorkspace(rootPath: string, config: WorkspaceConfig): Promise<WorkspaceDiscoveryResult> {
   return await postServerJson('/api/workspace/configure', { rootPath, config })
+}
+
+export async function planWorkspaceRecovery(rootId: string): Promise<WorkspaceRecoveryPlanResult> {
+  return await postServerJson('/api/workspace/recovery/plan', { rootId })
+}
+
+export async function executeWorkspaceRecovery(
+  rootId: string,
+  input: WorkspaceRecoveryExecuteInput,
+): Promise<WorkspaceRecoveryExecuteResult> {
+  return await postServerJson('/api/workspace/recovery/execute', { rootId, input })
+}
+
+export async function abortWorkspaceRecovery(rootId: string): Promise<{ ok: boolean }> {
+  return await postServerJson('/api/workspace/recovery/abort', { rootId })
 }
 
 export async function readBranchWorkspaces(rootId: string, signal?: AbortSignal): Promise<BranchWorkspaceReadResult> {
   return await postServerJson('/api/workspace/branch-workspaces/read', { rootId }, { signal })
 }
 
-export async function cleanupBranchWorkspaceRegistry(
-  rootId: string,
-): Promise<BranchWorkspaceRegistryCleanupResult> {
+export async function cleanupBranchWorkspaceRegistry(rootId: string): Promise<BranchWorkspaceRegistryCleanupResult> {
   return await postServerJson('/api/workspace/branch-workspaces/cleanup', { rootId })
 }
 
@@ -121,19 +141,4 @@ export async function executeBranchWorkspaceGitAction(
 
 export async function abortBranchWorkspaceGitAction(rootId: string): Promise<{ ok: boolean }> {
   return await postServerJson('/api/workspace/branch-workspaces/git-actions/abort', { rootId })
-}
-
-export async function planWorkspacePull(rootId: string): Promise<WorkspacePullPlanResult> {
-  return await postServerJson('/api/workspace/pull/plan', { rootId })
-}
-
-export async function executeWorkspacePull(
-  rootId: string,
-  input: WorkspacePullExecuteInput,
-): Promise<WorkspacePullResult> {
-  return await postServerJson('/api/workspace/pull/execute', { rootId, ...input })
-}
-
-export async function abortWorkspacePull(rootId: string): Promise<{ ok: boolean }> {
-  return await postServerJson('/api/workspace/pull/abort', { rootId })
 }

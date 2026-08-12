@@ -1,7 +1,6 @@
 package com.mrongm.hobgoblin.ui.screens.terminals
 
 import kotlin.math.abs
-import kotlin.math.sqrt
 
 internal data class TerminalCell(
     val column: Int,
@@ -73,18 +72,6 @@ internal fun terminalCellAt(
         column = (unscaledX / safeFontWidth).toInt().coerceIn(0, maxColumn),
         row = bufferRow,
     )
-}
-
-internal fun terminalWithinTouchSlop(
-    downX: Float,
-    downY: Float,
-    currentX: Float,
-    currentY: Float,
-    touchSlopPx: Int,
-): Boolean {
-    val dx = currentX - downX
-    val dy = currentY - downY
-    return sqrt((dx * dx) + (dy * dy)) <= touchSlopPx.toFloat()
 }
 
 internal fun terminalDoubleTapAction(yPx: Float, heightPx: Int): TerminalDoubleTapAction =

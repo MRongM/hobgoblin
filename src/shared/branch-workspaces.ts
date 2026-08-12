@@ -235,7 +235,7 @@ export interface BranchWorkspaceRepositoryPlan {
   worktreeBootstrap: WorktreeBootstrapDecision
   confirmationRequired: boolean
   satisfied: boolean
-  action?: 'create-worktree' | 'remove-worktree' | 'delete-branch' | 'satisfied'
+  action?: 'create-worktree' | 'remove-worktree' | 'remove-entry' | 'delete-branch' | 'satisfied'
   worktreePresent?: boolean
   deleteBranch?: boolean
   deleteUpstream?: boolean

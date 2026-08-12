@@ -53,6 +53,7 @@ const RepoEventActionSchema = v.union([
   v.object({ kind: v.literal('createWorktree'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('createBranch'), branch: v.string(), baseBranch: v.string() }),
   v.object({ kind: v.literal('trackRemoteBranch'), branch: v.string(), remoteRef: v.string() }),
+  v.object({ kind: v.literal('setBranchUpstream'), branch: v.string(), remoteRef: v.nullable(v.string()) }),
   v.object({ kind: v.literal('deleteBranch'), branch: v.string() }),
   v.object({ kind: v.literal('cleanupWorktree'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('removeWorktree'), branch: v.string(), worktreePath: v.string(), alsoDeleteBranch: v.boolean() }),

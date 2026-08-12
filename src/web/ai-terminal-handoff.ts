@@ -1,4 +1,4 @@
-import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
+import type { CommitMessageProvider } from '#/shared/commit-message-ai.ts'
 import type {
   BranchWorkspaceGitActionKind,
   BranchWorkspaceGitActionStep,
@@ -30,12 +30,6 @@ export interface BranchWorkspaceBatchErrorAiFailure {
   worktreePath: string
   reason?: GitFailureReason
   conflictWorktree?: GitConflictWorktree
-}
-
-export function preferredAiHandoffProvider(availability: CommitMessageProviderAvailability): CommitMessageProvider {
-  if (availability.codex) return 'codex'
-  if (availability.claude) return 'claude'
-  return 'codex'
 }
 
 export function buildAiHandoffCommand(provider: CommitMessageProvider, prompt: string): string {

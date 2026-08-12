@@ -3,7 +3,6 @@ import {
   buildAiHandoffCommand,
   buildBranchWorkspaceBatchErrorAiCommand,
   buildMergeConflictAiCommand,
-  preferredAiHandoffProvider,
   prefillAiTerminalCommand,
   prefillAiTerminalTargetCommand,
 } from '#/web/ai-terminal-handoff.ts'
@@ -40,12 +39,6 @@ beforeEach(() => {
 })
 
 describe('AI terminal handoff', () => {
-  test('prefers available providers in deterministic order', () => {
-    expect(preferredAiHandoffProvider({ codex: true, claude: true })).toBe('codex')
-    expect(preferredAiHandoffProvider({ codex: false, claude: true })).toBe('claude')
-    expect(preferredAiHandoffProvider({ codex: false, claude: false })).toBe('codex')
-  })
-
   test('builds reviewable provider commands without executing them', () => {
     expect(buildAiHandoffCommand('codex', 'Inspect "deps".')).toBe(
       'codex exec --skip-git-repo-check "Inspect \\"deps\\"."',

@@ -5,6 +5,7 @@ import type {
   RepositoryBranchMergeDestinationPlan,
   RepositoryBranchMergeOutPlan,
 } from '#/shared/repository-branch-merge.ts'
+import type { RepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 
 const REPO_ID = '/workspace/repo'
 const SOURCE_PATH = '/workspace/feature'
@@ -13,11 +14,24 @@ const TOKEN = 'sha256:plan'
 
 function destination(fields: Partial<RepositoryBranchMergeDestinationPlan> = {}): RepositoryBranchMergeDestinationPlan {
   return {
-    branch: 'main',
+    destination: { kind: 'local', branch: 'main' },
     head: 'main-head',
     ready: true,
     worktreePath: DESTINATION_PATH,
     requiresTemporaryWorktree: false,
+    pullMergePushReady: true,
+    ...fields,
+  }
+}
+
+function remoteDestination(
+  fields: Partial<RepositoryBranchMergeDestinationPlan> = {},
+): RepositoryBranchMergeDestinationPlan {
+  return {
+    destination: { kind: 'remote', remoteRef: 'origin/release/v2' },
+    head: 'remote-head',
+    ready: true,
+    requiresTemporaryWorktree: true,
     pullMergePushReady: true,
     ...fields,
   }
@@ -39,13 +53,16 @@ function plan(
   } satisfies RepositoryBranchMergeOutPlan
 }
 
-function input(mode: 'merge' | 'pull-merge-push' = 'merge') {
+function input(
+  mode: 'merge' | 'pull-merge-push' = 'merge',
+  selectedDestination: RepositoryMergeBranchSelection = { kind: 'local', branch: 'main' },
+) {
   return {
     repoId: REPO_ID,
     planToken: TOKEN,
     sourceBranch: 'feature/source',
     sourceWorktreePath: SOURCE_PATH,
-    destinationBranch: 'main',
+    destination: selectedDestination,
     mode,
   }
 }
@@ -63,6 +80,8 @@ function dependencies(
     pushResult?: { ok: boolean; message: string }
     createResult?: { ok: boolean; message: string; repoChanged?: boolean }
     cleanupResult?: { ok: boolean; message: string }
+    fetchRemoteResult?: { ok: boolean; message: string }
+    pushWorktreeHeadResult?: { ok: boolean; message: string }
   } = {},
 ) {
   const calls: string[] = []
@@ -82,6 +101,14 @@ function dependencies(
     push: vi.fn(async () => {
       calls.push('push')
       return options.pushResult ?? success()
+    }),
+    fetchRemote: vi.fn(async () => {
+      calls.push('fetch-remote')
+      return options.fetchRemoteResult ?? success()
+    }),
+    pushWorktreeHead: vi.fn(async () => {
+      calls.push('push-head')
+      return options.pushWorktreeHeadResult ?? success()
     }),
     createWorktree: vi.fn(async () => {
       calls.push('create')
@@ -271,5 +298,137 @@ describe('repository branch merge-out writes', () => {
       undefined,
       undefined,
     )
+  })
+
+  test('runs the remote destination pipeline through fetch, detached worktree, exact push, and cleanup', async () => {
+    const selected = remoteDestination()
+    const deps = dependencies({ destinationPlan: selected })
+    const remote = selected.destination
+    if (remote.kind !== 'remote') throw new Error('expected remote destination')
+    const expectedPath = repositoryTemporaryWorktreePath(REPO_ID, 'merge-out', TOKEN, 'remote:origin/release/v2')
+
+    await expect(
+      executeRepositoryBranchMergeOut(input('pull-merge-push', remote), deps),
+    ).resolves.toMatchObject({ ok: true })
+
+    expect(deps.calls).toEqual(['fetch-remote', 'create', 'merge', 'push-head', 'cleanup'])
+    expect(deps.fetchRemote).toHaveBeenCalledWith(REPO_ID, 'origin', undefined, undefined, {
+      publishInvalidation: false,
+    })
+    expect(deps.createWorktree).toHaveBeenCalledWith(
+      REPO_ID,
+      {
+        worktreePath: expectedPath,
+        mode: { kind: 'detached', ref: 'refs/remotes/origin/release/v2' },
+        syncBeforeCreate: false,
+      },
+      { kind: 'skip' },
+      undefined,
+      undefined,
+    )
+    expect(deps.merge).toHaveBeenCalledWith(
+      REPO_ID,
+      expectedPath,
+      'refs/heads/feature/source',
+      undefined,
+      undefined,
+    )
+    expect(deps.pushWorktreeHead).toHaveBeenCalledWith(
+      REPO_ID,
+      expectedPath,
+      'origin/release/v2',
+      undefined,
+      undefined,
+    )
+    expect(deps.removeWorktree).toHaveBeenCalledWith(
+      REPO_ID,
+      {
+        branch: 'release/v2',
+        worktreePath: expectedPath,
+        alsoDeleteBranch: false,
+        forceRemoveWorktree: true,
+      },
+      undefined,
+      undefined,
+    )
+  })
+
+  test('rejects merge-only mode for a remote destination before Git writes', async () => {
+    const selected = remoteDestination()
+    const deps = dependencies({ destinationPlan: selected })
+
+    await expect(executeRepositoryBranchMergeOut(input('merge', selected.destination), deps)).resolves.toEqual({
+      ok: false,
+      message: 'error.merge-out-remote-requires-push',
+    })
+    expect(deps.calls).toEqual([])
+  })
+
+  test('stops a remote destination before worktree creation when exact fetch fails', async () => {
+    const selected = remoteDestination()
+    const deps = dependencies({ destinationPlan: selected, fetchRemoteResult: { ok: false, message: 'offline' } })
+
+    await expect(
+      executeRepositoryBranchMergeOut(input('pull-merge-push', selected.destination), deps),
+    ).resolves.toEqual({ ok: false, message: 'offline' })
+    expect(deps.calls).toEqual(['fetch-remote'])
+  })
+
+  test.each([
+    ['deleted remote destination', plan({ destinations: [] }), 'error.merge-out-destination-changed'],
+    ['changed source', plan({ destination: remoteDestination(), sourceHead: 'changed' }), 'error.merge-out-source-changed'],
+    [
+      'changed remote head',
+      plan({ destination: remoteDestination({ head: 'changed-remote-head' }) }),
+      'error.merge-out-destination-changed',
+    ],
+  ])('stops remote execution after fetch when %s', async (_name, refreshedPlan, message) => {
+    const selected = remoteDestination()
+    const deps = dependencies({ plans: [plan({ destination: selected }), refreshedPlan] })
+
+    await expect(
+      executeRepositoryBranchMergeOut(input('pull-merge-push', selected.destination), deps),
+    ).resolves.toEqual({ ok: false, message })
+    expect(deps.calls).toEqual(['fetch-remote'])
+  })
+
+  test.each([
+    ['merge conflict', { mergeResult: { ok: false, message: 'conflict', reason: 'merge-conflict' as const } }],
+    ['non-fast-forward push', { pushWorktreeHeadResult: { ok: false, message: 'non-fast-forward' } }],
+  ])('cleans a remote detached worktree after %s', async (_name, failure) => {
+    const selected = remoteDestination()
+    const deps = dependencies({ destinationPlan: selected, ...failure })
+
+    await expect(
+      executeRepositoryBranchMergeOut(input('pull-merge-push', selected.destination), deps),
+    ).resolves.toMatchObject({ ok: false })
+    expect(deps.calls.at(-1)).toBe('cleanup')
+  })
+
+  test('cleans a remote detached worktree after cancellation', async () => {
+    const selected = remoteDestination()
+    const deps = dependencies({ destinationPlan: selected })
+    deps.merge.mockImplementationOnce(async () => {
+      deps.calls.push('merge')
+      throw new DOMException('cancelled', 'AbortError')
+    })
+
+    await expect(
+      executeRepositoryBranchMergeOut(input('pull-merge-push', selected.destination), deps),
+    ).resolves.toEqual({ ok: false, message: 'cancelled' })
+    expect(deps.calls).toEqual(['fetch-remote', 'create', 'merge', 'cleanup'])
+  })
+
+  test('surfaces remote detached cleanup failure', async () => {
+    const selected = remoteDestination()
+    const deps = dependencies({
+      destinationPlan: selected,
+      pushWorktreeHeadResult: { ok: false, message: 'non-fast-forward' },
+      cleanupResult: { ok: false, message: 'cleanup failed' },
+    })
+
+    await expect(
+      executeRepositoryBranchMergeOut(input('pull-merge-push', selected.destination), deps),
+    ).resolves.toEqual({ ok: false, message: 'cleanup failed' })
   })
 })

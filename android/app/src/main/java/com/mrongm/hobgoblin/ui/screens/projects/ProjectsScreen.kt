@@ -105,9 +105,6 @@ internal fun projectTerminalTarget(repository: RemoteRepositoryProfile): Project
         terminalWorkspacePath = repository.remotePath,
     )
 
-internal fun projectActionLabelResources(): List<Int> =
-    listOf(R.string.common_open, R.string.common_terminals, R.string.common_delete)
-
 internal fun emptyProjectsDescriptionResource(): Int = R.string.projects_empty_description
 
 internal fun projectsForHost(
@@ -122,9 +119,6 @@ internal fun projectsForHost(
 internal fun filteredProjectsDescriptionResource(): Int = R.string.projects_filtered_empty_description
 
 internal fun projectReorderAvailable(hostFilterId: String?): Boolean = hostFilterId == null
-
-internal fun localProjectReorderIds(projects: List<RemoteRepositoryProfile>): List<String> =
-    projects.map(RemoteRepositoryProfile::id)
 
 internal fun projectDisplayOrder(
     repositories: List<RemoteRepositoryProfile>,

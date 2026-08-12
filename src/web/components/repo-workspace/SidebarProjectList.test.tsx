@@ -18,6 +18,7 @@ import type {
 } from '#/web/components/terminal/types.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 
 type TestDragEndEvent = { active: { id: string }; over: { id: string } | null }
 type CloseTerminalMock = ReturnType<typeof vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>>
@@ -62,8 +63,18 @@ const hostTmuxInventoryState = vi.hoisted(() => ({
   visible: true,
 }))
 
+const workspaceRecoveryState = vi.hoisted(() => ({
+  calls: [] as Array<{ rootId: string; workspace: unknown; disabled?: boolean }>,
+  onSelect: vi.fn(),
+  visible: false,
+}))
+
 const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
+}))
+
+const branchWorkspaceQueryState = vi.hoisted(() => ({
+  resultByRoot: {} as Record<string, BranchWorkspaceReadResult | undefined>,
 }))
 
 const rescanWorkspace = vi.fn(async (_rootId: string) => {})
@@ -119,6 +130,15 @@ vi.mock('@dnd-kit/sortable', async () => {
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, params?: Record<string, string>) =>
     key === 'repo-tabs.close-named' ? `Close ${params?.name}` : key,
+}))
+
+vi.mock('#/web/branch-workspace-queries.ts', () => ({
+  useBranchWorkspaceQuery: (rootId: string) => ({
+    data: branchWorkspaceQueryState.resultByRoot[rootId],
+    isPending: false,
+    isFetching: false,
+    refresh: vi.fn(),
+  }),
 }))
 
 vi.mock('#/web/hooks/useProjectExternalOpenActions.ts', () => ({
@@ -197,6 +217,25 @@ vi.mock('#/web/hooks/useHostTmuxInventory.tsx', () => ({
         onSelect: hostTmuxInventoryState.onSelect,
       },
       dialog: <div data-testid="project-host-tmux-inventory-dialog" />,
+    }
+  },
+}))
+
+vi.mock('#/web/hooks/useWorkspaceConfigurationRecovery.tsx', () => ({
+  useWorkspaceConfigurationRecovery: (options: { rootId: string; workspace: unknown; disabled?: boolean }) => {
+    workspaceRecoveryState.calls.push(options)
+    return {
+      visible: workspaceRecoveryState.visible && !!options.workspace,
+      contextAction: {
+        label: 'workspace.recovery.action',
+        icon: null,
+        disabled: false,
+        busy: false,
+        destructive: true,
+        separated: true,
+        onSelect: workspaceRecoveryState.onSelect,
+      },
+      dialog: <div data-testid="workspace-recovery-dialog" />,
     }
   },
 }))
@@ -294,8 +333,12 @@ beforeEach(() => {
   hostTmuxInventoryState.calls = []
   hostTmuxInventoryState.onSelect.mockReset()
   hostTmuxInventoryState.visible = true
+  workspaceRecoveryState.calls = []
+  workspaceRecoveryState.onSelect.mockReset()
+  workspaceRecoveryState.visible = false
   repoClientMocks.getRepositoryRemoteBranches.mockReset()
   repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
+  branchWorkspaceQueryState.resultByRoot = {}
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -327,9 +370,10 @@ function renderList(
   const onToggleFileArea = vi.fn()
   const closeTerminal =
     fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
+  const terminalCommands = terminalCommandContext(closeTerminal)
   act(() => {
     root!.render(
-      <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
+      <TerminalSessionContext.Provider value={terminalCommands}>
         <TerminalSessionReadContext.Provider value={terminalReadContext(fixture.snapshots ?? new Map())}>
           <SidebarProjectList
             id="project-list"
@@ -344,7 +388,7 @@ function renderList(
       </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onClose, onReorder, onToggleFileArea, closeTerminal }
+  return { onActivate, onClose, onReorder, onToggleFileArea, closeTerminal, terminalCommands }
 }
 
 describe('SidebarProjectList', () => {
@@ -466,6 +510,64 @@ describe('SidebarProjectList', () => {
     act(() => firstRow?.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 
     expect(onActivate).toHaveBeenCalledWith('/repo-a')
+  })
+
+  test('routes a configured workspace project click to its child workspace terminal', () => {
+    const rootId = '/repo-b'
+    const branchPath = '/repo-b/feature-one'
+    const branchKey = `${rootId}\0${branchPath}`
+    const terminalKey = `${branchKey}\0terminal-1`
+    const activateBranchWorkspace = vi.fn()
+    const setDetailCollapsed = vi.fn()
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        [rootId]: {
+          rootId,
+          repositoryIds: [],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        ...state.workspaceActiveContextByRoot,
+        [rootId]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+      activateBranchWorkspace,
+      setDetailCollapsed,
+    }))
+    branchWorkspaceQueryState.resultByRoot[rootId] = {
+      ok: true,
+      rootId,
+      items: [branchWorkspace(rootId, 'branch-1', branchPath)],
+      auxiliaryCandidates: [],
+    }
+    const { onActivate, terminalCommands } = renderList({
+      projects: [
+        {
+          id: rootId,
+          name: 'Workspace',
+          unavailable: false,
+          isGitRepo: false,
+          changeCount: 0,
+          terminalWorktreeKeys: [],
+          branchWorkspaceRootId: rootId,
+        },
+      ],
+      snapshots: new Map([[branchKey, worktreeSnapshot(branchKey, [terminalSession(branchKey, 1)])]]),
+    })
+
+    act(() => projectRow(rootId).querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')?.click())
+
+    expect(onActivate).toHaveBeenCalledWith(rootId)
+    expect(activateBranchWorkspace).toHaveBeenCalledWith(rootId, 'branch-1')
+    expect(terminalCommands.selectTerminal).toHaveBeenCalledWith(branchKey, terminalKey)
+    expect(terminalCommands.focusTerminal).toHaveBeenCalledWith(terminalKey)
+    expect(setDetailCollapsed).toHaveBeenCalledWith(false)
   })
 
   test('requests a file area toggle from a project row double-click', () => {
@@ -608,6 +710,50 @@ describe('SidebarProjectList', () => {
     expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain(
       'workspace.detect-repositories',
     )
+  })
+
+  test('offers configuration recovery only from an anomalous project context menu', async () => {
+    workspaceRecoveryState.visible = true
+    useReposStore.setState((state) => ({
+      workspaceProjects: {
+        ...state.workspaceProjects,
+        '/repo-b': {
+          rootId: '/repo-b',
+          repositoryIds: ['/repo-b/missing'],
+          candidates: [{ id: '/repo-b/missing', name: 'missing', selected: true, available: false }],
+          configured: true,
+          configuredRepositoryNames: ['missing'],
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    }))
+    const { onActivate, onClose } = renderList()
+
+    const moreLabels = (await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())
+    expect(moreLabels).not.toContain('workspace.recovery.action')
+    const contextItems = await openContextMenu(projectRow('/repo-b'))
+    const recovery = contextItems.find((item) => item.textContent?.includes('workspace.recovery.action'))
+    expect(recovery?.getAttribute('data-variant')).toBe('destructive')
+
+    await act(async () => {
+      recovery?.click()
+      await Promise.resolve()
+    })
+
+    expect(workspaceRecoveryState.onSelect).toHaveBeenCalledTimes(1)
+    expect(onActivate).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(workspaceRecoveryState.calls).toEqual([
+      { rootId: '/repo-a', workspace: undefined, disabled: false },
+      {
+        rootId: '/repo-b',
+        workspace: expect.objectContaining({ configurationError: null }),
+        disabled: false,
+      },
+    ])
   })
 
   test('offers destructive tmux cleanup from More without activating or closing the project', async () => {
@@ -899,5 +1045,20 @@ function terminalSession(worktreeTerminalKey: string, index: number): TerminalSe
     phase: 'open',
     selected: index === 1,
     hasBell: false,
+  }
+}
+
+function branchWorkspace(rootId: string, id: string, path: string): BranchWorkspaceSnapshot {
+  return {
+    id,
+    rootId,
+    branch: 'feature/one',
+    directoryName: 'feature-one',
+    path,
+    state: { kind: 'ready' },
+    available: true,
+    issues: [],
+    repositories: [],
+    auxiliaryEntries: [],
   }
 }
