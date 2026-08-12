@@ -15,7 +15,9 @@ interface GetWorktreesOptions {
 
 export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): Promise<WorktreeInfo[]> {
   try {
-    const output = await git(cwd, ['worktree', 'list', '--porcelain', '--expire', 'now'], { signal: options?.signal })
+    const output = await git(cwd, ['worktree', 'list', '--porcelain', '-z', '--expire', 'now'], {
+      signal: options?.signal,
+    })
     const worktrees = parseWorktrees(output)
     if (options?.includeStatus === false) return worktrees
 

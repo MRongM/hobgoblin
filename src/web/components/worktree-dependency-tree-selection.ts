@@ -28,7 +28,7 @@ export function selectWorktreeDependency(
   }
   return [
     ...selections.filter((selection) => !isWorktreeDependencyDescendant(selection.path, path)),
-    { path, mode: 'symlink' },
+    { path, mode: 'copy' },
   ]
 }
 

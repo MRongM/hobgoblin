@@ -541,6 +541,43 @@ function BatchCommitContent({
   )
 }
 
+function BatchMergeSelectionSummary({
+  selectableRepositories,
+  selectedRepositories,
+  disabled,
+  onSelectedRepositoriesChange,
+}: {
+  selectableRepositories: string[]
+  selectedRepositories: string[]
+  disabled: boolean
+  onSelectedRepositoriesChange: (repositoryNames: string[]) => void
+}) {
+  const t = useT()
+  const selected = new Set(selectedRepositories)
+  const selectedCount = selectableRepositories.filter((repositoryName) => selected.has(repositoryName)).length
+  const allSelected = selectableRepositories.length > 0 && selectedCount === selectableRepositories.length
+  const checked = selectedCount === 0 ? false : allSelected ? true : 'indeterminate'
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <Checkbox
+        data-merge-select-all
+        checked={checked}
+        disabled={disabled || selectableRepositories.length === 0}
+        aria-label={t('workspace.branch-workspace.git-action.select-all-members')}
+        onCheckedChange={() => onSelectedRepositoriesChange(allSelected ? [] : selectableRepositories)}
+      />
+      <span>{t('workspace.branch-workspace.git-action.select-all-members')}</span>
+      <span className="ml-auto">
+        {t('workspace.branch-workspace.git-action.selected-count', {
+          selected: selectedCount,
+          total: selectableRepositories.length,
+        })}
+      </span>
+    </div>
+  )
+}
+
 function BranchWorkspaceBatchMergeInDialog({
   plan,
   result,
@@ -572,6 +609,10 @@ function BranchWorkspaceBatchMergeInDialog({
 }) {
   const t = useT()
   const locked = pending || startedMode !== null
+  const selectableRepositories =
+    plan?.members
+      .filter((member) => member.ready && member.sourceBranches.length > 0)
+      .map((member) => member.repositoryName) ?? []
   const selectedMembers = plan?.members.filter((member) => selectedRepositories.includes(member.repositoryName)) ?? []
   const hasSelection = selectedMembers.length > 0
   const selectedSources: BranchWorkspaceBatchMergeInSourceInput[] = selectedMembers.flatMap((member) => {
@@ -637,14 +678,14 @@ function BranchWorkspaceBatchMergeInDialog({
                   })}
                 </span>
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t('workspace.branch-workspace.git-action.selected-count', {
-                  selected: selectedMembers.length,
-                  total: plan.members.filter((member) => member.ready && member.sourceBranches.length > 0).length,
-                })}
-              </p>
-            )}
+            ) : null}
+
+            <BatchMergeSelectionSummary
+              selectableRepositories={selectableRepositories}
+              selectedRepositories={selectedRepositories}
+              disabled={locked}
+              onSelectedRepositoriesChange={onSelectedRepositoriesChange}
+            />
 
             <div className="overflow-hidden rounded-md border border-separator">
               {plan.members.map((member, index) => {
@@ -854,6 +895,10 @@ function BranchWorkspaceBatchMergeOutDialog({
 }) {
   const t = useT()
   const locked = pending || startedMode !== null
+  const selectableRepositories =
+    plan?.members
+      .filter((member) => member.ready && member.destinationBranches.some((destination) => destination.ready))
+      .map((member) => member.repositoryName) ?? []
   const selectedMembers = plan?.members.filter((member) => selectedRepositories.includes(member.repositoryName)) ?? []
   const hasSelection = selectedMembers.length > 0
   const selectedTargets: BranchWorkspaceBatchMergeOutTargetInput[] = selectedMembers.flatMap((member) => {
@@ -938,16 +983,14 @@ function BranchWorkspaceBatchMergeOutDialog({
                   })}
                 </span>
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t('workspace.branch-workspace.git-action.selected-count', {
-                  selected: selectedMembers.length,
-                  total: plan.members.filter(
-                    (member) => member.ready && member.destinationBranches.some((destination) => destination.ready),
-                  ).length,
-                })}
-              </p>
-            )}
+            ) : null}
+
+            <BatchMergeSelectionSummary
+              selectableRepositories={selectableRepositories}
+              selectedRepositories={selectedRepositories}
+              disabled={locked}
+              onSelectedRepositoriesChange={onSelectedRepositoriesChange}
+            />
 
             <div className="overflow-hidden rounded-md border border-separator">
               {plan.members.map((member, index) => {

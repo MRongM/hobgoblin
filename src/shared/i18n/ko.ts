@@ -274,6 +274,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-merge-out': '일괄 내보내기 병합',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     '선택한 각 멤버 워크트리의 로컬 대상 브랜치를 선택한 뒤 저장소 순서대로 병합합니다.',
+  'workspace.branch-workspace.git-action.select-all-members': '사용 가능한 모든 멤버 선택',
   'workspace.branch-workspace.git-action.selected-count': '멤버 {selected}/{total}개 선택됨',
   'workspace.branch-workspace.git-action.select-member': '{repository} 멤버 워크트리를 일괄 병합 대상으로 선택',
   'workspace.branch-workspace.git-action.not-selected': '선택 안 함',

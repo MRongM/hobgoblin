@@ -684,7 +684,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(mocks.getRepositoryFileTree).toHaveBeenCalledTimes(1)
   })
 
-  test('loads and submits repository dependencies from the selected base worktree', async () => {
+  test('loads and submits repository dependencies with default copy mode from the selected base worktree', async () => {
     mocks.getRepositoryFileTree.mockResolvedValueOnce({
       ok: true,
       worktreePath: '/workspace/api-main',
@@ -725,7 +725,7 @@ describe('BranchWorkspaceDialog', () => {
           worktreeBootstrap: {
             kind: 'materialize',
             sourceWorktreePath: '/workspace/api-main',
-            selections: [{ path: 'node_modules', mode: 'symlink' }],
+            selections: [{ path: 'node_modules', mode: 'copy' }],
           },
         },
       ],

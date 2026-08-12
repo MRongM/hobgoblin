@@ -289,10 +289,11 @@ export function parseStatus(output: string): StatusEntry[] {
 export function parseWorktrees(output: string): WorktreeInfo[] {
   if (!output) return []
   const worktrees: WorktreeInfo[] = []
-  const blocks = output.split('\n\n').filter(Boolean)
+  const nulDelimited = output.includes('\0')
+  const blocks = (nulDelimited ? output.split('\0\0') : output.split(/\r?\n\r?\n/u)).filter(Boolean)
 
   for (const block of blocks) {
-    const lines = block.split('\n').filter(Boolean)
+    const lines = (nulDelimited ? block.split('\0') : block.split(/\r?\n/u)).filter(Boolean)
     let path = ''
     let branch: string | undefined
     let head: string | undefined

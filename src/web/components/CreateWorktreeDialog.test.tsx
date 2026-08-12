@@ -499,7 +499,7 @@ describe('CreateWorktreeDialog', () => {
     expect(button('button[type="submit"]').disabled).toBe(false)
   })
 
-  test('submits a selected nested dependency with its exact source and mode', async () => {
+  test('submits a selected nested dependency with its exact source and default copy mode', async () => {
     const onCreate = vi.fn(async () => {})
     const source = branchSource('feature/base', '/tmp/repo-base')
     repoClientMocks.getRepositoryFileTree.mockImplementation(
@@ -554,7 +554,6 @@ describe('CreateWorktreeDialog', () => {
       expect(document.querySelector('[data-worktree-dependency-path="backend/.venv"]')).not.toBeNull()
     })
     click('[data-worktree-dependency-path="backend/.venv"]')
-    changeNativeSelect('[data-worktree-dependency-mode="backend/.venv"]', 'copy')
     setInputValue('#cwt-branch', 'feature/new')
     click('button[type="submit"]')
 
@@ -780,14 +779,6 @@ function click(selector: string) {
   act(() => {
     element.click()
   })
-}
-
-function changeNativeSelect(selector: string, value: string) {
-  const element = document.body.querySelector(selector)
-  if (!(element instanceof HTMLSelectElement)) throw new Error(`Missing select: ${selector}`)
-  const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
-  descriptor?.set?.call(element, value)
-  act(() => element.dispatchEvent(new Event('change', { bubbles: true })))
 }
 
 function openSelect(selector: string) {

@@ -284,6 +284,7 @@ export const en = {
   'workspace.branch-workspace.git-action.batch-merge-out': 'Batch merge out',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     'Select member worktrees and a local destination branch for each, then merge each member target out in repository order.',
+  'workspace.branch-workspace.git-action.select-all-members': 'Select all available members',
   'workspace.branch-workspace.git-action.selected-count': '{selected} of {total} members selected',
   'workspace.branch-workspace.git-action.select-member': 'Select {repository} for this batch',
   'workspace.branch-workspace.git-action.not-selected': 'not selected',

@@ -281,6 +281,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-merge-out': '一括送り出し',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     '選択した各メンバー worktree のローカルマージ先ブランチを選び、リポジトリ順にマージします。',
+  'workspace.branch-workspace.git-action.select-all-members': '利用可能なメンバーをすべて選択',
   'workspace.branch-workspace.git-action.selected-count': '{selected}/{total} 件のメンバーを選択',
   'workspace.branch-workspace.git-action.select-member': '{repository} を一括マージ対象に選択',
   'workspace.branch-workspace.git-action.not-selected': '未選択',

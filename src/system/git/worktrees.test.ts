@@ -36,7 +36,7 @@ describe('worktree git operations', () => {
 
     await getWorktrees('/tmp/repo', { includeStatus: false, signal })
 
-    expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['worktree', 'list', '--porcelain', '--expire', 'now'], {
+    expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['worktree', 'list', '--porcelain', '-z', '--expire', 'now'], {
       signal,
     })
   })

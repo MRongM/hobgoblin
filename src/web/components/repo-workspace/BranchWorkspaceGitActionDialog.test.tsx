@@ -649,6 +649,29 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(mergeCheckbox('docs')?.disabled).toBe(true)
   })
 
+  test.each([
+    ['batch-merge-in', mergeInPlan],
+    ['batch-merge-out', mergeOutPlan],
+  ] as const)('supports tri-state select-all for %s eligible members', async (kind, createPlan) => {
+    render({ kind, plan: createPlan() })
+
+    const selectAll = mergeSelectAllCheckbox()
+    expect(selectAll?.dataset.state).toBe('checked')
+    expect(mergeCheckbox('docs')?.disabled).toBe(true)
+
+    await act(async () => mergeCheckbox('web')?.click())
+    expect(selectAll?.dataset.state).toBe('indeterminate')
+
+    await act(async () => selectAll?.click())
+    expect(mergeCheckbox('api')?.dataset.state).toBe('checked')
+    expect(mergeCheckbox('web')?.dataset.state).toBe('checked')
+    expect(mergeCheckbox('docs')?.dataset.state).toBe('unchecked')
+
+    await act(async () => selectAll?.click())
+    expect(mergeCheckbox('api')?.dataset.state).toBe('unchecked')
+    expect(mergeCheckbox('web')?.dataset.state).toBe('unchecked')
+  })
+
   test('requires a destination for every selected member and computes readiness from those destinations', async () => {
     render({ kind: 'batch-merge-out', plan: mergeOutPlan() })
     const local = document.querySelector<HTMLButtonElement>('[data-action="merge"]')
@@ -760,6 +783,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     const progress = document.querySelector<HTMLElement>('[data-testid="branch-workspace-batch-merge-progress"]')
     expect(progress?.dataset.completed).toBe('1')
     expect(progress?.dataset.total).toBe('2')
+    expect(mergeSelectAllCheckbox()?.disabled).toBe(true)
     expect(mergeCheckbox('api')?.disabled).toBe(true)
     expect(document.querySelector<HTMLElement>('[data-merge-step="api:merge"]')?.dataset.status).toBe('complete')
     expect(document.querySelector<HTMLElement>('[data-merge-step="web:merge"]')?.dataset.status).toBe('active')
@@ -1033,6 +1057,10 @@ function buttonWithExactText(text: string): HTMLButtonElement | null {
 
 function mergeCheckbox(repositoryName: string): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>(`[data-merge-repository="${repositoryName}"]`)
+}
+
+function mergeSelectAllCheckbox(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('[data-merge-select-all]')
 }
 
 async function selectMergeDestination(

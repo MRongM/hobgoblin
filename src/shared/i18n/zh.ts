@@ -261,6 +261,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-merge-out': '批量合出',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     '为每个选中的成员工作树选择本地目标分支，再按仓库顺序逐个合出。',
+  'workspace.branch-workspace.git-action.select-all-members': '选择全部可用成员',
   'workspace.branch-workspace.git-action.selected-count': '已选择 {selected}/{total} 个成员',
   'workspace.branch-workspace.git-action.select-member': '选择成员工作树 {repository}',
   'workspace.branch-workspace.git-action.not-selected': '未选择',
