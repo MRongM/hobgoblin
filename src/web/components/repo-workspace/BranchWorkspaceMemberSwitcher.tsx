@@ -6,12 +6,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '#/web/components/ui/dropdown-menu.tsx'
+import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 export interface BranchWorkspaceMemberOption {
   repositoryName: string
   available: boolean
+  changeCount: number
 }
 
 export function BranchWorkspaceMemberSwitcher({
@@ -41,6 +43,12 @@ export function BranchWorkspaceMemberSwitcher({
         >
           <FolderGit2 className="size-4 shrink-0" aria-hidden="true" />
           <span className="max-w-48 min-w-0 truncate text-xs font-medium">{selectedRepositoryName}</span>
+          {selectedMember.changeCount > 0 ? (
+            <ChangeCountBadge
+              count={selectedMember.changeCount}
+              testId="branch-workspace-selected-member-change-count"
+            />
+          ) : null}
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
@@ -61,9 +69,28 @@ export function BranchWorkspaceMemberSwitcher({
             {!member.available ? (
               <span className="text-[10px] text-danger">{t('workspace.repository-unavailable')}</span>
             ) : null}
+            {member.changeCount > 0 ? (
+              <ChangeCountBadge count={member.changeCount} testId="branch-workspace-member-change-count" />
+            ) : null}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function ChangeCountBadge({ count, testId }: { count: number; testId: string }) {
+  const t = useT()
+  const label = t('branch-status.worktree-dirty', { n: count })
+  return (
+    <Badge
+      data-testid={testId}
+      variant="attention"
+      aria-label={label}
+      title={label}
+      className="ml-auto font-mono font-normal tabular-nums"
+    >
+      {count}
+    </Badge>
   )
 }

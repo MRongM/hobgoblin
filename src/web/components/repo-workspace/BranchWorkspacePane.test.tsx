@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchWorkspacePane } from '#/web/components/repo-workspace/BranchWorkspacePane.tsx'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
@@ -287,14 +288,20 @@ describe('BranchWorkspacePane', () => {
   })
 
   test('offers status, files, changes, history, local, and remote for the parent file area', () => {
-    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+    const targetWorkspace = {
+      ...workspace(),
+      repositories: [repositoryMember('api'), repositoryMember('web')],
+    }
+    seedMemberChangeCounts()
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={targetWorkspace} layout="left-right" />))
 
     const tabs = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
     )
     expect(tabs.every((tab) => !tab.draggable)).toBe(true)
     expect(container.querySelector('[data-testid="branch-workspace-file-area-toolbar"]')).not.toBeNull()
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes5'])
+    expect(container.querySelector('[data-testid="branch-workspace-changes-count-badge"]')?.textContent).toBe('5')
     expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false'])
 
     act(() =>
@@ -306,7 +313,7 @@ describe('BranchWorkspacePane', () => {
     expect(expandedTabs.map((tab) => tab.textContent)).toEqual([
       'tab.status',
       'file-tree.title',
-      'tab.changes',
+      'tab.changes5',
       'tab.history',
       'tab.local',
       'tab.remote-branches',
@@ -668,9 +675,7 @@ describe('BranchWorkspacePane', () => {
       selectedBranch: 'feature/auth',
     })
     const initialWorkspace = { ...workspace(), repositories: [repositoryMember()] }
-    act(() =>
-      root.render(<BranchWorkspacePane rootId="/workspace" workspace={initialWorkspace} layout="left-right" />),
-    )
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={initialWorkspace} layout="left-right" />))
     expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
 
     act(() =>
@@ -806,6 +811,49 @@ function fileAreaSplitPane(): Element | null {
   return (
     container.querySelector('[data-testid="branch-workspace-file-tree"]')?.closest('[data-testid="split-pane"]') ?? null
   )
+}
+
+function seedMemberChangeCounts() {
+  const current = useReposStore.getState()
+  const memberRepo = (repositoryName: string, changeCount: number) =>
+    replaceRepo(emptyRepo(`/workspace/${repositoryName}`, repositoryName), (repo) => {
+      const worktreePath = `/workspace/goblin-feature-auth/${repositoryName}`
+      repo.data.branches = [createRepoBranch('feature/auth', { worktree: { path: worktreePath } })]
+      repo.data.status = [
+        {
+          path: worktreePath,
+          branch: 'feature/auth',
+          isMain: false,
+          entries: Array.from({ length: changeCount }, (_, index) => ({
+            x: 'M',
+            y: ' ',
+            path: `src/${repositoryName}-${index}.ts`,
+          })),
+        },
+      ]
+    })
+  useReposStore.setState({
+    repos: {
+      ...current.repos,
+      '/workspace/api': memberRepo('api', 2),
+      '/workspace/web': memberRepo('web', 3),
+    },
+    workspaceProjects: {
+      '/workspace': {
+        rootId: '/workspace',
+        repositoryIds: ['/workspace/api', '/workspace/web'],
+        candidates: [
+          { id: '/workspace/api', name: 'api', selected: true, available: true },
+          { id: '/workspace/web', name: 'web', selected: true, available: true },
+        ],
+        configured: true,
+        configurationError: null,
+        phase: 'ready',
+        skipped: [],
+        error: null,
+      },
+    },
+  })
 }
 
 function workspace(): BranchWorkspaceSnapshot {

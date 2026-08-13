@@ -39,14 +39,14 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceMemberSwitcher.tsx', () 
     selectedRepositoryName,
     onSelect,
   }: {
-    members: { repositoryName: string; available: boolean }[]
+    members: { repositoryName: string; available: boolean; changeCount: number }[]
     selectedRepositoryName: string
     onSelect: (repositoryName: string) => void
   }) => (
     <div data-testid="member-switcher" data-selected-repository={selectedRepositoryName}>
       {members.map((member) => (
         <button key={member.repositoryName} type="button" onClick={() => onSelect(member.repositoryName)}>
-          {member.repositoryName}:{String(member.available)}
+          {member.repositoryName}:{String(member.available)}:{member.changeCount}
         </button>
       ))}
     </div>
@@ -128,6 +128,9 @@ describe('BranchWorkspaceAggregatePanel', () => {
     expect(container.querySelector('[data-testid="member-switcher"]')?.getAttribute('data-selected-repository')).toBe(
       'web',
     )
+    const expectedCounts = kind === 'changes' ? ['api:true:2', 'web:true:1'] : ['api:true:0', 'web:true:0']
+    expect(container.querySelector('[data-testid="member-switcher"]')?.textContent).toContain(expectedCounts[0])
+    expect(container.querySelector('[data-testid="member-switcher"]')?.textContent).toContain(expectedCounts[1])
     expect(container.querySelector('[data-testid="scroll-pane"]')).toBeNull()
   })
 
@@ -139,7 +142,7 @@ describe('BranchWorkspaceAggregatePanel', () => {
 
     expect(container.querySelector('[data-testid="history-member"]')).toBeNull()
     expect(container.textContent).toContain('workspace.branch-workspace.member-unconfigured')
-    expect(container.querySelector('[data-testid="member-switcher"]')?.textContent).toContain('docs:false')
+    expect(container.querySelector('[data-testid="member-switcher"]')?.textContent).toContain('docs:false:0')
   })
 
   function renderPanel(
@@ -166,6 +169,18 @@ function repository(id: string, name: string) {
       createRepoBranch('feature/auth', {
         worktree: { path: `${ROOT}/goblin-feature-auth/${name}` },
       }),
+    ]
+    repo.data.status = [
+      {
+        path: `${ROOT}/goblin-feature-auth/${name}`,
+        branch: 'feature/auth',
+        isMain: false,
+        entries: Array.from({ length: name === 'api' ? 2 : 1 }, (_, index) => ({
+          x: 'M',
+          y: ' ',
+          path: `src/${name}-${index}.ts`,
+        })),
+      },
     ]
   })
 }

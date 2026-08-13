@@ -285,3 +285,30 @@ Expected: exit 0 with all tests passing.
 Run: `git diff --check && git status --short && git diff -- CONTEXT.md docs/ui-conventions.md src/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx src/web/components/repo-workspace/BranchWorkspaceFileArea.tsx src/web/components/repo-workspace/BranchWorkspaceMemberSwitcher.tsx`
 
 Expected: no whitespace errors; only intended files plus pre-existing user changes are listed. Do not run `git add`, `git commit`, or branch commands.
+
+### Task 5: Changes counts for the tab and member switcher
+
+**Files:**
+
+- Modify: `src/web/components/repo-workspace/branch-workspace-file-area-members.ts`
+- Modify: `src/web/components/repo-workspace/BranchWorkspaceMemberSwitcher.tsx`
+- Modify: `src/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx`
+- Modify: `src/web/components/repo-workspace/BranchWorkspaceFileArea.tsx`
+- Test: matching component and member-resolution tests
+
+**Interfaces:**
+
+- Produces: `branchWorkspaceFileAreaMemberChangeCount(member): number` and `branchWorkspaceFileAreaTotalChangeCount(members): number`.
+- Extends: `BranchWorkspaceMemberOption` with required `changeCount: number`.
+
+- [ ] **Step 1: Verify RED for missing counts**
+
+Assert exact-path member counts, the summed Changes-tab badge, selected-member and option badges, zero-value omission, and unavailable-member zero handling.
+
+- [ ] **Step 2: Implement one shared count path**
+
+Read each resolved member's exact worktree `status.entries.length`, sum the resolved member counts for the Changes tab, and pass per-member counts to the switcher only while Changes is active.
+
+- [ ] **Step 3: Verify focused and full suites**
+
+Run the member-resolution, switcher, aggregate-panel, and branch-workspace-pane tests, followed by formatting, typecheck, architecture, and the full test suite.

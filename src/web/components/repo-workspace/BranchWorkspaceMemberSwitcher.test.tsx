@@ -42,8 +42,8 @@ describe('BranchWorkspaceMemberSwitcher', () => {
       root.render(
         <BranchWorkspaceMemberSwitcher
           members={[
-            { repositoryName: 'api', available: true },
-            { repositoryName: 'web', available: false },
+            { repositoryName: 'api', available: true, changeCount: 2 },
+            { repositoryName: 'web', available: false, changeCount: 0 },
           ]}
           selectedRepositoryName="api"
           onSelect={vi.fn()}
@@ -55,8 +55,13 @@ describe('BranchWorkspaceMemberSwitcher', () => {
     const options = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[data-testid="branch-workspace-member-options"] button'),
     )
-    expect(options.map((option) => option.textContent)).toEqual(['api', 'webworkspace.repository-unavailable'])
+    expect(options.map((option) => option.textContent)).toEqual(['api2', 'webworkspace.repository-unavailable'])
     expect(options[0]?.getAttribute('aria-current')).toBe('page')
+    expect(container.querySelector('[data-testid="branch-workspace-selected-member-change-count"]')?.textContent).toBe(
+      '2',
+    )
+    expect(options[0]?.querySelector('[data-testid="branch-workspace-member-change-count"]')?.textContent).toBe('2')
+    expect(options[1]?.querySelector('[data-testid="branch-workspace-member-change-count"]')).toBeNull()
   })
 
   test('selects another member without changing workspace navigation', () => {
@@ -65,8 +70,8 @@ describe('BranchWorkspaceMemberSwitcher', () => {
       root.render(
         <BranchWorkspaceMemberSwitcher
           members={[
-            { repositoryName: 'api', available: true },
-            { repositoryName: 'web', available: true },
+            { repositoryName: 'api', available: true, changeCount: 0 },
+            { repositoryName: 'web', available: true, changeCount: 3 },
           ]}
           selectedRepositoryName="api"
           onSelect={onSelect}

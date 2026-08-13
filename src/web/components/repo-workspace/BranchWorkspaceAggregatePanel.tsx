@@ -7,7 +7,10 @@ import { ProjectHistoryPanel } from '#/web/components/repo-workspace/ProjectHist
 import { ProjectLocalPanel } from '#/web/components/repo-workspace/ProjectLocalPanel.tsx'
 import { ProjectRemoteBranchesPanel } from '#/web/components/repo-workspace/ProjectRemoteBranchesPanel.tsx'
 import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatusPanel.tsx'
-import { resolveBranchWorkspaceFileAreaMembers } from '#/web/components/repo-workspace/branch-workspace-file-area-members.ts'
+import {
+  branchWorkspaceFileAreaMemberChangeCount,
+  resolveBranchWorkspaceFileAreaMembers,
+} from '#/web/components/repo-workspace/branch-workspace-file-area-members.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
@@ -94,6 +97,7 @@ export function BranchWorkspaceAggregatePanel({
               members={members.map((member) => ({
                 repositoryName: member.repositoryName,
                 available: member.ok,
+                changeCount: kind === 'changes' ? branchWorkspaceFileAreaMemberChangeCount(member) : 0,
               }))}
               selectedRepositoryName={selectedMember.repositoryName}
               onSelect={(repositoryName) => onSelectedRepositoryNameChange?.(repositoryName)}

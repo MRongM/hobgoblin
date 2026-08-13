@@ -405,7 +405,7 @@ The workspace overview representation of one branch workspace, labelled by the c
 _Avoid_: Project item, repository row, worktree row
 
 **Branch workspace file area**:
-The parent-scoped file surface opened for a selected branch workspace item. Its Files view browses the branch workspace root. Status, Changes, and History show one locally selected member worktree, while Local and Remote show that same selected member repository; the five Git views mount only their selected member surface and share a panel-local member switcher without changing the active workspace or member-worktree context. Every repository remains an independent Git boundary. When the file surface is explicitly opened for a selected member-worktree context, it uses that repository's ordinary file area.
+The parent-scoped file surface opened for a selected branch workspace item. Its Files view browses the branch workspace root. Status, Changes, and History show one locally selected member worktree, while Local and Remote show that same selected member repository; the five Git views mount only their selected member surface and share a panel-local member switcher without changing the active workspace or member-worktree context. The Changes tab displays the summed exact change count of all resolvable member worktrees, while its member switcher displays each member's exact worktree change count. Every repository remains an independent Git boundary. When the file surface is explicitly opened for a selected member-worktree context, it uses that repository's ordinary file area.
 _Avoid_: Member file area, combined repository, workspace repository file area
 
 **Branch workspace member summary**:

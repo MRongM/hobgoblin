@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest'
-import { resolveBranchWorkspaceFileAreaMembers } from '#/web/components/repo-workspace/branch-workspace-file-area-members.ts'
+import {
+  branchWorkspaceFileAreaMemberChangeCount,
+  branchWorkspaceFileAreaTotalChangeCount,
+  resolveBranchWorkspaceFileAreaMembers,
+} from '#/web/components/repo-workspace/branch-workspace-file-area-members.ts'
 import { createRepoBranch, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 
@@ -13,6 +17,31 @@ describe('branch workspace file area members', () => {
       id: '/workspace/web',
       branches: [createRepoBranch('feature/auth', { worktree: { path: '/workspace/hobgoblin-auth/web' } })],
     })
+    api.data.status = [
+      {
+        path: '/workspace/hobgoblin-auth/api',
+        branch: 'feature/auth',
+        isMain: false,
+        entries: [
+          { x: 'M', y: ' ', path: 'src/api.ts' },
+          { x: '?', y: '?', path: 'src/api.test.ts' },
+        ],
+      },
+    ]
+    web.data.status = [
+      {
+        path: '/workspace/hobgoblin-auth/web',
+        branch: 'feature/auth',
+        isMain: false,
+        entries: [{ x: 'M', y: ' ', path: 'src/page.tsx' }],
+      },
+      {
+        path: '/workspace/unrelated',
+        branch: 'feature/unrelated',
+        isMain: false,
+        entries: [{ x: 'M', y: ' ', path: 'ignored.ts' }],
+      },
+    ]
 
     const members = resolveBranchWorkspaceFileAreaMembers({
       workspace: branchWorkspace(),
@@ -31,6 +60,8 @@ describe('branch workspace file area members', () => {
       '/workspace/hobgoblin-auth/api',
       '/workspace/hobgoblin-auth/web',
     ])
+    expect(members.map(branchWorkspaceFileAreaMemberChangeCount)).toEqual([2, 1])
+    expect(branchWorkspaceFileAreaTotalChangeCount(members)).toBe(3)
   })
 })
 
