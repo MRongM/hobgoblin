@@ -174,6 +174,51 @@ describe('stabilizeTerminalImePosition', () => {
     disposable.dispose()
   })
 
+  test('replaces the drifting xterm cursor with a proxy at the opaque IME anchor', () => {
+    const fixture = terminalFixture()
+    moveImeElements(fixture.textarea, fixture.compositionView, 84, 168)
+    const disposable = stabilizeTerminalImePosition(fixture.terminal, 'Win32')
+
+    fixture.textarea.dispatchEvent(new KeyboardEvent('keyup', { key: 'z' }))
+    const cursorProxy = fixture.element.querySelector<HTMLElement>('.goblin-terminal-ime-cursor-proxy')
+
+    expect(fixture.element.classList.contains('goblin-terminal-ime-cursor-anchored')).toBe(true)
+    expect(cursorProxy?.classList.contains('is-active')).toBe(true)
+    expect([cursorProxy?.style.left, cursorProxy?.style.top, cursorProxy?.style.height]).toEqual([
+      '84px',
+      '168px',
+      '24px',
+    ])
+
+    moveImeElements(fixture.textarea, fixture.compositionView, 896, 658)
+    const driftingCursor = document.createElement('span')
+    driftingCursor.className = 'xterm-cursor xterm-cursor-bar'
+    fixture.screen.append(driftingCursor)
+
+    expect([cursorProxy?.style.left, cursorProxy?.style.top]).toEqual(['84px', '168px'])
+
+    fixture.textarea.dispatchEvent(new InputEvent('beforeinput', { data: 'committed', inputType: 'insertText' }))
+    expect(fixture.element.classList.contains('goblin-terminal-ime-cursor-anchored')).toBe(false)
+    expect(cursorProxy?.classList.contains('is-active')).toBe(false)
+
+    disposable.dispose()
+    expect(cursorProxy?.isConnected).toBe(false)
+  })
+
+  test('keeps xterm native cursor rendering during standard composition', () => {
+    const fixture = terminalFixture()
+    const disposable = stabilizeTerminalImePosition(fixture.terminal, 'Win32')
+
+    fixture.textarea.dispatchEvent(new CompositionEvent('compositionstart'))
+    const cursorProxy = fixture.element.querySelector<HTMLElement>('.goblin-terminal-ime-cursor-proxy')
+
+    expect(fixture.element.classList.contains('goblin-terminal-ime-cursor-anchored')).toBe(false)
+    expect(cursorProxy?.classList.contains('is-active')).toBe(false)
+    expectImeAnchor(fixture.textarea, fixture.compositionView, '12px', '24px')
+
+    disposable.dispose()
+  })
+
   test('keeps an opaque Windows TSF anchor for Backspace and releases it for Escape', () => {
     const fixture = terminalFixture()
     moveImeElements(fixture.textarea, fixture.compositionView, 84, 168)

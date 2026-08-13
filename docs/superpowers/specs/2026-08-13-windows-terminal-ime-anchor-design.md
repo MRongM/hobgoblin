@@ -11,6 +11,7 @@ The existing `MutationObserver` correction is also asynchronous. Even where stan
 ## Goals
 
 - Keep Microsoft Pinyin's candidate anchor at the logical terminal input position while Codex or another terminal application continues rendering output.
+- Keep xterm's visible cursor at that same logical input position while its buffer cursor temporarily follows output rendering.
 - Support both standard browser composition events and the Windows TSF path that exposes only orphaned printable `keyup` events before committed `beforeinput`/`input`.
 - Let each committed Chinese phrase advance the anchor to the terminal application's newly rendered logical cursor before the next phrase begins.
 - Preserve continuous PTY output, terminal focus, xterm input, candidate selection, and standard non-Windows behavior.
@@ -47,6 +48,8 @@ When an anchor is active, the adapter sets CSS custom properties containing its 
 ```
 
 xterm may continue assigning ordinary inline `left` and `top` values during output. Those assignments no longer change computed layout while the class is present, so Windows cannot observe an intermediate output-cursor position. Releasing the lock removes the class and custom properties, immediately exposing xterm's current inline position.
+
+xterm's DOM renderer independently recreates `.xterm-cursor` from the current buffer cursor on every render. During opaque TSF input, the adapter therefore removes only that cursor span's paint effects and displays a separate 1px cursor proxy at the locked input coordinates. The original span stays in document flow so terminal row text and layout are not disturbed. Standard composition retains xterm's native preedit cursor behavior. Commit, cancellation, blur, and disposal hide the proxy and restore ordinary xterm cursor painting.
 
 The existing observer/timer restoration is removed because it corrects after mutation instead of preventing layout movement. Render listeners are no longer needed for position restoration.
 
@@ -86,6 +89,8 @@ Unit tests in `terminal-ime-position.test.ts` will cover:
 - repeated xterm inline position mutations cannot change the CSS anchor contract;
 - matching keydown/keyup ordinary typing does not start opaque anchoring;
 - repeated Microsoft Pinyin `Process`/229 keydowns retain the original opaque anchor;
+- continuous output may move the real `.xterm-cursor` node, but its paint remains disabled and the cursor proxy stays at the original anchor;
+- standard composition keeps xterm's native cursor and preedit rendering while retaining the candidate anchor;
 - committed `beforeinput` releases the lock and the next unmatched printable `keyup` anchors at the new logical cursor;
 - Backspace retains, Escape releases, blur releases, and disposal cleans the opaque state;
 - standard composition, first input, resize fallback, custom Ctrl+V veto, and non-Windows behavior remain covered.

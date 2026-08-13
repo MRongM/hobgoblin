@@ -1330,6 +1330,14 @@ describe('ManagedTerminalSession', () => {
       expect(textarea.classList.contains('goblin-terminal-ime-anchor')).toBe(true)
       expect(textarea.style.getPropertyValue('--goblin-terminal-ime-anchor-left')).toBe('40px')
       expect(textarea.style.getPropertyValue('--goblin-terminal-ime-anchor-top')).toBe('40px')
+      const cursorProxy = term.element!.querySelector('.goblin-terminal-ime-cursor-proxy') as HTMLElement | null
+      expect(term.element!.classList.contains('goblin-terminal-ime-cursor-anchored')).toBe(true)
+      expect(cursorProxy?.classList.contains('is-active')).toBe(true)
+      expect([cursorProxy?.style.left, cursorProxy?.style.top, cursorProxy?.style.height]).toEqual([
+        '40px',
+        '40px',
+        '20px',
+      ])
 
       textarea.style.left = '360px'
       textarea.style.top = '80px'
@@ -1345,6 +1353,8 @@ describe('ManagedTerminalSession', () => {
       textarea.dispatchEvent(new InputEvent('beforeinput', { data: 'committed', inputType: 'insertText' }))
       expect(textarea.classList.contains('goblin-terminal-ime-anchor')).toBe(false)
       expect(compositionView.classList.contains('goblin-terminal-ime-anchor')).toBe(false)
+      expect(term.element!.classList.contains('goblin-terminal-ime-cursor-anchored')).toBe(false)
+      expect(cursorProxy?.classList.contains('is-active')).toBe(false)
     } finally {
       Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
     }

@@ -10,6 +10,8 @@ type TerminalImeMode = 'standard' | 'opaque'
 const IME_ANCHOR_CLASS = 'goblin-terminal-ime-anchor'
 const IME_ANCHOR_LEFT = '--goblin-terminal-ime-anchor-left'
 const IME_ANCHOR_TOP = '--goblin-terminal-ime-anchor-top'
+const IME_CURSOR_ANCHORED_CLASS = 'goblin-terminal-ime-cursor-anchored'
+const IME_CURSOR_PROXY_CLASS = 'goblin-terminal-ime-cursor-proxy'
 
 function terminalCursorAnchor(term: XTermTerminal, screen: HTMLElement): TerminalImeAnchor | null {
   const screenWidth = Number.parseFloat(screen.style.width)
@@ -35,6 +37,13 @@ function textareaAnchor(textarea: HTMLTextAreaElement): TerminalImeAnchor | null
   return left && top ? { left, top } : null
 }
 
+function terminalCellHeight(term: XTermTerminal, screen: HTMLElement, textarea: HTMLTextAreaElement): string | null {
+  const textareaHeight = inlinePixelPosition(textarea.style.height)
+  if (textareaHeight) return textareaHeight
+  const screenHeight = Number.parseFloat(screen.style.height)
+  return screenHeight > 0 && term.rows > 0 ? `${screenHeight / term.rows}px` : null
+}
+
 function keyIdentity(event: KeyboardEvent): string {
   return event.code || event.key
 }
@@ -50,9 +59,14 @@ export function stabilizeTerminalImePosition(
 ): IDisposable {
   if (!/^Win/i.test(navigatorPlatform)) return { dispose: () => {} }
   const textarea = term.textarea
-  const screen = term.element?.querySelector<HTMLElement>('.xterm-screen') ?? null
-  const compositionView = term.element?.querySelector<HTMLElement>('.composition-view') ?? null
-  if (!textarea || !screen || !compositionView) return { dispose: () => {} }
+  const terminalElement = term.element
+  const screen = terminalElement?.querySelector<HTMLElement>('.xterm-screen') ?? null
+  const compositionView = terminalElement?.querySelector<HTMLElement>('.composition-view') ?? null
+  if (!textarea || !terminalElement || !screen || !compositionView) return { dispose: () => {} }
+  const cursorProxy = screen.ownerDocument.createElement('div')
+  cursorProxy.className = IME_CURSOR_PROXY_CLASS
+  cursorProxy.setAttribute('aria-hidden', 'true')
+  screen.append(cursorProxy)
 
   let anchor: TerminalImeAnchor | null = null
   let mode: TerminalImeMode | null = null
@@ -67,6 +81,14 @@ export function stabilizeTerminalImePosition(
       element.style.setProperty(IME_ANCHOR_TOP, nextAnchor.top)
       element.classList.add(IME_ANCHOR_CLASS)
     }
+    if (mode === 'opaque') {
+      terminalElement.classList.add(IME_CURSOR_ANCHORED_CLASS)
+      cursorProxy.style.left = nextAnchor.left
+      cursorProxy.style.top = nextAnchor.top
+      const cursorHeight = terminalCellHeight(term, screen, textarea)
+      if (cursorHeight) cursorProxy.style.height = cursorHeight
+      cursorProxy.classList.add('is-active')
+    }
   }
   const release = (): void => {
     anchor = null
@@ -78,6 +100,11 @@ export function stabilizeTerminalImePosition(
       element.style.removeProperty(IME_ANCHOR_LEFT)
       element.style.removeProperty(IME_ANCHOR_TOP)
     }
+    terminalElement.classList.remove(IME_CURSOR_ANCHORED_CLASS)
+    cursorProxy.classList.remove('is-active')
+    cursorProxy.style.removeProperty('left')
+    cursorProxy.style.removeProperty('top')
+    cursorProxy.style.removeProperty('height')
   }
   const handleCompositionStart = (): void => {
     release()
@@ -148,6 +175,7 @@ export function stabilizeTerminalImePosition(
   return {
     dispose: () => {
       release()
+      cursorProxy.remove()
       textarea.removeEventListener('compositionstart', handleCompositionStart)
       textarea.removeEventListener('compositionupdate', handleCompositionUpdate)
       textarea.removeEventListener('compositionend', handleCompositionEnd)

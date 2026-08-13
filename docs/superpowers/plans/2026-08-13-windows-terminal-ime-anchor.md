@@ -336,3 +336,21 @@ Open the new unpack with a fresh remote-debugging port. In Codex, submit a long-
 The v4 unpack is running on remote-debugging port 9227. Native Microsoft Pinyin UAT reproduced the exact transient: xterm inline position alternated between the input row (`top: 306px`) and output row (`top: 18px`) every 90 ms while 13 Pinyin characters were entered about 650 ms apart. The CSS anchor, computed position, DOM rectangle, and candidate window stayed on the original input row. Committing `中国新闻` released the anchor on `beforeinput`/`input` without relocking on the Space keyup.
 
 The packaged `dist/web` HTML, JS, and CSS hashes match the local build, both packed JS and CSS contain the IME anchor marker, and the v4 executable SHA-256 is `9AA11A770A96B8DA23A792479588287DECC4C5AE70140DB7D467411157B0F83D`.
+
+### Task 5: Stabilize The Visible Xterm Cursor
+
+- [x] **Step 1: Reproduce the independent cursor drift**
+
+Native instrumentation showed the IME textarea fixed at `y=275` while xterm recreated its painted `.xterm-cursor` at `y=51` and `y=275` during each output/input redraw cycle.
+
+- [x] **Step 2: Add cursor proxy regression tests**
+
+Cover proxy creation, fixed coordinates, cell height, commit cleanup, disposal cleanup, the cursor-paint CSS contract, managed-session integration, and preservation of xterm's native cursor during standard composition.
+
+- [x] **Step 3: Implement the renderer-local cursor proxy**
+
+Keep the real cursor span in document flow, remove its cursor-specific paint during opaque Windows TSF input, and draw a 1px proxy inside `.xterm-screen` at the locked input coordinates. Leave standard composition on xterm's native preedit cursor path.
+
+- [x] **Step 4: Build and run native Windows UAT**
+
+Run `bun run build:web` before electron-builder, then package `release-ime-unpack-v7`. During native Microsoft Pinyin input, the real cursor node continued alternating between the output row (`y=51`) and input row (`y=275`) with transparent paint while the proxy remained fixed at `x=249.2, y=275`. The candidate window and visible cursor both remained beside the input prompt. Commit hid the proxy and restored ordinary xterm cursor ownership. The packaged Web assets match the local build byte-for-byte; the v7 executable SHA-256 is `9B5FE4D138F24ED0A0D4A1D21784FF3D4A532E30CF4DF6AA196A92E733807B49`.

@@ -265,6 +265,40 @@
   top: var(--goblin-terminal-ime-anchor-top) !important;
 }
 
+.goblin-managed-terminal-host .xterm.goblin-terminal-ime-cursor-anchored .xterm-cursor {
+  animation: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  outline-color: transparent !important;
+}
+
+.goblin-terminal-ime-cursor-proxy {
+  position: absolute;
+  z-index: 4;
+  display: none;
+  width: 1px;
+  background: var(--color-terminal-cursor);
+  pointer-events: none;
+}
+
+.goblin-terminal-ime-cursor-proxy.is-active {
+  display: block;
+  animation: goblin-terminal-ime-cursor-blink 1s step-end infinite;
+}
+
+@keyframes goblin-terminal-ime-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goblin-terminal-ime-cursor-proxy.is-active {
+    animation: none;
+  }
+}
+
 .goblin-managed-terminal-host .xterm-viewport {
   background: var(--goblin-terminal-background, var(--color-terminal-background)) !important;
   scrollbar-color: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent) transparent;
