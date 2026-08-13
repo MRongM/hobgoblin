@@ -2451,6 +2451,78 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test.each(['copied text', ' \n'])(
+    'leaves Windows terminal paste to xterm when text/plain is %j',
+    async (clipboardText) => {
+      const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+      const writeInput = vi.fn()
+      const getAsFile = vi.fn(
+        () => new File([new Uint8Array([1])], 'image.png', { type: 'image/png' }),
+      )
+      const getData = vi.fn((format: string) => (format === 'text/plain' ? clipboardText : ''))
+      const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+      try {
+        const host = container.querySelector('.goblin-terminal-slot__host')
+        expect(host).toBeInstanceOf(HTMLDivElement)
+        const event = new Event('paste', { bubbles: true, cancelable: true })
+        Object.defineProperty(event, 'clipboardData', {
+          value: {
+            getData,
+            files: [],
+            items: [{ kind: 'file', type: 'image/png', getAsFile }],
+          },
+        })
+
+        await act(async () => {
+          host?.dispatchEvent(event)
+          await Promise.resolve()
+        })
+
+        expect(getData).toHaveBeenCalledWith('text/plain')
+        expect(event.defaultPrevented).toBe(false)
+        expect(getAsFile).not.toHaveBeenCalled()
+        expect(appShellMocks.readSystemClipboardFilePaths).not.toHaveBeenCalled()
+        expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+        expect(writeInput).not.toHaveBeenCalled()
+      } finally {
+        platformSpy.mockRestore()
+        await act(async () => root.unmount())
+        container.remove()
+      }
+    },
+  )
+
+  test('swallows an empty Windows paste without writing Ctrl+V into the terminal', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLDivElement)
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(event)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(appShellMocks.readSystemClipboardFilePaths).toHaveBeenCalledTimes(1)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('saves binary paste files and writes returned paths into the active terminal', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     runtimeSettingsMocks.temporaryFilesDirectory = '/Users/test/project/tmp'
@@ -2509,6 +2581,116 @@ describe('TerminalSlot', () => {
       })
       expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/Users/test/project/tmp/pasted image.png'")
     } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('reads a Windows clipboard image item after finding no text', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    appShellMocks.saveClipboardBinaryFilesFromPaste.mockResolvedValue({
+      ok: true,
+      paths: ['C:/project/tmp/pasted-image.png'],
+    })
+    const writeInput = vi.fn()
+    const file = new File([new Uint8Array([1, 2, 3])], 'image.png', { type: 'image/png' })
+    const getAsFile = vi.fn(() => file)
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLDivElement)
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          getData: () => '',
+          files: [],
+          items: [{ kind: 'file', type: 'image/png', getAsFile }],
+        },
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(event)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(getAsFile).toHaveBeenCalledTimes(1)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).toHaveBeenCalledWith({
+        worktreePath: '/worktree',
+        temporaryFilesDirectory: '',
+        files: [{ name: 'image.png', type: 'image/png', bytes: expect.any(ArrayBuffer) }],
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'C:/project/tmp/pasted-image.png')
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps probing clipboard item files on macOS terminal paste', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    appShellMocks.saveClipboardBinaryFilesFromPaste.mockResolvedValue({
+      ok: true,
+      paths: ['/Users/test/project/tmp/pasted image.png'],
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root: Root = createRoot(container)
+    const writeInput = vi.fn()
+    const file = new File([new Uint8Array([1, 2, 3])], 'image.png', { type: 'image/png' })
+    const getAsFile = vi.fn(() => file)
+    const { worktreeSnapshot, snapshot } = controllerFixture()
+    const context = terminalContext({ writeInput })
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => worktreeSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+
+    await act(async () => {
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      )
+    })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLDivElement)
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: {
+          getData: () => '',
+          files: [],
+          items: [{ kind: 'file', type: 'image/png', getAsFile }],
+        },
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(event)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(getAsFile).toHaveBeenCalledTimes(1)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).toHaveBeenCalledWith({
+        worktreePath: '/worktree',
+        temporaryFilesDirectory: '',
+        files: [{ name: 'image.png', type: 'image/png', bytes: expect.any(ArrayBuffer) }],
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/Users/test/project/tmp/pasted image.png'")
+    } finally {
+      platformSpy.mockRestore()
       await act(async () => root.unmount())
       container.remove()
     }
