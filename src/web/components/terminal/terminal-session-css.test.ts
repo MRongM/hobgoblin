@@ -55,9 +55,14 @@ describe('terminal session CSS layout contract', () => {
     )
   })
 
+  test('locks the Windows IME anchor before xterm inline position updates reach layout', () => {
+    expect(css).toMatch(
+      /\.goblin-managed-terminal-host \.goblin-terminal-ime-anchor\s*\{[^}]*left:\s*var\(--goblin-terminal-ime-anchor-left\)\s*!important;[^}]*top:\s*var\(--goblin-terminal-ime-anchor-top\)\s*!important;/,
+    )
+  })
+
   test('uses xterm native scrollbar geometry without extra layout clearance', () => {
-    expect(css).toContain(`.goblin-managed-terminal-host {
-  width: 100%;`)
+    expect(css).toMatch(/\.goblin-managed-terminal-host\s*\{\r?\n\s*width:\s*100%;/)
     expect(css).not.toContain('--goblin-terminal-scrollbar-clearance')
     expect(css).not.toContain('padding-right: var(--goblin-terminal-scrollbar-clearance);')
     expect(css).not.toMatch(/\.goblin-managed-terminal-host\s*\{[^}]*margin-right:\s*14px;/)

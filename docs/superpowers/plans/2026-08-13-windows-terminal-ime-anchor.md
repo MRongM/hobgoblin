@@ -21,11 +21,12 @@
 ### Task 1: Encode The Real Windows TSF Reproduction
 
 **Files:**
+
 - Modify: `src/web/components/terminal/terminal-ime-position.test.ts`
 - Modify: `src/web/components/terminal/terminal-session-css.test.ts`
 - Modify: `src/web/components/terminal/ManagedTerminalSession.test.ts`
 
-- [ ] **Step 1: Add a unit test for an unmatched printable keyup**
+- [x] **Step 1: Add a unit test for an unmatched printable keyup**
 
 Add a test that starts with xterm's textarea at `84px/168px`, dispatches only `keyup(KeyX)`, mutates xterm's ordinary inline position to `896px/658px`, and expects the lock class and anchor variables to remain `84px/168px`:
 
@@ -48,7 +49,7 @@ test('locks the Windows TSF candidate anchor when the IME consumes printable key
 })
 ```
 
-- [ ] **Step 2: Add opaque-state lifecycle tests**
+- [x] **Step 2: Add opaque-state lifecycle tests**
 
 Add separate tests proving:
 
@@ -69,7 +70,7 @@ textarea.dispatchEvent(new KeyboardEvent('keyup', { code: 'Escape', key: 'Escape
 
 Each test must assert both lock-class state and custom-property values, not restored inline coordinates.
 
-- [ ] **Step 3: Add the CSS contract test**
+- [x] **Step 3: Add the CSS contract test**
 
 Add to `terminal-session-css.test.ts`:
 
@@ -81,11 +82,11 @@ test('locks the Windows IME anchor before xterm inline position updates reach la
 })
 ```
 
-- [ ] **Step 4: Change the terminal integration test to the no-composition path**
+- [x] **Step 4: Change the terminal integration test to the no-composition path**
 
 Replace the existing integration scenario's `compositionstart` with an unmatched printable `keyup`. Assert the adapter adds the class and anchor variables, terminal render mutations may change ordinary inline `left/top`, and `beforeinput` removes the class.
 
-- [ ] **Step 5: Run the focused tests and verify RED**
+- [x] **Step 5: Run the focused tests and verify RED**
 
 Run:
 
@@ -98,10 +99,11 @@ Expected: FAIL because the current implementation has no orphan-`keyup` state an
 ### Task 2: Implement Synchronous Standard And Opaque Anchoring
 
 **Files:**
+
 - Modify: `src/web/components/terminal/terminal-ime-position.ts`
 - Modify: `src/web/components/terminal/terminal-session.css`
 
-- [ ] **Step 1: Add the CSS priority rule**
+- [x] **Step 1: Add the CSS priority rule**
 
 Insert after the `.goblin-managed-terminal-host .xterm` rule:
 
@@ -112,7 +114,7 @@ Insert after the `.goblin-managed-terminal-host .xterm` rule:
 }
 ```
 
-- [ ] **Step 2: Replace observer restoration with lock helpers**
+- [x] **Step 2: Replace observer restoration with lock helpers**
 
 Use these constants and helpers in `terminal-ime-position.ts`:
 
@@ -149,6 +151,7 @@ The adapter state becomes:
 ```ts
 let anchor: TerminalImeAnchor | null = null
 let mode: TerminalImeMode | null = null
+let suppressNextOpaqueKeyUp = false
 const pressedKeys = new Set<string>()
 ```
 
@@ -176,11 +179,11 @@ const release = (): void => {
 }
 ```
 
-- [ ] **Step 3: Implement standard composition event handling**
+- [x] **Step 3: Implement standard composition event handling**
 
 `compositionstart` releases stale state, sets `mode = 'standard'`, and applies `terminalCursorAnchor(term, screen)` when measurable. `compositionupdate` supplies the textarea/fallback anchor only when standard composition began without a measurable cursor. `compositionend` releases.
 
-- [ ] **Step 4: Implement opaque TSF key pairing**
+- [x] **Step 4: Implement opaque TSF key pairing**
 
 Use this event behavior:
 
@@ -189,7 +192,7 @@ const handleKeyDown = (event: KeyboardEvent): void => {
   const identity = keyIdentity(event)
   if (mode === 'standard') {
     if (!compositionView.classList.contains('active')) release()
-  } else if (mode === 'opaque') {
+  } else if (mode === 'opaque' && event.key !== 'Process' && event.keyCode !== 229) {
     release()
   }
   pressedKeys.add(identity)
@@ -197,6 +200,10 @@ const handleKeyDown = (event: KeyboardEvent): void => {
 
 const handleKeyUp = (event: KeyboardEvent): void => {
   if (pressedKeys.delete(keyIdentity(event))) return
+  if (suppressNextOpaqueKeyUp) {
+    suppressNextOpaqueKeyUp = false
+    return
+  }
   if (event.key === 'Escape') {
     release()
     return
@@ -211,12 +218,13 @@ const handleKeyUp = (event: KeyboardEvent): void => {
 
 const handleBeforeInput = (): void => {
   if (mode === 'opaque') release()
+  suppressNextOpaqueKeyUp = true
 }
 ```
 
 Register `keyup`, `beforeinput`, and `input` alongside the existing events. Remove the render listener, MutationObserver, restore timers, and their cleanup. Blur and disposal call `release()`.
 
-- [ ] **Step 5: Run the focused tests and verify GREEN**
+- [x] **Step 5: Run the focused tests and verify GREEN**
 
 Run:
 
@@ -229,22 +237,23 @@ Expected: PASS, including standard composition regressions and the no-compositio
 ### Task 3: Tighten Edge Cases And Regression Coverage
 
 **Files:**
+
 - Modify: `src/web/components/terminal/terminal-ime-position.test.ts`
 - Modify: `src/web/components/terminal/ManagedTerminalSession.test.ts`
 
-- [ ] **Step 1: Verify normal Windows input is unaffected**
+- [x] **Step 1: Verify normal Windows input is unaffected**
 
 Add or retain tests for matched keydown/keyup, Ctrl+V custom-handler veto, modifier keys, focus retention, non-Windows no-op behavior, and unavailable xterm DOM elements.
 
-- [ ] **Step 2: Verify cleanup**
+- [x] **Step 2: Verify cleanup**
 
 Assert blur and `dispose()` remove both classes and both variables, and a later xterm position update is no longer locked.
 
-- [ ] **Step 3: Verify standard composition still follows pre-edit width**
+- [x] **Step 3: Verify standard composition still follows pre-edit width**
 
 Set `textarea.style.width` during standard composition and assert the adapter does not define or restore a width custom property. Only `left/top` are locked.
 
-- [ ] **Step 4: Run terminal tests**
+- [x] **Step 4: Run terminal tests**
 
 Run:
 
@@ -254,13 +263,18 @@ bun run test terminal-ime-position.test.ts terminal-session-css.test.ts ManagedT
 
 Expected: all targeted tests pass with no timer leaks or unhandled jsdom errors.
 
+- [x] **Step 5: Preserve opaque state across Microsoft Pinyin Process keydowns**
+
+Native v3 UAT showed that Microsoft Pinyin can emit `keydown(key="Process", keyCode=229)` before every printable keyup during one opaque pre-edit. Add a failing regression test proving the original anchor survives that sequence, then exempt only `Process`/229 from opaque keydown release. Keep normal keydown, commit, Escape, blur, and disposal release behavior unchanged.
+
 ### Task 4: Repository Verification And Unpacked Build
 
 **Files:**
-- Verify: all modified source and test files
-- Build: `release-ime-unpack-v2/win-unpacked/Hobgoblin.exe`
 
-- [ ] **Step 1: Run static and architecture checks**
+- Verify: all modified source and test files
+- Build: `release-ime-unpack-v4/win-unpacked/Hobgoblin.exe`
+
+- [x] **Step 1: Run static and architecture checks**
 
 Run:
 
@@ -281,7 +295,9 @@ bun run test
 
 Expected: exit code 0. Existing documented jsdom warnings are acceptable only when the suite passes.
 
-- [ ] **Step 3: Build web assets with the requested proxy/mirrors**
+Windows run on 2026-08-13: 3,991 tests passed and 112 unrelated platform tests failed. The failures are dominated by POSIX-only fixture paths, unavailable `sh`/`python3`, and Linux packaging expectations; the terminal component suite remains green.
+
+- [x] **Step 3: Build web assets with the requested proxy/mirrors**
 
 Set the same proxy and npmmirror variables used by `install.ts` and the fast Windows build script:
 
@@ -293,26 +309,30 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR='https://npmmirror.com/mirrors/electron-bu
 bun run build:web
 ```
 
-- [ ] **Step 4: Build a fresh unpacked x64 app without native rebuild/download**
+- [x] **Step 4: Build a fresh unpacked x64 app without native rebuild/download**
 
 Run:
 
 ```powershell
-bun run build:electron -- --win --x64 --dir --config.directories.output=release-ime-unpack-v2 --config.npmRebuild=false --config.electronDist="$PWD\node_modules\electron\dist"
+bun run build:electron -- --win --x64 --dir --config.directories.output=release-ime-unpack-v4 --config.npmRebuild=false --config.electronDist="$PWD\node_modules\electron\dist"
 ```
 
-Expected: `release-ime-unpack-v2/win-unpacked/Hobgoblin.exe` exists.
+Expected: `release-ime-unpack-v4/win-unpacked/Hobgoblin.exe` exists.
 
-- [ ] **Step 5: Verify packaged web bytes and hash the executable**
+- [x] **Step 5: Verify packaged web bytes and hash the executable**
 
 Compare the packaged asar's web bundle with `dist/web`, then run:
 
 ```powershell
-Get-FileHash release-ime-unpack-v2\win-unpacked\Hobgoblin.exe -Algorithm SHA256
+Get-FileHash release-ime-unpack-v4\win-unpacked\Hobgoblin.exe -Algorithm SHA256
 ```
 
 Expected: the asar contains the new IME class/variable symbols and an executable SHA-256 is reported.
 
-- [ ] **Step 6: Launch the new unpack and perform Windows 11 UAT**
+- [x] **Step 6: Launch the new unpack and perform Windows 11 UAT**
 
 Open the new unpack with a fresh remote-debugging port. In Codex, submit a long-running prompt and slowly enter multiple Pinyin phrases while output continues. Verify the candidate UI never jumps to the output cursor and advances after each committed phrase.
+
+The v4 unpack is running on remote-debugging port 9227. Native Microsoft Pinyin UAT reproduced the exact transient: xterm inline position alternated between the input row (`top: 306px`) and output row (`top: 18px`) every 90 ms while 13 Pinyin characters were entered about 650 ms apart. The CSS anchor, computed position, DOM rectangle, and candidate window stayed on the original input row. Committing `中国新闻` released the anchor on `beforeinput`/`input` without relocking on the Space keyup.
+
+The packaged `dist/web` HTML, JS, and CSS hashes match the local build, both packed JS and CSS contain the IME anchor marker, and the v4 executable SHA-256 is `9AA11A770A96B8DA23A792479588287DECC4C5AE70140DB7D467411157B0F83D`.

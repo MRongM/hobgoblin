@@ -2,7 +2,7 @@
 
 ## Problem
 
-On Windows 11, Microsoft Pinyin can keep its native pre-edit and candidate UI outside the browser composition-event path. During the observed Codex TUI reproduction, the xterm textarea received only printable `keyup` events while Pinyin was collecting a candidate. It emitted `beforeinput` and `input` only when a Chinese phrase was committed; no `compositionstart`, `compositionupdate`, or `compositionend` event was emitted.
+On Windows 11, Microsoft Pinyin can keep its native pre-edit and candidate UI outside the browser composition-event path. During the observed Codex TUI reproduction, no `compositionstart`, `compositionupdate`, or `compositionend` event was emitted. Depending on the native input cycle, xterm either consumed the keydown before the adapter saw it or the adapter received `keydown(key="Process", keyCode=229)` followed by printable keyup events. `beforeinput` and `input` arrived only when a Chinese phrase was committed.
 
 The existing Windows workaround begins its position lock only on `compositionstart`. It therefore remains inactive in this real path. While Codex renders progress, xterm synchronizes its hidden textarea to the terminal buffer cursor. The captured trace moved the textarea from `left: 14px; top: 168px` to output positions as far away as `left: 896px; top: 658px`. Windows uses that textarea layout position for its native candidate UI, so the candidate window can jump to the output cursor and return on the next input update.
 
@@ -31,7 +31,7 @@ The behavior remains a renderer-local adapter in `terminal-ime-position.ts`, ins
 The adapter supports two input paths:
 
 1. **Standard composition**: `compositionstart` establishes an anchor and `compositionend` releases it. Existing xterm composition-view activity remains authoritative for key-driven finalization.
-2. **Opaque Windows TSF composition**: a printable `keyup` for which the page observed no matching `keydown` establishes an anchor. Microsoft Pinyin consumes the keydown while collecting a candidate but lets the keyup reach Chromium; ordinary terminal typing produces a matched keydown/keyup pair and does not enter this state.
+2. **Opaque Windows TSF composition**: a printable `keyup` for which the adapter observed no matching printable `keydown` establishes an anchor. Microsoft Pinyin exposes its ongoing pre-edit keydowns as `Process`/229 or lets xterm consume them before the adapter, while ordinary terminal typing emits committed `beforeinput`/`input` before keyup and does not enter this state.
 
 Both paths use the same layout lock and cleanup. This is renderer presentation state, not terminal session state, so it is neither persisted nor synchronized.
 
@@ -54,12 +54,12 @@ The existing observer/timer restoration is removed because it corrects after mut
 
 The adapter tracks physical keys whose `keydown` reached the textarea.
 
-- On `keydown`, record the key identity. If an opaque anchor is active, a normal keydown means the IME is no longer consuming the key, so release the opaque state before continuing. Standard composition continues to use xterm's `.composition-view.active` state to decide whether the key finalized composition.
+- On `keydown`, record the key identity. `Process`/229 retains an opaque anchor because Microsoft Pinyin emits it for every character in an ongoing pre-edit. Any other normal keydown releases opaque state. Standard composition continues to use xterm's `.composition-view.active` state to decide whether the key finalized composition.
 - On `keyup`, remove a matching recorded key. A matching pair is ordinary browser input and does not start an opaque anchor.
 - An unmatched printable `keyup` starts opaque anchoring at the textarea's current xterm position. Later unmatched printable keyups retain the same anchor.
 - An unmatched `Backspace` retains an existing opaque anchor because it edits the native pre-edit string, but does not start one by itself.
 - `Escape`, blur, disposal, or a normal keydown releases opaque anchoring.
-- `beforeinput` releases opaque anchoring before committed text advances the terminal input. The subsequent unmatched space or printable keyup starts the next phrase at xterm's newly synchronized position.
+- `beforeinput`/`input` releases opaque anchoring before committed text advances the terminal input. The commit keyup is suppressed so it cannot immediately create a false anchor; the next phrase starts at xterm's newly synchronized position.
 
 Key identity uses `event.code` when present and falls back to `event.key`, allowing tests and older event implementations to behave consistently.
 
@@ -85,13 +85,14 @@ Unit tests in `terminal-ime-position.test.ts` will cover:
 - unmatched printable `keyup` starts a lock without any composition event;
 - repeated xterm inline position mutations cannot change the CSS anchor contract;
 - matching keydown/keyup ordinary typing does not start opaque anchoring;
+- repeated Microsoft Pinyin `Process`/229 keydowns retain the original opaque anchor;
 - committed `beforeinput` releases the lock and the next unmatched printable `keyup` anchors at the new logical cursor;
 - Backspace retains, Escape releases, blur releases, and disposal cleans the opaque state;
 - standard composition, first input, resize fallback, custom Ctrl+V veto, and non-Windows behavior remain covered.
 
 The terminal integration test will use the xterm mock to reproduce continuous renders while the opaque TSF state is active. The CSS contract test will verify the priority rule exists in `terminal-session.css`.
 
-Manual Windows 11 verification will run Codex, submit a long-running prompt, and slowly enter multiple Pinyin phrases while output continues. The native pre-edit and candidate window must remain at the logical input cursor, advance after each committed phrase, and never jump to a progress/output cursor.
+Manual Windows 11 verification runs a native Microsoft Pinyin sequence while the terminal alternates its xterm cursor between an output row and the logical input row every 90 ms. The native pre-edit and candidate window must remain at the logical input cursor, advance after each committed phrase, and never jump to a progress/output cursor.
 
 ## Alternatives Rejected
 

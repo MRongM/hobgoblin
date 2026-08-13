@@ -225,8 +225,15 @@ const xtermMocks = vi.hoisted(() => {
       this.viewportElement.className = 'xterm-viewport'
       this.screenElement = document.createElement('div')
       this.screenElement.className = 'xterm-screen'
+      this.screenElement.style.width = `${this.cols * 10}px`
+      this.screenElement.style.height = `${this.rows * 20}px`
       this.textarea = document.createElement('textarea')
-      this.element.append(this.viewportElement, this.screenElement, this.textarea)
+      const compositionView = document.createElement('div')
+      compositionView.className = 'composition-view'
+      this.textarea.addEventListener('compositionstart', () => compositionView.classList.add('active'))
+      this.textarea.addEventListener('compositionend', () => compositionView.classList.remove('active'))
+      this.screenElement.append(this.textarea, compositionView)
+      this.element.append(this.viewportElement, this.screenElement)
       host.appendChild(this.element)
     }
 
@@ -279,6 +286,10 @@ const xtermMocks = vi.hoisted(() => {
     resize(cols: number, rows: number) {
       this.cols = cols
       this.rows = rows
+      if (this.screenElement) {
+        this.screenElement.style.width = `${cols * 10}px`
+        this.screenElement.style.height = `${rows * 20}px`
+      }
       for (const handler of this.resizeHandlers) handler({ cols, rows })
     }
 
@@ -1296,6 +1307,47 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
 
     expect(xtermMocks.terminals[0]!.options.windowsPty).toEqual(windowsPty)
+  })
+
+  test('keeps the Windows TSF IME anchor stable when the native IME consumes keydown', async () => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      const term = xtermMocks.terminals[0]!
+      const textarea = term.textarea!
+      const compositionView = term.element!.querySelector('.composition-view') as HTMLElement
+      textarea.focus()
+      textarea.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyX', key: 'x' }))
+      expect(textarea.classList.contains('goblin-terminal-ime-anchor')).toBe(true)
+      expect(textarea.style.getPropertyValue('--goblin-terminal-ime-anchor-left')).toBe('40px')
+      expect(textarea.style.getPropertyValue('--goblin-terminal-ime-anchor-top')).toBe('40px')
+
+      textarea.style.left = '360px'
+      textarea.style.top = '80px'
+      compositionView.style.left = '360px'
+      compositionView.style.top = '80px'
+
+      expect([textarea.style.left, textarea.style.top]).toEqual(['360px', '80px'])
+      expect(textarea.style.getPropertyValue('--goblin-terminal-ime-anchor-left')).toBe('40px')
+      expect(compositionView.style.getPropertyValue('--goblin-terminal-ime-anchor-top')).toBe('40px')
+      expect(document.activeElement).toBe(textarea)
+      expect(compositionView.classList.contains('active')).toBe(false)
+
+      textarea.dispatchEvent(new InputEvent('beforeinput', { data: 'committed', inputType: 'insertText' }))
+      expect(textarea.classList.contains('goblin-terminal-ime-anchor')).toBe(false)
+      expect(compositionView.classList.contains('goblin-terminal-ime-anchor')).toBe(false)
+    } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
   })
 
   test('leaves Windows Ctrl+V to native paste instead of sending a control character', async () => {

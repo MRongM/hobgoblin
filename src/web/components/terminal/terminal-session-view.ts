@@ -51,6 +51,8 @@ import {
   finishTerminalMobileSelection,
   terminalMobileSelectionText,
 } from '#/web/components/terminal/terminal-mobile-selection.ts'
+import { stabilizeTerminalImePosition } from '#/web/components/terminal/terminal-ime-position.ts'
+
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
 
@@ -298,6 +300,7 @@ export class TerminalSessionView {
       }),
     )
     term.open(this.xtermHost)
+    this.disposables.push(stabilizeTerminalImePosition(term))
     this.applyInputMode(term)
     this.installResizeObserver()
     this.installFontObserver(term)

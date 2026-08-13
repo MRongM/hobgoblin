@@ -260,6 +260,11 @@
   overflow-anchor: none;
 }
 
+.goblin-managed-terminal-host .goblin-terminal-ime-anchor {
+  left: var(--goblin-terminal-ime-anchor-left) !important;
+  top: var(--goblin-terminal-ime-anchor-top) !important;
+}
+
 .goblin-managed-terminal-host .xterm-viewport {
   background: var(--goblin-terminal-background, var(--color-terminal-background)) !important;
   scrollbar-color: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent) transparent;
