@@ -13,6 +13,7 @@ import { wireShellBridgeIpc } from '#/main/shell-bridge.ts'
 import { wireTerminalIpc } from '#/main/terminal.ts'
 import { closeDetachedFileAreaWindows, wireDetachedFileAreaWindowIpc } from '#/main/detached-file-area-window.ts'
 import { enqueueExternalOpenPath } from '#/main/external-open.ts'
+import { windowsCliProjectOpenPathFromArgv } from '#/main/windows-cli-project-open.ts'
 import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts'
 import { getSettingsSnapshot } from '#/main/settings-server-client.ts'
 import { startEmbeddedServer, stopEmbeddedServer } from '#/main/server-manager.ts'
@@ -80,9 +81,14 @@ async function main(): Promise<void> {
     return
   }
 
+  const initialExternalOpenPath = windowsCliProjectOpenPathFromArgv(process.argv)
+  if (initialExternalOpenPath) enqueueExternalOpenPath(initialExternalOpenPath)
+
   activationBarrier = initializeMainProcess()
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
+    const externalOpenPath = windowsCliProjectOpenPathFromArgv(commandLine)
+    if (externalOpenPath) enqueueExternalOpenPath(externalOpenPath)
     activateMainWindowFromEvent()
   })
 
