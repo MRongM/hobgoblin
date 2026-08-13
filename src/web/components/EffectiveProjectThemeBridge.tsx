@@ -4,6 +4,8 @@ import { effectiveProjectColorTheme } from '#/web/effective-project-theme.ts'
 import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
+import { projectNativeWindowChromeTheme } from '#/web/app-shell-client.ts'
+import { DEFAULT_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 
 export function EffectiveProjectThemeBridge() {
   const resolved = useThemeStore((s) => s.resolved)
@@ -15,11 +17,13 @@ export function EffectiveProjectThemeBridge() {
     globalColorTheme,
     repoSettings: data?.repoSettings ?? [],
   })
+  const topbarHeightPx = data?.topbarHeightPx ?? DEFAULT_TOPBAR_HEIGHT_PX
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', resolved)
     document.documentElement.setAttribute('data-color-theme', effectiveColorTheme)
-  }, [resolved, globalColorTheme, effectiveColorTheme])
+    void projectNativeWindowChromeTheme({ theme: resolved, colorTheme: effectiveColorTheme, topbarHeightPx })
+  }, [resolved, globalColorTheme, effectiveColorTheme, topbarHeightPx])
 
   return null
 }

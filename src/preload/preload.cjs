@@ -24,6 +24,7 @@ const IPC = {
     writeFileTreeClipboardFile: 'goblin:shell-write-file-tree-clipboard-file',
     readFileTreeClipboardFile: 'goblin:shell-read-file-tree-clipboard-file',
     openDetachedFileAreaWindow: 'goblin:shell-open-detached-file-area-window',
+    projectWindowChromeTheme: 'goblin:shell-project-window-chrome-theme',
   },
   terminal: {
     notifyBell: 'goblin:terminal-notify-bell',
@@ -184,6 +185,7 @@ contextBridge.exposeInMainWorld('goblinNative', {
     writeFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.writeFileTreeClipboardFile, input),
     readFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.readFileTreeClipboardFile, input),
     openDetachedFileAreaWindow: (input) => safeInvoke(IPC.shell.openDetachedFileAreaWindow, input),
+    projectWindowChromeTheme: (input) => safeInvoke(IPC.shell.projectWindowChromeTheme, input),
   },
   terminal: {
     notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),

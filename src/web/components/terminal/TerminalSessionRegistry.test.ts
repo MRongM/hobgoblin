@@ -513,6 +513,10 @@ describe('TerminalSessionRegistry', () => {
         cols: 95,
         rows: 28,
         launchMode: 'native',
+        windowsPtyAppearance: {
+          foreground: { red: 255, green: 255, blue: 255 },
+          background: { red: 0, green: 0, blue: 0 },
+        },
       })
       expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
       expect(registry.snapshot(key)).toMatchObject({
@@ -625,6 +629,10 @@ describe('TerminalSessionRegistry', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        windowsPtyAppearance: {
+          foreground: { red: 255, green: 255, blue: 255 },
+          background: { red: 0, green: 0, blue: 0 },
+        },
       })
       expect(bridgeMocks.openTmuxSessions).not.toHaveBeenCalled()
       expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
@@ -673,6 +681,10 @@ describe('TerminalSessionRegistry', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        windowsPtyAppearance: {
+          foreground: { red: 255, green: 255, blue: 255 },
+          background: { red: 0, green: 0, blue: 0 },
+        },
       })
       expect(bridgeMocks.create).not.toHaveBeenCalled()
       expect(restored).toBe(2)

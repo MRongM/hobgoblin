@@ -45,6 +45,17 @@ export interface TerminalWindowsPty {
   buildNumber?: number
 }
 
+export interface TerminalRgbColor {
+  red: number
+  green: number
+  blue: number
+}
+
+export interface TerminalWindowsPtyAppearance {
+  foreground: TerminalRgbColor
+  background: TerminalRgbColor
+}
+
 export interface TerminalResolvedOwnership {
   role: TerminalAttachmentRole
   controllerStatus: TerminalControllerStatus
@@ -88,6 +99,7 @@ export interface TerminalCreateInput {
   cols?: number
   rows?: number
   attachmentId?: string
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
 }
 
 export interface TerminalOpenTmuxSessionsInput {
@@ -99,6 +111,7 @@ export interface TerminalOpenTmuxSessionsInput {
   cols?: number
   rows?: number
   attachmentId?: string
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
 }
 
 export interface TerminalRestartInput {
@@ -106,6 +119,7 @@ export interface TerminalRestartInput {
   cols: number
   rows: number
   attachmentId?: string
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
 }
 
 export type TerminalTakeoverResult =
@@ -400,13 +414,29 @@ const TerminalWindowsPtySchema = v.object({
   backend: v.optional(v.picklist(TERMINAL_WINDOWS_PTY_BACKEND_VALUES)),
   buildNumber: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 })
+const TerminalRgbChannelSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(255))
+const TerminalRgbColorSchema = v.object({
+  red: TerminalRgbChannelSchema,
+  green: TerminalRgbChannelSchema,
+  blue: TerminalRgbChannelSchema,
+})
+const TerminalWindowsPtyAppearanceSchema = v.object({
+  foreground: TerminalRgbColorSchema,
+  background: TerminalRgbColorSchema,
+})
 const TerminalAttachInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
   cols: TerminalColsSchema,
   rows: TerminalRowsSchema,
   attachmentId: TerminalOptionalAttachmentIdSchema,
 })
-const TerminalRestartInputSchema = TerminalAttachInputSchema
+const TerminalRestartInputSchema = v.object({
+  sessionId: TerminalSessionIdSchema,
+  cols: TerminalColsSchema,
+  rows: TerminalRowsSchema,
+  attachmentId: TerminalOptionalAttachmentIdSchema,
+  windowsPtyAppearance: v.optional(TerminalWindowsPtyAppearanceSchema),
+})
 const TerminalWriteInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
   data: v.pipe(v.string(), v.maxLength(MAX_TERMINAL_WRITE_CHARS)),
@@ -441,6 +471,7 @@ const TerminalCreateInputSchema = v.object({
   cols: v.optional(TerminalColsSchema),
   rows: v.optional(TerminalRowsSchema),
   attachmentId: TerminalOptionalAttachmentIdSchema,
+  windowsPtyAppearance: v.optional(TerminalWindowsPtyAppearanceSchema),
 })
 const TerminalOpenTmuxSessionsInputSchema = v.object({
   repoRoot: v.string(),
@@ -451,6 +482,7 @@ const TerminalOpenTmuxSessionsInputSchema = v.object({
   cols: v.optional(TerminalColsSchema),
   rows: v.optional(TerminalRowsSchema),
   attachmentId: TerminalOptionalAttachmentIdSchema,
+  windowsPtyAppearance: v.optional(TerminalWindowsPtyAppearanceSchema),
 })
 const TerminalPruneInputSchema = v.object({
   repoRoot: v.string(),

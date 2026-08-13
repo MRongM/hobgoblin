@@ -951,6 +951,36 @@ describe('ManagedTerminalSession', () => {
     expect(terminalCalls.resize).not.toHaveBeenCalled()
   })
 
+  test('replays alternate-screen output without waiting for a follow-up controller resize', async () => {
+    const resizeRequest = deferred<TerminalMutationResult>()
+    terminalCalls.resize.mockReturnValueOnce(resizeRequest.promise)
+    terminalCalls.attach.mockResolvedValueOnce(
+      attachResult('session-1', {
+        canonicalCols: 101,
+        canonicalRows: 30,
+        snapshot: '\x1b[?1049h\x1b[2KWorking\x1b[1;101H6% left',
+        snapshotSeq: 1,
+      }),
+    )
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session, { canonicalCols: 101, canonicalRows: 30 })
+
+    session.attach(host)
+    try {
+      await flushTerminalStart()
+
+      const term = xtermMocks.terminals[0]!
+      expect(term.reset).toHaveBeenCalledTimes(1)
+      expect(term.write).toHaveBeenCalledWith('\x1b[?1049h\x1b[2KWorking\x1b[1;101H6% left', expect.any(Function))
+      expect(session.snapshot().renderPending).toBeUndefined()
+    } finally {
+      resizeRequest.resolve(true)
+      session.dispose({ closeSession: false })
+    }
+  })
+
   test('scrubs Mobile Web normal-buffer history from the terminal edge without a range input', async () => {
     const host = document.createElement('div')
     const parking = document.createElement('div')
@@ -1657,6 +1687,10 @@ describe('ManagedTerminalSession', () => {
       sessionId: 'session-1',
       cols: 100,
       rows: 30,
+      windowsPtyAppearance: {
+        foreground: { red: 29, green: 29, blue: 31 },
+        background: { red: 251, green: 251, blue: 253 },
+      },
     })
     expect(terminalCalls.attach).toHaveBeenCalledTimes(1)
   })

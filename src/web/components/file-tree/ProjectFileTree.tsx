@@ -65,6 +65,7 @@ import {
 } from '#/web/components/ui/context-menu.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -217,6 +218,7 @@ export function ProjectFileTree({
   const [createEntryPending, setCreateEntryPending] = useState(false)
   const [createEntryError, setCreateEntryError] = useState<string | null>(null)
   const protectedRootNames = useMemo(() => new Set(folderContext?.protectedRootNames ?? []), [folderContext])
+  const refreshExpandedDirectoriesOnRootRefresh = getInitialBootstrap().hostPlatform === 'win32'
   const isProtectedRoot = useCallback(
     (node: FileTreeNode) => !node.relativePath.includes('/') && protectedRootNames.has(node.name),
     [protectedRootNames],
@@ -639,9 +641,26 @@ export function ProjectFileTree({
   const refreshTreeDirectory = useCallback(
     (target: CreateEntryTarget | null) => {
       if (!target) return
+      if (
+        refreshExpandedDirectoriesOnRootRefresh &&
+        worktreePath &&
+        target.parentRelativePath === ROOT_DIR &&
+        target.parentAbsolutePath === worktreePath
+      ) {
+        void (async () => {
+          await loadDirectory(target.parentRelativePath, target.parentAbsolutePath)
+          const expandedRelativePaths = Array.from(expandedDirs).sort(
+            (a, b) => pathParts(a).length - pathParts(b).length,
+          )
+          for (const relativePath of expandedRelativePaths) {
+            await loadDirectory(relativePath, absoluteDirectoryPath(worktreePath, relativePath))
+          }
+        })()
+        return
+      }
       void loadDirectory(target.parentRelativePath, target.parentAbsolutePath)
     },
-    [loadDirectory],
+    [expandedDirs, loadDirectory, refreshExpandedDirectoriesOnRootRefresh, worktreePath],
   )
 
   const refreshDirectoryForContextNode = useCallback(
@@ -2080,6 +2099,12 @@ function relativeDirPath(worktreePath: string, dirPath: string): string {
     .slice(normalizedRoot.length + 1)
     .split('\\')
     .join('/')
+}
+
+function absoluteDirectoryPath(worktreePath: string, relativePath: string): string {
+  if (!relativePath) return worktreePath
+  const separator = worktreePath.includes('\\') && !worktreePath.includes('/') ? '\\' : '/'
+  return `${worktreePath.replace(/[\\/]+$/, '')}${separator}${relativePath.split('/').join(separator)}`
 }
 
 function sourcePathsFromInternalDrop(dataTransfer: DataTransfer): string[] {

@@ -9,6 +9,8 @@ import { sendRendererEffectIntent } from '#/main/renderer-surface-events.ts'
 import { isValidAbsolutePath } from '#/shared/input-validation.ts'
 import { isTrustedIpcEvent } from '#/main/ipc/trusted-webcontents.ts'
 import { openHttpExternal, openHttpsExternal } from '#/main/external-url.ts'
+import { titleBarOverlayForTheme } from '#/main/window-chrome.ts'
+import { isColorTheme } from '#/shared/color-theme.ts'
 import type { SettingsPage } from '#/shared/rpc.ts'
 import {
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
@@ -20,6 +22,7 @@ import {
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+  SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 import type {
@@ -27,12 +30,44 @@ import type {
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FileTreeClipboardFilePayload, FileTreeClipboardReadInput } from '#/shared/file-tree-clipboard.ts'
+import {
+  MAX_CHROME_HEIGHT_PX,
+  MIN_CHROME_HEIGHT_PX,
+  type NativeWindowChromeThemeProjection,
+} from '#/shared/window-chrome.ts'
 
 function callerWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender) ?? focusedRegisteredSurface()?.window ?? getMainWindow() ?? null
 }
 
+function isNativeWindowChromeThemeProjection(input: unknown): input is NativeWindowChromeThemeProjection {
+  if (!input || typeof input !== 'object') return false
+  const projection = input as Partial<NativeWindowChromeThemeProjection>
+  return (
+    (projection.theme === 'light' || projection.theme === 'dark') &&
+    isColorTheme(projection.colorTheme) &&
+    typeof projection.topbarHeightPx === 'number' &&
+    Number.isInteger(projection.topbarHeightPx) &&
+    projection.topbarHeightPx >= MIN_CHROME_HEIGHT_PX &&
+    projection.topbarHeightPx <= MAX_CHROME_HEIGHT_PX
+  )
+}
+
 export function wireShellBridgeIpc(): void {
+  ipcMain.handle(SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL, async (event, input?: unknown): Promise<boolean> => {
+    if (!isTrustedIpcEvent(event) || !isNativeWindowChromeThemeProjection(input)) return false
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+    const overlay = titleBarOverlayForTheme(input.theme, input.colorTheme, input.topbarHeightPx)
+    if (!overlay) return true
+    try {
+      win.setTitleBarOverlay(overlay)
+      return true
+    } catch {
+      return false
+    }
+  })
+
   ipcMain.handle(SHELL_OPEN_SETTINGS_WINDOW_CHANNEL, async (event, input?: { page?: SettingsPage }) => {
     if (!isTrustedIpcEvent(event)) return false
     const win = await activateMainWindow()

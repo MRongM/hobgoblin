@@ -8,6 +8,7 @@ import {
 import {
   terminalSearchDecorationsForCurrentDocument,
   terminalThemeForCurrentDocument,
+  terminalWindowsPtyAppearanceForCurrentDocument,
 } from '#/web/components/terminal/terminal-theme.ts'
 
 const REQUIRED_XTERM_THEME_KEYS = [
@@ -50,6 +51,22 @@ describe('terminal theme tokens', () => {
       foreground: '#1d1d1f',
       cursor: '#1d1d1f',
       blue: '#0066cc',
+    })
+  })
+
+  test('reads the current terminal foreground and background for a new Windows PTY', () => {
+    installTerminalThemeStyles()
+
+    document.documentElement.setAttribute('data-theme', 'dark')
+    expect(terminalWindowsPtyAppearanceForCurrentDocument()).toEqual({
+      foreground: { red: 245, green: 245, blue: 247 },
+      background: { red: 17, green: 17, blue: 19 },
+    })
+
+    document.documentElement.setAttribute('data-theme', 'light')
+    expect(terminalWindowsPtyAppearanceForCurrentDocument()).toEqual({
+      foreground: { red: 29, green: 29, blue: 31 },
+      background: { red: 251, green: 251, blue: 253 },
     })
   })
 
@@ -165,7 +182,17 @@ describe('terminal theme tokens', () => {
     ['solarized', 'light', '#fdf6e3', '#475b62', 'rgb(38 139 210 / 0.22)', '#268bd2', '#6c71c4', '#b58900', '#268bd2'],
     ['solarized', 'dark', '#002b36', '#93a1a1', 'rgb(38 139 210 / 0.28)', '#268bd2', '#6c71c4', '#b58900', '#268bd2'],
     ['tokyo-night', 'light', '#e6e7ed', '#343b58', 'rgb(41 89 170 / 0.22)', '#2959aa', '#5a3e8e', '#8f5e15', '#2959aa'],
-    ['tokyo-night', 'dark', '#1a1b26', '#c0caf5', 'rgb(122 162 247 / 0.28)', '#7aa2f7', '#bb9af7', '#e0af68', '#7aa2f7'],
+    [
+      'tokyo-night',
+      'dark',
+      '#1a1b26',
+      '#c0caf5',
+      'rgb(122 162 247 / 0.28)',
+      '#7aa2f7',
+      '#bb9af7',
+      '#e0af68',
+      '#7aa2f7',
+    ],
   ] as const)(
     'reads %s/%s synchronized terminal tokens',
     (colorTheme, mode, background, foreground, selectionBackground, blue, brightMagenta, searchMatch, searchActive) => {

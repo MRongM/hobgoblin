@@ -52,6 +52,72 @@ describe('spawnTerminalPtyRuntime', () => {
     )
   })
 
+  test('declares both xterm-256color and truecolor for spawned terminal applications', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      {
+        kind: 'powershell-core',
+        command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockReturnValue(terminalPty('pwsh.exe'))
+
+    spawnTerminalPtyRuntime({
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+    })
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ TERM: 'xterm-256color', COLORTERM: 'truecolor' }),
+      }),
+    )
+  })
+
+  test('sets the ConPTY default color table and attributes before launching an explicit Windows command', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockReturnValue(terminalPty('powershell.exe'))
+
+    const result = spawnTerminalPtyRuntime({
+      command: 'C:\\Tools\\custom-shell.exe',
+      args: ['--interactive', "value'with-quote"],
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+      windowsPtyAppearance: {
+        foreground: { red: 0xf5, green: 0xf5, blue: 0xf7 },
+        background: { red: 0x11, green: 0x11, blue: 0x13 },
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.runtime.processName()).toBe('custom-shell.exe')
+    expect(spawnMock).toHaveBeenCalledTimes(1)
+    const [command, args] = spawnMock.mock.calls[0]!
+    expect(command).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe')
+    expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', expect.any(String)])
+    const script = Buffer.from(args[4] as string, 'base64').toString('utf16le')
+    expect(script).toContain('GetConsoleScreenBufferInfoEx')
+    expect(script).toContain('SetConsoleScreenBufferInfoEx')
+    expect(script).toContain('C:\\Tools\\custom-shell.exe')
+    expect(script).toContain("'--interactive'")
+    expect(script).toContain("'value''with-quote'")
+    expect(script).toContain('16250357')
+    expect(script).toContain('1249553')
+  })
+
   test('falls back when the preferred Windows shell cannot be spawned', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     resolveWindowsShellCandidatesMock.mockReturnValue([

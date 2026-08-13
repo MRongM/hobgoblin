@@ -79,6 +79,23 @@ describe('app shell client', () => {
     installWindow()
   })
 
+  test('projects an effective theme through the native sender-window shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const projectWindowChromeTheme = vi.fn(async () => true)
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        kind: () => 'electron',
+        shell: () => ({ projectWindowChromeTheme }) as never,
+      }),
+    )
+    const projection = { theme: 'light' as const, colorTheme: 'signal' as const, topbarHeightPx: 39 }
+
+    const { projectNativeWindowChromeTheme } = await import('#/web/app-shell-client.ts')
+
+    await expect(projectNativeWindowChromeTheme(projection)).resolves.toBe(true)
+    expect(projectWindowChromeTheme).toHaveBeenCalledWith(projection)
+  })
+
   test('opens a detached file area window only through the native capability', async () => {
     const bridgeModule = await import('#/web/renderer-bridge.ts')
     const request = {

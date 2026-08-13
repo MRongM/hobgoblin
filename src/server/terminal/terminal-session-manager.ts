@@ -17,6 +17,7 @@ import {
   type TerminalSessionSummary,
   type TerminalTakeoverResult,
   type TerminalWindowsPty,
+  type TerminalWindowsPtyAppearance,
 } from '#/shared/terminal.ts'
 import {
   attachTerminalAttachment,
@@ -57,6 +58,7 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   rows: number
   attachmentId?: string
   attachmentConnected?: boolean
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
   forceNew?: boolean
   command?: string
   args?: string[]
@@ -73,6 +75,7 @@ interface TerminalSession<TOwner extends string | number> {
   cwd: string
   command?: string
   args?: string[]
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
   tmuxSessionName: string | null
   tmuxWorkingDirectory: string | null
   tmuxCloseSupported: boolean
@@ -141,6 +144,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cwd,
       command: input.command,
       args: input.args,
+      windowsPtyAppearance: input.windowsPtyAppearance,
       tmuxSessionName: input.tmuxSessionName ?? null,
       tmuxWorkingDirectory: input.tmuxSessionName ? (input.tmuxWorkingDirectory ?? null) : null,
       tmuxCloseSupported: input.tmuxSessionName ? input.tmuxCloseSupported !== false : false,
@@ -263,6 +267,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     rows: number,
     attachmentId?: string,
     attachmentConnected?: boolean,
+    windowsPtyAppearance?: TerminalWindowsPtyAppearance,
   ): TerminalAttachResult {
     if (!isValidTerminalSessionId(sessionId)) return { ok: false, message: 'error.invalid-arguments' }
     const size = normalizeTerminalSize(cols, rows)
@@ -279,6 +284,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     }
     session.phase = 'restarting'
     session.message = null
+    session.windowsPtyAppearance = windowsPtyAppearance ?? session.windowsPtyAppearance
     this.resetSessionState(session, size.cols, size.rows)
     const spawnResult = this.spawnSessionPty(session)
     if (!spawnResult.ok) return spawnResult
@@ -538,6 +544,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cwd: session.cwd,
       cols: session.cols,
       rows: session.rows,
+      windowsPtyAppearance: session.windowsPtyAppearance,
     })
     if (!spawnResult.ok) {
       this.disposeSessionResources(session)

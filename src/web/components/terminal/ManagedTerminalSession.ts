@@ -23,7 +23,10 @@ import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TERMINAL_FONT_FAMILY } from '#/web/components/terminal/terminal-geometry.ts'
 import { isTerminalEmulatorInput, type TerminalInput } from '#/web/components/terminal/terminal-input.ts'
 import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
-import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
+import {
+  terminalWindowsPtyAppearanceForCurrentDocument,
+  type TerminalThemeMode,
+} from '#/web/components/terminal/terminal-theme.ts'
 import type {
   TerminalBellEvent,
   TerminalDescriptor,
@@ -46,6 +49,7 @@ export class ManagedTerminalSession {
   private readonly notify: () => void
   private readonly onBell: ((descriptor: TerminalDescriptor, event: TerminalBellEvent) => void) | null
   private readonly onInput: ((descriptor: TerminalDescriptor) => void) | null
+  private terminalThemeMode: () => TerminalThemeMode
   private readonly runtime = new TerminalSessionRuntime()
   private readonly view: TerminalSessionView
   private readonly backgroundBellScanner = createTerminalBellScanner()
@@ -80,6 +84,7 @@ export class ManagedTerminalSession {
     this.notify = notify
     this.onBell = onBell
     this.onInput = onInput
+    this.terminalThemeMode = terminalThemeMode
     this.view = new TerminalSessionView(
       {
         onInput: (data) => this.writeInput(data),
@@ -109,6 +114,7 @@ export class ManagedTerminalSession {
   }
 
   setTerminalThemeMode(terminalThemeMode: () => TerminalThemeMode): void {
+    this.terminalThemeMode = terminalThemeMode
     this.view.setTerminalThemeMode(terminalThemeMode)
   }
 
@@ -550,6 +556,7 @@ export class ManagedTerminalSession {
       sessionId,
       cols: term.cols,
       rows: term.rows,
+      windowsPtyAppearance: terminalWindowsPtyAppearanceForCurrentDocument(this.terminalThemeMode()),
     }
   }
 

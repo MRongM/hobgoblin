@@ -2,7 +2,7 @@ import * as pty from 'node-pty'
 import os from 'node:os'
 import path from 'node:path'
 import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
-import type { TerminalWindowsPty } from '#/shared/terminal.ts'
+import type { TerminalRgbColor, TerminalWindowsPty, TerminalWindowsPtyAppearance } from '#/shared/terminal.ts'
 
 export interface TerminalPtyRuntime {
   write(data: string): void
@@ -19,6 +19,7 @@ export interface SpawnTerminalPtyRuntimeInput {
   cwd: string
   cols: number
   rows: number
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
 }
 
 export type SpawnTerminalPtyRuntimeResult =
@@ -30,7 +31,7 @@ const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
 export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): SpawnTerminalPtyRuntimeResult {
   try {
     const candidates = resolveTerminalPtySpawnCandidates(input)
-    const env = { ...process.env, TERM: 'xterm-256color' }
+    const env = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
     let lastError: unknown
 
     for (const candidate of candidates) {
@@ -45,7 +46,7 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
         const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
         const runtime = new NodePtyTerminalRuntime(
           term,
-          process.platform === 'win32' ? path.win32.basename(candidate.command) : undefined,
+          process.platform === 'win32' ? candidate.launchedProcessName : undefined,
         )
         return windowsPty ? { ok: true, runtime, windowsPty } : { ok: true, runtime }
       } catch (error) {
@@ -69,12 +70,36 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
 
 function resolveTerminalPtySpawnCandidates(
   input: SpawnTerminalPtyRuntimeInput,
-): Array<{ command: string; args: string[] }> {
+): Array<{ command: string; args: string[]; launchedProcessName?: string }> {
+  const candidates = resolveDirectTerminalPtySpawnCandidates(input)
+  const appearance = input.windowsPtyAppearance
+  if (process.platform !== 'win32' || !appearance) return candidates
+  const bootstrap = resolveWindowsTerminalShellCandidates().find(
+    (candidate) => candidate.kind === 'windows-powershell' || candidate.kind === 'powershell-core',
+  )
+  if (!bootstrap) return candidates
+  return candidates.map((candidate) => ({
+    command: bootstrap.command,
+    args: [
+      ...bootstrap.args,
+      '-NoProfile',
+      '-NonInteractive',
+      '-EncodedCommand',
+      encodeWindowsPtyBootstrap(candidate.command, candidate.args, appearance),
+    ],
+    launchedProcessName: candidate.launchedProcessName,
+  }))
+}
+
+function resolveDirectTerminalPtySpawnCandidates(
+  input: SpawnTerminalPtyRuntimeInput,
+): Array<{ command: string; args: string[]; launchedProcessName?: string }> {
   if (input.command) {
     return [
       {
         command: input.command,
         args: input.args ?? (process.platform === 'win32' ? [] : ['-l']),
+        launchedProcessName: process.platform === 'win32' ? path.win32.basename(input.command) : undefined,
       },
     ]
   }
@@ -83,10 +108,65 @@ function resolveTerminalPtySpawnCandidates(
     return resolveWindowsTerminalShellCandidates().map((candidate) => ({
       command: candidate.command,
       args: input.args ?? candidate.args,
+      launchedProcessName: path.win32.basename(candidate.command),
     }))
   }
 
   return [{ command: process.env.SHELL || '/bin/zsh', args: input.args ?? ['-l'] }]
+}
+
+function encodeWindowsPtyBootstrap(command: string, args: string[], appearance: TerminalWindowsPtyAppearance): string {
+  const foreground = windowsColorRef(appearance.foreground)
+  const background = windowsColorRef(appearance.background)
+  const invocation = [command, ...args].map(quotePowerShellLiteral).join(' ')
+  const script = `$source = @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class HobgoblinConsoleColors {
+    [StructLayout(LayoutKind.Sequential)] public struct COORD { public short X; public short Y; }
+    [StructLayout(LayoutKind.Sequential)] public struct SMALL_RECT { public short Left; public short Top; public short Right; public short Bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct CONSOLE_SCREEN_BUFFER_INFOEX {
+        public uint cbSize;
+        public COORD dwSize;
+        public COORD dwCursorPosition;
+        public ushort wAttributes;
+        public SMALL_RECT srWindow;
+        public COORD dwMaximumWindowSize;
+        public ushort wPopupAttributes;
+        [MarshalAs(UnmanagedType.Bool)] public bool bFullscreenSupported;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public uint[] ColorTable;
+    }
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr GetStdHandle(int handle);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfoEx(IntPtr output, ref CONSOLE_SCREEN_BUFFER_INFOEX info);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleScreenBufferInfoEx(IntPtr output, ref CONSOLE_SCREEN_BUFFER_INFOEX info);
+    public static void SetDefaultColors(uint foreground, uint background) {
+        var info = new CONSOLE_SCREEN_BUFFER_INFOEX();
+        info.cbSize = (uint)Marshal.SizeOf(info);
+        info.ColorTable = new uint[16];
+        var output = GetStdHandle(-11);
+        if (!GetConsoleScreenBufferInfoEx(output, ref info)) return;
+        info.ColorTable[7] = foreground;
+        info.ColorTable[0] = background;
+        info.wAttributes = (ushort)((info.wAttributes & 0xff00) | 7);
+        SetConsoleScreenBufferInfoEx(output, ref info);
+    }
+}
+'@
+Add-Type -TypeDefinition $source
+[HobgoblinConsoleColors]::SetDefaultColors(${foreground}, ${background})
+& ${invocation}
+exit $LASTEXITCODE
+`
+  return Buffer.from(script, 'utf16le').toString('base64')
+}
+
+function windowsColorRef(color: TerminalRgbColor): number {
+  return color.red | (color.green << 8) | (color.blue << 16)
+}
+
+function quotePowerShellLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`
 }
 
 export function detectWindowsPtyCompatibility(

@@ -16,6 +16,7 @@
     "build:web": "vite build",
     "start:server": "node scripts/start-server.ts",
     "build:electron": "electron-builder",
+    "build:win:fast": "bun scripts/build-windows-fast.ts",
     "install:app": "bun install.ts",
     "check:architecture": "bun scripts/check-architecture.ts",
     "typecheck": "bun scripts/typecheck.ts",

@@ -141,6 +141,41 @@ describe('terminal protocol normalization', () => {
     ).toMatchObject({ action: 'create' })
   })
 
+  test('preserves validated Windows PTY appearance colors on create requests', () => {
+    const request = {
+      type: 'request' as const,
+      requestId: 'request_windows_pty_colors',
+      action: 'create' as const,
+      input: {
+        repoRoot: '/repo',
+        branch: 'main',
+        worktreePath: '/repo',
+        kind: 'primary' as const,
+        windowsPtyAppearance: {
+          foreground: { red: 245, green: 245, blue: 247 },
+          background: { red: 17, green: 17, blue: 19 },
+        },
+      },
+    }
+
+    expect(normalizeTerminalClientMessage(request)).toMatchObject({
+      action: 'create',
+      input: { windowsPtyAppearance: request.input.windowsPtyAppearance },
+    })
+    expect(
+      normalizeTerminalClientMessage({
+        ...request,
+        input: {
+          ...request.input,
+          windowsPtyAppearance: {
+            ...request.input.windowsPtyAppearance,
+            background: { red: 256, green: 17, blue: 19 },
+          },
+        },
+      }),
+    ).toBeNull()
+  })
+
   test('accepts a measured batch tmux-open request', () => {
     expect(
       normalizeTerminalClientMessage({

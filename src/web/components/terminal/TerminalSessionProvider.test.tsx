@@ -612,6 +612,10 @@ describe('TerminalSessionProvider', () => {
 
     try {
       const base = { repoRoot: REPO_ID, branch: 'feature/worktree', worktreePath: WORKTREE_PATH }
+      const windowsPtyAppearance = {
+        foreground: { red: 255, green: 255, blue: 255 },
+        background: { red: 0, green: 0, blue: 0 },
+      }
       await act(async () => {
         await getContext().createTerminal(base)
         await getContext().createTerminal(base, 'tmux-if-available')
@@ -625,6 +629,7 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         launchMode: 'native',
+        windowsPtyAppearance,
       })
       expect(createTerminalMock).toHaveBeenNthCalledWith(2, {
         ...base,
@@ -633,6 +638,7 @@ describe('TerminalSessionProvider', () => {
         cols: 80,
         rows: 24,
         launchMode: 'tmux-if-available',
+        windowsPtyAppearance,
       })
       expect(openTmuxSessionsMock).not.toHaveBeenCalled()
 
@@ -644,6 +650,7 @@ describe('TerminalSessionProvider', () => {
         attachmentId: 'attachment_local',
         cols: 80,
         rows: 24,
+        windowsPtyAppearance,
       })
       expect(getProbe().summaries.map((session) => [session.terminalId, session.selected, session.hasBell])).toEqual([
         ['terminal-1', false, false],

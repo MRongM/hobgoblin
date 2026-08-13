@@ -108,6 +108,14 @@ _Avoid_: New terminal, embedded terminal
 The interactive command interpreter running inside one internal terminal session. It is attached to Hobgoblin's PTY and rendered by the existing terminal surface; it is distinct from the terminal host, the PTY transport, and an external terminal application.
 _Avoid_: Windows Terminal, terminal emulator, external terminal
 
+**Internal terminal input focus**:
+The renderer-local browser focus that lets the selected controlling internal terminal receive keyboard input through its terminal input surface. It is distinct from terminal selection, terminal attachment ownership, Terminal focus mode, and native window activation; output, replay, resize, or notification activity should not silently create it.
+_Avoid_: Terminal focus mode, selected terminal, window focus, terminal ownership
+
+**Native window activation**:
+The operating-system state where a Hobgoblin application window becomes visible and foregrounded for user interaction. It is distinct from internal terminal input focus and does not by itself select an internal terminal or grant terminal input authority.
+_Avoid_: Terminal focus, xterm focus, unread bell
+
 **Internal terminal path identity**:
 The renderer-and-server-stable identity of an internal terminal's project root or working-directory path. Equivalent Windows drive and UNC paths share one case-insensitive identity with normalized separators and dot segments, while the repository-owned original path remains authoritative for navigation, presentation, and the PTY working directory; symbolic links are never resolved as part of identity. It is distinct from a filesystem real path and from the operational working-directory spelling.
 _Avoid_: Normalized working directory, canonical filesystem path, real path

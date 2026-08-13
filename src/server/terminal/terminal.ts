@@ -253,6 +253,7 @@ export async function restartServerTerminal(
     input.rows,
     input.attachmentId,
     broker.attachmentIsConnected(clientId, input.attachmentId),
+    input.windowsPtyAppearance,
   )
   return result.ok ? await withSessionSnapshot(result) : result
 }

@@ -25,6 +25,7 @@ import type {
   OpenDetachedFileAreaWindowResult,
   RendererSurfaceBootstrap,
 } from '#/shared/file-area.ts'
+import type { NativeWindowChromeThemeProjection } from '#/shared/window-chrome.ts'
 
 interface GoblinNativeBridge {
   runtime: RendererRuntimeSnapshot
@@ -51,6 +52,7 @@ interface GoblinNativeBridge {
     writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
     readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
     openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
+    projectWindowChromeTheme?: (input: NativeWindowChromeThemeProjection) => Promise<boolean>
   }
   terminal: {
     notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>

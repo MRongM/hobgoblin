@@ -19,6 +19,7 @@ import {
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+  SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   TERMINAL_NOTIFY_BELL_CHANNEL,
   TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL,
@@ -224,6 +225,11 @@ describe('preload goblinNative bridge', () => {
       branch: 'feature/a',
       tab: 'history',
     })
+    await goblinNative.shell.projectWindowChromeTheme({
+      theme: 'light',
+      colorTheme: 'signal',
+      topbarHeightPx: 39,
+    })
 
     expect(invocations.map((entry) => entry.channel)).toEqual([
       SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
@@ -237,6 +243,7 @@ describe('preload goblinNative bridge', () => {
       SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
       SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
       SHELL_OPEN_DETACHED_FILE_AREA_WINDOW_CHANNEL,
+      SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL,
     ])
     expect(sends).toEqual([])
   })

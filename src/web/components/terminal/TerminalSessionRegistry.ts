@@ -26,7 +26,10 @@ import {
 } from '#/web/components/terminal/terminal-repo-index.ts'
 import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
 import { DEFAULT_TERMINAL_FONT_FAMILY, measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
-import type { TerminalThemeMode } from '#/web/components/terminal/terminal-theme.ts'
+import {
+  terminalWindowsPtyAppearanceForCurrentDocument,
+  type TerminalThemeMode,
+} from '#/web/components/terminal/terminal-theme.ts'
 import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
 import type {
   TerminalDescriptor,
@@ -380,6 +383,7 @@ export class TerminalSessionRegistry {
       attachmentId,
       cols: geometry.cols,
       rows: geometry.rows,
+      windowsPtyAppearance: terminalWindowsPtyAppearanceForCurrentDocument(this.terminalThemeMode),
     }
     this.beginTerminalCreation(terminalWorktreeKey)
     try {
@@ -426,6 +430,7 @@ export class TerminalSessionRegistry {
       attachmentId,
       cols: geometry.cols,
       rows: geometry.rows,
+      windowsPtyAppearance: terminalWindowsPtyAppearanceForCurrentDocument(this.terminalThemeMode),
     })
     if (!result.ok) throw new Error(result.message)
     if (result.restored === 0) {

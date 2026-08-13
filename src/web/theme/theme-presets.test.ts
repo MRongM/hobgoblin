@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import { COLOR_THEMES, type ColorTheme } from '#/shared/color-theme.ts'
+import { TOPBAR_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
 
 const THEME_MODES = ['light', 'dark'] as const
 type ThemeMode = (typeof THEME_MODES)[number]
@@ -711,6 +712,20 @@ describe('theme preset css contracts', () => {
         } else {
           expect(topbar, `${colorTheme}/${theme} topbar is deeper than toolbar`).toBeLessThan(toolbar)
         }
+      }
+    }
+  })
+
+  test('keeps native title bar overlays aligned with renderer topbars', () => {
+    for (const colorTheme of COLOR_THEMES) {
+      const css = readThemeCss(colorTheme)
+
+      for (const theme of THEME_MODES) {
+        const block = selectorBlock(css, colorTheme, theme)
+
+        expect(TOPBAR_BACKGROUND_BY_COLOR_THEME[colorTheme][theme], `${colorTheme}/${theme} native topbar`).toBe(
+          cssTokenValue(block, '--goblin-topbar-bg'),
+        )
       }
     }
   })

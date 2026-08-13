@@ -17,6 +17,9 @@ const toastMocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
 }))
+const bootstrapMocks = vi.hoisted(() => ({
+  hostPlatform: 'darwin' as NodeJS.Platform,
+}))
 
 const getRepositoryFileTree = vi.fn(
   async (
@@ -138,6 +141,18 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 39, toolbarHeightPx: 41 }),
 }))
 
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({
+    runtime: { kind: 'electron', bridgeVersion: 1, capabilities: [] },
+    homeDir: '',
+    hostPlatform: bootstrapMocks.hostPlatform,
+    initialI18n: null,
+    initialSettings: null,
+    initialServer: null,
+    surface: { kind: 'main' },
+  }),
+}))
+
 vi.mock('sonner', () => ({
   toast: {
     success: toastMocks.success,
@@ -182,6 +197,7 @@ beforeEach(() => {
       bytesBase64: Buffer.from([1, 2, 3]).toString('base64'),
     },
   })
+  bootstrapMocks.hostPlatform = 'darwin'
   toastMocks.success.mockClear()
   toastMocks.error.mockClear()
   clipboardWriteText.mockClear()
@@ -488,6 +504,58 @@ describe('ProjectFileTree', () => {
     })
 
     expect(container?.textContent).not.toContain('app.ts')
+  })
+
+  test('refreshes expanded directories from the toolbar on Windows', async () => {
+    bootstrapMocks.hostPlatform = 'win32'
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('src')
+    await act(async () => {
+      row.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    getRepositoryFileTree.mockClear()
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    if (!refreshButton) throw new Error('missing refresh button')
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
+  })
+
+  test('keeps toolbar refresh scoped to the root directory on macOS', async () => {
+    bootstrapMocks.hostPlatform = 'darwin'
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    const row = treeItemByText('src')
+    await act(async () => {
+      row.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    getRepositoryFileTree.mockClear()
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    if (!refreshButton) throw new Error('missing refresh button')
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getRepositoryFileTree).toHaveBeenCalledTimes(1)
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
   })
 
   test('clicking a directory row selects and expands it', async () => {

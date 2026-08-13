@@ -960,6 +960,83 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('copies a desktop terminal selection with Ctrl+C without sending interrupt input', async () => {
+    const clearMobileSelection = vi.fn()
+    const writeInput = vi.fn()
+    const mobileSelectionText = vi.fn(() => 'selected desktop text')
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      clearMobileSelection,
+      isTerminalFocusTarget: vi.fn(
+        (_key, target) => target instanceof Element && target.closest('.goblin-terminal-slot__host') !== null,
+      ),
+      mobileSelectionText,
+      writeInput,
+    })
+
+    try {
+      clearMobileSelection.mockClear()
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLElement)
+      const event = new KeyboardEvent('keydown', {
+        key: 'c',
+        code: 'KeyC',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(event)
+        await Promise.resolve()
+      })
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected desktop text')
+      expect(clearMobileSelection).toHaveBeenCalledWith('terminal-1')
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('leaves Ctrl+C available for terminal interrupt when there is no desktop selection', async () => {
+    const clearMobileSelection = vi.fn()
+    const mobileSelectionText = vi.fn(() => '')
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      clearMobileSelection,
+      isTerminalFocusTarget: vi.fn(
+        (_key, target) => target instanceof Element && target.closest('.goblin-terminal-slot__host') !== null,
+      ),
+      mobileSelectionText,
+    })
+
+    try {
+      clearMobileSelection.mockClear()
+      const host = container.querySelector<HTMLElement>('.goblin-terminal-slot__host')
+      expect(host).toBeInstanceOf(HTMLElement)
+      const event = new KeyboardEvent('keydown', {
+        key: 'c',
+        code: 'KeyC',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+
+      await act(async () => {
+        host?.dispatchEvent(event)
+        await Promise.resolve()
+      })
+
+      expect(event.defaultPrevented).toBe(false)
+      expect(clipboardMocks.writeTerminalClipboardText).not.toHaveBeenCalled()
+      expect(clearMobileSelection).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('does not offer Copy when xterm reports an empty selection on release', async () => {
     vi.useFakeTimers()
     mobileDetectionMocks.isMobileDevice = true

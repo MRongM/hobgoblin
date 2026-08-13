@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
 import { EffectiveProjectThemeBridge } from '#/web/components/EffectiveProjectThemeBridge.tsx'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
@@ -11,6 +11,12 @@ import { settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
+
+const projectNativeWindowChromeTheme = vi.hoisted(() => vi.fn(async () => true))
+
+vi.mock('#/web/app-shell-client.ts', () => ({
+  projectNativeWindowChromeTheme,
+}))
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -30,6 +36,7 @@ beforeEach(() => {
     setPref: async () => {},
     setColorTheme: async () => {},
   })
+  projectNativeWindowChromeTheme.mockClear()
 })
 
 afterEach(() => {
@@ -62,18 +69,33 @@ describe('EffectiveProjectThemeBridge', () => {
     await renderBridge()
     expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('cursor')
+    expect(projectNativeWindowChromeTheme).toHaveBeenLastCalledWith({
+      theme: 'light',
+      colorTheme: 'cursor',
+      topbarHeightPx: 34,
+    })
 
     await act(async () => {
       useReposStore.setState({ activeId: '/repo-b', activeProjectId: '/repo-b' })
       await Promise.resolve()
     })
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('github')
+    expect(projectNativeWindowChromeTheme).toHaveBeenLastCalledWith({
+      theme: 'light',
+      colorTheme: 'github',
+      topbarHeightPx: 34,
+    })
 
     await act(async () => {
       useReposStore.setState({ activeId: null, activeProjectId: null })
       await Promise.resolve()
     })
     expect(document.documentElement.getAttribute('data-color-theme')).toBe('macos')
+    expect(projectNativeWindowChromeTheme).toHaveBeenLastCalledWith({
+      theme: 'light',
+      colorTheme: 'macos',
+      topbarHeightPx: 34,
+    })
   })
 
   test('reapplies active project override after global theme store changes', async () => {

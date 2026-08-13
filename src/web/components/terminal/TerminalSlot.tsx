@@ -622,8 +622,21 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         closeSearch()
         return
       }
+      if (key && isNonMacTerminalCopyShortcut(event, isMacPlatform) && isTerminalFocusTarget(key, event.target)) {
+        const selectedText = mobileSelectionText(key)
+        if (!selectedText) return
+        event.preventDefault()
+        event.stopPropagation()
+        void writeTerminalClipboardText(selectedText).then((copied) => {
+          if (!copied) {
+            toast.error(t('terminal.selection-copy-failed'))
+            return
+          }
+          clearMobileSelection(key)
+        })
+      }
     },
-    [closeSearch, searchOpen],
+    [clearMobileSelection, closeSearch, isMacPlatform, isTerminalFocusTarget, key, mobileSelectionText, searchOpen, t],
   )
   const handlePasteCapture = useCallback(
     (event: ClipboardEvent<HTMLDivElement>) => {
@@ -1106,6 +1119,12 @@ function ViewerStatus({
 function isTerminalSearchShortcut(event: KeyboardEvent<HTMLDivElement>): boolean {
   if (event.altKey || event.key.toLowerCase() !== 'f') return false
   return event.metaKey || (event.ctrlKey && event.shiftKey)
+}
+
+function isNonMacTerminalCopyShortcut(event: KeyboardEvent<HTMLDivElement>, isMac: boolean): boolean {
+  return (
+    !isMac && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'c'
+  )
 }
 
 function shellEscapePath(path: string): string {

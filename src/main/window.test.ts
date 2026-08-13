@@ -348,7 +348,7 @@ describe('main window navigation boundaries', () => {
     expect(mocks.windowOptions[0]).toMatchObject({
       titleBarStyle: 'hidden',
       titleBarOverlay: {
-        color: '#fbfbfd',
+        color: '#d8e7f8',
         symbolColor: '#000000',
         height: 39,
       },
@@ -358,7 +358,7 @@ describe('main window navigation boundaries', () => {
     applyMainWindowChromeTheme('dark')
 
     expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
-      color: '#1c1c1e',
+      color: '#0d1622',
       symbolColor: '#ffffff',
       height: 39,
     })
@@ -377,7 +377,7 @@ describe('main window navigation boundaries', () => {
     }
 
     expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
-      color: '#fbfbfd',
+      color: '#d8e7f8',
       symbolColor: '#000000',
       height: 42,
     })

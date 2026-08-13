@@ -12,6 +12,7 @@ import type {
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
 import { openWebDetachedFileAreaWindow } from '#/web/lib/web-detached-file-area.ts'
+import type { NativeWindowChromeThemeProjection } from '#/shared/window-chrome.ts'
 const PROJECT_GITHUB_URL = 'https://github.com/MRongM/hobgoblin'
 
 function nativeShell() {
@@ -74,6 +75,14 @@ export async function openDetachedFileAreaWindow(
 
 export function homeDirectory(): string {
   return getInitialBootstrap().homeDir
+}
+
+export async function projectNativeWindowChromeTheme(input: NativeWindowChromeThemeProjection): Promise<boolean> {
+  try {
+    return (await nativeShell()?.projectWindowChromeTheme?.(input)) ?? false
+  } catch {
+    return false
+  }
 }
 
 export function pathForDroppedFile(file: File): string {

@@ -22,7 +22,7 @@ describe('window chrome helpers', () => {
     setPlatform('win32')
 
     expect(titleBarOverlayForTheme('light', 'macos', WINDOW_TOPBAR_HEIGHT_PX)).toEqual({
-      color: '#ffffff',
+      color: '#d8e7f8',
       symbolColor: '#000000',
       height: 34,
     })

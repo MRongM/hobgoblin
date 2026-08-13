@@ -40,6 +40,7 @@ import type {
 } from '#/shared/terminal.ts'
 import type { TerminalOwnershipViewModel } from '#/web/components/terminal/types.ts'
 import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
+import type { NativeWindowChromeThemeProjection } from '#/shared/window-chrome.ts'
 
 export interface RendererTerminalBridge {
   attach: (input: TerminalAttachInput) => Promise<TerminalAttachResult>
@@ -78,6 +79,7 @@ export interface RendererShellBridge {
   writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
   readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
   openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
+  projectWindowChromeTheme?: (input: NativeWindowChromeThemeProjection) => Promise<boolean>
 }
 
 export interface RendererBridge {

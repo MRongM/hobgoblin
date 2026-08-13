@@ -10,6 +10,7 @@ import {
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
+  SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 
@@ -23,6 +24,7 @@ const {
   saveClipboardBinaryFilesToTemp,
   readFileTreeClipboardFile,
   writeFileTreeClipboardFile,
+  titleBarOverlayForTheme,
 } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (_event: unknown, input: any) => unknown>(),
   browserWindowFromWebContents: vi.fn(),
@@ -33,6 +35,7 @@ const {
   saveClipboardBinaryFilesToTemp: vi.fn(),
   readFileTreeClipboardFile: vi.fn(),
   writeFileTreeClipboardFile: vi.fn(),
+  titleBarOverlayForTheme: vi.fn(() => ({ color: '#c8e4df', symbolColor: '#000000', height: 39 })),
 }))
 
 vi.mock('electron', () => ({
@@ -49,6 +52,10 @@ vi.mock('electron', () => ({
 vi.mock('#/main/window.ts', () => ({
   activateMainWindow,
   getMainWindow: vi.fn(() => null),
+}))
+
+vi.mock('#/main/window-chrome.ts', () => ({
+  titleBarOverlayForTheme,
 }))
 
 vi.mock('#/main/renderer-surface-events.ts', () => ({
@@ -95,6 +102,49 @@ describe('shell bridge IPC', () => {
     expect(ipcHandlers.has(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL)).toBe(true)
+  })
+
+  test('projects the effective renderer theme onto only the sender window chrome', async () => {
+    const senderWindow = { isDestroyed: () => false, setTitleBarOverlay: vi.fn() }
+    browserWindowFromWebContents.mockReturnValue(senderWindow)
+
+    const result = await invoke(SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL, {
+      theme: 'light',
+      colorTheme: 'signal',
+      topbarHeightPx: 39,
+    })
+
+    expect(result).toBe(true)
+    expect(titleBarOverlayForTheme).toHaveBeenCalledWith('light', 'signal', 39)
+    expect(senderWindow.setTitleBarOverlay).toHaveBeenCalledWith({
+      color: '#c8e4df',
+      symbolColor: '#000000',
+      height: 39,
+    })
+  })
+
+  test('rejects invalid or untrusted window chrome theme projections', async () => {
+    browserWindowFromWebContents.mockReturnValue({ isDestroyed: () => false, setTitleBarOverlay: vi.fn() })
+
+    await expect(
+      invoke(SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL, {
+        theme: 'light',
+        colorTheme: 'unknown',
+        topbarHeightPx: 39,
+      }),
+    ).resolves.toBe(false)
+    await expect(
+      invokeWithEvent(
+        SHELL_PROJECT_WINDOW_CHROME_THEME_CHANNEL,
+        { theme: 'light', colorTheme: 'signal', topbarHeightPx: 39 },
+        {
+          sender: { id: 99, once: vi.fn() },
+          senderFrame: { url: 'https://example.com/' },
+        } as any,
+      ),
+    ).resolves.toBe(false)
+    expect(titleBarOverlayForTheme).not.toHaveBeenCalled()
   })
 
   test('parents directory dialogs to the sender window', async () => {

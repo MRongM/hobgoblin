@@ -25,6 +25,7 @@ import {
   type TerminalOpenTmuxSessionsResult,
   type TerminalSessionSummary,
   type TerminalWindowsPty,
+  type TerminalWindowsPtyAppearance,
   normalizeTerminalLaunchMode,
 } from '#/shared/terminal.ts'
 
@@ -39,6 +40,7 @@ interface EnsureTerminalCatalogInput {
   cols?: number
   rows?: number
   attachmentId?: string
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
   existingTmuxSession?: TmuxSessionRecord
   tmuxCloseSupported?: boolean
 }
@@ -74,6 +76,7 @@ interface TerminalCatalogEnsureSessionInput {
   rows: number
   attachmentId?: string
   attachmentConnected?: boolean
+  windowsPtyAppearance?: TerminalWindowsPtyAppearance
   forceNew?: boolean
   command?: string
   args?: string[]
@@ -312,6 +315,7 @@ class TerminalCatalog {
       rows: context.rows,
       attachmentId: input.attachmentId,
       attachmentConnected: this.options.attachmentIsConnected(clientId, input.attachmentId),
+      windowsPtyAppearance: input.windowsPtyAppearance,
       forceNew: context.action === 'created',
       command: invocation.command,
       args: invocation.args,
@@ -406,6 +410,7 @@ class TerminalCatalog {
       rows: context.rows,
       attachmentId: input.attachmentId,
       attachmentConnected: this.options.attachmentIsConnected(clientId, input.attachmentId),
+      windowsPtyAppearance: input.windowsPtyAppearance,
       forceNew: context.action === 'created',
       command: invocation?.command,
       args: invocation?.args,

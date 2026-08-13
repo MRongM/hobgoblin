@@ -1,5 +1,6 @@
 import type { ITheme } from '@xterm/xterm'
 import type { ISearchOptions } from '@xterm/addon-search'
+import type { TerminalWindowsPtyAppearance } from '#/shared/terminal.ts'
 type TerminalSearchDecorations = NonNullable<ISearchOptions['decorations']>
 
 export const TERMINAL_THEME_TOKENS_CHANGED_EVENT = 'theme-tokens-changed'
@@ -63,19 +64,31 @@ const TERMINAL_SEARCH_SAFE_DEFAULTS: Record<keyof typeof TERMINAL_SEARCH_TOKEN_M
   activeBorder: 'white',
 }
 
+type Rgb = {
+  red: number
+  green: number
+  blue: number
+}
+
 export function terminalThemeForCurrentDocument(mode: TerminalThemeMode = 'theme'): ITheme {
   const styles = getComputedStyle(document.documentElement)
-  return Object.fromEntries(
+  const theme = Object.fromEntries(
     Object.entries(TERMINAL_THEME_TOKEN_MAP).map(([key, token]) => [
       key,
-      cssTokenForMode(
-        styles,
-        token,
-        mode,
-        TERMINAL_THEME_SAFE_DEFAULTS[key as keyof typeof TERMINAL_THEME_TOKEN_MAP],
-      ),
+      cssTokenForMode(styles, token, mode, TERMINAL_THEME_SAFE_DEFAULTS[key as keyof typeof TERMINAL_THEME_TOKEN_MAP]),
     ]),
   ) as ITheme
+  return theme
+}
+
+export function terminalWindowsPtyAppearanceForCurrentDocument(
+  mode: TerminalThemeMode = 'theme',
+): TerminalWindowsPtyAppearance {
+  const theme = terminalThemeForCurrentDocument(mode)
+  return {
+    foreground: parseCssRgb(theme.foreground) ?? { red: 255, green: 255, blue: 255 },
+    background: parseCssRgb(theme.background) ?? { red: 0, green: 0, blue: 0 },
+  }
 }
 
 export function terminalSearchDecorationsForCurrentDocument(
@@ -103,10 +116,7 @@ export function terminalSearchDecorationsForCurrentDocument(
   }
 }
 
-export function observeTerminalTheme(
-  mode: () => TerminalThemeMode,
-  onTheme: (theme: ITheme) => void,
-): () => void {
+export function observeTerminalTheme(mode: () => TerminalThemeMode, onTheme: (theme: ITheme) => void): () => void {
   const refresh = () => onTheme(terminalThemeForCurrentDocument(mode()))
   const observer = new MutationObserver(refresh)
   observer.observe(document.documentElement, {
@@ -148,4 +158,52 @@ function resolveCssValue(styles: CSSStyleDeclaration, value: string, seen: Set<s
     seen.delete(token)
     return resolved
   })
+}
+
+function parseCssRgb(value: string | undefined): Rgb | null {
+  if (!value) return null
+  const color = value.trim().toLowerCase()
+  if (color === 'black') return { red: 0, green: 0, blue: 0 }
+  if (color === 'white') return { red: 255, green: 255, blue: 255 }
+  const hex = parseHexColor(color)
+  if (hex) return hex
+  return parseRgbColor(color)
+}
+
+function parseHexColor(color: string): Rgb | null {
+  const shorthand = /^#([\da-f])([\da-f])([\da-f])$/.exec(color)
+  if (shorthand) {
+    return {
+      red: parseInt(`${shorthand[1]}${shorthand[1]}`, 16),
+      green: parseInt(`${shorthand[2]}${shorthand[2]}`, 16),
+      blue: parseInt(`${shorthand[3]}${shorthand[3]}`, 16),
+    }
+  }
+  const full = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/.exec(color)
+  if (!full) return null
+  return {
+    red: parseInt(full[1], 16),
+    green: parseInt(full[2], 16),
+    blue: parseInt(full[3], 16),
+  }
+}
+
+function parseRgbColor(color: string): Rgb | null {
+  const match = /^rgba?\((.*)\)$/.exec(color)
+  if (!match) return null
+  const channels = match[1]
+    .replace(/\/.*$/, '')
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .map((channel) => Number(channel))
+  if (channels.length < 3 || channels.some((channel) => !Number.isFinite(channel))) return null
+  return {
+    red: clampByte(channels[0]),
+    green: clampByte(channels[1]),
+    blue: clampByte(channels[2]),
+  }
+}
+
+function clampByte(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)))
 }
