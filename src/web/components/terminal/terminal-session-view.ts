@@ -587,6 +587,7 @@ export class TerminalSessionView {
     const isMac = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
     const safariShiftKeyResolver = this.safariShiftKeyResolver
     term.attachCustomKeyEventHandler((event) => {
+      if (isNonMacTerminalPasteShortcut(event, isMac)) return false
       const optionInput = terminalInputForMacOptionArrow(event, {
         isMac,
         applicationCursorKeysMode: term.modes.applicationCursorKeysMode,
@@ -852,6 +853,18 @@ export class TerminalSessionView {
     cancelScheduledAnimationFrame(this.pinToBottomFrame)
     this.pinToBottomFrame = null
   }
+}
+
+function isNonMacTerminalPasteShortcut(event: KeyboardEvent, isMac: boolean): boolean {
+  return (
+    !isMac &&
+    event.type === 'keydown' &&
+    event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    (event.code === 'KeyV' || event.key.toLowerCase() === 'v')
+  )
 }
 
 function terminalSearchOptions(mode: TerminalThemeMode, incremental?: boolean): ISearchOptions {

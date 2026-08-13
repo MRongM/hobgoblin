@@ -1268,6 +1268,45 @@ describe('ManagedTerminalSession', () => {
     expect(xtermMocks.terminals[0]!.options.windowsPty).toEqual(windowsPty)
   })
 
+  test('leaves Windows Ctrl+V to native paste instead of sending a control character', async () => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      const term = xtermMocks.terminals[0]!
+      expect(term.customKeyEventHandler).toBeTypeOf('function')
+
+      const pasteEvent = new KeyboardEvent('keydown', {
+        key: 'v',
+        code: 'KeyV',
+        ctrlKey: true,
+        cancelable: true,
+      })
+      expect(term.customKeyEventHandler?.(pasteEvent)).toBe(false)
+      expect(pasteEvent.defaultPrevented).toBe(false)
+
+      const shiftedPasteEvent = new KeyboardEvent('keydown', {
+        key: 'v',
+        code: 'KeyV',
+        ctrlKey: true,
+        shiftKey: true,
+        cancelable: true,
+      })
+      expect(term.customKeyEventHandler?.(shiftedPasteEvent)).toBe(true)
+      expect(terminalCalls.write).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
+  })
+
   test('handles mac option arrows with VS Code-like terminal input', async () => {
     const savedPlatform = navigator.platform
     Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'MacIntel' })
