@@ -23,6 +23,7 @@ interface DesktopBuilderConfig {
     oneClick?: boolean
     perMachine?: boolean
     allowToChangeInstallationDirectory?: boolean
+    include?: string
   }
 }
 
@@ -300,6 +301,13 @@ describe('desktop build scripts', () => {
     expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
+  test('desktop packaging includes the Windows hob launcher outside asar', () => {
+    const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+
+    expect(config.extraResources).toContainEqual({ from: 'bin/hob.cmd', to: 'bin/hob.cmd' })
+    expect(existsSync(path.join(repoRoot, 'bin/hob.cmd'))).toBe(true)
+  })
+
   test('desktop release packaging config includes Windows ARM64 and x64 NSIS output', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
@@ -308,5 +316,17 @@ describe('desktop build scripts', () => {
     expect(config.nsis?.oneClick).toBe(false)
     expect(config.nsis?.perMachine).toBe(false)
     expect(config.nsis?.allowToChangeInstallationDirectory).toBe(true)
+    expect(config.nsis?.include).toBe('build/installer.nsh')
+  })
+
+  test('Windows installer adds and removes only its user PATH entry', () => {
+    const installer = readText('build/installer.nsh')
+
+    expect(installer).toContain('!macro customInstall')
+    expect(installer).toContain('!macro customUnInstall')
+    expect(installer).toContain('-Action "Add"')
+    expect(installer).toContain('-Action "Remove"')
+    expect(installer).toContain('$INSTDIR\\resources\\bin')
+    expect(installer).toContain('${WM_SETTINGCHANGE}')
   })
 })
