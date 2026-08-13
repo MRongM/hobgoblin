@@ -100,6 +100,34 @@ describe.runIf(process.platform === 'win32')('hob Windows launcher', () => {
     ])
   })
 
+  test('does not pass Electron run-as-Node mode to the desktop app', () => {
+    const fixture = fixtureDir()
+    const capturePath = path.join(fixture, 'captured-environment.txt')
+    const executablePath = path.join(fixture, 'capture-environment.cmd')
+    writeFileSync(
+      executablePath,
+      [
+        '@echo off',
+        'if defined ELECTRON_RUN_AS_NODE (',
+        '  > "%HOB_TEST_CAPTURE%" echo SET',
+        ') else (',
+        '  > "%HOB_TEST_CAPTURE%" echo UNSET',
+        ')',
+        'exit /b 0',
+        '',
+      ].join('\r\n'),
+    )
+
+    const result = runLauncher(['.'], fixture, {
+      ELECTRON_RUN_AS_NODE: '1',
+      HOBGOBLIN_CLI_EXECUTABLE: executablePath,
+      HOB_TEST_CAPTURE: capturePath,
+    })
+
+    expect(result.status).toBe(0)
+    expect(readFileSync(capturePath, 'utf8').trim()).toBe('UNSET')
+  })
+
   test.each(['-h', '--help'])('prints help for %s without opening the app', (helpArgument) => {
     const fixture = fixtureDir()
     const { capturePath, env } = captureEnvironment(fixture)

@@ -63,6 +63,16 @@ function logMainStartup(event: string, payload: Record<string, unknown> = {}): v
   createStartupDiagnostics(logPath).log(event, payload)
 }
 
+function externalOpenSingleInstanceData(path: string | null): Record<string, string> {
+  return path ? { hobOpenPath: path } : {}
+}
+
+function externalOpenPathFromSingleInstanceData(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = (value as Record<string, unknown>).hobOpenPath
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null
+}
+
 app.on('open-file', (event, path) => {
   event.preventDefault()
   if (!enqueueExternalOpenPath(path)) return
@@ -76,18 +86,27 @@ async function main(): Promise<void> {
     isPackaged: app.isPackaged,
     hasUserDataOverride: Boolean(userDataDirOverride()),
   })
-  if (!app.requestSingleInstanceLock()) {
+  const initialExternalOpenPath = windowsCliProjectOpenPathFromArgv(process.argv)
+  if (!app.requestSingleInstanceLock(externalOpenSingleInstanceData(initialExternalOpenPath))) {
     app.quit()
     return
   }
 
-  const initialExternalOpenPath = windowsCliProjectOpenPathFromArgv(process.argv)
+  logMainStartup('external-open-initial', {
+    argv: process.argv,
+    path: initialExternalOpenPath,
+  })
   if (initialExternalOpenPath) enqueueExternalOpenPath(initialExternalOpenPath)
 
   activationBarrier = initializeMainProcess()
 
-  app.on('second-instance', (_event, commandLine) => {
-    const externalOpenPath = windowsCliProjectOpenPathFromArgv(commandLine)
+  app.on('second-instance', (_event, commandLine, _workingDirectory, additionalData) => {
+    const commandLineExternalOpenPath = windowsCliProjectOpenPathFromArgv(commandLine)
+    const externalOpenPath = externalOpenPathFromSingleInstanceData(additionalData) ?? commandLineExternalOpenPath
+    logMainStartup('external-open-second-instance', {
+      argv: commandLine,
+      path: externalOpenPath,
+    })
     if (externalOpenPath) enqueueExternalOpenPath(externalOpenPath)
     activateMainWindowFromEvent()
   })

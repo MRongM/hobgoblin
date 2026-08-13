@@ -15,6 +15,8 @@ if not exist "%target%" goto missing_directory
 for %%I in ("%target%") do set "target_attributes=%%~aI"
 if not "%target_attributes:~0,1%"=="d" goto not_directory
 
+set "ELECTRON_RUN_AS_NODE="
+
 if defined HOBGOBLIN_CLI_EXECUTABLE goto launch_override
 
 for %%I in ("%~dp0..\..\Hobgoblin.exe") do set "executable=%%~fI"
