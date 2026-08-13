@@ -143,6 +143,25 @@ describe('desktop build scripts', () => {
     }
   })
 
+  test('documents the Windows hob launcher and command diagnostics in every README language', () => {
+    for (const readmePath of ['README.md', 'README.zh-CN.md', 'README.ja.md', 'README.ko.md']) {
+      const readme = readText(readmePath)
+
+      expect(readme).toContain('PowerShell')
+      expect(readme).toContain('Get-Command hob -All')
+      expect(readme).toContain('where.exe hob')
+    }
+  })
+
+  test('website describes hob as a macOS and Windows terminal command in every language', () => {
+    const website = readText('docs/index.html')
+
+    expect(website).toContain('Open the current project from a macOS or Windows terminal:')
+    expect(website).toContain('从 macOS 或 Windows 终端打开当前项目：')
+    expect(website).toContain('macOS または Windows のターミナルから現在のプロジェクトを開く：')
+    expect(website).toContain('macOS 또는 Windows 터미널에서 현재 프로젝트 열기:')
+  })
+
   test('manual release workflow builds macOS, Windows, Android, and Linux artifacts then publishes release assets', () => {
     const workflowPath = path.join(repoRoot, '.github/workflows/release.yml')
 
