@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, FolderKanban, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
+import { FolderKanban, FolderTree, GitBranch, GitCompareArrows, Terminal } from 'lucide-react'
 import { useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { formatShortCommitHashTag } from '#/web/lib/commit-hash.ts'
 import { formatWorktreeListPath, lastPathSegment } from '#/web/lib/paths.ts'
 import { getBranchWorktreeState, type BranchWorktreeRepo } from '#/web/stores/repos/worktree-state.ts'
@@ -29,24 +30,6 @@ interface BranchSummaryInlineProps {
   branchWorkspaceMember?: boolean
   selected?: boolean
   className?: string
-}
-
-function Delta({ direction, count, label }: { direction: 'ahead' | 'behind'; count: number; label: string }) {
-  const Icon = direction === 'ahead' ? ArrowUp : ArrowDown
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className={cn(
-        'inline-flex items-center gap-0.5 font-mono text-xs',
-        direction === 'ahead' ? 'text-success' : 'text-attention',
-      )}
-    >
-      <Icon size={11} />
-      {count}
-    </span>
-  )
 }
 
 export function BranchSummaryInline({
@@ -180,14 +163,14 @@ export function BranchSummaryInline({
             ) : null}
             {branch.trackingGone && <Badge variant="attention">{t('branches.gone')}</Badge>}
             {branch.ahead > 0 && (
-              <Delta
+              <BranchSyncDelta
                 direction="ahead"
                 count={branch.ahead}
                 label={t('branch-status.sync.ahead', { n: branch.ahead })}
               />
             )}
             {branch.behind > 0 && (
-              <Delta
+              <BranchSyncDelta
                 direction="behind"
                 count={branch.behind}
                 label={t('branch-status.sync.behind', { n: branch.behind })}

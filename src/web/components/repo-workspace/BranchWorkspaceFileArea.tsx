@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -50,6 +50,29 @@ export function BranchWorkspaceFileArea({
     tab: activeTab,
   })
   const [overflowExpanded, setOverflowExpanded] = useState(false)
+  const firstRepositoryName = workspace.repositories[0]?.repositoryName ?? null
+  const [aggregateSelection, setAggregateSelection] = useState<{
+    workspaceId: string
+    repositoryName: string | null
+  }>(() => ({ workspaceId: workspace.id, repositoryName: firstRepositoryName }))
+  const requestedRepositoryName =
+    aggregateSelection.workspaceId === workspace.id ? aggregateSelection.repositoryName : null
+  const selectedAggregateRepositoryName =
+    requestedRepositoryName &&
+    workspace.repositories.some((member) => member.repositoryName === requestedRepositoryName)
+      ? requestedRepositoryName
+      : firstRepositoryName
+
+  useEffect(() => {
+    if (
+      aggregateSelection.workspaceId === workspace.id &&
+      aggregateSelection.repositoryName === selectedAggregateRepositoryName
+    ) {
+      return
+    }
+    setAggregateSelection({ workspaceId: workspace.id, repositoryName: selectedAggregateRepositoryName })
+  }, [aggregateSelection, selectedAggregateRepositoryName, workspace.id])
+
   const tabs = [
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'files' as const, label: t('file-tree.title'), icon: FolderTree },
@@ -111,6 +134,10 @@ export function BranchWorkspaceFileArea({
         <BranchWorkspaceAggregatePanel
           workspace={workspace}
           kind={activeTab}
+          selectedRepositoryName={selectedAggregateRepositoryName}
+          onSelectedRepositoryNameChange={(repositoryName) =>
+            setAggregateSelection({ workspaceId: workspace.id, repositoryName })
+          }
           onRevealPath={
             activeTab === 'changes' || activeTab === 'history'
               ? (memberName, relativePath) => onRevealPath?.(`${memberName}/${relativePath}`)

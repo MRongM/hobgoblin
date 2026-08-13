@@ -191,7 +191,6 @@ export function RepoExplorerPane({
               <WorkspaceRepositoryRail
                 workspaceRootId={workspaceRootId}
                 currentRepoId={repoId}
-                fileAreaCollapsed={desktopFileAreaCollapsed}
                 onOpenFileArea={onOpenFileArea}
                 onCollapseFileArea={onCollapseFileArea}
                 onToggleFileArea={handleWorktreeDoubleClick}

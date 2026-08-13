@@ -1,4 +1,4 @@
-import { useMemo, useRef, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -36,6 +36,7 @@ import {
   WorkspaceListItemMenu,
   type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
 import { useBranchActionItems, type BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
@@ -67,8 +68,7 @@ interface BranchWorkspaceMemberRowProps {
   selected: boolean
   disabled: boolean
   presentation: BranchWorkspaceMemberPresentation
-  fileAreaCollapsed?: boolean
-  onOpenRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onSelectRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onToggleFileArea?: () => void
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onRemoveMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
@@ -115,14 +115,12 @@ function BranchWorkspaceMemberRowFrame({
   disabled,
   presentation,
   actions,
-  fileAreaCollapsed,
-  onOpenRepositoryMember,
+  onSelectRepositoryMember,
   onToggleFileArea,
   onOpenInternalTerminal,
   onRemoveMember,
 }: BranchWorkspaceMemberRowProps & { actions: BranchActionItemGroups }) {
   const t = useT()
-  const fileAreaCollapsedAtInteractionStart = useRef<boolean | undefined>(undefined)
   const terminalKey =
     presentation.repositoryId && presentation.worktreePath
       ? worktreeTerminalKey(presentation.repositoryId, presentation.worktreePath)
@@ -138,7 +136,8 @@ function BranchWorkspaceMemberRowFrame({
     : null
   const unavailableLabel = presentation.reason ? t(presentation.reason) : null
   const warningLabel = presentation.warning ? t(presentation.warning) : null
-  const commitHashTag = formatShortCommitHashTag(presentation.actionTarget?.branch.lastCommitHash ?? '')
+  const branch = presentation.actionTarget?.branch
+  const commitHashTag = formatShortCommitHashTag(branch?.lastCommitHash ?? '')
   const forceDisabled = disabled || !presentation.navigable
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: presentation.repositoryId,
@@ -198,15 +197,8 @@ function BranchWorkspaceMemberRowFrame({
           ? (warningLabel ?? t('workspace.branch-workspace.member.open-worktree'))
           : (unavailableLabel ?? undefined),
         className: presentation.navigable && !disabled ? undefined : 'cursor-default',
-        onMouseDown: (event) => {
-          if (event.detail <= 1) fileAreaCollapsedAtInteractionStart.current = fileAreaCollapsed
-        },
-        onClick: () => onOpenRepositoryMember?.(item, member),
-        onDoubleClick: () => {
-          const startedCollapsed = fileAreaCollapsedAtInteractionStart.current ?? fileAreaCollapsed
-          fileAreaCollapsedAtInteractionStart.current = undefined
-          if (startedCollapsed !== true) onToggleFileArea?.()
-        },
+        onClick: () => onSelectRepositoryMember?.(item, member),
+        onDoubleClick: onToggleFileArea,
       }}
       actions={
         <WorkspaceListItemActionDock
@@ -279,6 +271,20 @@ function BranchWorkspaceMemberRowFrame({
             <GitCompareArrows size={10} aria-hidden="true" />
             {presentation.changeCount}
           </Badge>
+        ) : null}
+        {branch && branch.ahead > 0 ? (
+          <BranchSyncDelta
+            direction="ahead"
+            count={branch.ahead}
+            label={t('branch-status.sync.ahead', { n: branch.ahead })}
+          />
+        ) : null}
+        {branch && branch.behind > 0 ? (
+          <BranchSyncDelta
+            direction="behind"
+            count={branch.behind}
+            label={t('branch-status.sync.behind', { n: branch.behind })}
+          />
         ) : null}
       </span>
       {warningLabel ? (

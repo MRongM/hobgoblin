@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, useState, type ReactNode } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
@@ -18,6 +18,8 @@ import type {
   TerminalSessionSummary,
   WorktreeTerminalSnapshot,
 } from '#/web/components/terminal/types.ts'
+import { emptyRepo } from '#/web/stores/repos/helpers.ts'
+import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 
 const terminalState = vi.hoisted(() => ({ outputActive: true, count: 2 }))
 const folderActionState = vi.hoisted(() => ({
@@ -469,6 +471,122 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-testid="branch-workspace-change-count-badge"]')).toBeNull()
   })
 
+  test('sums ahead and behind separately across member worktrees', () => {
+    const apiMember = repositoryMember()
+    const webMember = repositoryMember({
+      repositoryName: 'web',
+      worktreePath: '/workspace/goblin-feature-auth/web',
+    })
+    const item = { ...workspace('ready'), repositories: [apiMember, webMember] }
+    const apiRepo = emptyRepo('/workspace/api', 'api')
+    const webRepo = emptyRepo('/workspace/web', 'web')
+    const apiBranch = createRepoBranch(apiMember.targetBranch, {
+      ahead: 3,
+      behind: 1,
+      worktree: { path: apiMember.worktreePath },
+    })
+    const webBranch = createRepoBranch(webMember.targetBranch, {
+      ahead: 2,
+      behind: 4,
+      worktree: { path: webMember.worktreePath },
+    })
+
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            getMemberPresentation={(_item, member) => {
+              const actionTarget =
+                member.repositoryName === 'api'
+                  ? { repo: apiRepo, branch: apiBranch }
+                  : { repo: webRepo, branch: webBranch }
+              return {
+                dirty: false,
+                changeCount: null,
+                navigable: true,
+                actionTarget,
+              }
+            }}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+
+    const aheadDelta = container.querySelector('[aria-label="branch-status.sync.ahead:5"]')
+    const behindDelta = container.querySelector('[aria-label="branch-status.sync.behind:5"]')
+    expect(aheadDelta).not.toBeNull()
+    expect(aheadDelta?.textContent).toContain('5')
+    expect(behindDelta).not.toBeNull()
+    expect(behindDelta?.textContent).toContain('5')
+  })
+
+  test('excludes unresolved members and hides zero upstream delta totals', () => {
+    const apiMember = repositoryMember()
+    const webMember = repositoryMember({
+      repositoryName: 'web',
+      worktreePath: '/workspace/goblin-feature-auth/web',
+    })
+    const item = { ...workspace('ready'), repositories: [apiMember, webMember] }
+    const apiRepo = emptyRepo('/workspace/api', 'api')
+    const apiBranch = createRepoBranch(apiMember.targetBranch, {
+      ahead: 3,
+      behind: 1,
+      worktree: { path: apiMember.worktreePath },
+    })
+    const renderSummary = (ahead: number, behind: number) => {
+      const branch = { ...apiBranch, ahead, behind }
+      act(() =>
+        root.render(
+          withTerminalContexts(
+            <BranchWorkspaceList
+              rootId="/workspace"
+              items={[item]}
+              activeId={null}
+              getMemberPresentation={(_item, member) =>
+                member.repositoryName === 'api'
+                  ? {
+                      dirty: false,
+                      changeCount: null,
+                      navigable: true,
+                      actionTarget: { repo: apiRepo, branch },
+                    }
+                  : {
+                      dirty: false,
+                      changeCount: null,
+                      navigable: false,
+                      reason: 'workspace.branch-workspace.member-unavailable',
+                    }
+              }
+              onActivate={() => {}}
+              onReorder={() => {}}
+              onInspect={() => {}}
+              onRepair={() => {}}
+              onRemove={() => {}}
+              onCancel={() => {}}
+            />,
+          ),
+        ),
+      )
+    }
+
+    renderSummary(3, 1)
+    expect(container.querySelector('[aria-label="branch-status.sync.ahead:3"]')).not.toBeNull()
+    expect(container.querySelector('[aria-label="branch-status.sync.behind:1"]')).not.toBeNull()
+
+    renderSummary(0, 0)
+    expect(container.querySelector('[aria-label^="branch-status.sync.ahead"]')).toBeNull()
+    expect(container.querySelector('[aria-label^="branch-status.sync.behind"]')).toBeNull()
+  })
+
   test('renders only the active repository member list with a dirty badge and opens a ready member', () => {
     const member = repositoryMember()
     const activeWorkspace = { ...workspace('ready'), repositories: [member] }
@@ -479,7 +597,7 @@ describe('BranchWorkspaceList', () => {
       path: '/workspace/goblin-feature-payments',
       repositories: [{ ...member, repositoryName: 'web' }],
     }
-    const onOpenRepositoryMember = vi.fn()
+    const onSelectRepositoryMember = vi.fn()
     act(() =>
       root.render(
         withTerminalContexts(
@@ -495,7 +613,7 @@ describe('BranchWorkspaceList', () => {
               repositoryId: '/workspace/api',
               worktreePath: member.worktreePath,
             })}
-            onOpenRepositoryMember={onOpenRepositoryMember}
+            onSelectRepositoryMember={onSelectRepositoryMember}
             onActivate={() => {}}
             onReorder={() => {}}
             onInspect={() => {}}
@@ -539,8 +657,8 @@ describe('BranchWorkspaceList', () => {
       container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')?.className,
     ).toContain('font-semibold')
     act(() => memberButton.click())
-    expect(onOpenRepositoryMember).toHaveBeenCalledWith(activeWorkspace, member)
-    expect(onOpenRepositoryMember).toHaveBeenCalledTimes(1)
+    expect(onSelectRepositoryMember).toHaveBeenCalledWith(activeWorkspace, member)
+    expect(onSelectRepositoryMember).toHaveBeenCalledTimes(1)
   })
 
   test('left-aligns repository member terminal and dirty badges beside its name', () => {
@@ -649,33 +767,31 @@ describe('BranchWorkspaceList', () => {
     expect(onActivate).not.toHaveBeenCalled()
   })
 
-  test('toggles the member file area from its interaction-start state without collapsing members', () => {
+  test('selects the member through the normal double-click sequence and toggles files without collapsing members', () => {
     const member = repositoryMember()
     const item = { ...workspace('ready'), repositories: [member] }
-    function MemberFileAreaHarness() {
-      const [fileAreaCollapsed, setFileAreaCollapsed] = useState(true)
-      return (
-        <>
-          <output data-testid="member-file-area-collapsed">{String(fileAreaCollapsed)}</output>
+    const onSelectRepositoryMember = vi.fn()
+    const onToggleFileArea = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
           <BranchWorkspaceList
             rootId="/workspace"
             items={[item]}
             activeId={item.id}
             onActivate={() => {}}
-            fileAreaCollapsed={fileAreaCollapsed}
-            onToggleFileArea={() => setFileAreaCollapsed((collapsed) => !collapsed)}
+            onToggleFileArea={onToggleFileArea}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
             onRemove={() => {}}
             onCancel={() => {}}
             getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: true })}
-            onOpenRepositoryMember={() => setFileAreaCollapsed(false)}
-          />
-        </>
-      )
-    }
-    act(() => root.render(withTerminalContexts(<MemberFileAreaHarness />)))
+            onSelectRepositoryMember={onSelectRepositoryMember}
+          />,
+        ),
+      ),
+    )
 
     act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
     const memberButton = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')
@@ -683,12 +799,9 @@ describe('BranchWorkspaceList', () => {
 
     act(() => dispatchMouseDoubleClickSequence(memberButton))
 
-    expect(container.querySelector('[data-testid="member-file-area-collapsed"]')?.textContent).toBe('false')
-    expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
-
-    act(() => dispatchMouseDoubleClickSequence(memberButton))
-
-    expect(container.querySelector('[data-testid="member-file-area-collapsed"]')?.textContent).toBe('true')
+    expect(onSelectRepositoryMember).toHaveBeenCalledTimes(2)
+    expect(onSelectRepositoryMember).toHaveBeenLastCalledWith(item, member)
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).not.toBeNull()
   })
 
@@ -754,7 +867,7 @@ describe('BranchWorkspaceList', () => {
                   }
                 : { dirty: false, changeCount: null, navigable: true }
             }
-            onOpenRepositoryMember={() => {}}
+            onSelectRepositoryMember={() => {}}
             onReduceMember={onReduceMember}
             onActivate={() => {}}
             onReorder={() => {}}

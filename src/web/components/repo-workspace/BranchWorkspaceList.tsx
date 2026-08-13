@@ -75,6 +75,7 @@ import {
   BranchWorkspaceMemberRow,
   type BranchWorkspaceMemberPresentation,
 } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
+import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 
 const restrictToVerticalBranchWorkspaceList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
@@ -85,7 +86,6 @@ export interface BranchWorkspaceListProps {
   activeId: string | null
   activeMemberRepositoryName?: string | null
   disabled?: boolean
-  fileAreaCollapsed?: boolean
   changeCountById?: Readonly<Record<string, number>>
   onActivate: (id: string) => void
   onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
@@ -103,7 +103,7 @@ export interface BranchWorkspaceListProps {
     item: BranchWorkspaceSnapshot,
     member: BranchWorkspaceRepositorySnapshot,
   ) => BranchWorkspaceMemberPresentation
-  onOpenRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onSelectRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onOpenRepositoryMemberTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onOpenEditor?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenExternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
@@ -119,7 +119,6 @@ export function BranchWorkspaceList({
   activeId,
   activeMemberRepositoryName = null,
   disabled = false,
-  fileAreaCollapsed,
   changeCountById = {},
   onActivate,
   onToggleFileArea,
@@ -134,7 +133,7 @@ export function BranchWorkspaceList({
   onRemoveDependencies,
   onCancel,
   getMemberPresentation,
-  onOpenRepositoryMember,
+  onSelectRepositoryMember,
   onOpenRepositoryMemberTerminal,
   onOpenEditor,
   onOpenExternalTerminal,
@@ -187,7 +186,6 @@ export function BranchWorkspaceList({
               activeMemberRepositoryName={item.id === activeId ? activeMemberRepositoryName : null}
               expanded={expandedIds.has(item.id)}
               disabled={disabled}
-              fileAreaCollapsed={fileAreaCollapsed}
               changeCountById={changeCountById}
               onActivate={selectRoot}
               onToggleFileArea={onToggleFileArea}
@@ -202,7 +200,7 @@ export function BranchWorkspaceList({
               onRemoveDependencies={onRemoveDependencies}
               onCancel={onCancel}
               getMemberPresentation={getMemberPresentation}
-              onOpenRepositoryMember={onOpenRepositoryMember}
+              onSelectRepositoryMember={onSelectRepositoryMember}
               onOpenRepositoryMemberTerminal={onOpenRepositoryMemberTerminal}
               onOpenEditor={onOpenEditor}
               onOpenExternalTerminal={onOpenExternalTerminal}
@@ -225,7 +223,6 @@ function BranchWorkspaceRow({
   activeMemberRepositoryName,
   expanded,
   disabled,
-  fileAreaCollapsed,
   changeCountById,
   onActivate,
   onToggleFileArea,
@@ -240,7 +237,7 @@ function BranchWorkspaceRow({
   onRemoveDependencies,
   onCancel,
   getMemberPresentation,
-  onOpenRepositoryMember,
+  onSelectRepositoryMember,
   onOpenRepositoryMemberTerminal,
   onOpenEditor,
   onOpenExternalTerminal,
@@ -270,6 +267,21 @@ function BranchWorkspaceRow({
   const terminalKeys = useMemo(() => [terminalKey], [terminalKey])
   const terminalCount = useWorktreeTerminalCount(terminalKey)
   const changeCount = changeCountById?.[item.id] ?? 0
+  const memberPresentations = item.repositories.map((member) => {
+    const presentation: BranchWorkspaceMemberPresentation = getMemberPresentation?.(item, member) ?? {
+      dirty: false,
+      changeCount: null,
+      navigable: false,
+    }
+    return { member, presentation }
+  })
+  const syncDelta = memberPresentations.reduce(
+    (total, { presentation }) => ({
+      ahead: total.ahead + (presentation.actionTarget?.branch.ahead ?? 0),
+      behind: total.behind + (presentation.actionTarget?.branch.behind ?? 0),
+    }),
+    { ahead: 0, behind: 0 },
+  )
   const hasTerminalBell = useWorktreeTerminalHasBell(terminalKey)
   const hasTerminalOutputActivity = useWorktreeTerminalHasOutputActivity(terminalKey)
   const tmuxCleanup = useAssociatedTmuxCleanup({ projectRoot: rootId, itemPath: item.path, disabled: disabled || busy })
@@ -535,22 +547,15 @@ function BranchWorkspaceRow({
         data-branch-workspace-scope-spine
         className="relative ml-5 pl-2"
       >
-        {item.repositories.map((member) => (
+        {memberPresentations.map(({ member, presentation }) => (
           <BranchWorkspaceMemberRow
             key={member.repositoryName}
             item={item}
             member={member}
             selected={scopeActive && activeMemberRepositoryName === member.repositoryName}
             disabled={disabled || busy}
-            presentation={
-              getMemberPresentation?.(item, member) ?? {
-                dirty: false,
-                changeCount: null,
-                navigable: false,
-              }
-            }
-            fileAreaCollapsed={fileAreaCollapsed}
-            onOpenRepositoryMember={onOpenRepositoryMember}
+            presentation={presentation}
+            onSelectRepositoryMember={onSelectRepositoryMember}
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
             onRemoveMember={
@@ -680,6 +685,20 @@ function BranchWorkspaceRow({
             <GitCompareArrows size={10} aria-hidden="true" />
             {changeCount}
           </Badge>
+        ) : null}
+        {syncDelta.ahead > 0 ? (
+          <BranchSyncDelta
+            direction="ahead"
+            count={syncDelta.ahead}
+            label={t('branch-status.sync.ahead', { n: syncDelta.ahead })}
+          />
+        ) : null}
+        {syncDelta.behind > 0 ? (
+          <BranchSyncDelta
+            direction="behind"
+            count={syncDelta.behind}
+            label={t('branch-status.sync.behind', { n: syncDelta.behind })}
+          />
         ) : null}
         {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
         <StateSummary item={item} />

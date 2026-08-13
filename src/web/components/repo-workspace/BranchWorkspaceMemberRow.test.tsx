@@ -147,7 +147,7 @@ describe('BranchWorkspaceMemberRow', () => {
             worktreePath: member.worktreePath,
             actionTarget: { repo, branch },
           }}
-          onOpenRepositoryMember={vi.fn()}
+          onSelectRepositoryMember={vi.fn()}
           onOpenInternalTerminal={vi.fn()}
         />,
       )
@@ -164,13 +164,58 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(container.querySelector('[data-testid="branch-workspace-member-hash-tag"]')).toBeNull()
   })
 
+  test('shows each non-zero upstream delta and omits zero directions', () => {
+    const item = workspace()
+    const member = repositoryMember()
+    const repo = emptyRepo('/workspace/api', 'api')
+    const renderDeltas = (ahead: number, behind: number) => {
+      const branch = createRepoBranch(member.targetBranch, {
+        ahead,
+        behind,
+        worktree: { path: member.worktreePath },
+      })
+      repo.data.branches = [branch]
+      render(
+        <BranchWorkspaceMemberRow
+          item={item}
+          member={member}
+          selected={false}
+          disabled={false}
+          presentation={{
+            dirty: false,
+            changeCount: null,
+            navigable: true,
+            repositoryId: repo.id,
+            worktreePath: member.worktreePath,
+            actionTarget: { repo, branch },
+          }}
+          onSelectRepositoryMember={vi.fn()}
+          onOpenInternalTerminal={vi.fn()}
+        />,
+      )
+    }
+
+    renderDeltas(3, 0)
+    const aheadDelta = container.querySelector('[aria-label="branch-status.sync.ahead:3"]')
+    expect(aheadDelta).not.toBeNull()
+    expect(aheadDelta?.textContent).toContain('3')
+    expect(container.querySelector('[aria-label^="branch-status.sync.behind"]')).toBeNull()
+
+    renderDeltas(0, 2)
+    expect(container.querySelector('[aria-label^="branch-status.sync.ahead"]')).toBeNull()
+    const behindDelta = container.querySelector('[aria-label="branch-status.sync.behind:2"]')
+    expect(behindDelta).not.toBeNull()
+    expect(behindDelta?.textContent).toContain('2')
+  })
+
   test('renders a compact actionable member row without independent-worktree lifecycle actions', async () => {
     const item = workspace()
     const member = repositoryMember()
     const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
     const repo = emptyRepo('/workspace/api', 'api')
     repo.data.branches = [branch]
-    const onOpenRepositoryMember = vi.fn()
+    const onSelectRepositoryMember = vi.fn()
+    const onToggleFileArea = vi.fn()
     const onOpenInternalTerminal = vi.fn()
 
     render(
@@ -187,7 +232,8 @@ describe('BranchWorkspaceMemberRow', () => {
           worktreePath: member.worktreePath,
           actionTarget: { repo, branch },
         }}
-        onOpenRepositoryMember={onOpenRepositoryMember}
+        onSelectRepositoryMember={onSelectRepositoryMember}
+        onToggleFileArea={onToggleFileArea}
         onOpenInternalTerminal={onOpenInternalTerminal}
       />,
     )
@@ -242,7 +288,7 @@ describe('BranchWorkspaceMemberRow', () => {
       await Promise.resolve()
     })
     expect(actionState.editor).toHaveBeenCalledTimes(1)
-    expect(onOpenRepositoryMember).not.toHaveBeenCalled()
+    expect(onSelectRepositoryMember).not.toHaveBeenCalled()
 
     await act(async () => {
       row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.click()
@@ -250,10 +296,17 @@ describe('BranchWorkspaceMemberRow', () => {
     })
     expect(actionState.terminal).toHaveBeenCalledTimes(1)
     expect(onOpenInternalTerminal).toHaveBeenCalledWith(item, member)
-    expect(onOpenRepositoryMember).not.toHaveBeenCalled()
+    expect(onSelectRepositoryMember).not.toHaveBeenCalled()
 
     act(() => main?.click())
-    expect(onOpenRepositoryMember).toHaveBeenCalledWith(item, member)
+    expect(onSelectRepositoryMember).toHaveBeenCalledWith(item, member)
+    expect(onToggleFileArea).not.toHaveBeenCalled()
+
+    onSelectRepositoryMember.mockClear()
+    act(() => dispatchMouseDoubleClickSequence(main))
+    expect(onSelectRepositoryMember).toHaveBeenCalledTimes(2)
+    expect(onSelectRepositoryMember).toHaveBeenLastCalledWith(item, member)
+    expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
   test('keeps the stable safe action set visible and disabled when target resolution fails', async () => {
@@ -269,7 +322,7 @@ describe('BranchWorkspaceMemberRow', () => {
           navigable: false,
           reason: 'workspace.branch-workspace.member-branch-missing',
         }}
-        onOpenRepositoryMember={vi.fn()}
+        onSelectRepositoryMember={vi.fn()}
         onOpenInternalTerminal={vi.fn()}
       />,
     )
@@ -318,7 +371,7 @@ describe('BranchWorkspaceMemberRow', () => {
           navigable: false,
           reason: 'workspace.branch-workspace.member-branch-missing',
         }}
-        onOpenRepositoryMember={vi.fn()}
+        onSelectRepositoryMember={vi.fn()}
         onOpenInternalTerminal={vi.fn()}
       />,
     )
@@ -355,7 +408,7 @@ describe('BranchWorkspaceMemberRow', () => {
           worktreePath: member.worktreePath,
           actionTarget: { repo, branch },
         }}
-        onOpenRepositoryMember={vi.fn()}
+        onSelectRepositoryMember={vi.fn()}
         onOpenInternalTerminal={vi.fn()}
       />,
     )
@@ -375,7 +428,7 @@ describe('BranchWorkspaceMemberRow', () => {
     const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
     const repo = emptyRepo('/workspace/api', 'api')
     repo.data.branches = [branch]
-    const onOpenRepositoryMember = vi.fn()
+    const onSelectRepositoryMember = vi.fn()
 
     render(
       <BranchWorkspaceMemberRow
@@ -391,7 +444,7 @@ describe('BranchWorkspaceMemberRow', () => {
           worktreePath: member.worktreePath,
           actionTarget: { repo, branch },
         }}
-        onOpenRepositoryMember={onOpenRepositoryMember}
+        onSelectRepositoryMember={onSelectRepositoryMember}
         onOpenInternalTerminal={vi.fn()}
       />,
     )
@@ -416,7 +469,7 @@ describe('BranchWorkspaceMemberRow', () => {
       await Promise.resolve()
     })
     expect(actionState.editor).toHaveBeenCalledTimes(1)
-    expect(onOpenRepositoryMember).not.toHaveBeenCalled()
+    expect(onSelectRepositoryMember).not.toHaveBeenCalled()
 
     const tmuxContextItems = await openContextMenu(itemRow)
     await act(async () => {
@@ -459,6 +512,16 @@ async function openMenu(): Promise<HTMLElement[]> {
     await Promise.resolve()
   })
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+function dispatchMouseDoubleClickSequence(target: HTMLElement | null): void {
+  if (!target) throw new Error('missing double-click target')
+  for (const detail of [1, 2]) {
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail }))
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, detail }))
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0, detail }))
+  }
+  target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0, detail: 2 }))
 }
 
 async function openContextMenu(row: HTMLElement): Promise<HTMLElement[]> {
