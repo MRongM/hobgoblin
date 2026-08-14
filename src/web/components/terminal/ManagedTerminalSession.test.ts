@@ -149,6 +149,7 @@ const xtermMocks = vi.hoisted(() => {
     private keyHandlers: Array<(event: { key: string; domEvent: KeyboardEvent }) => void> = []
     private bellHandlers: Array<() => void> = []
     private scrollHandlers: Array<(position: number) => void> = []
+    private renderHandlers: Array<() => void> = []
     private writeParsedHandlers: Array<() => void> = []
     private titleHandlers: Array<(title: string) => void> = []
     private bufferChangeHandlers: Array<(buffer: { type: 'normal' | 'alternate' }) => void> = []
@@ -274,6 +275,11 @@ const xtermMocks = vi.hoisted(() => {
       }
     }
 
+    onRender(cb: () => void) {
+      this.renderHandlers.push(cb)
+      return { dispose: vi.fn(() => (this.renderHandlers = this.renderHandlers.filter((handler) => handler !== cb))) }
+    }
+
     onTitleChange(cb: (title: string) => void) {
       this.titleHandlers.push(cb)
       return { dispose: vi.fn(() => (this.titleHandlers = this.titleHandlers.filter((handler) => handler !== cb))) }
@@ -359,6 +365,10 @@ const xtermMocks = vi.hoisted(() => {
 
     emitWriteParsed() {
       for (const handler of this.writeParsedHandlers) handler()
+    }
+
+    emitRender() {
+      for (const handler of this.renderHandlers) handler()
     }
 
     private dispatchViewportScroll() {
@@ -896,6 +906,7 @@ describe('ManagedTerminalSession', () => {
     })
     expect(xtermMocks.terminals[0]!.options.minimumContrastRatio).toBe(4.5)
     expect(xtermMocks.terminals[0]!.options.allowProposedApi).toBe(true)
+    expect(xtermMocks.terminals[0]!.options.cursorBlink).toBe(true)
     expect(xtermMocks.terminals[0]!.options.cursorStyle).toBe('bar')
     expect(xtermMocks.terminals[0]!.options.fontFamily).toBe(DEFAULT_TERMINAL_FONT_FAMILY)
     expect(xtermMocks.terminals[0]!.options.fontSize).toBe(14)
@@ -1253,7 +1264,7 @@ describe('ManagedTerminalSession', () => {
     mockFonts.resolveReady()
     await flushFontRefit()
 
-    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
     expect(term.refresh).not.toHaveBeenCalled()
 
     term.refresh.mockClear()
@@ -1262,8 +1273,36 @@ describe('ManagedTerminalSession', () => {
     mockFonts.emitLoadingDone()
     await flushFontRefit()
 
-    expect(fitAddon.fit).toHaveBeenCalledTimes(1)
+    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
     expect(term.refresh).not.toHaveBeenCalled()
+  })
+
+  test('converges loaded font geometry before resizing the Windows PTY', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    const fitAddon = xtermMocks.fitAddons[0]!
+    fitAddon.fit.mockReset()
+    fitAddon.fit
+      .mockImplementationOnce(() => term.resize(92, 34))
+      .mockImplementationOnce(() => term.resize(77, 29))
+    terminalCalls.resize.mockClear()
+
+    mockFonts.emitLoadingDone()
+    await flushFontRefit()
+    await flushResizeDebounce()
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(2)
+    expect(term).toMatchObject({ cols: 77, rows: 29 })
+    expect(terminalCalls.resize).toHaveBeenCalledTimes(1)
+    expect(terminalCalls.resize).toHaveBeenCalledWith({ sessionId: 'session-1', cols: 77, rows: 29 })
   })
 
   test('loads terminal addons and exposes search and serialization', async () => {
@@ -1356,6 +1395,81 @@ describe('ManagedTerminalSession', () => {
       expect(term.element!.classList.contains('goblin-terminal-ime-cursor-anchored')).toBe(false)
       expect(cursorProxy?.classList.contains('is-active')).toBe(false)
     } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
+  })
+
+  test('keeps the Windows terminal cursor steady to avoid focus flicker', async () => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      expect(xtermMocks.terminals[0]!.options.cursorBlink).toBe(false)
+      expect(host.querySelector('.goblin-managed-terminal-host.goblin-terminal-static-cursor')).not.toBeNull()
+    } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
+  })
+
+  test('anchors the Windows cursor while inline TUI output redraws transient status rows', async () => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    try {
+      hydrateManagedSession(session)
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      const term = xtermMocks.terminals[0]!
+      const nativeCursor = document.createElement('span')
+      nativeCursor.className = 'xterm-cursor xterm-cursor-bar'
+      term.screenElement!.getBoundingClientRect = () =>
+        ({ left: 100, top: 50, width: 1000, height: 600 } as DOMRect)
+      let cursorRect = { left: 140, top: 90, width: 10, height: 20 } as DOMRect
+      nativeCursor.getBoundingClientRect = () => cursorRect
+      term.screenElement?.append(nativeCursor)
+      term.focus()
+      term.emitCoreUserData('x')
+      session.handleOutput({
+        sessionId: 'session-1',
+        data: '\x1b[?2026htransient status frame\x1b[?2026l',
+        seq: 1,
+        processName: 'codex',
+      })
+
+      expect(term.element?.classList.contains('goblin-terminal-output-cursor-stabilized')).toBe(true)
+      const proxy = term.element?.querySelector('.goblin-terminal-output-cursor-proxy.is-active') as
+        | HTMLElement
+        | null
+        | undefined
+      expect(proxy).not.toBeNull()
+      expect(proxy?.style.left).toBe('40px')
+
+      term.emitData('input')
+      cursorRect = { left: 500, top: 300, width: 10, height: 20 } as DOMRect
+      term.emitRender()
+      cursorRect = { left: 200, top: 90, width: 10, height: 20 } as DOMRect
+      term.emitRender()
+      term.emitRender()
+      await new Promise((resolve) => setTimeout(resolve, 130))
+      expect(proxy?.style.left).toBe('100px')
+
+      cursorRect = { left: 300, top: 90, width: 10, height: 20 } as DOMRect
+      term.emitRender()
+      expect(proxy?.style.left).toBe('100px')
+    } finally {
+      session.dispose()
       Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
     }
   })

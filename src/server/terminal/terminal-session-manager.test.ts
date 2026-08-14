@@ -140,6 +140,40 @@ describe('terminal session manager administrative close', () => {
 })
 
 describe('terminal session manager output excerpts', () => {
+  test('preserves PTY scroll-region output for the terminal parser', () => {
+    const onOutput = vi.fn()
+    const manager = new TerminalSessionManager<string>({ onOutput, onExit: vi.fn() })
+    const result = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const output = '\x1b[1;20r\x1b[3S\x1b[r'
+    ptys[0]?.emitData(output)
+
+    expect(onOutput).toHaveBeenCalledWith('client_a', {
+      sessionId: result.sessionId,
+      data: output,
+      seq: 1,
+      processName: result.processName,
+    })
+    const attached = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    expect(attached).toMatchObject({ ok: true, replay: output, replaySeq: 1 })
+  })
+
   test('reads the canonical headless screen for an existing session', async () => {
     const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
     const result = manager.ensureSession({

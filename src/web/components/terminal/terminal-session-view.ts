@@ -52,6 +52,10 @@ import {
   terminalMobileSelectionText,
 } from '#/web/components/terminal/terminal-mobile-selection.ts'
 import { stabilizeTerminalImePosition } from '#/web/components/terminal/terminal-ime-position.ts'
+import {
+  stabilizeTerminalOutputCursor,
+  type TerminalOutputCursorStabilizer,
+} from '#/web/components/terminal/terminal-output-cursor-stabilizer.ts'
 
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
@@ -64,12 +68,14 @@ export class TerminalSessionView {
   private fitAddon: XTermFitAddon | null = null
   private searchAddon: XTermSearchAddon | null = null
   private serializeAddon: XTermSerializeAddon | null = null
+  private outputCursorStabilizer: TerminalOutputCursorStabilizer | null = null
   private resizeObserver: ResizeObserver | null = null
   private disposables: Array<{ dispose: () => void }> = []
   private disposeThemeObserver: (() => void) | null = null
   private disposeFontObserver: (() => void) | null = null
   private fitFlushTimer: number | null = null
   private fontFitTimer: number | null = null
+  private fontFitFrame: number | null = null
   private pinToBottomFrame: number | null = null
   private autoFitEnabled = true
   private host: HTMLElement | null = null
@@ -249,11 +255,13 @@ export class TerminalSessionView {
     windowsPty?: TerminalWindowsPty,
   ): XTermTerminal {
     const theme = terminalThemeForCurrentDocument(this.terminalThemeMode())
+    const isWindows = /^Win/i.test(globalThis.navigator?.platform ?? '')
+    this.xtermHost.classList.toggle('goblin-terminal-static-cursor', isWindows)
     const term = new Terminal({
       allowProposedApi: true,
       cols: geometry.cols,
       rows: geometry.rows,
-      cursorBlink: true,
+      cursorBlink: !isWindows,
       cursorStyle: 'bar',
       disableStdin: !this.inputEnabled,
       fontFamily: this.fontFamily,
@@ -301,6 +309,8 @@ export class TerminalSessionView {
     )
     term.open(this.xtermHost)
     this.disposables.push(stabilizeTerminalImePosition(term))
+    this.outputCursorStabilizer = stabilizeTerminalOutputCursor(term)
+    this.disposables.push(this.outputCursorStabilizer)
     this.applyInputMode(term)
     this.installResizeObserver()
     this.installFontObserver(term)
@@ -310,6 +320,13 @@ export class TerminalSessionView {
 
   currentTerminal(): XTermTerminal | null {
     return this.term
+  }
+
+  writeOutput(data: string): void {
+    const term = this.term
+    if (!term) return
+    this.outputCursorStabilizer?.handleOutput(data)
+    term.write(data)
   }
 
   focus(): void {
@@ -461,6 +478,7 @@ export class TerminalSessionView {
     this.fitAddon = null
     this.searchAddon = null
     this.serializeAddon = null
+    this.outputCursorStabilizer = null
     this.term?.dispose()
     this.term = null
     this.syncMobileScrollScrubber()
@@ -818,13 +836,24 @@ export class TerminalSessionView {
     this.fontFitTimer = window.setTimeout(() => {
       this.fontFitTimer = null
       this.fitForFontLoad(term)
+      // The first fit can make xterm remeasure a newly loaded font. Fit again
+      // on the next frame so the PTY receives dimensions from the new metrics.
+      this.fontFitFrame = requestAnimationFrame(() => {
+        this.fontFitFrame = null
+        this.fitForFontLoad(term)
+      })
     }, FONT_REMEASURE_DEBOUNCE_MS)
   }
 
   private cancelFontFit(): void {
-    if (this.fontFitTimer === null) return
-    window.clearTimeout(this.fontFitTimer)
-    this.fontFitTimer = null
+    if (this.fontFitTimer !== null) {
+      window.clearTimeout(this.fontFitTimer)
+      this.fontFitTimer = null
+    }
+    if (this.fontFitFrame !== null) {
+      cancelScheduledAnimationFrame(this.fontFitFrame)
+      this.fontFitFrame = null
+    }
   }
 
   private fitForFontLoad(term: XTermTerminal): void {

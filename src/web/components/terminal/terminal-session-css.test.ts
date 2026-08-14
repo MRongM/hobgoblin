@@ -63,12 +63,40 @@ describe('terminal session CSS layout contract', () => {
 
   test('replaces the moving xterm cursor with a fixed IME cursor proxy', () => {
     expect(css).toMatch(
-      /\.goblin-managed-terminal-host \.xterm\.goblin-terminal-ime-cursor-anchored \.xterm-cursor\s*\{[^}]*animation:\s*none\s*!important;[^}]*background-color:\s*transparent\s*!important;[^}]*box-shadow:\s*none\s*!important;/,
+      /\.goblin-managed-terminal-host \.xterm\.goblin-terminal-ime-cursor-anchored \.xterm-cursor\.xterm-cursor-bar\s*\{[^}]*animation:\s*none\s*!important;[^}]*box-shadow:\s*none\s*!important;/,
     )
+    const anchoredCursorRule = css.match(
+      /\.goblin-managed-terminal-host \.xterm\.goblin-terminal-ime-cursor-anchored \.xterm-cursor[^\{]*\{[^}]*\}/,
+    )?.[0]
+    expect(anchoredCursorRule).not.toMatch(/(?:background|color|border|outline)(?:-color)?:/)
     expect(css).toMatch(
       /\.goblin-terminal-ime-cursor-proxy\s*\{[^}]*position:\s*absolute;[^}]*display:\s*none;[^}]*pointer-events:\s*none;/,
     )
-    expect(css).toMatch(/\.goblin-terminal-ime-cursor-proxy\.is-active\s*\{[^}]*display:\s*block;/)
+    expect(css).toMatch(
+      /\.goblin-terminal-ime-cursor-proxy\.is-active\s*\{[^}]*display:\s*block;[^}]*animation:\s*none;/,
+    )
+    expect(css).not.toContain('@keyframes goblin-terminal-ime-cursor-blink')
+  })
+
+  test('keeps the Windows xterm cursor static when a TUI requests DEC cursor blinking', () => {
+    expect(css).toMatch(
+      /\.goblin-managed-terminal-host\.goblin-terminal-static-cursor \.xterm-cursor\.xterm-cursor-blink\s*\{[^}]*animation:\s*none\s*!important;/,
+    )
+  })
+
+  test('replaces transient Windows inline-TUI cursor positions with a stable bar proxy', () => {
+    expect(css).toMatch(
+      /\.goblin-managed-terminal-host \.xterm\.goblin-terminal-output-cursor-stabilized \.xterm-cursor\.xterm-cursor-bar\s*\{[^}]*animation:\s*none\s*!important;[^}]*box-shadow:\s*none\s*!important;/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-output-cursor-proxy\s*\{[^}]*position:\s*absolute;[^}]*display:\s*none;[^}]*pointer-events:\s*none;/,
+    )
+    expect(css).toMatch(
+      /\.goblin-terminal-output-cursor-proxy\.is-active\s*\{[^}]*display:\s*block;[^}]*animation:\s*none;/,
+    )
+    expect(css).toMatch(
+      /\.xterm\.goblin-terminal-ime-cursor-anchored \.goblin-terminal-output-cursor-proxy\s*\{[^}]*display:\s*none;/,
+    )
   })
 
   test('uses xterm native scrollbar geometry without extra layout clearance', () => {

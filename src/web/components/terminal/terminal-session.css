@@ -260,17 +260,18 @@
   overflow-anchor: none;
 }
 
+.goblin-managed-terminal-host.goblin-terminal-static-cursor .xterm-cursor.xterm-cursor-blink {
+  animation: none !important;
+}
+
 .goblin-managed-terminal-host .goblin-terminal-ime-anchor {
   left: var(--goblin-terminal-ime-anchor-left) !important;
   top: var(--goblin-terminal-ime-anchor-top) !important;
 }
 
-.goblin-managed-terminal-host .xterm.goblin-terminal-ime-cursor-anchored .xterm-cursor {
+.goblin-managed-terminal-host .xterm.goblin-terminal-ime-cursor-anchored .xterm-cursor.xterm-cursor-bar {
   animation: none !important;
-  background-color: transparent !important;
   box-shadow: none !important;
-  border-color: transparent !important;
-  outline-color: transparent !important;
 }
 
 .goblin-terminal-ime-cursor-proxy {
@@ -284,19 +285,30 @@
 
 .goblin-terminal-ime-cursor-proxy.is-active {
   display: block;
-  animation: goblin-terminal-ime-cursor-blink 1s step-end infinite;
+  animation: none;
 }
 
-@keyframes goblin-terminal-ime-cursor-blink {
-  50% {
-    opacity: 0;
-  }
+.goblin-managed-terminal-host .xterm.goblin-terminal-output-cursor-stabilized .xterm-cursor.xterm-cursor-bar {
+  animation: none !important;
+  box-shadow: none !important;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .goblin-terminal-ime-cursor-proxy.is-active {
-    animation: none;
-  }
+.goblin-terminal-output-cursor-proxy {
+  position: absolute;
+  z-index: 4;
+  display: none;
+  width: 1px;
+  background: var(--color-terminal-cursor);
+  pointer-events: none;
+}
+
+.goblin-terminal-output-cursor-proxy.is-active {
+  display: block;
+  animation: none;
+}
+
+.goblin-managed-terminal-host .xterm.goblin-terminal-ime-cursor-anchored .goblin-terminal-output-cursor-proxy {
+  display: none;
 }
 
 .goblin-managed-terminal-host .xterm-viewport {

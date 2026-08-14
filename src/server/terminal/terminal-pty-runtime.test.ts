@@ -78,6 +78,30 @@ describe('spawnTerminalPtyRuntime', () => {
     )
   })
 
+  test('uses bundled ConPTY on Windows so scroll-region output reaches xterm unchanged', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      {
+        kind: 'powershell-core',
+        command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockReturnValue(terminalPty('pwsh.exe'))
+
+    spawnTerminalPtyRuntime({
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+    })
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ useConptyDll: true }),
+    )
+  })
+
   test('sets the ConPTY default color table and attributes before launching an explicit Windows command', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     resolveWindowsShellCandidatesMock.mockReturnValue([
