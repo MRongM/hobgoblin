@@ -8,6 +8,7 @@ interface DesktopTerminalDockProps {
   onCycleTerminal: (direction: -1 | 1) => void
   onScrollToBottom: () => void
   quickInputButtons?: ReactNode
+  navigationControlsVisible?: boolean
 }
 
 const DOCK_BUTTON_CLASS = 'goblin-terminal-custom-buttons__button goblin-terminal-custom-buttons__button--medium'
@@ -17,6 +18,7 @@ export function DesktopTerminalDock({
   onCycleTerminal,
   onScrollToBottom,
   quickInputButtons,
+  navigationControlsVisible = true,
 }: DesktopTerminalDockProps) {
   const t = useT()
   const hasQuickInputButtons = Children.count(quickInputButtons) > 0
@@ -28,22 +30,26 @@ export function DesktopTerminalDock({
       aria-label={t('terminal.command-deck')}
     >
       <div className="goblin-terminal-custom-buttons__row">
-        <TerminalCycleButtons
-          terminalCount={terminalCount}
-          onCycleTerminal={onCycleTerminal}
-          buttonClassName={DOCK_BUTTON_CLASS}
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className={DOCK_BUTTON_CLASS}
-          onPointerDown={preserveTerminalFocus}
-          onClick={onScrollToBottom}
-        >
-          {t('terminal.command-deck.scroll-to-bottom')}
-        </Button>
-        {hasQuickInputButtons && (
+        {navigationControlsVisible && (
+          <>
+            <TerminalCycleButtons
+              terminalCount={terminalCount}
+              onCycleTerminal={onCycleTerminal}
+              buttonClassName={DOCK_BUTTON_CLASS}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className={DOCK_BUTTON_CLASS}
+              onPointerDown={preserveTerminalFocus}
+              onClick={onScrollToBottom}
+            >
+              {t('terminal.command-deck.scroll-to-bottom')}
+            </Button>
+          </>
+        )}
+        {navigationControlsVisible && hasQuickInputButtons && (
           <span className="goblin-terminal-custom-buttons__separator" aria-hidden="true">
             |
           </span>

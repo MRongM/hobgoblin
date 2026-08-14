@@ -1433,6 +1433,10 @@ export const ko: Record<DictKey, string> = {
   'settings.terminal-font.title': '글꼴',
   'settings.terminal-font-size': '글꼴 크기',
   'settings.terminal-font-size-hint': '앱 내 터미널의 글꼴 크기를 조정합니다.',
+  'settings.terminal-navigation-controls.title': '터미널 탐색',
+  'settings.terminal-navigation-controls.visible': '터미널 탐색 컨트롤 표시',
+  'settings.terminal-navigation-controls.visible-hint':
+    '이전 터미널, 다음 터미널, 맨 아래로 버튼을 함께 표시합니다. 숨겨도 키보드 단축키는 사용할 수 있습니다.',
   'settings.terminal-custom-buttons.title': '사용자 지정 터미널 버튼',
   'settings.terminal-custom-buttons.hint':
     '터미널 하단 버튼 막대를 표시합니다. 버튼은 즉시 실행하거나 편집할 수 있도록 터미널 입력 줄에 채울 수 있습니다.',

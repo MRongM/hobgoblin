@@ -82,6 +82,7 @@ vi.mock('#/web/components/terminal/mobile-detection.ts', () => ({
 const runtimeSettingsMocks = vi.hoisted(() => ({
   temporaryFilesDirectory: '',
   terminalFontSize: 14,
+  terminalNavigationControlsVisible: true,
   terminalCustomButtonsVisible: true,
   terminalCustomButtonSize: 'medium' as 'small' | 'medium' | 'large',
   terminalCustomButtons: [] as TerminalCustomButton[],
@@ -95,6 +96,7 @@ vi.mock('#/web/runtime-settings-terminal-buttons.ts', () => ({
   useRuntimeTerminalSettings: () => ({
     temporaryFilesDirectory: runtimeSettingsMocks.temporaryFilesDirectory,
     terminalFontSize: runtimeSettingsMocks.terminalFontSize,
+    terminalNavigationControlsVisible: runtimeSettingsMocks.terminalNavigationControlsVisible,
     terminalCustomButtonsVisible: runtimeSettingsMocks.terminalCustomButtonsVisible,
     terminalCustomButtonSize: runtimeSettingsMocks.terminalCustomButtonSize,
     terminalCustomButtons: runtimeSettingsMocks.terminalCustomButtons,
@@ -108,6 +110,7 @@ vi.mock('#/web/runtime-settings-shortcuts.ts', () => ({
 afterEach(() => {
   runtimeSettingsMocks.temporaryFilesDirectory = ''
   runtimeSettingsMocks.terminalFontSize = 14
+  runtimeSettingsMocks.terminalNavigationControlsVisible = true
   runtimeSettingsMocks.terminalCustomButtonsVisible = true
   runtimeSettingsMocks.terminalCustomButtonSize = 'medium'
   runtimeSettingsMocks.terminalCustomButtons = []
@@ -1271,6 +1274,27 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('hides terminal navigation controls from the Mobile Web command deck', async () => {
+    mobileDetectionMocks.isMobileDevice = true
+    runtimeSettingsMocks.terminalNavigationControlsVisible = false
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const actionRow = container.querySelector('.goblin-terminal-command-deck__row--actions')
+      const labels = [...(actionRow?.querySelectorAll<HTMLButtonElement>('button') ?? [])].map(
+        (button) => button.textContent,
+      )
+      expect(labels).not.toContain('T↑')
+      expect(labels).not.toContain('T↓')
+      expect(labels).not.toContain('terminal.command-deck.scroll-to-bottom')
+      expect(labels).toContain('ENTER')
+      expect(labels).toContain('terminal.command-deck.compose')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('shows extra-key rows only while the Mobile Web input method obscures the visual viewport', async () => {
     mobileDetectionMocks.isMobileDevice = true
     const visualViewport = installVisualViewportHarness({
@@ -1545,6 +1569,7 @@ describe('TerminalSlot', () => {
     { platform: 'MacIntel', modifiers: { metaKey: true, altKey: true }, label: 'macOS' },
     { platform: 'Linux x86_64', modifiers: { ctrlKey: true, altKey: true }, label: 'non-macOS' },
   ])('cycles to the next terminal with the $label primary modifier plus Alt+Down', async ({ platform, modifiers }) => {
+    runtimeSettingsMocks.terminalNavigationControlsVisible = false
     const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
     const fixture = await renderCrossProjectCycleFixture('controller', false)
 
@@ -1558,6 +1583,7 @@ describe('TerminalSlot', () => {
       })
       await act(async () => host?.dispatchEvent(event))
 
+      expect(fixture.container.querySelector('button[title="terminal.command-deck.next-terminal"]')).toBeNull()
       expect(event.defaultPrevented).toBe(true)
       expect(fixture.selectTerminal).toHaveBeenCalledWith(fixture.target.worktreeTerminalKey, fixture.target.key)
     } finally {
@@ -1704,6 +1730,56 @@ describe('TerminalSlot', () => {
     } finally {
       await act(async () => root.unmount())
       container.remove()
+    }
+  })
+
+  test('hides terminal navigation controls from the desktop controller dock', async () => {
+    runtimeSettingsMocks.terminalNavigationControlsVisible = false
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const dock = container.querySelector('.goblin-terminal-custom-buttons')
+      expect(dock).toBeInstanceOf(HTMLDivElement)
+      expect(
+        [...(dock?.querySelectorAll<HTMLButtonElement>('button') ?? [])].map((button) => button.textContent),
+      ).toEqual(['status'])
+      expect(dock?.querySelector('.goblin-terminal-custom-buttons__separator')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('removes the desktop dock and its terminal viewport placeholder when navigation and custom buttons are hidden', async () => {
+    runtimeSettingsMocks.terminalNavigationControlsVisible = false
+    runtimeSettingsMocks.terminalCustomButtonsVisible = false
+    runtimeSettingsMocks.terminalCustomButtons = [{ label: 'status', value: 'git status --short' }]
+    const { container, root } = await renderTerminalSlotFixture('controller')
+
+    try {
+      const slot = container.querySelector<HTMLElement>('.goblin-terminal-slot')
+      expect(container.querySelector('.goblin-terminal-bottom-dock')).toBeNull()
+      expect(container.querySelector('.goblin-terminal-custom-buttons')).toBeNull()
+      expect(slot?.style.getPropertyValue('--goblin-terminal-bottom-dock-height')).toBe('')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('hides terminal navigation controls from the desktop read-only dock', async () => {
+    runtimeSettingsMocks.terminalNavigationControlsVisible = false
+    const fixture = await renderCrossProjectCycleFixture('viewer', false)
+
+    try {
+      const viewerActions = fixture.container.querySelector('.goblin-terminal-slot__viewer-actions')
+      expect(
+        [...(viewerActions?.querySelectorAll<HTMLButtonElement>('button') ?? [])].map((button) => button.textContent),
+      ).toEqual(['terminal.takeover'])
+      expect(fixture.container.querySelector('.goblin-terminal-slot__viewer-message')).toBeInstanceOf(HTMLSpanElement)
+    } finally {
+      await fixture.cleanup()
     }
   })
 

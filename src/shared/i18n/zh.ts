@@ -1380,6 +1380,10 @@ export const zh: Record<DictKey, string> = {
   'settings.terminal-font.title': '字体',
   'settings.terminal-font-size': '字体大小',
   'settings.terminal-font-size-hint': '控制应用内终端的字体大小。',
+  'settings.terminal-navigation-controls.title': '终端导航',
+  'settings.terminal-navigation-controls.visible': '显示终端导航控件',
+  'settings.terminal-navigation-controls.visible-hint':
+    '同时显示上一终端、下一终端和回到底部。隐藏后仍可使用键盘快捷键。',
   'settings.terminal-custom-buttons.title': '自定义终端按钮',
   'settings.terminal-custom-buttons.hint': '在终端底部显示按钮栏。按钮可配置为直接执行，或填入终端输入行后再编辑发送。',
   'settings.terminal-custom-buttons.visible': '显示自定义按钮',

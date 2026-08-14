@@ -35,6 +35,7 @@ interface MobileTerminalDockProps {
   projection: MobileTerminalDockProjection
   onScrollToBottom: () => void
   onCycleTerminal: (direction: -1 | 1) => void
+  navigationControlsVisible?: boolean
   className?: string
 }
 
@@ -51,6 +52,7 @@ export function MobileTerminalDock({
   projection,
   onScrollToBottom,
   onCycleTerminal,
+  navigationControlsVisible = true,
   className,
 }: MobileTerminalDockProps) {
   const t = useT()
@@ -136,21 +138,25 @@ export function MobileTerminalDock({
         ))}
 
       <div key="actions" className="goblin-terminal-command-deck__row goblin-terminal-command-deck__row--actions">
-        <TerminalCycleButtons
-          terminalCount={terminalCount}
-          onCycleTerminal={onCycleTerminal}
-          buttonClassName="goblin-terminal-command-deck__btn"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="goblin-terminal-command-deck__btn goblin-terminal-command-deck__btn--action"
-          onPointerDown={preserveTerminalFocus}
-          onClick={onScrollToBottom}
-        >
-          {t('terminal.command-deck.scroll-to-bottom')}
-        </Button>
+        {navigationControlsVisible && (
+          <>
+            <TerminalCycleButtons
+              terminalCount={terminalCount}
+              onCycleTerminal={onCycleTerminal}
+              buttonClassName="goblin-terminal-command-deck__btn"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="goblin-terminal-command-deck__btn goblin-terminal-command-deck__btn--action"
+              onPointerDown={preserveTerminalFocus}
+              onClick={onScrollToBottom}
+            >
+              {t('terminal.command-deck.scroll-to-bottom')}
+            </Button>
+          </>
+        )}
         {controllerProjection && (
           <>
             {DIRECT_INPUT_ACTIONS.map((action) => (

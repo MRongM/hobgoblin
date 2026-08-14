@@ -186,6 +186,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const {
     temporaryFilesDirectory,
     terminalFontSize,
+    terminalNavigationControlsVisible,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
     terminalCustomButtons,
@@ -716,9 +717,9 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           .filter((button) => button.label.trim() && button.value.trim())
       : []
   const hasMobileDock = isMobile && !!key
-  const hasDesktopCycleButtons = !isMobile && isController && !!key
-  const hasBottomDock =
-    !isMobileFocusMode && (visibleCustomButtons.length > 0 || hasMobileDock || hasDesktopCycleButtons)
+  const hasDesktopDock =
+    !isMobile && isController && !!key && (terminalNavigationControlsVisible || visibleCustomButtons.length > 0)
+  const hasBottomDock = !isMobileFocusMode && (hasMobileDock || hasDesktopDock)
 
   useLayoutEffect(() => {
     if (!hasBottomDock || !hasMobileDock) {
@@ -860,13 +861,14 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       </Button>
     )
   })
-  const customButtonsDock = hasDesktopCycleButtons ? (
+  const customButtonsDock = hasDesktopDock ? (
     <DesktopTerminalDock
       key={key}
       terminalCount={switchableTerminalCount}
       onCycleTerminal={cycleTerminal}
       onScrollToBottom={handleScrollToBottom}
       quickInputButtons={customButtonElements}
+      navigationControlsVisible={terminalNavigationControlsVisible}
     />
   ) : visibleCustomButtons.length > 0 ? (
     <div className="goblin-terminal-custom-buttons" aria-label={t('terminal.custom-buttons')}>
@@ -1020,6 +1022,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
               }
               onScrollToBottom={handleScrollToBottom}
               onCycleTerminal={cycleTerminal}
+              navigationControlsVisible={terminalNavigationControlsVisible}
             />
           )}
         </div>
@@ -1035,6 +1038,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           takeoverPending={snapshot.takeoverPending}
           terminalCount={switchableTerminalCount}
           onCycleTerminal={cycleTerminal}
+          navigationControlsVisible={terminalNavigationControlsVisible}
         />
       )}
       {hasSessions && snapshot.phase === 'error' && snapshot.message !== 'terminal.empty' && (
@@ -1066,6 +1070,7 @@ interface ViewerStatusProps {
   takeoverPending?: boolean
   terminalCount: number
   onCycleTerminal: (direction: -1 | 1) => void
+  navigationControlsVisible: boolean
 }
 
 function ViewerStatus({
@@ -1078,14 +1083,19 @@ function ViewerStatus({
   takeoverPending,
   terminalCount,
   onCycleTerminal,
+  navigationControlsVisible,
 }: ViewerStatusProps) {
   return (
     <div className="goblin-terminal-slot__viewer-status">
       <div className="goblin-terminal-slot__viewer-actions">
-        <TerminalCycleButtons terminalCount={terminalCount} onCycleTerminal={onCycleTerminal} />
-        <Button type="button" size="sm" variant="secondary" onClick={onScrollToBottom} disabled={!takeoverKey}>
-          {scrollToBottomLabel}
-        </Button>
+        {navigationControlsVisible && (
+          <>
+            <TerminalCycleButtons terminalCount={terminalCount} onCycleTerminal={onCycleTerminal} />
+            <Button type="button" size="sm" variant="secondary" onClick={onScrollToBottom} disabled={!takeoverKey}>
+              {scrollToBottomLabel}
+            </Button>
+          </>
+        )}
         <Button
           type="button"
           size="sm"

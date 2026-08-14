@@ -68,6 +68,7 @@ export interface SettingsPrefs {
   fileTreeFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
+  terminalNavigationControlsVisible: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]

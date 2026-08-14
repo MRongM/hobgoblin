@@ -1454,6 +1454,10 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-font.title': 'フォント',
   'settings.terminal-font-size': 'フォントサイズ',
   'settings.terminal-font-size-hint': 'アプリ内ターミナルのフォントサイズを調整します。',
+  'settings.terminal-navigation-controls.title': 'ターミナルナビゲーション',
+  'settings.terminal-navigation-controls.visible': 'ターミナルナビゲーションコントロールを表示',
+  'settings.terminal-navigation-controls.visible-hint':
+    '前のターミナル、次のターミナル、一番下へをまとめて表示します。非表示でもキーボードショートカットは使用できます。',
   'settings.terminal-custom-buttons.title': 'カスタムターミナルボタン',
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部のボタンバーを表示します。ボタンはすぐ実行するか、編集できるようターミナル入力行へ入力できます。',

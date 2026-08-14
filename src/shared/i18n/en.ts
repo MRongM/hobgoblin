@@ -1446,6 +1446,10 @@ export const en = {
   'settings.terminal-font.title': 'Font',
   'settings.terminal-font-size': 'Font size',
   'settings.terminal-font-size-hint': 'Controls the in-app terminal font size.',
+  'settings.terminal-navigation-controls.title': 'Terminal navigation',
+  'settings.terminal-navigation-controls.visible': 'Show terminal navigation controls',
+  'settings.terminal-navigation-controls.visible-hint':
+    'Show previous terminal, next terminal, and Back to bottom together. Keyboard shortcuts remain available when hidden.',
   'settings.terminal-custom-buttons.title': 'Custom terminal buttons',
   'settings.terminal-custom-buttons.hint':
     'Show a terminal bottom button bar. Buttons can run immediately or fill the terminal input line for editing.',

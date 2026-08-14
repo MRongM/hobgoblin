@@ -73,6 +73,7 @@ export function TerminalSettings() {
   const dict = useI18nStore((state) => state.dict)
   const {
     terminalCustomButtons: buttons,
+    terminalNavigationControlsVisible,
     terminalCustomButtonsVisible,
     terminalCustomButtonSize,
     terminalFontSize,
@@ -80,8 +81,12 @@ export function TerminalSettings() {
   const initialRows = useMemo(() => editableFromButtons(buttons, dict), [buttons, dict])
   const [rows, setRows] = useState<EditableTerminalCustomButton[]>(initialRows)
   const [dirty, setDirty] = useState(false)
-  const { setTerminalCustomButtons, setTerminalCustomButtonsVisible, setTerminalCustomButtonSize } =
-    useTerminalCustomButtonsController()
+  const {
+    setTerminalNavigationControlsVisible,
+    setTerminalCustomButtons,
+    setTerminalCustomButtonsVisible,
+    setTerminalCustomButtonSize,
+  } = useTerminalCustomButtonsController()
   const { setTerminalFontSize } = useFontSettingsController()
 
   useEffect(() => {
@@ -139,6 +144,23 @@ export function TerminalSettings() {
                 max={MAX_TERMINAL_FONT_SIZE}
                 value={terminalFontSize}
                 onChange={(fontSize) => void setTerminalFontSize(fontSize)}
+              />
+            }
+          />
+        </SettingsList>
+      </SettingsGroup>
+      <SettingsGroup label={t('settings.terminal-navigation-controls.title')}>
+        <SettingsList>
+          <SettingsRow
+            controlId="settings-terminal-navigation-controls-visible"
+            label={t('settings.terminal-navigation-controls.visible')}
+            hint={t('settings.terminal-navigation-controls.visible-hint')}
+            control={
+              <Switch
+                id="settings-terminal-navigation-controls-visible"
+                checked={terminalNavigationControlsVisible}
+                onCheckedChange={(visible) => void setTerminalNavigationControlsVisible(visible)}
+                aria-label={t('settings.terminal-navigation-controls.visible')}
               />
             }
           />

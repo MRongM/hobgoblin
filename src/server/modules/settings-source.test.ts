@@ -77,6 +77,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     toolbarHeightPx: 34,
     fileTreeFontSize: 13,
     terminalFontSize: 14,
+    terminalNavigationControlsVisible: true,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     lanEnabled: false,
@@ -115,6 +116,22 @@ test('normalizes and persists the scheduled status refresh interval', async () =
   vi.resetModules()
   const reloaded = await import('#/server/modules/settings-source.ts')
   await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ statusRefreshIntervalSec: 300 })
+})
+
+test('defaults legacy terminal navigation controls to visible and persists opt-out', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ terminalNavigationControlsVisible: true })
+  await expect(mod.updateServerSettingsPrefs({ terminalNavigationControlsVisible: false })).resolves.toMatchObject({
+    terminalNavigationControlsVisible: false,
+  })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ terminalNavigationControlsVisible: false })
 })
 
 test('retains the 30 most recently opened repositories', async () => {

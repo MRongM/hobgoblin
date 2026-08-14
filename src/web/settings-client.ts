@@ -283,6 +283,10 @@ export async function setTerminalCustomButtonsVisible(visible: boolean): Promise
   await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
 }
 
+export async function setTerminalNavigationControlsVisible(visible: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalNavigationControlsVisible: visible })
+}
+
 export async function setTerminalCustomButtonSize(size: TerminalCustomButtonSize): Promise<void> {
   await updateSettingsPrefsPatch({ terminalCustomButtonSize: size })
 }
