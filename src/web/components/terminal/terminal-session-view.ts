@@ -52,10 +52,6 @@ import {
   terminalMobileSelectionText,
 } from '#/web/components/terminal/terminal-mobile-selection.ts'
 import { stabilizeTerminalImePosition } from '#/web/components/terminal/terminal-ime-position.ts'
-import {
-  stabilizeTerminalOutputCursor,
-  type TerminalOutputCursorStabilizer,
-} from '#/web/components/terminal/terminal-output-cursor-stabilizer.ts'
 
 const RESIZE_DEBOUNCE_MS = 80
 const FONT_REMEASURE_DEBOUNCE_MS = 80
@@ -68,7 +64,6 @@ export class TerminalSessionView {
   private fitAddon: XTermFitAddon | null = null
   private searchAddon: XTermSearchAddon | null = null
   private serializeAddon: XTermSerializeAddon | null = null
-  private outputCursorStabilizer: TerminalOutputCursorStabilizer | null = null
   private resizeObserver: ResizeObserver | null = null
   private disposables: Array<{ dispose: () => void }> = []
   private disposeThemeObserver: (() => void) | null = null
@@ -309,8 +304,6 @@ export class TerminalSessionView {
     )
     term.open(this.xtermHost)
     this.disposables.push(stabilizeTerminalImePosition(term))
-    this.outputCursorStabilizer = stabilizeTerminalOutputCursor(term)
-    this.disposables.push(this.outputCursorStabilizer)
     this.applyInputMode(term)
     this.installResizeObserver()
     this.installFontObserver(term)
@@ -320,13 +313,6 @@ export class TerminalSessionView {
 
   currentTerminal(): XTermTerminal | null {
     return this.term
-  }
-
-  writeOutput(data: string): void {
-    const term = this.term
-    if (!term) return
-    this.outputCursorStabilizer?.handleOutput(data)
-    term.write(data)
   }
 
   focus(): void {
@@ -478,7 +464,6 @@ export class TerminalSessionView {
     this.fitAddon = null
     this.searchAddon = null
     this.serializeAddon = null
-    this.outputCursorStabilizer = null
     this.term?.dispose()
     this.term = null
     this.syncMobileScrollScrubber()

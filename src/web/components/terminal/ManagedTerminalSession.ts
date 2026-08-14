@@ -724,7 +724,7 @@ export class ManagedTerminalSession {
     if (!this.pendingOutput.length) return
     const output = this.pendingOutput.join('')
     this.pendingOutput = []
-    this.view.writeOutput(output)
+    this.view.currentTerminal()?.write(output)
   }
 
   private recoverActiveView(): void {

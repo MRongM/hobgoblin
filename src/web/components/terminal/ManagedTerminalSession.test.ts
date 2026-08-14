@@ -1419,7 +1419,7 @@ describe('ManagedTerminalSession', () => {
     }
   })
 
-  test('anchors the Windows cursor while inline TUI output redraws transient status rows', async () => {
+  test('leaves synchronized Windows TUI cursor geometry to xterm', async () => {
     const savedPlatform = navigator.platform
     Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
     const host = document.createElement('div')
@@ -1434,40 +1434,21 @@ describe('ManagedTerminalSession', () => {
       const term = xtermMocks.terminals[0]!
       const nativeCursor = document.createElement('span')
       nativeCursor.className = 'xterm-cursor xterm-cursor-bar'
-      term.screenElement!.getBoundingClientRect = () =>
-        ({ left: 100, top: 50, width: 1000, height: 600 } as DOMRect)
-      let cursorRect = { left: 140, top: 90, width: 10, height: 20 } as DOMRect
-      nativeCursor.getBoundingClientRect = () => cursorRect
       term.screenElement?.append(nativeCursor)
       term.focus()
       term.emitCoreUserData('x')
+      term.write.mockClear()
+      const data = '\x1b[?2026htransient status frame\x1b[?2026l'
       session.handleOutput({
         sessionId: 'session-1',
-        data: '\x1b[?2026htransient status frame\x1b[?2026l',
+        data,
         seq: 1,
         processName: 'codex',
       })
 
-      expect(term.element?.classList.contains('goblin-terminal-output-cursor-stabilized')).toBe(true)
-      const proxy = term.element?.querySelector('.goblin-terminal-output-cursor-proxy.is-active') as
-        | HTMLElement
-        | null
-        | undefined
-      expect(proxy).not.toBeNull()
-      expect(proxy?.style.left).toBe('40px')
-
-      term.emitData('input')
-      cursorRect = { left: 500, top: 300, width: 10, height: 20 } as DOMRect
-      term.emitRender()
-      cursorRect = { left: 200, top: 90, width: 10, height: 20 } as DOMRect
-      term.emitRender()
-      term.emitRender()
-      await new Promise((resolve) => setTimeout(resolve, 130))
-      expect(proxy?.style.left).toBe('100px')
-
-      cursorRect = { left: 300, top: 90, width: 10, height: 20 } as DOMRect
-      term.emitRender()
-      expect(proxy?.style.left).toBe('100px')
+      expect(term.write).toHaveBeenCalledWith(data)
+      expect(term.element?.classList.contains('goblin-terminal-output-cursor-stabilized')).toBe(false)
+      expect(term.element?.querySelector('.goblin-terminal-output-cursor-proxy')).toBeNull()
     } finally {
       session.dispose()
       Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })

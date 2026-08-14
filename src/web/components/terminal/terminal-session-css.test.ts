@@ -84,19 +84,9 @@ describe('terminal session CSS layout contract', () => {
     )
   })
 
-  test('replaces transient Windows inline-TUI cursor positions with a stable bar proxy', () => {
-    expect(css).toMatch(
-      /\.goblin-managed-terminal-host \.xterm\.goblin-terminal-output-cursor-stabilized \.xterm-cursor\.xterm-cursor-bar\s*\{[^}]*animation:\s*none\s*!important;[^}]*box-shadow:\s*none\s*!important;/,
-    )
-    expect(css).toMatch(
-      /\.goblin-terminal-output-cursor-proxy\s*\{[^}]*position:\s*absolute;[^}]*display:\s*none;[^}]*pointer-events:\s*none;/,
-    )
-    expect(css).toMatch(
-      /\.goblin-terminal-output-cursor-proxy\.is-active\s*\{[^}]*display:\s*block;[^}]*animation:\s*none;/,
-    )
-    expect(css).toMatch(
-      /\.xterm\.goblin-terminal-ime-cursor-anchored \.goblin-terminal-output-cursor-proxy\s*\{[^}]*display:\s*none;/,
-    )
+  test('leaves synchronized-output cursor geometry to xterm', () => {
+    expect(css).not.toContain('goblin-terminal-output-cursor-stabilized')
+    expect(css).not.toContain('goblin-terminal-output-cursor-proxy')
   })
 
   test('uses xterm native scrollbar geometry without extra layout clearance', () => {
