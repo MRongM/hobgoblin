@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import type { Readable } from 'node:stream'
@@ -23,7 +23,11 @@ interface EmbeddedServerRuntime {
   clientId: string
 }
 
-type ServerChildProcess = ChildProcessByStdio<null, Readable, Readable>
+type ServerChildProcess = ChildProcess & {
+  stdin: null
+  stdout: Readable
+  stderr: Readable
+}
 
 let serverProcess: ServerChildProcess | null = null
 let runtime: EmbeddedServerRuntime | null = null
@@ -175,7 +179,7 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
         GOBLIN_SERVER_DATA_DIR: app.getPath('userData'),
       },
       stdio: embeddedServerSpawnStdio(),
-    })
+    }) as ServerChildProcess
     serverProcess = proc
     pipeProcessLogs(proc, log)
     proc.once('exit', (code, signal) => {
