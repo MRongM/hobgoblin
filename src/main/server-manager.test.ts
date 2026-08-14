@@ -3,6 +3,7 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import {
   DEFAULT_EMBEDDED_SERVER_PORT,
+  embeddedServerSpawnStdio,
   parseServerPort,
   reserveEmbeddedServerPort,
   resolveEmbeddedServerEntryPath,
@@ -82,5 +83,9 @@ describe('embedded server entry resolution', () => {
     const appPath = path.join('/repo/hobgoblin')
 
     expect(resolveEmbeddedServerWorkingDirectory(appPath, false)).toBe(appPath)
+  })
+
+  test('opens a private IPC channel for graceful embedded-server shutdown', () => {
+    expect(embeddedServerSpawnStdio()).toEqual(['ignore', 'pipe', 'pipe', 'ipc'])
   })
 })

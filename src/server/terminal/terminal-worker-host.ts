@@ -31,6 +31,7 @@ import type {
 import type { TerminalWorkerMessage, TerminalWorkerRequest } from '#/server/terminal/terminal-worker-protocol.ts'
 import { isValidTerminalAttachmentId } from '#/shared/terminal.ts'
 import { serverLogger } from '#/server/logger.ts'
+import { shutdownOwnedProcess } from '#/system/owned-process-shutdown.ts'
 
 interface PendingRequest<T> {
   resolve(value: T): void
@@ -48,12 +49,16 @@ export interface WorkerBackedTerminalHostOptions {
   now?: () => number
   setTimer?: (callback: () => void, delayMs: number) => WorkerTimerHandle
   clearTimer?: (timer: WorkerTimerHandle) => void
+  shutdownTimeoutMs?: number
+  platform?: NodeJS.Platform
+  terminateProcessTree?: (pid: number) => Promise<void>
 }
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const STABLE_WORKER_UPTIME_MS = 15_000
 const MIN_RESTART_BACKOFF_MS = 250
 const MAX_RESTART_BACKOFF_MS = 5_000
+const TERMINAL_WORKER_SHUTDOWN_TIMEOUT_MS = 1_000
 const terminalWorkerLogger = serverLogger.child({ module: 'terminal-worker-host' })
 
 function isValidTerminalClientId(value: unknown): value is string {
@@ -81,6 +86,7 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
   private workerStartedAt = 0
   private restartTimer: WorkerTimerHandle | null = null
   private shuttingDown = false
+  private shutdownPromise: Promise<void> | null = null
   private lastSuccessfulResponseAt: number | null = null
   private lastExitCode: number | null = null
   private lastExitSignal: NodeJS.Signals | null = null
@@ -202,7 +208,8 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     this.worker?.send?.({ type: 'socket-message', socketId, clientId, attachmentId, payload: message })
   }
 
-  shutdown(): void {
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise
     this.shuttingDown = true
     this.clearRestartTimer()
     const worker = this.worker
@@ -216,13 +223,15 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     this.socketMeta.clear()
     this.sockets.clear()
     this.socketIdBySocket = new WeakMap()
-    worker?.send?.({ type: 'shutdown' })
-    try {
-      worker?.disconnect?.()
-    } catch {}
-    try {
-      worker?.kill()
-    } catch {}
+    this.shutdownPromise = worker
+      ? shutdownOwnedProcess(worker, {
+          message: { type: 'shutdown' } satisfies TerminalWorkerRequest,
+          timeoutMs: this.options.shutdownTimeoutMs ?? TERMINAL_WORKER_SHUTDOWN_TIMEOUT_MS,
+          platform: this.options.platform,
+          terminateProcessTree: this.options.terminateProcessTree,
+        })
+      : Promise.resolve()
+    return this.shutdownPromise
   }
 
   private request<T>(

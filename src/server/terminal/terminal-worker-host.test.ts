@@ -8,6 +8,7 @@ class FakeWorker extends EventEmitter {
   sent: TerminalWorkerRequest[] = []
   killed = false
   sendResult = true
+  pid: number | undefined
 
   send(message: TerminalWorkerRequest): boolean {
     this.sent.push(message)
@@ -256,6 +257,51 @@ describe('worker-backed terminal host', () => {
       state: 'running',
       lastSuccessfulResponseAt: 2_000,
     })
+  })
+
+  test('waits for the terminal worker to exit after a graceful shutdown request', async () => {
+    worker.pid = 2468
+    const terminateProcessTree = vi.fn(async () => {})
+    const host = new WorkerBackedTerminalHost({
+      spawnWorker: () => worker as any,
+      shutdownTimeoutMs: 100,
+      platform: 'win32',
+      terminateProcessTree,
+    } as any)
+    const socket: ServerTerminalSocket = { send: vi.fn(), close: vi.fn() }
+    host.registerSocket('client_1', 'attachment_a', socket)
+
+    const shutdown = host.shutdown() as unknown as Promise<void>
+    expect(shutdown).toBeInstanceOf(Promise)
+    expect(worker.sent.at(-1)).toEqual({ type: 'shutdown' })
+
+    worker.emit('exit', 0, null)
+    await shutdown
+
+    expect(terminateProcessTree).not.toHaveBeenCalled()
+    expect(worker.killed).toBe(false)
+  })
+
+  test('force-kills only the owned terminal worker tree when graceful shutdown times out', async () => {
+    vi.useFakeTimers()
+    worker.pid = 2468
+    const terminateProcessTree = vi.fn(async () => {})
+    const host = new WorkerBackedTerminalHost({
+      spawnWorker: () => worker as any,
+      shutdownTimeoutMs: 100,
+      platform: 'win32',
+      terminateProcessTree,
+    } as any)
+    const socket: ServerTerminalSocket = { send: vi.fn(), close: vi.fn() }
+    host.registerSocket('client_1', 'attachment_a', socket)
+
+    const shutdown = host.shutdown() as unknown as Promise<void>
+    await vi.advanceTimersByTimeAsync(100)
+    await shutdown
+
+    expect(terminateProcessTree).toHaveBeenCalledTimes(1)
+    expect(terminateProcessTree).toHaveBeenCalledWith(2468)
+    expect(worker.killed).toBe(false)
   })
 
   test('requires an explicit worker entry when using the default spawner', () => {

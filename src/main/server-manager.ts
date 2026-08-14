@@ -5,6 +5,8 @@ import type { Readable } from 'node:stream'
 import path from 'node:path'
 import { app } from 'electron'
 import { createStartupDiagnostics, type StartupDiagnostics } from '#/main/startup-diagnostics.ts'
+import { EMBEDDED_SERVER_SHUTDOWN_MESSAGE } from '#/shared/server-lifecycle.ts'
+import { shutdownOwnedProcess } from '#/system/owned-process-shutdown.ts'
 import { reserveAvailablePort } from '#/system/port-allocation.ts'
 
 const DEFAULT_HOST = '127.0.0.1'
@@ -49,6 +51,10 @@ function serverEntryPath(): string {
 
 function serverWorkingDirectory(): string {
   return resolveEmbeddedServerWorkingDirectory(app.getAppPath(), app.isPackaged)
+}
+
+export function embeddedServerSpawnStdio(): ['ignore', 'pipe', 'pipe', 'ipc'] {
+  return ['ignore', 'pipe', 'pipe', 'ipc']
 }
 
 function serverCommand(): { bin: string; args: string[]; env: NodeJS.ProcessEnv } {
@@ -168,7 +174,7 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
         GOBLIN_SERVER_INTERNAL_SECRET: secret,
         GOBLIN_SERVER_DATA_DIR: app.getPath('userData'),
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: embeddedServerSpawnStdio(),
     })
     serverProcess = proc
     pipeProcessLogs(proc, log)
@@ -211,29 +217,9 @@ export async function stopEmbeddedServer(): Promise<void> {
   runtime = null
   startPromise = null
   if (!proc) return
-  await new Promise<void>((resolve) => {
-    let settled = false
-    const settle = () => {
-      if (settled) return
-      settled = true
-      resolve()
-    }
-    const timer = setTimeout(() => {
-      try {
-        proc.kill('SIGKILL')
-      } catch {}
-      settle()
-    }, SERVER_STOP_TIMEOUT_MS)
-    proc.once('exit', () => {
-      clearTimeout(timer)
-      settle()
-    })
-    try {
-      proc.kill('SIGTERM')
-    } catch {
-      clearTimeout(timer)
-      settle()
-    }
+  await shutdownOwnedProcess(proc, {
+    message: EMBEDDED_SERVER_SHUTDOWN_MESSAGE,
+    timeoutMs: SERVER_STOP_TIMEOUT_MS,
   })
 }
 

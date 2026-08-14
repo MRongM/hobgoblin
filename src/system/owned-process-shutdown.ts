@@ -5,7 +5,7 @@ interface OwnedProcess {
   exitCode?: number | null
   signalCode?: NodeJS.Signals | null
   connected?: boolean
-  send?(message: unknown): boolean
+  send?(message: any): boolean
   kill(signal?: NodeJS.Signals | number): boolean
   once(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown
   removeListener(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown
