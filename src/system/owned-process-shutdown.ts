@@ -63,7 +63,10 @@ export async function terminateWindowsProcessTree(pid: number): Promise<void> {
       else resolve()
     }
     taskkill.once('error', settle)
-    taskkill.once('exit', () => settle())
+    taskkill.once('exit', (code, signal) => {
+      if (code === 0) settle()
+      else settle(new Error(`taskkill exited with ${signal ? `signal ${signal}` : `code ${code ?? 'unknown'}`}`))
+    })
   })
 }
 

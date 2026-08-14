@@ -82,4 +82,14 @@ describe('owned process shutdown', () => {
       windowsHide: true,
     })
   })
+
+  test('reports a nonzero taskkill exit so the caller can use its direct-child fallback', async () => {
+    const taskkill = new EventEmitter()
+    mocks.spawn.mockReturnValueOnce(taskkill)
+
+    const termination = terminateWindowsProcessTree(4321)
+    taskkill.emit('exit', 1, null)
+
+    await expect(termination).rejects.toThrow('taskkill exited with code 1')
+  })
 })
