@@ -1,4 +1,6 @@
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { EMBEDDED_SERVER_SHUTDOWN_MESSAGE } from '#/shared/server-lifecycle.ts'
 
 const mocks = vi.hoisted(() => {
   const closeHttpServer = vi.fn()
@@ -85,5 +87,37 @@ describe('bootstrap server shutdown', () => {
     expect(client.terminate).toHaveBeenCalledTimes(1)
     expect(socket.destroy).toHaveBeenCalledTimes(1)
     expect(exit).not.toHaveBeenCalled()
+  })
+
+  test('awaits graceful shutdown before exiting on the embedded-server IPC message', async () => {
+    let resolveRuntimeShutdown: () => void = () => {}
+    mocks.runtimeShutdown.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRuntimeShutdown = resolve
+        }),
+    )
+    mocks.closeHttpServer.mockImplementation((callback: () => void) => callback())
+    mocks.websocketClose.mockImplementation((callback: () => void) => callback())
+    const processMessageSource = new EventEmitter()
+    const exit = vi.fn()
+    const { bootstrapServer } = await import('#/server/bootstrap.ts')
+
+    bootstrapServer({
+      terminalWorkerEntry: '/tmp/terminal-worker.ts',
+      exit,
+      processMessageSource,
+    } as any)
+    processMessageSource.emit('message', EMBEDDED_SERVER_SHUTDOWN_MESSAGE)
+
+    await vi.waitFor(() => {
+      expect(mocks.runtimeShutdown).toHaveBeenCalledTimes(1)
+    })
+    expect(exit).not.toHaveBeenCalled()
+
+    resolveRuntimeShutdown()
+    await vi.waitFor(() => {
+      expect(exit).toHaveBeenCalledWith(0)
+    })
   })
 })

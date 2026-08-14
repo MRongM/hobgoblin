@@ -96,12 +96,17 @@ describe('server runtime', () => {
     })
   })
 
-  test('shutdown is idempotent and stops background sync, port forwarding, and terminal host teardown', async () => {
+  test('shutdown is idempotent and awaits background sync, port forwarding, and terminal host teardown', async () => {
     const { createServerRuntime } = await import('#/server/runtime.ts')
     const events: string[] = []
+    let resolveTerminalShutdown: () => void = () => {}
+    const terminalShutdown = new Promise<void>((resolve) => {
+      resolveTerminalShutdown = resolve
+    })
     const terminalHost = {
       shutdown: vi.fn(() => {
         events.push('terminal')
+        return terminalShutdown
       }),
     } as unknown as ServerTerminalHost
     mocks.stopBackgroundSync.mockImplementation(() => {
@@ -118,12 +123,25 @@ describe('server runtime', () => {
       terminalHost,
     })
 
-    runtime.shutdown()
-    runtime.shutdown()
+    const firstShutdown = runtime.shutdown() as unknown as Promise<void>
+    const secondShutdown = runtime.shutdown() as unknown as Promise<void>
 
     expect(mocks.stopBackgroundSync).toHaveBeenCalledTimes(1)
     expect(mocks.shutdownPortForwarding).toHaveBeenCalledTimes(1)
     expect(terminalHost.shutdown).toHaveBeenCalledTimes(1)
     expect(events).toEqual(['background-sync', 'port-forwarding', 'terminal'])
+    expect(firstShutdown).toBeInstanceOf(Promise)
+    expect(secondShutdown).toBe(firstShutdown)
+
+    let settled = false
+    void firstShutdown.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    resolveTerminalShutdown()
+    await Promise.all([firstShutdown, secondShutdown])
+    expect(settled).toBe(true)
   })
 })

@@ -7,6 +7,7 @@ import { serverLogger } from '#/server/logger.ts'
 import { disconnectAllInvalidationSockets } from '#/server/modules/invalidation-broker.ts'
 import { createServerRuntime } from '#/server/runtime.ts'
 import { resolveTerminalWorkerEntry } from '#/server/terminal/terminal-worker-entry.ts'
+import { isEmbeddedServerShutdownMessage } from '#/shared/server-lifecycle.ts'
 
 const DEFAULT_HOST = '127.0.0.1'
 const DEFAULT_PORT = 32200
@@ -40,6 +41,12 @@ export interface BootstrapServerOptions {
   terminalWorkerDir?: string
   terminalWorkerEntry?: string
   exit?: (code: number) => void
+  processMessageSource?: ServerProcessMessageSource
+}
+
+export interface ServerProcessMessageSource {
+  on(event: 'message', listener: (message: unknown) => void): unknown
+  removeListener(event: 'message', listener: (message: unknown) => void): unknown
 }
 
 export function bootstrapServer(options: BootstrapServerOptions = {}): BootstrappedServer {
@@ -68,6 +75,7 @@ export function bootstrapServer(options: BootstrapServerOptions = {}): Bootstrap
   })
   const sockets = new Set<Socket>()
   const exit = options.exit ?? ((code: number) => process.exit(code))
+  const processMessageSource = options.processMessageSource ?? process
   let shutdownPromise: Promise<void> | null = null
 
   server.on('connection', (socket: Socket) => {
@@ -80,8 +88,9 @@ export function bootstrapServer(options: BootstrapServerOptions = {}): Bootstrap
   const shutdown = async () => {
     if (shutdownPromise) return await shutdownPromise
     shutdownPromise = (async () => {
+      processMessageSource.removeListener('message', handleProcessMessage)
       try {
-        runtime.shutdown()
+        await runtime.shutdown()
       } catch {}
       try {
         disconnectAllInvalidationSockets()
@@ -111,6 +120,11 @@ export function bootstrapServer(options: BootstrapServerOptions = {}): Bootstrap
       exit(0)
     }
   }
+  const handleProcessMessage = (message: unknown) => {
+    if (!isEmbeddedServerShutdownMessage(message)) return
+    void shutdownAndExit()
+  }
+  processMessageSource.on('message', handleProcessMessage)
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
       void shutdownAndExit()

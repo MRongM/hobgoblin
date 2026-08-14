@@ -13,23 +13,25 @@ export interface ServerRuntimeOptions extends Omit<ServerAppOptions, 'terminalHo
 export interface ServerRuntime {
   app: Hono
   terminalHost: ServerTerminalHost
-  shutdown(): void
+  shutdown(): Promise<void>
 }
 
 export function createServerRuntime(options: ServerRuntimeOptions): ServerRuntime {
   const { terminalHost: providedTerminalHost, terminalWorkerEntry, ...appOptions } = options
   const terminalHost = providedTerminalHost ?? new WorkerBackedTerminalHost({ workerEntry: terminalWorkerEntry })
   const app = createApp({ ...appOptions, terminalHost })
-  let stopped = false
+  let shutdownPromise: Promise<void> | null = null
   return {
     app,
     terminalHost,
     shutdown() {
-      if (stopped) return
-      stopped = true
-      stopBackgroundSync()
-      shutdownPortForwarding()
-      terminalHost.shutdown()
+      if (shutdownPromise) return shutdownPromise
+      shutdownPromise = (async () => {
+        stopBackgroundSync()
+        shutdownPortForwarding()
+        await terminalHost.shutdown()
+      })()
+      return shutdownPromise
     },
   }
 }

@@ -79,5 +79,5 @@ export interface ServerTerminalHost {
   getScreenSnapshot(input: TerminalScreenSnapshotInput): MaybePromise<TerminalScreenSnapshot | null>
   /** Handle an incoming realtime message from a client socket. */
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void
-  shutdown(): void
+  shutdown(): MaybePromise<void>
 }
