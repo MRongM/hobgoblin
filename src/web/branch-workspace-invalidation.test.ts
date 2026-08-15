@@ -114,6 +114,46 @@ describe('branch workspace invalidation', () => {
     expect(cached?.ok && cached.items[0] && 'activeOperation' in cached.items[0]).toBe(false)
     expect(invalidateQueries).not.toHaveBeenCalled()
   })
+
+  test('projects an active batch upstream operation without refetching', () => {
+    let emit: (event: unknown) => void = () => {
+      throw new Error('missing invalidation listener')
+    }
+    mocks.subscribeServerInvalidationIngress.mockImplementation((listener) => {
+      emit = listener
+      return () => undefined
+    })
+    const invalidateQueries = vi.fn()
+    let cached: BranchWorkspaceReadResult | undefined = successfulRead()
+    const setQueryData = vi.fn(
+      (
+        _queryKey: readonly unknown[],
+        updater: (current: BranchWorkspaceReadResult | undefined) => BranchWorkspaceReadResult | undefined,
+      ) => {
+        cached = updater(cached)
+      },
+    )
+    const operation = {
+      kind: 'batch-set-upstream' as const,
+      currentStep: 1,
+      completedCount: 0,
+      totalCount: 2,
+      cancellable: true,
+      repositoryName: 'api',
+      step: 'upstream' as const,
+    }
+
+    subscribeBranchWorkspaceInvalidation({ invalidateQueries, setQueryData })
+    emit({
+      type: 'branch-workspace-operation-updated',
+      rootId: '/workspace',
+      branchWorkspaceId: 'workspace_1',
+      operation,
+    })
+
+    expect(cached?.ok && cached.items[0]?.activeOperation).toEqual(operation)
+    expect(invalidateQueries).not.toHaveBeenCalled()
+  })
 })
 
 function successfulRead(): Extract<BranchWorkspaceReadResult, { ok: true }> {

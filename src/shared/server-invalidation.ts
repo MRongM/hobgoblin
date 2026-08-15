@@ -127,6 +127,7 @@ function isBranchWorkspaceGitActionKind(value: unknown): boolean {
     value === 'batch-discard' ||
     value === 'batch-merge-in' ||
     value === 'batch-merge-out' ||
+    value === 'batch-set-upstream' ||
     value === 'pull' ||
     value === 'push'
   )
@@ -141,7 +142,8 @@ function isBranchWorkspaceGitActionStep(value: unknown): boolean {
     value === 'fetch' ||
     value === 'merge' ||
     value === 'push' ||
-    value === 'cleanup'
+    value === 'cleanup' ||
+    value === 'upstream'
   )
 }
 

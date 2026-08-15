@@ -31,6 +31,15 @@ const discardPlan: BranchWorkspaceGitActionPlan = {
   members: [],
 }
 
+const upstreamPlan: BranchWorkspaceGitActionPlan = {
+  kind: 'batch-set-upstream',
+  token: 'sha256:upstream',
+  rootId: '/workspace',
+  branchWorkspaceId: 'ws-1',
+  ready: true,
+  members: [],
+}
+
 function syncPlan(kind: 'pull' | 'push'): BranchWorkspaceGitActionPlan {
   return {
     kind,
@@ -158,6 +167,34 @@ describe('useBranchWorkspaceGitActions', () => {
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       kind: 'batch-discard',
       planToken: discardPlan.token,
+    })
+  })
+
+  test('executes the batch upstream mappings from the loaded plan', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan: upstreamPlan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind: 'batch-set-upstream',
+      planToken: upstreamPlan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-set-upstream', 'ws-1'))
+    await act(async () => state!.executeBatchSetUpstream([{ repositoryName: 'api', remoteRef: 'origin/release' }]))
+
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      kind: 'batch-set-upstream',
+      planToken: 'sha256:upstream',
+      upstreams: [{ repositoryName: 'api', remoteRef: 'origin/release' }],
     })
   })
 

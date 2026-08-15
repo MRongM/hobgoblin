@@ -261,6 +261,9 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-merge-out': '批量合出',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     '为每个选中的成员工作树选择本地目标分支，再按仓库顺序逐个合出。',
+  'workspace.branch-workspace.git-action.batch-set-upstream': '批量更换上游',
+  'workspace.branch-workspace.git-action.batch-set-upstream-description':
+    '为每个选中的成员工作树选择远程分支，再按仓库顺序更新其目标分支的上游。',
   'workspace.branch-workspace.git-action.select-all-members': '选择全部可用成员',
   'workspace.branch-workspace.git-action.selected-count': '已选择 {selected}/{total} 个成员',
   'workspace.branch-workspace.git-action.select-member': '选择成员工作树 {repository}',
@@ -272,6 +275,9 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.destination-branch': '{repository} 的目标分支',
   'workspace.branch-workspace.git-action.select-destination': '选择目标分支',
   'workspace.branch-workspace.git-action.destination-branch-required': '请选择目标分支。',
+  'workspace.branch-workspace.git-action.current-upstream': '当前上游',
+  'workspace.branch-workspace.git-action.select-upstream': '选择上游',
+  'workspace.branch-workspace.git-action.select-upstream-for-member': '为 {repository} 选择上游',
   'workspace.branch-workspace.git-action.temporary-worktree': '临时工作树',
   'workspace.branch-workspace.git-action.merge-in': '合入',
   'workspace.branch-workspace.git-action.pull-merge-in-push': '拉取目标、合入并推送',
@@ -301,6 +307,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.step.merge': '正在合并',
   'workspace.branch-workspace.git-action.step.push': '正在推送',
   'workspace.branch-workspace.git-action.step.cleanup': '正在清理',
+  'workspace.branch-workspace.git-action.step.upstream': '正在更新上游',
   'workspace.branch-workspace.git-action.failure-step.commit': '提交',
   'workspace.branch-workspace.git-action.failure-step.discard': '丢弃',
   'workspace.branch-workspace.git-action.failure-step.prepare': '准备',
@@ -309,6 +316,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.failure-step.merge': '合并',
   'workspace.branch-workspace.git-action.failure-step.push': '推送',
   'workspace.branch-workspace.git-action.failure-step.cleanup': '清理',
+  'workspace.branch-workspace.git-action.failure-step.upstream': '上游',
   'workspace.branch-workspace.git-action.not-ready': '子工作区尚未就绪。',
   'workspace.branch-workspace.git-action.no-repositories': '子工作区没有可操作的仓库。',
   'workspace.branch-workspace.git-action.operation-active': '另一个子工作区 Git 操作正在执行。',
@@ -326,6 +334,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required': '此操作要求每个所选目标分支都有可用上游。',
   'workspace.branch-workspace.git-action.remote-required': '批量推送要求每个成员工作树所属仓库都有可用远端。',
   'workspace.branch-workspace.git-action.remote-branches-unavailable': '无法读取此仓库的远程分支。',
+  'workspace.branch-workspace.git-action.remote-branch-required': '请选择远程分支。',
   'workspace.branch-workspace.git-action.remote-destination-requires-push':
     '远程目标必须使用获取、合并并推送模式。',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable': '无法使用目标分支工作树。',

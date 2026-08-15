@@ -3,13 +3,16 @@ import {
   normalizeRepositoryMergeBranchSelection,
   type RepositoryMergeBranchSelection,
 } from '#/shared/repository-merge-branch.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
+import { isRemoteTrackingRef } from '#/shared/worktree-create.ts'
 
 export type BranchWorkspaceGitActionKind =
   | 'batch-commit'
   | 'batch-discard'
   | 'batch-merge-in'
   | 'batch-merge-out'
+  | 'batch-set-upstream'
   | 'pull'
   | 'push'
 export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
@@ -20,6 +23,7 @@ export type BranchWorkspaceGitActionStep =
   | 'pull'
   | 'fetch'
   | 'merge'
+  | 'upstream'
   | 'push'
   | 'cleanup'
 export type BranchWorkspaceGitActionMemberPhase = 'ready' | 'satisfied' | 'succeeded' | 'failed' | 'not-started'
@@ -95,6 +99,20 @@ export interface BranchWorkspaceSyncMemberPlan {
   fingerprint: string
 }
 
+export interface BranchWorkspaceBatchSetUpstreamMemberPlan {
+  repositoryName: string
+  repoId: string
+  targetBranch: string
+  targetWorktreePath: string
+  targetHead: string
+  currentUpstream: string | null
+  trackingGone: boolean
+  remoteBranches: RemoteTrackingBranchInfo[]
+  ready: boolean
+  message?: string
+  fingerprint: string
+}
+
 interface BranchWorkspaceGitActionPlanBase {
   token: string
   rootId: string
@@ -127,11 +145,18 @@ export interface BranchWorkspaceSyncPlan extends BranchWorkspaceGitActionPlanBas
   ready: boolean
 }
 
+export interface BranchWorkspaceBatchSetUpstreamPlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'batch-set-upstream'
+  members: BranchWorkspaceBatchSetUpstreamMemberPlan[]
+  ready: boolean
+}
+
 export type BranchWorkspaceGitActionPlan =
   | BranchWorkspaceBatchCommitPlan
   | BranchWorkspaceBatchDiscardPlan
   | BranchWorkspaceBatchMergeInPlan
   | BranchWorkspaceBatchMergeOutPlan
+  | BranchWorkspaceBatchSetUpstreamPlan
   | BranchWorkspaceSyncPlan
 
 export type BranchWorkspaceGitActionPlanResult =
@@ -162,6 +187,11 @@ export interface BranchWorkspaceBatchMergeOutTargetInput {
   destination: RepositoryMergeBranchSelection
 }
 
+export interface BranchWorkspaceBatchSetUpstreamInput {
+  repositoryName: string
+  remoteRef: string
+}
+
 export type BranchWorkspaceGitActionExecuteInput =
   | {
       kind: 'batch-commit'
@@ -183,6 +213,11 @@ export type BranchWorkspaceGitActionExecuteInput =
       planToken: string
       mode: BranchWorkspaceMergeMode
       targets: BranchWorkspaceBatchMergeOutTargetInput[]
+    }
+  | {
+      kind: 'batch-set-upstream'
+      planToken: string
+      upstreams: BranchWorkspaceBatchSetUpstreamInput[]
     }
   | {
       kind: 'pull' | 'push'
@@ -224,6 +259,7 @@ export function normalizeBranchWorkspaceGitActionPlanRequest(
       input?.kind !== 'batch-discard' &&
       input?.kind !== 'batch-merge-in' &&
       input?.kind !== 'batch-merge-out' &&
+      input?.kind !== 'batch-set-upstream' &&
       input?.kind !== 'pull' &&
       input?.kind !== 'push')
   ) {
@@ -254,6 +290,11 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
     const targets = normalizedBatchMergeTargets(input.targets)
     if (!targets) return invalidArguments()
     return { ok: true, input: { kind: 'batch-merge-out', planToken, mode: input.mode, targets } }
+  }
+  if (input?.kind === 'batch-set-upstream') {
+    const upstreams = normalizedBatchUpstreams(input.upstreams)
+    if (!upstreams) return invalidArguments()
+    return { ok: true, input: { kind: 'batch-set-upstream', planToken, upstreams } }
   }
   if (input?.kind === 'pull' || input?.kind === 'push') {
     const repositoryNames = normalizedRepositoryNames(input.repositoryNames)
@@ -319,6 +360,29 @@ function normalizedRepositoryNames(value: unknown): string[] | null {
     if (!name || !isWorkspaceRepositoryName(name) || names.has(name)) return null
     names.add(name)
     normalized.push(name)
+  }
+  return normalized
+}
+
+function normalizedBatchUpstreams(value: unknown): BranchWorkspaceBatchSetUpstreamInput[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const names = new Set<string>()
+  const normalized: BranchWorkspaceBatchSetUpstreamInput[] = []
+  for (const candidate of value) {
+    const input = asRecord(candidate)
+    const repositoryName = normalizedText(input?.repositoryName)
+    const remoteRef = normalizedText(input?.remoteRef)
+    if (
+      !repositoryName ||
+      !isWorkspaceRepositoryName(repositoryName) ||
+      names.has(repositoryName) ||
+      !remoteRef ||
+      !isRemoteTrackingRef(remoteRef)
+    ) {
+      return null
+    }
+    names.add(repositoryName)
+    normalized.push({ repositoryName, remoteRef })
   }
   return normalized
 }

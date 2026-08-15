@@ -147,6 +147,7 @@ const branchGitActionState = vi.hoisted(() => ({
   requestPlan: vi.fn(async () => true),
   executeBatchCommit: vi.fn(async () => null),
   executeBatchCommitAndPush: vi.fn(async () => null),
+  executeBatchSetUpstream: vi.fn(async () => null),
   executeBatchMergeIn: vi.fn(async () => null),
   executeBatchMergeOut: vi.fn(async () => null),
   executeSync: vi.fn(async () => null),
@@ -161,6 +162,7 @@ const branchGitPanelState = vi.hoisted(() => ({
     activeOperation: BranchWorkspaceSnapshot['activeOperation'] | null
     onOpenChange: (open: boolean) => void
     onBatchCommitAndPush: typeof branchGitActionState.executeBatchCommitAndPush
+    onBatchSetUpstream: typeof branchGitActionState.executeBatchSetUpstream
     onBatchErrorAiHandoff: (input: {
       provider: 'codex' | 'claude'
       kind: BranchWorkspaceGitActionKind
@@ -451,6 +453,7 @@ beforeEach(() => {
   branchGitActionState.requestPlan.mockResolvedValue(true)
   branchGitActionState.executeBatchCommit.mockReset()
   branchGitActionState.executeBatchCommitAndPush.mockReset()
+  branchGitActionState.executeBatchSetUpstream.mockReset()
   branchGitActionState.executeBatchMergeIn.mockReset()
   branchGitActionState.executeBatchMergeOut.mockReset()
   branchGitActionState.executeSync.mockReset()
@@ -1369,6 +1372,7 @@ describe('WorkspaceRepositoryRail', () => {
     )
     expect(branchGitPanelState.props?.activeOperation).toBeNull()
     expect(branchGitPanelState.props?.onBatchCommitAndPush).toBe(branchGitActionState.executeBatchCommitAndPush)
+    expect(branchGitPanelState.props?.onBatchSetUpstream).toBe(branchGitActionState.executeBatchSetUpstream)
   })
 
   test('hands aggregated batch errors to a new branch workspace root terminal', async () => {

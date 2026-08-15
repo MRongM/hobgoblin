@@ -284,6 +284,9 @@ export const en = {
   'workspace.branch-workspace.git-action.batch-merge-out': 'Batch merge out',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     'Select member worktrees and a local destination branch for each, then merge each member target out in repository order.',
+  'workspace.branch-workspace.git-action.batch-set-upstream': 'Batch change upstream',
+  'workspace.branch-workspace.git-action.batch-set-upstream-description':
+    'Select member worktrees and a remote branch for each, then update their target branch upstreams in repository order.',
   'workspace.branch-workspace.git-action.select-all-members': 'Select all available members',
   'workspace.branch-workspace.git-action.selected-count': '{selected} of {total} members selected',
   'workspace.branch-workspace.git-action.select-member': 'Select {repository} for this batch',
@@ -295,6 +298,9 @@ export const en = {
   'workspace.branch-workspace.git-action.destination-branch': 'Destination branch for {repository}',
   'workspace.branch-workspace.git-action.select-destination': 'Select destination',
   'workspace.branch-workspace.git-action.destination-branch-required': 'Select a destination branch.',
+  'workspace.branch-workspace.git-action.current-upstream': 'Current upstream',
+  'workspace.branch-workspace.git-action.select-upstream': 'Select upstream',
+  'workspace.branch-workspace.git-action.select-upstream-for-member': 'Select upstream for {repository}',
   'workspace.branch-workspace.git-action.temporary-worktree': 'temporary worktree',
   'workspace.branch-workspace.git-action.merge-in': 'Merge in',
   'workspace.branch-workspace.git-action.pull-merge-in-push': 'Pull target, merge in & push',
@@ -325,6 +331,7 @@ export const en = {
   'workspace.branch-workspace.git-action.step.merge': 'merging',
   'workspace.branch-workspace.git-action.step.push': 'pushing',
   'workspace.branch-workspace.git-action.step.cleanup': 'cleaning up',
+  'workspace.branch-workspace.git-action.step.upstream': 'updating upstream',
   'workspace.branch-workspace.git-action.failure-step.commit': 'Commit',
   'workspace.branch-workspace.git-action.failure-step.discard': 'Discard',
   'workspace.branch-workspace.git-action.failure-step.prepare': 'Preparation',
@@ -333,6 +340,7 @@ export const en = {
   'workspace.branch-workspace.git-action.failure-step.merge': 'Merge',
   'workspace.branch-workspace.git-action.failure-step.push': 'Push',
   'workspace.branch-workspace.git-action.failure-step.cleanup': 'Cleanup',
+  'workspace.branch-workspace.git-action.failure-step.upstream': 'Upstream',
   'workspace.branch-workspace.git-action.not-ready': 'The branch workspace is not ready.',
   'workspace.branch-workspace.git-action.no-repositories': 'The branch workspace has no repositories to process.',
   'workspace.branch-workspace.git-action.operation-active': 'Another branch workspace Git action is running.',
@@ -355,6 +363,7 @@ export const en = {
   'workspace.branch-workspace.git-action.remote-required': 'Every repository needs a remote before batch push.',
   'workspace.branch-workspace.git-action.remote-branches-unavailable':
     'Could not read remote branches for this repository.',
+  'workspace.branch-workspace.git-action.remote-branch-required': 'Select a remote branch.',
   'workspace.branch-workspace.git-action.remote-destination-requires-push':
     'Remote destinations require fetch, merge & push.',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable':

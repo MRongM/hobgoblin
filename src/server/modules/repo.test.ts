@@ -1669,6 +1669,24 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('setRepositoryBranchUpstream can defer invalidation after a successful update', async () => {
+    const { setRepositoryBranchUpstream } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      setRepositoryBranchUpstream(
+        '/tmp/repo',
+        'feature/local',
+        'origin/release',
+        undefined,
+        'repo_branch_test',
+        { publishInvalidation: false },
+      ),
+    ).resolves.toEqual({ ok: true, message: 'updated local upstream' })
+
+    expect(mocks.setBranchUpstream).toHaveBeenCalledWith('/tmp/repo', 'feature/local', 'origin/release', undefined)
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
   test('setRepositoryBranchUpstream removes an SSH branch upstream through the remote backend', async () => {
     const module = await import('#/server/modules/repo-write-paths.ts')
     const setRepositoryBranchUpstream = (module as Record<string, unknown>).setRepositoryBranchUpstream

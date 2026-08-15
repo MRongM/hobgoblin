@@ -469,6 +469,10 @@ _Avoid_: Batch merge-out, source worktree merge, atomic batch merge
 An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local branch or remote-tracking branch ref per member. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Selected member pipelines retain manifest order, isolate and aggregate member failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
+**Branch workspace batch upstream change**:
+An application-coordinated action that changes the selected repository members' target-branch upstreams.
+_Avoid_: Batch push, branch creation base, inferred upstream
+
 **Plain workspace**:
 A readable directory opened as a workspace without requiring Git metadata.
 _Avoid_: Non-Git repository

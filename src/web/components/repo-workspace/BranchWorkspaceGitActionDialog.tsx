@@ -15,8 +15,10 @@ import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
   BranchWorkspaceBatchMergeOutTargetInput,
+  BranchWorkspaceBatchSetUpstreamInput,
   BranchWorkspaceBatchCommitPlan,
   BranchWorkspaceBatchDiscardPlan,
+  BranchWorkspaceBatchSetUpstreamPlan,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionKind,
   BranchWorkspaceGitActionPlan,
@@ -32,6 +34,7 @@ import {
 import { Button } from '#/web/components/ui/button.tsx'
 import { MergeConflictAiActions } from '#/web/components/MergeConflictAiActions.tsx'
 import { Checkbox } from '#/web/components/ui/checkbox.tsx'
+import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import {
   Dialog,
@@ -50,6 +53,7 @@ import {
 import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
 import type { BranchWorkspaceBatchErrorAiFailure } from '#/web/ai-terminal-handoff.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { remoteBranchRefMatchesQuery } from '#/shared/remote-branches.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface BranchWorkspaceGitActionPanelProps {
@@ -66,6 +70,9 @@ interface BranchWorkspaceGitActionPanelProps {
     messages: BranchWorkspaceCommitMessageInput[],
   ) => Promise<BranchWorkspaceGitActionResult | null>
   onBatchDiscard: () => Promise<BranchWorkspaceGitActionResult | null>
+  onBatchSetUpstream: (
+    upstreams: BranchWorkspaceBatchSetUpstreamInput[],
+  ) => Promise<BranchWorkspaceGitActionResult | null>
   onBatchMergeIn: (
     mode: BranchWorkspaceMergeMode,
     sources: BranchWorkspaceBatchMergeInSourceInput[],
@@ -99,6 +106,7 @@ export function BranchWorkspaceGitActionPanel({
   onBatchCommit,
   onBatchCommitAndPush,
   onBatchDiscard,
+  onBatchSetUpstream,
   onBatchMergeIn,
   onBatchMergeOut,
   onSync,
@@ -114,9 +122,13 @@ export function BranchWorkspaceGitActionPanel({
   const [autoCommitAndPush, setAutoCommitAndPush] = useState(false)
   const [selectedMergeRepositories, setSelectedMergeRepositories] = useState<string[]>([])
   const [selectedSyncRepositories, setSelectedSyncRepositories] = useState<string[]>([])
+  const [selectedUpstreamRepositories, setSelectedUpstreamRepositories] = useState<string[]>([])
   const [mergeSources, setMergeSources] = useState<Record<string, string>>({})
   const [mergeDestinations, setMergeDestinations] = useState<Record<string, string>>({})
+  const [upstreams, setUpstreams] = useState<Record<string, string>>({})
+  const [upstreamQueries, setUpstreamQueries] = useState<Record<string, string>>({})
   const [startedMergeMode, setStartedMergeMode] = useState<BranchWorkspaceMergeMode | null>(null)
+  const [startedUpstreamUpdate, setStartedUpstreamUpdate] = useState(false)
   const generationController = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -142,9 +154,19 @@ export function BranchWorkspaceGitActionPanel({
         ? plan.members.filter((member) => member.ready).map((member) => member.repositoryName)
         : [],
     )
+    setSelectedUpstreamRepositories(
+      plan?.kind === 'batch-set-upstream'
+        ? plan.members
+            .filter((member) => member.ready && member.remoteBranches.length > 0)
+            .map((member) => member.repositoryName)
+        : [],
+    )
     setMergeSources({})
     setMergeDestinations({})
+    setUpstreams({})
+    setUpstreamQueries({})
     setStartedMergeMode(null)
+    setStartedUpstreamUpdate(false)
   }, [open, plan?.token])
 
   useEffect(() => {
@@ -261,6 +283,18 @@ export function BranchWorkspaceGitActionPanel({
     )
   }
 
+  const upstreamPlan = plan?.kind === 'batch-set-upstream' ? plan : null
+  const selectedUpstreamMembers =
+    upstreamPlan?.members.filter((member) => selectedUpstreamRepositories.includes(member.repositoryName)) ?? []
+  const selectedUpstreams: BranchWorkspaceBatchSetUpstreamInput[] = selectedUpstreamMembers.flatMap((member) => {
+    const remoteRef = upstreams[member.repositoryName]
+    return member.remoteBranches.some((candidate) => candidate.remoteRef === remoteRef)
+      ? [{ repositoryName: member.repositoryName, remoteRef }]
+      : []
+  })
+  const upstreamSelectionReady =
+    selectedUpstreamMembers.length > 0 && selectedUpstreams.length === selectedUpstreamMembers.length
+
   return (
     <div
       data-testid="branch-workspace-git-action-panel"
@@ -309,6 +343,24 @@ export function BranchWorkspaceGitActionPanel({
         />
       ) : plan.kind === 'batch-discard' ? (
         <BatchDiscardContent plan={plan} result={result} activeOperation={activeOperation} />
+      ) : plan.kind === 'batch-set-upstream' ? (
+        <BatchSetUpstreamContent
+          plan={plan}
+          result={result}
+          activeOperation={activeOperation}
+          pending={pending}
+          selectedRepositories={selectedUpstreamRepositories}
+          upstreams={upstreams}
+          queries={upstreamQueries}
+          started={startedUpstreamUpdate}
+          onSelectedRepositoriesChange={setSelectedUpstreamRepositories}
+          onUpstreamChange={(repositoryName, remoteRef) =>
+            setUpstreams((current) => ({ ...current, [repositoryName]: remoteRef }))
+          }
+          onQueryChange={(repositoryName, query) =>
+            setUpstreamQueries((current) => ({ ...current, [repositoryName]: query }))
+          }
+        />
       ) : plan.kind === 'pull' || plan.kind === 'push' ? (
         <SyncContent
           plan={plan}
@@ -371,6 +423,23 @@ export function BranchWorkspaceGitActionPanel({
                 result && !result.ok
                   ? 'workspace.branch-workspace.retry'
                   : 'workspace.branch-workspace.git-action.batch-discard',
+              )}
+            </Button>
+          ) : null}
+          {plan?.kind === 'batch-set-upstream' ? (
+            <Button
+              type="button"
+              data-action="batch-set-upstream"
+              disabled={pending || !upstreamSelectionReady}
+              onClick={() => {
+                setStartedUpstreamUpdate(true)
+                void runAndClose(() => onBatchSetUpstream(selectedUpstreams))
+              }}
+            >
+              {t(
+                result && !result.ok
+                  ? 'workspace.branch-workspace.retry'
+                  : 'workspace.branch-workspace.git-action.batch-set-upstream',
               )}
             </Button>
           ) : null}
@@ -1278,6 +1347,161 @@ function BatchDiscardContent({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function BatchSetUpstreamContent({
+  plan,
+  result,
+  activeOperation,
+  pending,
+  selectedRepositories,
+  upstreams,
+  queries,
+  started,
+  onSelectedRepositoriesChange,
+  onUpstreamChange,
+  onQueryChange,
+}: {
+  plan: BranchWorkspaceBatchSetUpstreamPlan
+  result: BranchWorkspaceGitActionResult | null
+  activeOperation: BranchWorkspaceActiveOperation | null
+  pending: boolean
+  selectedRepositories: string[]
+  upstreams: Record<string, string>
+  queries: Record<string, string>
+  started: boolean
+  onSelectedRepositoriesChange: (repositoryNames: string[]) => void
+  onUpstreamChange: (repositoryName: string, remoteRef: string) => void
+  onQueryChange: (repositoryName: string, query: string) => void
+}) {
+  const t = useT()
+  const locked = pending || started
+  const selectableRepositories = plan.members
+    .filter((member) => member.ready && member.remoteBranches.length > 0)
+    .map((member) => member.repositoryName)
+  const selected = new Set(selectedRepositories)
+  const toggleRepository = (repositoryName: string, checked: boolean) => {
+    if (locked) return
+    onSelectedRepositoriesChange(
+      checked
+        ? [...new Set([...selectedRepositories, repositoryName])]
+        : selectedRepositories.filter((name) => name !== repositoryName),
+    )
+  }
+
+  return (
+    <div className="grid gap-2">
+      <BatchMergeSelectionSummary
+        selectableRepositories={selectableRepositories}
+        selectedRepositories={selectedRepositories}
+        disabled={locked}
+        onSelectedRepositoriesChange={onSelectedRepositoriesChange}
+      />
+      <div className="overflow-hidden rounded-md border border-separator">
+        {plan.members.map((member, index) => {
+          const memberSelected = selected.has(member.repositoryName)
+          const selectedRemote = upstreams[member.repositoryName]
+          const selectedCandidate = member.remoteBranches.find((candidate) => candidate.remoteRef === selectedRemote)
+          const visibleRemoteBranches = member.remoteBranches.filter((candidate) =>
+            remoteBranchRefMatchesQuery(candidate.remoteRef, queries[member.repositoryName] ?? ''),
+          )
+          const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+          const active = activeOperation?.repositoryName === member.repositoryName
+          const unavailable = !member.ready || member.remoteBranches.length === 0
+          return (
+            <div
+              key={member.repositoryName}
+              className="grid gap-2 border-b border-separator/60 px-3 py-3 text-xs last:border-b-0"
+            >
+              <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(12rem,2fr)] items-center gap-2">
+                <Checkbox
+                  data-upstream-repository={member.repositoryName}
+                  checked={memberSelected}
+                  disabled={locked || unavailable}
+                  aria-label={t('workspace.branch-workspace.git-action.select-member', {
+                    repository: member.repositoryName,
+                  })}
+                  onCheckedChange={(checked) => toggleRepository(member.repositoryName, checked === true)}
+                />
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <span className="truncate font-medium">{member.repositoryName}</span>
+                <Select
+                  value={selectedRemote ?? ''}
+                  disabled={locked || !memberSelected || unavailable}
+                  onValueChange={(remoteRef) => onUpstreamChange(member.repositoryName, remoteRef)}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    data-upstream-remote={member.repositoryName}
+                    aria-label={t('workspace.branch-workspace.git-action.select-upstream-for-member', {
+                      repository: member.repositoryName,
+                    })}
+                    title={selectedCandidate?.remoteRef}
+                    className="min-w-48 w-full max-w-none font-mono text-[10px] *:data-[slot=select-value]:line-clamp-none"
+                  >
+                    <SelectValue placeholder={t('workspace.branch-workspace.git-action.select-upstream')} />
+                  </SelectTrigger>
+                  <SelectContent
+                    matchTriggerWidth
+                    header={
+                      <RemoteBranchSearchInput
+                        id={`branch-workspace-upstream-${member.repositoryName}-filter`}
+                        value={queries[member.repositoryName] ?? ''}
+                        onChange={(query) => onQueryChange(member.repositoryName, query)}
+                        placeholder={t('action.remote-branch-search-placeholder')}
+                        ariaLabel={t('action.remote-branch-search-label')}
+                        disabled={locked || unavailable}
+                      />
+                    }
+                  >
+                    {visibleRemoteBranches.map((candidate) => (
+                      <SelectItem
+                        key={candidate.remoteRef}
+                        value={candidate.remoteRef}
+                        textValue={candidate.remoteRef}
+                        data-upstream-remote-option={`${member.repositoryName}:${candidate.remoteRef}`}
+                        className="font-mono text-xs"
+                      >
+                        {candidate.remoteRef}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="ml-12 flex flex-wrap items-center gap-x-1.5 text-[10px] text-muted-foreground">
+                <span>{member.targetBranch}</span>
+                <span className="text-muted-foreground/60">·</span>
+                <span data-upstream-current={member.repositoryName} className="break-all font-mono">
+                  {t('workspace.branch-workspace.git-action.current-upstream')}: {member.currentUpstream ?? t('branches.no-upstream')}
+                  {member.trackingGone ? ` · ${t('action.branch-upstream-gone')}` : ''}
+                </span>
+                <span className="text-muted-foreground/60">·</span>
+                <span
+                  className={cn(
+                    !member.ready || (memberSelected && !selectedCandidate) ? 'text-warning' : undefined,
+                  )}
+                >
+                  {!member.ready || member.remoteBranches.length === 0
+                    ? t(member.message ?? 'workspace.branch-workspace.git-action.remote-branch-required')
+                    : !memberSelected
+                      ? t('workspace.branch-workspace.git-action.not-selected')
+                      : !selectedCandidate
+                        ? t('workspace.branch-workspace.git-action.remote-branch-required')
+                        : active && activeOperation?.step
+                          ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                          : memberResult
+                            ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                            : t('workspace.branch-workspace.git-action.ready')}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

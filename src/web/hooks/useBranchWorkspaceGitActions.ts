@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
   BranchWorkspaceBatchMergeOutTargetInput,
+  BranchWorkspaceBatchSetUpstreamInput,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionExecuteInput,
   BranchWorkspaceGitActionKind,
@@ -129,6 +130,14 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     return await execute({ kind: 'batch-discard', planToken: plan.token })
   }, [execute, plan])
 
+  const executeBatchSetUpstream = useCallback(
+    async (upstreams: BranchWorkspaceBatchSetUpstreamInput[]) => {
+      if (!plan || plan.kind !== 'batch-set-upstream') return null
+      return await execute({ kind: 'batch-set-upstream', planToken: plan.token, upstreams })
+    },
+    [execute, plan],
+  )
+
   const executeBatchMergeIn = useCallback(
     async (mode: BranchWorkspaceMergeMode, sources: BranchWorkspaceBatchMergeInSourceInput[]) => {
       if (!plan || plan.kind !== 'batch-merge-in') return null
@@ -173,11 +182,13 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     executeBatchCommit,
     executeBatchCommitAndPush,
     executeBatchDiscard,
+    executeBatchSetUpstream,
     executeBatchMergeIn,
     executeBatchMergeOut,
     executeSync,
     retryBatchCommit: executeBatchCommit,
     retryBatchDiscard: executeBatchDiscard,
+    retryBatchSetUpstream: executeBatchSetUpstream,
     retryBatchMergeIn: executeBatchMergeIn,
     retryBatchMergeOut: executeBatchMergeOut,
     retrySync: executeSync,

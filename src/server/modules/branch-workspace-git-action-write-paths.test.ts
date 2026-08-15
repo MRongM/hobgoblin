@@ -193,7 +193,294 @@ function syncPlan(kind: 'pull' | 'push', ready = true, repositoryNames = ['api',
   }
 }
 
+function batchSetUpstreamPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
+  return {
+    kind: 'batch-set-upstream',
+    token: 'sha256:set-upstream',
+    rootId: ROOT,
+    branchWorkspaceId: 'ws-1',
+    ready: true,
+    members: repositoryNames.map((repositoryName) => {
+      const isApi = repositoryName === 'api'
+      const isWeb = repositoryName === 'web'
+      return {
+        repositoryName,
+        repoId: `${ROOT}/${repositoryName}`,
+        targetBranch: 'feature/a',
+        targetWorktreePath: `${ROOT}/goblin-feature-a/${repositoryName}`,
+        targetHead: `target-head-${repositoryName}`,
+        currentUpstream: null,
+        trackingGone: false,
+        remoteBranches: isApi
+          ? [
+              { remoteRef: 'origin/release', head: 'origin-release-head' },
+              { remoteRef: 'origin/other', head: 'origin-other-head' },
+            ]
+          : [{ remoteRef: isWeb ? 'upstream/release' : `origin/${repositoryName}-release`, head: `${repositoryName}-release-head` }],
+        ready: true,
+        fingerprint: `sha256:${repositoryName}`,
+      }
+    }),
+  }
+}
+
 describe('createBranchWorkspaceGitActionWriteService', () => {
+  test('sets selected member upstreams in manifest order and invalidates only touched repositories', async () => {
+    const plan = batchSetUpstreamPlan()
+    const setUpstream = vi.fn(
+      async (
+        _repoId: string,
+        _branch: string,
+        _remoteRef: string | null,
+        _signal?: AbortSignal,
+        _sourceToken?: string,
+        _options?: { publishInvalidation?: boolean },
+      ) => ({ ok: true as const, message: '' }),
+    )
+    const publishRepoInvalidation = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      setUpstream,
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [
+          { repositoryName: 'web', remoteRef: 'upstream/release' },
+          { repositoryName: 'api', remoteRef: 'origin/release' },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'succeeded' },
+      ],
+    })
+
+    expect(setUpstream.mock.calls.map(([repoId, branch, remoteRef]) => [repoId, branch, remoteRef])).toEqual([
+      ['/workspace/api', 'feature/a', 'origin/release'],
+      ['/workspace/web', 'feature/a', 'upstream/release'],
+    ])
+    expect(
+      setUpstream.mock.calls.every((call) => {
+        const options = call[5]
+        return typeof options === 'object' && options !== null && 'publishInvalidation' in options && options.publishInvalidation === false
+      }),
+    ).toBe(true)
+    expect(publishRepoInvalidation.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
+  })
+
+  test('marks unselected upstream members satisfied after a partial success and invalidates only attempted members', async () => {
+    const plan = batchSetUpstreamPlan(['api', 'web', 'docs'])
+    const setUpstream = vi.fn(async () => ({ ok: true as const, message: '' }))
+    const publishRepoInvalidation = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      setUpstream,
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [{ repositoryName: 'api', remoteRef: 'origin/release' }],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'satisfied' },
+        { repositoryName: 'docs', phase: 'satisfied' },
+      ],
+    })
+    expect(publishRepoInvalidation.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api'])
+  })
+
+  test('stops on an upstream failure and locks retries to the same remaining mappings', async () => {
+    const plan = batchSetUpstreamPlan(['api', 'web', 'docs'])
+    const setUpstream = vi
+      .fn(
+        async (
+          _repoId: string,
+          _branch: string,
+          _remoteRef: string | null,
+          _signal?: AbortSignal,
+          _sourceToken?: string,
+          _options?: { publishInvalidation?: boolean },
+        ): Promise<{ ok: boolean; message: string }> => ({ ok: true, message: '' }),
+      )
+      .mockResolvedValueOnce({ ok: true as const, message: '' })
+      .mockResolvedValueOnce({ ok: false as const, message: 'failed' })
+      .mockResolvedValueOnce({ ok: true as const, message: '' })
+    const publishRepoInvalidation = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      setUpstream,
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+    const upstreams = [
+      { repositoryName: 'web', remoteRef: 'upstream/release' },
+      { repositoryName: 'api', remoteRef: 'origin/release' },
+    ]
+
+    await expect(
+      service.execute(ROOT, { kind: 'batch-set-upstream', planToken: plan.token, upstreams }),
+    ).resolves.toMatchObject({
+      ok: false,
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'failed', step: 'upstream' },
+        { repositoryName: 'docs', phase: 'satisfied' },
+      ],
+    })
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [
+          { repositoryName: 'api', remoteRef: 'origin/other' },
+          { repositoryName: 'web', remoteRef: 'upstream/release' },
+        ],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    await expect(
+      service.execute(ROOT, { kind: 'batch-set-upstream', planToken: plan.token, upstreams }),
+    ).resolves.toMatchObject({ ok: true })
+
+    expect(setUpstream.mock.calls.map(([repoId]) => repoId)).toEqual([
+      '/workspace/api',
+      '/workspace/web',
+      '/workspace/web',
+    ])
+    expect(publishRepoInvalidation.mock.calls.map(([repoId]) => repoId)).toEqual([
+      '/workspace/api',
+      '/workspace/web',
+      '/workspace/web',
+    ])
+  })
+
+  test('rejects upstream mappings unavailable from the refreshed plan', async () => {
+    const plan = batchSetUpstreamPlan()
+    const refreshed = batchSetUpstreamPlan()
+    if (refreshed.kind !== 'batch-set-upstream') throw new Error('expected batch upstream plan')
+    refreshed.members[1] = { ...refreshed.members[1]!, ready: false, remoteBranches: [], message: 'unavailable' }
+    const setUpstream = vi.fn(
+      async (
+        _repoId: string,
+        _branch: string,
+        _remoteRef: string | null,
+        _signal?: AbortSignal,
+        _sourceToken?: string,
+        _options?: { publishInvalidation?: boolean },
+      ) => ({ ok: true as const, message: '' }),
+    )
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan: refreshed })),
+      setUpstream,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [
+          { repositoryName: 'api', remoteRef: 'origin/release' },
+          { repositoryName: 'web', remoteRef: 'upstream/release' },
+        ],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'unavailable' })
+    expect(setUpstream).not.toHaveBeenCalled()
+  })
+
+  test('stops after the first upstream failure, keeps selected pending members not-started, and reports upstream activity', async () => {
+    const plan = batchSetUpstreamPlan(['api', 'web', 'docs'])
+    const steps: string[] = []
+    const setUpstream = vi.fn(async () => ({ ok: false as const, message: 'failed' }))
+    const publishRepoInvalidation = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      setUpstream,
+      publishOperationUpdate: vi.fn((_rootId, _branchWorkspaceId, operation) => {
+        if (operation?.step) steps.push(operation.step)
+      }),
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [
+          { repositoryName: 'api', remoteRef: 'origin/release' },
+          { repositoryName: 'web', remoteRef: 'upstream/release' },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      members: [
+        { repositoryName: 'api', phase: 'failed', step: 'upstream' },
+        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'docs', phase: 'satisfied' },
+      ],
+    })
+    expect(steps).toContain('upstream')
+    expect(setUpstream).toHaveBeenCalledTimes(1)
+    expect(publishRepoInvalidation.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api'])
+  })
+
+  test('stops upstream execution before the next member after cancellation', async () => {
+    const plan = batchSetUpstreamPlan(['api', 'web', 'docs'])
+    let service: ReturnType<typeof createBranchWorkspaceGitActionWriteService>
+    const setUpstream = vi.fn(async () => {
+      service.abort(ROOT)
+      return { ok: false as const, message: 'cancelled' }
+    })
+    const publishRepoInvalidation = vi.fn()
+    service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      setUpstream,
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [
+          { repositoryName: 'api', remoteRef: 'origin/release' },
+          { repositoryName: 'web', remoteRef: 'upstream/release' },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      message: 'cancelled',
+      members: [
+        { repositoryName: 'api', phase: 'not-started' },
+        { repositoryName: 'web', phase: 'not-started' },
+        { repositoryName: 'docs', phase: 'satisfied' },
+      ],
+    })
+    expect(setUpstream).toHaveBeenCalledTimes(1)
+    expect(publishRepoInvalidation.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api'])
+  })
+
   test('publishes lightweight operation progress only after execution-time validation', async () => {
     const plan = batchPlan()
     const events: string[] = []
