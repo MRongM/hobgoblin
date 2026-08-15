@@ -722,6 +722,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
       return remoteBranchWorkspacePython(command.rootPath, [
         `excluded_names = set(json.loads(${pythonString(JSON.stringify(command.excludedNames))}))`,
         `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
+        'managed_hidden_prefixes = tuple("." + prefix for prefix in managed_prefixes)',
         'root_real = os.path.realpath(root_path)',
         'excluded_worktrees = set()',
         'for repository_name in excluded_names:',
@@ -737,7 +738,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         '            excluded_worktrees.add(os.path.realpath(line[len("worktree "):]))',
         'candidates = []',
         'for name in sorted(os.listdir(root_path)):',
-        '    if name in excluded_names or name.startswith(managed_prefixes) or name.startswith(".goblin-") or name.startswith(".hobgoblin-"):',
+        '    if name in excluded_names or name.startswith(managed_prefixes) or name.startswith(managed_hidden_prefixes):',
         '        continue',
         '    candidate_path = os.path.join(root_path, name)',
         '    info = os.lstat(candidate_path)',

@@ -29,6 +29,7 @@ import type {
   TelegramOutputCompletionNotificationContext,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
+import type { ExecResult } from '#/shared/git-types.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import {
   nativeSettingsProjectionStateFromSettings,
@@ -179,6 +180,10 @@ export async function getExternalAppsSnapshot(): Promise<ExternalAppsSnapshot> {
 
 export async function refreshExternalAppsSnapshot(): Promise<ExternalAppsSnapshot> {
   return await postServerJson('/api/settings/external-apps/refresh', {})
+}
+
+export async function openAppConfigEditor(): Promise<ExecResult> {
+  return await postServerJson<{}, ExecResult>('/api/settings/open-app-config-editor', {})
 }
 
 export async function addRecentRepo(repo: RepoSessionEntry): Promise<RecentReposUpdateResponse> {

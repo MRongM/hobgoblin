@@ -86,12 +86,12 @@ function dependencies(snapshots: Record<string, RepoSnapshot | null>) {
 }
 
 function existingManifest(): BranchWorkspaceManifest {
-  const workspacePath = path.join(ROOT, 'goblin-feature-auth')
+  const workspacePath = path.join(ROOT, 'hobgoblin-feature-auth')
   return {
     id: 'branch-workspace-1',
     rootId: ROOT,
     branch: BRANCH,
-    directoryName: 'goblin-feature-auth',
+    directoryName: 'hobgoblin-feature-auth',
     path: workspacePath,
     repositories: [
       {
@@ -311,7 +311,7 @@ describe('branch workspace create planner', () => {
       plan: {
         operation: 'create',
         branch: BRANCH,
-        directoryName: 'hobgoblin-feature-auth',
+        directoryName: 'hob-feature-auth',
         repositories: [
           {
             repositoryName: 'api',
@@ -336,7 +336,7 @@ describe('branch workspace create planner', () => {
     })
     if (!result.ok) throw new Error('Expected a create plan')
     expect(result.plan.steps.find((step) => step.kind === 'create-directory')).toMatchObject({
-      label: 'hobgoblin-feature-auth',
+      label: 'hob-feature-auth',
     })
   })
 
@@ -384,8 +384,8 @@ describe('branch workspace create planner', () => {
   })
 
   test('uses an existing branch and recognizes only its exact expected worktree as satisfied', async () => {
-    const expectedApi = path.join(ROOT, 'hobgoblin-feature-auth', 'api')
-    const expectedWeb = path.join(ROOT, 'hobgoblin-feature-auth', 'web')
+    const expectedApi = path.join(ROOT, 'hob-feature-auth', 'api')
+    const expectedWeb = path.join(ROOT, 'hob-feature-auth', 'web')
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH)),
       [path.join(ROOT, 'web')]: snapshot(branch('develop'), branch(BRANCH, expectedWeb)),
@@ -956,7 +956,7 @@ describe('branch workspace repair planner', () => {
         auxiliaryEntries: [],
         manifest: { auxiliaryEntries: [] },
         steps: [
-          { kind: 'create-directory', label: 'goblin-feature-auth' },
+          { kind: 'create-directory', label: 'hobgoblin-feature-auth' },
           { kind: 'create-worktree', repositoryName: 'api' },
         ],
       },
@@ -1313,7 +1313,7 @@ describe('branch workspace remove planner', () => {
     })
     if (!result.ok) throw new Error('Expected a removal plan')
     expect(result.plan.steps.find((step) => step.kind === 'remove-directory')).toMatchObject({
-      label: 'goblin-feature-auth',
+      label: 'hobgoblin-feature-auth',
     })
   })
 

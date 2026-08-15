@@ -632,9 +632,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
       trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
       await Promise.resolve()
     })
-    const option = document.querySelector<HTMLElement>(
-      `[data-merge-destination-option="api:local:${longBranch}"]`,
-    )
+    const option = document.querySelector<HTMLElement>(`[data-merge-destination-option="api:local:${longBranch}"]`)
     expect(option?.className).toContain('break-all')
     expect(option?.textContent).toBe(longBranch)
     expect(document.body.textContent).not.toContain('workspace.branch-workspace.git-action.temporary-worktree')
@@ -1006,7 +1004,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
       action?.click()
       await Promise.resolve()
     })
-    expect(onSync).toHaveBeenCalledWith(kind)
+    expect(onSync).toHaveBeenCalledWith(kind, ['api', 'web'])
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
@@ -1018,6 +1016,37 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain(
       'workspace.branch-workspace.git-action.target-upstream-required',
     )
+  })
+
+  test('selects ready sync members by default and executes only that subset', async () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    plan.ready = false
+    plan.members[1]!.ready = false
+    plan.members[1]!.message = 'workspace.branch-workspace.git-action.remote-required'
+    const onSync = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'push' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    render({ kind: 'push', plan, onSync })
+
+    const api = document.querySelector<HTMLButtonElement>('[data-sync-repository="api"]')
+    const web = document.querySelector<HTMLButtonElement>('[data-sync-repository="web"]')
+    const action = document.querySelector<HTMLButtonElement>('[data-action="push"]')
+    expect(api?.getAttribute('data-state')).toBe('checked')
+    expect(web?.disabled).toBe(true)
+    expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain(
+      'workspace.branch-workspace.git-action.selected-count',
+    )
+
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+    expect(onSync).toHaveBeenCalledWith('push', ['api'])
   })
 })
 

@@ -159,14 +159,12 @@ describe('branch workspace Git action inputs', () => {
     ).toMatchObject({
       ok: true,
       input: {
-        targets: [
-          { repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'upstream/release/v2' } },
-        ],
+        targets: [{ repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'upstream/release/v2' } }],
       },
     })
   })
 
-  test.each(['pull', 'push'] as const)('normalizes a coordinated %s plan and execution input', (kind) => {
+  test.each(['pull', 'push'] as const)('normalizes a selected coordinated %s execution input', (kind) => {
     expect(
       normalizeBranchWorkspaceGitActionPlanRequest({
         kind,
@@ -180,12 +178,11 @@ describe('branch workspace Git action inputs', () => {
       normalizeBranchWorkspaceGitActionExecuteInput({
         kind,
         planToken: ' sha256:plan ',
-        mode: 'ignored',
-        messages: [{ repositoryName: 'ignored', message: 'ignored' }],
+        repositoryNames: [' web ', 'api'],
       }),
     ).toEqual({
       ok: true,
-      input: { kind, planToken: 'sha256:plan' },
+      input: { kind, planToken: 'sha256:plan', repositoryNames: ['web', 'api'] },
     })
   })
 
@@ -226,6 +223,10 @@ describe('branch workspace Git action inputs', () => {
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'squash', targets: [] },
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', targets: [] },
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', sources: [] },
+    { kind: 'pull', planToken: 'sha256:plan' },
+    { kind: 'push', planToken: 'sha256:plan', repositoryNames: [] },
+    { kind: 'pull', planToken: 'sha256:plan', repositoryNames: ['api', 'api'] },
+    { kind: 'push', planToken: 'sha256:plan', repositoryNames: ['../api'] },
     {
       kind: 'batch-merge-in',
       planToken: 'sha256:plan',

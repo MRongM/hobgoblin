@@ -187,6 +187,7 @@ export type BranchWorkspaceGitActionExecuteInput =
   | {
       kind: 'pull' | 'push'
       planToken: string
+      repositoryNames: string[]
     }
 
 export type BranchWorkspaceGitActionExecuteInputResult =
@@ -255,7 +256,9 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
     return { ok: true, input: { kind: 'batch-merge-out', planToken, mode: input.mode, targets } }
   }
   if (input?.kind === 'pull' || input?.kind === 'push') {
-    return { ok: true, input: { kind: input.kind, planToken } }
+    const repositoryNames = normalizedRepositoryNames(input.repositoryNames)
+    if (!repositoryNames) return invalidArguments()
+    return { ok: true, input: { kind: input.kind, planToken, repositoryNames } }
   }
   if (input?.kind !== 'batch-commit' || !Array.isArray(input.messages)) return invalidArguments()
 
@@ -305,6 +308,19 @@ function normalizedBatchMergeInSources(value: unknown): BranchWorkspaceBatchMerg
 function normalizedBatchMergeTargets(value: unknown): BranchWorkspaceBatchMergeOutTargetInput[] | null {
   const mappings = normalizedBatchMergeMappings(value, 'destination', 'destinationBranch')
   return mappings?.map(({ repositoryName, selection }) => ({ repositoryName, destination: selection })) ?? null
+}
+
+function normalizedRepositoryNames(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const names = new Set<string>()
+  const normalized: string[] = []
+  for (const candidate of value) {
+    const name = normalizedText(candidate)
+    if (!name || !isWorkspaceRepositoryName(name) || names.has(name)) return null
+    names.add(name)
+    normalized.push(name)
+  }
+  return normalized
 }
 
 function normalizedBatchMergeMappings(

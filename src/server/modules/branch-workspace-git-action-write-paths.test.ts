@@ -1587,7 +1587,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       pull,
     })
     await service.plan(ROOT, { kind: 'pull', branchWorkspaceId: 'ws-1' })
-    const input = { kind: 'pull' as const, planToken: plan.token }
+    const input = { kind: 'pull' as const, planToken: plan.token, repositoryNames: ['api', 'web', 'docs'] }
 
     await expect(service.execute(ROOT, input)).resolves.toMatchObject({
       ok: false,
@@ -1621,7 +1621,9 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
 
-    await expect(service.execute(ROOT, { kind: 'push', planToken: plan.token })).resolves.toMatchObject({
+    await expect(
+      service.execute(ROOT, { kind: 'push', planToken: plan.token, repositoryNames: ['api', 'web', 'docs'] }),
+    ).resolves.toMatchObject({
       ok: false,
       members: [
         {
@@ -1662,7 +1664,9 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind: 'pull', branchWorkspaceId: 'ws-1' })
 
-    await expect(service.execute(ROOT, { kind: 'pull', planToken: plan.token })).resolves.toMatchObject({
+    await expect(
+      service.execute(ROOT, { kind: 'pull', planToken: plan.token, repositoryNames: ['api', 'web', 'docs'] }),
+    ).resolves.toMatchObject({
       ok: false,
       message: 'cancelled',
     })
@@ -1682,8 +1686,44 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
 
-    await expect(service.execute(ROOT, { kind: 'push', planToken: plan.token })).resolves.toMatchObject({ ok: true })
+    await expect(
+      service.execute(ROOT, { kind: 'push', planToken: plan.token, repositoryNames: ['api', 'web'] }),
+    ).resolves.toMatchObject({ ok: true })
     expect(calls).toEqual(['/workspace/api:feature/a', '/workspace/web:feature/a'])
+  })
+
+  test('pushes selected ready members when another member is unavailable', async () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    plan.ready = false
+    plan.members[1]!.ready = false
+    plan.members[1]!.message = 'workspace.branch-workspace.git-action.remote-required'
+    const ignoredSets: string[][] = []
+    const push = vi.fn(async () => ({ ok: true as const, message: 'pushed' }))
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async (_plan, ignored) => {
+        ignoredSets.push([...ignored])
+        return { ok: true as const, plan }
+      }),
+      push,
+    })
+    await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, { kind: 'push', planToken: plan.token, repositoryNames: ['api'] }),
+    ).resolves.toMatchObject({
+      ok: true,
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'satisfied' },
+      ],
+    })
+    expect(ignoredSets).toEqual([['web']])
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith('/workspace/api', 'feature/a', expect.any(AbortSignal), undefined, {
+      publishInvalidation: false,
+    })
   })
 
   test.each(['pull', 'push'] as const)('does not execute an unready %s plan', async (kind) => {
@@ -1698,7 +1738,9 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind, branchWorkspaceId: 'ws-1' })
 
-    await expect(service.execute(ROOT, { kind, planToken: plan.token })).resolves.toMatchObject({
+    await expect(
+      service.execute(ROOT, { kind, planToken: plan.token, repositoryNames: ['api', 'web'] }),
+    ).resolves.toMatchObject({
       ok: false,
       message:
         kind === 'pull'

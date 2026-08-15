@@ -1,5 +1,7 @@
 import { type ReactNode } from 'react'
-import { Laptop, Moon, Sun } from 'lucide-react'
+import { FolderOpen, Laptop, Moon, Sun } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import {
@@ -14,6 +16,9 @@ import { useRuntimeGeneralSettings } from '#/web/runtime-settings-general.ts'
 import { useGeneralSettingsController } from '#/web/runtime-settings-general.ts'
 import { useFontSettingsController, useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useChromeSettingsController, useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
+import { useRuntimeExternalAppSettings } from '#/web/runtime-settings-external-apps.ts'
+import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
+import { openAppConfigEditor } from '#/web/settings-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
 import { useI18nStore } from '#/web/stores/i18n.ts'
@@ -33,10 +38,13 @@ export function GeneralSettings() {
   const setLangPref = useI18nStore((s) => s.setPref)
   const { appFontSize, fontFamily } = useRuntimeFontSettings()
   const { topbarHeightPx, toolbarHeightPx } = useRuntimeChromeSettings()
+  const { editorAvailable } = useRuntimeExternalAppSettings()
   const { terminalThemeSyncEnabled, temporaryFilesDirectory, serverPort } = useRuntimeGeneralSettings()
   const { setTerminalThemeSyncEnabled, setTemporaryFilesDirectory, setServerPort } = useGeneralSettingsController()
   const { setAppFontSize, setFontFamily } = useFontSettingsController()
   const { setTopbarHeightPx, setToolbarHeightPx } = useChromeSettingsController()
+  const { pending: externalActionPending, isPending: externalActionPendingAny, run: runExternalAction } =
+    useAsyncPending<'open-app-config-editor'>()
   const appearanceOptions: { value: ThemePref; labelKey: string; icon: ReactNode }[] = [
     { value: 'auto', labelKey: 'settings.appearance.auto', icon: <Laptop className="size-4" /> },
     { value: 'light', labelKey: 'settings.appearance.light', icon: <Sun className="size-4" /> },
@@ -58,6 +66,21 @@ export function GeneralSettings() {
     { value: 'ko', labelKey: 'settings.lang.ko', emoji: '🇰🇷' },
     { value: 'ja', labelKey: 'settings.lang.ja', emoji: '🇯🇵' },
   ]
+
+  function openAppConfigDirectory(): void {
+    if (!editorAvailable || externalActionPendingAny) return
+    void runExternalAction('open-app-config-editor', async () => {
+      try {
+        const result = await openAppConfigEditor()
+        if (!result.ok) {
+          toast.error(t('settings.general.open-app-config-failed'), { description: t(result.message) })
+        }
+      } catch {
+        toast.error(t('settings.general.open-app-config-failed'))
+      }
+    })
+  }
+
   return (
     <>
       <SettingsGroup label={t('settings.group.general')}>
@@ -165,6 +188,26 @@ export function GeneralSettings() {
                 onChange={(event) => void setTemporaryFilesDirectory(event.currentTarget.value)}
                 aria-label={t('settings.temporary-files-directory')}
               />
+            }
+          />
+          <SettingsRow
+            controlId="settings-open-app-config"
+            label={t('settings.general.open-app-config-title')}
+            hint={t('settings.general.open-app-config-body')}
+            control={
+              <Button
+                id="settings-open-app-config"
+                type="button"
+                data-interactive
+                size="sm"
+                variant="outline"
+                disabled={!editorAvailable || externalActionPendingAny}
+                aria-busy={externalActionPending === 'open-app-config-editor'}
+                onClick={openAppConfigDirectory}
+              >
+                <FolderOpen className="size-3" />
+                {t('settings.general.open-app-config-action')}
+              </Button>
             }
           />
         </SettingsList>

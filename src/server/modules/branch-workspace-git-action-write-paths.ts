@@ -33,6 +33,7 @@ import {
   type BranchWorkspaceGitActionPlanResult,
   type BranchWorkspaceGitActionResult,
   type BranchWorkspaceMergeMode,
+  type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 import type { ExecResult, GitConflictWorktree } from '#/shared/git-types.ts'
@@ -179,9 +180,15 @@ export function createBranchWorkspaceGitActionWriteService(
       if (input.kind === 'batch-merge-out' && (!mergeOutSelection || !mergeOutSelection.ok)) {
         return { ok: false, message: mergeOutSelection?.message ?? 'error.invalid-arguments' }
       }
+      const syncSelection =
+        input.kind === 'pull' || input.kind === 'push' ? selectedSyncMembers(state.plan, input.repositoryNames) : null
+      if ((input.kind === 'pull' || input.kind === 'push') && (!syncSelection || !syncSelection.ok)) {
+        return { ok: false, message: syncSelection?.message ?? 'error.invalid-arguments' }
+      }
       const mergeInMembers = mergeInSelection?.ok ? mergeInSelection.members : null
       const mergeOutMembers = mergeOutSelection?.ok ? mergeOutSelection.members : null
-      const mergeMembers = mergeInMembers ?? mergeOutMembers
+      const syncMembers = syncSelection?.ok ? syncSelection.members : null
+      const selectedMembers = mergeInMembers ?? mergeOutMembers ?? syncMembers
       if (input.kind === 'batch-merge-in' && mergeInMembers) {
         const sources = mergeInMembers.map((member) => ({
           repositoryName: member.repositoryName,
@@ -220,7 +227,7 @@ export function createBranchWorkspaceGitActionWriteService(
       }
 
       const controller = new AbortController()
-      const totalCount = mergeMembers?.length ?? state.plan.members.length
+      const totalCount = selectedMembers?.length ?? state.plan.members.length
       const touchedRepoIds = new Set<string>()
       let operationPublished = false
       active.set(normalizedRootId, {
@@ -245,9 +252,11 @@ export function createBranchWorkspaceGitActionWriteService(
         const ignored = new Set([
           ...state.completed,
           ...state.mergeProgress.keys(),
-          ...(mergeMembers
+          ...(selectedMembers
             ? state.plan.members
-                .filter((member) => !mergeMembers.some((selected) => selected.repositoryName === member.repositoryName))
+                .filter(
+                  (member) => !selectedMembers.some((selected) => selected.repositoryName === member.repositoryName),
+                )
                 .map((member) => member.repositoryName)
             : []),
         ])
@@ -319,7 +328,8 @@ export function createBranchWorkspaceGitActionWriteService(
             executionContext,
           )
         }
-        return await executeSync(state, input.kind, controller.signal, { pull, push }, executionContext)
+        if (!syncMembers) return { ok: false, message: 'error.invalid-arguments' }
+        return await executeSync(state, input.kind, syncMembers, controller.signal, { pull, push }, executionContext)
       } catch (error) {
         return failureResult(state.plan, state.completed, controller.signal.aborted ? 'cancelled' : safeMessage(error))
       } finally {
@@ -385,10 +395,7 @@ function selectedBatchMergeInMembers(
   for (const member of plan.members) {
     const sourceSelection = selected.get(member.repositoryName)
     if (!sourceSelection) continue
-    if (
-      !member.ready ||
-      (sourceSelection.kind === 'local' && sourceSelection.branch === member.targetBranch)
-    ) {
+    if (!member.ready || (sourceSelection.kind === 'local' && sourceSelection.branch === member.targetBranch)) {
       return { ok: false, message: member.message ?? 'error.invalid-arguments' }
     }
     const sourceKey = repositoryMergeBranchSelectionKey(sourceSelection)
@@ -427,6 +434,23 @@ function selectedBatchMergeOutMembers(
       return { ok: false, message: destination?.message ?? 'error.invalid-arguments' }
     }
     members.push({ ...member, destination })
+  }
+  return members.length === selected.size && members.length > 0
+    ? { ok: true, members }
+    : { ok: false, message: 'error.invalid-arguments' }
+}
+
+function selectedSyncMembers(
+  plan: BranchWorkspaceGitActionPlan,
+  repositoryNames: string[],
+): { ok: true; members: BranchWorkspaceSyncMemberPlan[] } | { ok: false; message: string } {
+  if (plan.kind !== 'pull' && plan.kind !== 'push') return { ok: false, message: 'error.invalid-arguments' }
+  const selected = new Set(repositoryNames)
+  const members: BranchWorkspaceSyncMemberPlan[] = []
+  for (const member of plan.members) {
+    if (!selected.has(member.repositoryName)) continue
+    if (!member.ready) return { ok: false, message: member.message ?? 'error.invalid-arguments' }
+    members.push(member)
   }
   return members.length === selected.size && members.length > 0
     ? { ok: true, members }
@@ -577,13 +601,7 @@ async function executeBatchMergeIn(
       publishActiveOperation(context)
       context.touchedRepoIds.add(member.repoId)
       const fetched = await attemptMemberOperation(() =>
-        operations.fetchRemote(
-          member.repoId,
-          remoteSource.remote,
-          signal,
-          undefined,
-          DEFER_REPOSITORY_INVALIDATION,
-        ),
+        operations.fetchRemote(member.repoId, remoteSource.remote, signal, undefined, DEFER_REPOSITORY_INVALIDATION),
       )
       if (!fetched.ok) {
         if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
@@ -1061,14 +1079,8 @@ async function batchMergeFailureAfterCleanup(
     state.mergeProgress.delete(member.repositoryName)
   }
   const conflictWorktree =
-    step === 'merge' &&
-    !member.destination.requiresTemporaryWorktree &&
-    member.destination.destination.kind === 'local'
-      ? retainedConflictWorktree(
-          result,
-          member.destination.destination.branch,
-          member.destination.worktreePath,
-        )
+    step === 'merge' && !member.destination.requiresTemporaryWorktree && member.destination.destination.kind === 'local'
+      ? retainedConflictWorktree(result, member.destination.destination.branch, member.destination.worktreePath)
       : undefined
   return cleaned.ok
     ? memberFailure(member.repositoryName, step, result, worktreePath, conflictWorktree)
@@ -1122,6 +1134,7 @@ function batchMergeDestinationBranch(selection: RepositoryMergeBranchSelection):
 async function executeSync(
   state: PendingAction,
   kind: 'pull' | 'push',
+  members: BranchWorkspaceSyncMemberPlan[],
   signal: AbortSignal,
   operations: {
     pull: typeof pullRepositoryBranch
@@ -1134,16 +1147,15 @@ async function executeSync(
   }
   const plan = state.plan
   if (plan.kind !== kind) return failureResult(plan, state.completed, 'error.invalid-arguments')
-  if (!plan.ready) {
-    return failureResult(
-      plan,
-      state.completed,
-      plan.members.find((member) => !member.ready)?.message ?? 'error.invalid-arguments',
-    )
-  }
+  const selectedRepositoryNames = new Set(members.map((member) => member.repositoryName))
+  const skippedRepositoryNames = new Set(
+    plan.members
+      .filter((member) => !selectedRepositoryNames.has(member.repositoryName))
+      .map((member) => member.repositoryName),
+  )
   const failures: BranchWorkspaceGitActionMemberFailures = new Map()
-  for (let index = 0; index < plan.members.length; index += 1) {
-    const member = plan.members[index]!
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index]!
     if (state.completed.has(member.repositoryName)) continue
     if (signal.aborted) return failureResult(plan, state.completed, 'cancelled')
     updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, kind)
@@ -1170,7 +1182,7 @@ async function executeSync(
     updateActive(context.active.get(context.rootId), index + 1, state.completed.size)
     publishActiveOperation(context)
   }
-  return executionResult(plan, state.completed, failures)
+  return executionResult(plan, state.completed, failures, skippedRepositoryNames)
 }
 
 function publishActiveOperation(context: ActionExecutionContext): void {
@@ -1199,6 +1211,7 @@ function updateActive(
 function successResult(
   plan: BranchWorkspaceGitActionPlan,
   completed: ReadonlySet<string>,
+  satisfied: ReadonlySet<string> = new Set(),
 ): BranchWorkspaceGitActionResult {
   return {
     ok: true,
@@ -1216,8 +1229,9 @@ function executionResult(
   plan: BranchWorkspaceGitActionPlan,
   completed: ReadonlySet<string>,
   failures: ReadonlyMap<string, BranchWorkspaceGitActionMemberResult>,
+  satisfied: ReadonlySet<string> = new Set(),
 ): BranchWorkspaceGitActionResult {
-  if (failures.size === 0) return successResult(plan, completed)
+  if (failures.size === 0) return successResult(plan, completed, satisfied)
   return {
     ok: false,
     kind: plan.kind,
@@ -1231,7 +1245,7 @@ function executionResult(
         repositoryName: member.repositoryName,
         phase: completed.has(member.repositoryName)
           ? 'succeeded'
-          : isInitiallySatisfied(plan, member.repositoryName)
+          : satisfied.has(member.repositoryName) || isInitiallySatisfied(plan, member.repositoryName)
             ? 'satisfied'
             : 'not-started',
       }

@@ -111,14 +111,15 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
 
       const pushPlan = await loadPlan('push', commitPlan.branchWorkspaceId)
       if (!pushPlan || pushPlan.kind !== 'push') return null
-      if (!pushPlan.ready) {
+      const repositoryNames = pushPlan.members.filter((member) => member.ready).map((member) => member.repositoryName)
+      if (repositoryNames.length === 0) {
         setError(
           pushPlan.members.find((member) => !member.ready)?.message ??
             'workspace.branch-workspace.git-action.execute-failed',
         )
         return null
       }
-      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token })
+      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token, repositoryNames })
     },
     [executePlan, loadPlan, plan],
   )
@@ -145,9 +146,9 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   )
 
   const executeSync = useCallback(
-    async (kind: 'pull' | 'push') => {
+    async (kind: 'pull' | 'push', repositoryNames: string[]) => {
       if (!plan || plan.kind !== kind) return null
-      return await execute({ kind, planToken: plan.token })
+      return await execute({ kind, planToken: plan.token, repositoryNames })
     },
     [execute, plan],
   )

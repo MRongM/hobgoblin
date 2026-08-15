@@ -309,14 +309,17 @@ describe('remote command scripts', () => {
     expect(list.script).toContain('os.listdir')
     expect(list.script).toContain('excluded_names')
     expect(list.script).toContain("team's repo")
-    expect(list.script).toMatch(/hobgoblin-.*goblin-/)
+    expect(list.script).toContain('\\"hob-\\"')
+    expect(list.script).toContain('\\"hobgoblin-\\"')
+    expect(list.script).toContain('managed_hidden_prefixes = tuple("." + prefix for prefix in managed_prefixes)')
 
     const create = buildRemoteCommandInvocation(TARGET, {
       type: 'createBranchWorkspaceDirectory',
       rootPath: '/srv/workspace',
-      targetPath: '/srv/workspace/hobgoblin-feature',
+      targetPath: '/srv/workspace/hob-feature',
     })
-    expect(create.script).toMatch(/hobgoblin-.*goblin-/)
+    expect(create.script).toContain('\\"hob-\\"')
+    expect(create.script).toContain('\\"hobgoblin-\\"')
   })
 
   test('builds fixed branch workspace copy and fingerprint commands', () => {
@@ -356,7 +359,7 @@ describe('remote command scripts', () => {
     tempDirs.push(directory)
     const root = path.join(directory, 'workspace')
     const source = path.join(root, 'docs')
-    const branchRoot = path.join(root, 'hobgoblin-feature')
+    const branchRoot = path.join(root, 'hob-feature')
     const copied = path.join(branchRoot, 'docs')
     mkdirSync(source, { recursive: true })
     writeFileSync(path.join(source, 'guide.md'), 'guide')

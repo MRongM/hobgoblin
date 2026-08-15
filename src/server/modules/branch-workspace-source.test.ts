@@ -27,7 +27,7 @@ function manifest(
   rootId: string,
   branch: string,
   repositoryName = 'api',
-  directoryPrefix = 'goblin-',
+  directoryPrefix = 'hob-',
 ): BranchWorkspaceManifest {
   const slug = branch.replaceAll('/', '-').replaceAll('.', '-')
   const directoryName = `${directoryPrefix}${slug}`
@@ -89,13 +89,25 @@ describe('branch workspace source', () => {
 
   test('round-trips manifests using the current directory prefix', async () => {
     const { dataFile, root } = await createFixture()
-    const current = manifest(root, 'feature/auth', 'api', 'hobgoblin-')
+    const current = manifest(root, 'feature/auth')
 
     await replaceBranchWorkspaceManifests(root, [current], { dataFile })
 
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
       kind: 'ready',
       manifests: [current],
+    })
+  })
+
+  test('round-trips existing manifests using the legacy hobgoblin directory prefix', async () => {
+    const { dataFile, root } = await createFixture()
+    const legacy = manifest(root, 'feature/auth', 'api', 'hobgoblin-')
+
+    await replaceBranchWorkspaceManifests(root, [legacy], { dataFile })
+
+    await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({
+      kind: 'ready',
+      manifests: [legacy],
     })
   })
 

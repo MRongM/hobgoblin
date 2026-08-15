@@ -92,28 +92,28 @@ describe('remote branch workspace wrappers', () => {
       .mockResolvedValueOnce(result(JSON.stringify({ ok: true, children: ['README.md', 'api'] })))
       .mockResolvedValueOnce(result('{"ok":true}'))
 
-    await createRemoteBranchWorkspaceDirectory(TARGET, '/srv/workspace', '/srv/workspace/goblin-feature', { run })
+    await createRemoteBranchWorkspaceDirectory(TARGET, '/srv/workspace', '/srv/workspace/hob-feature', { run })
     await materializeRemoteBranchWorkspaceSymlink(
       TARGET,
       '/srv/workspace',
       '/srv/workspace/README.md',
-      '/srv/workspace/goblin-feature/README.md',
+      '/srv/workspace/hob-feature/README.md',
       { run },
     )
     await copyRemoteBranchWorkspaceEntry(
       TARGET,
       '/srv/workspace',
       '/srv/workspace/docs',
-      '/srv/workspace/goblin-feature/docs',
+      '/srv/workspace/hob-feature/docs',
       { run },
     )
     await expect(
-      fingerprintRemoteBranchWorkspaceEntry(TARGET, '/srv/workspace', '/srv/workspace/goblin-feature/docs', { run }),
+      fingerprintRemoteBranchWorkspaceEntry(TARGET, '/srv/workspace', '/srv/workspace/hob-feature/docs', { run }),
     ).resolves.toBe(fingerprint)
     await expect(
-      listRemoteBranchWorkspaceChildren(TARGET, '/srv/workspace', '/srv/workspace/goblin-feature', { run }),
+      listRemoteBranchWorkspaceChildren(TARGET, '/srv/workspace', '/srv/workspace/hob-feature', { run }),
     ).resolves.toEqual(['README.md', 'api'])
-    await removeRemoteBranchWorkspaceEntry(TARGET, '/srv/workspace', '/srv/workspace/goblin-feature/docs', { run })
+    await removeRemoteBranchWorkspaceEntry(TARGET, '/srv/workspace', '/srv/workspace/hob-feature/docs', { run })
 
     expect(run.mock.calls.map(([command]) => command.type)).toEqual([
       'createBranchWorkspaceDirectory',

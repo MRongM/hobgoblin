@@ -1437,6 +1437,10 @@ export const zh: Record<DictKey, string> = {
   'settings.general.open-from-terminal-body':
     '在 macOS 上，你可以从终端或脚本里直接把本地仓库路径交给 Hobgoblin 打开。',
   'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
+  'settings.general.open-app-config-title': '打开应用配置',
+  'settings.general.open-app-config-body': '使用当前选择的编辑器打开包含应用设置和工作区配置的目录。',
+  'settings.general.open-app-config-action': '打开配置目录',
+  'settings.general.open-app-config-failed': '无法打开应用配置',
   'settings.fetch.off': '关闭',
   'settings.fetch.30s': '30 秒',
   'settings.fetch.1m': '1 分钟',

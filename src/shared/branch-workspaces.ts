@@ -14,8 +14,8 @@ import {
   type WorktreeBootstrapDecision,
 } from '#/shared/worktree-bootstrap-summary.ts'
 
-export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hobgoblin-'
-export const BRANCH_WORKSPACE_DIRECTORY_PREFIXES = [BRANCH_WORKSPACE_DIRECTORY_PREFIX, 'goblin-'] as const
+export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hob-'
+export const BRANCH_WORKSPACE_DIRECTORY_PREFIXES = [BRANCH_WORKSPACE_DIRECTORY_PREFIX, 'hobgoblin-', 'goblin-'] as const
 
 export function isBranchWorkspaceDirectoryName(value: string): boolean {
   return (
@@ -24,7 +24,10 @@ export function isBranchWorkspaceDirectoryName(value: string): boolean {
 }
 
 export function isManagedBranchWorkspaceEntryName(value: string): boolean {
-  return isBranchWorkspaceDirectoryName(value) || value.startsWith('.goblin-') || value.startsWith('.hobgoblin-')
+  return (
+    isBranchWorkspaceDirectoryName(value) ||
+    BRANCH_WORKSPACE_DIRECTORY_PREFIXES.some((prefix) => value.startsWith(`.${prefix}`))
+  )
 }
 
 export type BranchWorkspaceProgress = 'pending' | 'complete' | 'removed' | 'failed'

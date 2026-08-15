@@ -180,6 +180,30 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     })
   })
 
+  test.each(['batch-commit', 'batch-discard'] as const)(
+    'reads %s members concurrently while preserving manifest order',
+    async (kind) => {
+      let activeSnapshots = 0
+      let maxActiveSnapshots = 0
+      const result = await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind, branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) => {
+            activeSnapshots += 1
+            maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots)
+            await new Promise((resolve) => setTimeout(resolve, 20))
+            activeSnapshots -= 1
+            return snapshot(repoId.endsWith('/api') ? 'api' : 'web')
+          }),
+        }),
+      )
+
+      expect(maxActiveSnapshots).toBe(2)
+      expect(result.ok && result.plan.members.map((member) => member.repositoryName)).toEqual(['api', 'web'])
+    },
+  )
+
   test('plans exact changed paths for every branch workspace member in manifest order', async () => {
     const deps = dependencies({
       getStatus: vi.fn(async (repoId: string) => {
@@ -442,7 +466,11 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     )
 
     expect(result.ok && result.plan.kind === 'batch-merge-out' && result.plan.members[0]?.destinationBranches).toEqual([
-      expect.objectContaining({ destination: { kind: 'local', branch: 'main' }, ready: true, requiresTemporaryWorktree: false }),
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'main' },
+        ready: true,
+        requiresTemporaryWorktree: false,
+      }),
       expect.objectContaining({
         destination: { kind: 'local', branch: 'release/v2' },
         ready: false,
@@ -556,7 +584,10 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
       expect.objectContaining({ source: { kind: 'local', branch: 'main' }, head: 'base-head' }),
       expect.objectContaining({ source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' }),
       expect.objectContaining({ source: { kind: 'local', branch: 'origin/main' }, head: 'local-origin-main' }),
-      expect.objectContaining({ source: { kind: 'remote', remoteRef: 'origin/feature/a' }, head: 'remote-target-head' }),
+      expect.objectContaining({
+        source: { kind: 'remote', remoteRef: 'origin/feature/a' },
+        head: 'remote-target-head',
+      }),
       expect.objectContaining({ source: { kind: 'remote', remoteRef: 'origin/main' }, head: 'remote-main-head' }),
     ])
     expect(
@@ -631,6 +662,33 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetHead: repoId.endsWith('/api') ? 'new-head' : 'target-head',
           }),
         ),
+      }),
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
+  test('does not block selected members when an ignored member is removed', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'push', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', { remotes: ['origin'] }),
+        ),
+      }),
+    )
+    expect(original.ok).toBe(true)
+    if (!original.ok) return
+
+    const current = manifest()
+    current.repositories.pop()
+    const result = await validateBranchWorkspaceGitActionPlan(
+      original.plan,
+      new Set(['web']),
+      dependencies({
+        readManifests: vi.fn(async () => ({ kind: 'ready' as const, manifests: [current] })),
+        getSnapshot: vi.fn(async () => snapshot('api', { remotes: ['origin'] })),
       }),
     )
 

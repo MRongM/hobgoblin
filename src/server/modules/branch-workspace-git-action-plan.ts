@@ -93,11 +93,7 @@ export async function validateBranchWorkspaceGitActionPlan(
   )
   if (!current.ok) return current
 
-  if (
-    current.plan.kind !== expected.kind ||
-    current.plan.members.length !== expected.members.length ||
-    current.plan.members.some((member, index) => member.repositoryName !== expected.members[index]?.repositoryName)
-  ) {
+  if (current.plan.kind !== expected.kind) {
     return { ok: false, message: 'workspace.branch-workspace.git-action.repository-changed' }
   }
   const currentMembers = new Map(current.plan.members.map((member) => [member.repositoryName, member]))
@@ -105,7 +101,7 @@ export async function validateBranchWorkspaceGitActionPlan(
     if (completedRepositoryNames.has(member.repositoryName)) continue
     if (currentMembers.get(member.repositoryName)?.fingerprint !== member.fingerprint) {
       return {
-        ok: false,
+        ok: false as const,
         message: 'workspace.branch-workspace.git-action.repository-changed',
         repositoryName: member.repositoryName,
       }
@@ -131,36 +127,45 @@ async function buildBatchCommitPlan(
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  const members: BranchWorkspaceBatchCommitMemberPlan[] = []
-  for (const member of manifest.repositories) {
-    signal?.throwIfAborted()
-    const facts = await readMemberFacts(
-      rootId,
-      member.repositoryName,
-      member.targetBranch,
-      member.worktreePath,
-      dependencies,
-      signal,
-    )
-    if (!facts.ok) return facts
-    const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
-    if (!patch.ok) {
-      return {
-        ok: false,
-        message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
-        repositoryName: member.repositoryName,
+  const memberPlans = await Promise.all(
+    manifest.repositories.map(async (member) => {
+      signal?.throwIfAborted()
+      const facts = await readMemberFacts(
+        rootId,
+        member.repositoryName,
+        member.targetBranch,
+        member.worktreePath,
+        dependencies,
+        signal,
+      )
+      if (!facts.ok) return facts
+      const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
+      if (!patch.ok) {
+        return {
+          ok: false as const,
+          message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
+          repositoryName: member.repositoryName,
+        }
       }
-    }
-    const entries = normalizedStatusEntries(facts.status.entries)
-    members.push({
-      repositoryName: member.repositoryName,
-      repoId: facts.repoId,
-      targetBranch: member.targetBranch,
-      targetWorktreePath: member.worktreePath,
-      dirty: entries.length > 0,
-      changeCount: entries.length,
-      fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
-    })
+      const entries = normalizedStatusEntries(facts.status.entries)
+      return {
+        ok: true as const,
+        member: {
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
+          dirty: entries.length > 0,
+          changeCount: entries.length,
+          fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
+        },
+      }
+    }),
+  )
+  const members: BranchWorkspaceBatchCommitMemberPlan[] = []
+  for (const memberPlan of memberPlans) {
+    if (!memberPlan.ok) return memberPlan
+    members.push(memberPlan.member)
   }
   const planWithoutToken = {
     kind: 'batch-commit' as const,
@@ -177,36 +182,45 @@ async function buildBatchDiscardPlan(
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  const members: BranchWorkspaceBatchDiscardMemberPlan[] = []
-  for (const member of manifest.repositories) {
-    signal?.throwIfAborted()
-    const facts = await readMemberFacts(
-      rootId,
-      member.repositoryName,
-      member.targetBranch,
-      member.worktreePath,
-      dependencies,
-      signal,
-    )
-    if (!facts.ok) return facts
-    const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
-    if (!patch.ok) {
-      return {
-        ok: false,
-        message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
-        repositoryName: member.repositoryName,
+  const memberPlans = await Promise.all(
+    manifest.repositories.map(async (member) => {
+      signal?.throwIfAborted()
+      const facts = await readMemberFacts(
+        rootId,
+        member.repositoryName,
+        member.targetBranch,
+        member.worktreePath,
+        dependencies,
+        signal,
+      )
+      if (!facts.ok) return facts
+      const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
+      if (!patch.ok) {
+        return {
+          ok: false as const,
+          message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
+          repositoryName: member.repositoryName,
+        }
       }
-    }
-    const entries = normalizedStatusEntries(facts.status.entries)
-    members.push({
-      repositoryName: member.repositoryName,
-      repoId: facts.repoId,
-      targetBranch: member.targetBranch,
-      targetWorktreePath: member.worktreePath,
-      paths: entries.map((entry) => entry.path),
-      changeCount: entries.length,
-      fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
-    })
+      const entries = normalizedStatusEntries(facts.status.entries)
+      return {
+        ok: true as const,
+        member: {
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
+          paths: entries.map((entry) => entry.path),
+          changeCount: entries.length,
+          fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
+        },
+      }
+    }),
+  )
+  const members: BranchWorkspaceBatchDiscardMemberPlan[] = []
+  for (const memberPlan of memberPlans) {
+    if (!memberPlan.ok) return memberPlan
+    members.push(memberPlan.member)
   }
   const planWithoutToken = {
     kind: 'batch-discard' as const,

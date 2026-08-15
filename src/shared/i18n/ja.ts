@@ -1513,6 +1513,10 @@ export const ja: Record<DictKey, string> = {
   'settings.general.open-from-terminal-body':
     'macOS では、Terminal やスクリプトからローカルリポジトリのパスを Hobgoblin に直接渡して開けます。',
   'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
+  'settings.general.open-app-config-title': 'アプリケーション設定を開く',
+  'settings.general.open-app-config-body': '選択したエディターでアプリケーション設定とワークスペース設定を含むディレクトリを開きます。',
+  'settings.general.open-app-config-action': '設定ディレクトリを開く',
+  'settings.general.open-app-config-failed': 'アプリケーション設定を開けませんでした',
   'settings.fetch.off': 'オフ',
   'settings.fetch.30s': '30 秒',
   'settings.fetch.1m': '1 分',
