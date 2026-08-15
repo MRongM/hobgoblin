@@ -37,6 +37,7 @@ import type {
   TerminalTouchScrollInput,
 } from '#/web/components/terminal/types.ts'
 const RESIZE_DEBOUNCE_MS = 80
+const OUTPUT_PRIORITY_FALLBACK_MS = 100
 const EMPTY_SEARCH_RESULT: TerminalSearchResult = { resultIndex: -1, resultCount: 0, found: false }
 
 type TerminalAttachResultWithOwnership = Extract<TerminalAttachResult, { ok: true }> & {
@@ -56,6 +57,8 @@ export class ManagedTerminalSession {
   private startToken = 0
   private resizeFlushTimer: number | null = null
   private outputFlushFrame: number | null = null
+  private outputPriorityFrame: number | null = null
+  private outputPriorityTimer: number | null = null
   private pendingFocus = false
   private renderPending = true
   private tmuxNavigationTail: Promise<void> = Promise.resolve()
@@ -65,8 +68,8 @@ export class ManagedTerminalSession {
   private pendingWriteBuffer = ''
   private pendingWriteHasUserIntent = false
   private inputFlushScheduled = false
-  // One-shot bypass of Hobgoblin's frame queue for authoritative output after user intent.
-  private prioritizeNextOutput = false
+  // Bypass frame batching until the first render boundary after output responds to user intent.
+  private prioritizeOutput = false
   private hydratedSnapshot: { snapshot: string; snapshotSeq: number } | null = null
   private windowsPty: TerminalWindowsPty | undefined
   private disposed = false
@@ -222,7 +225,7 @@ export class ManagedTerminalSession {
     const sessionId = this.runtime.currentSessionId()
     if (!data || !sessionId || !this.runtime.canWrite()) return
     if (isUserIntentInput) {
-      this.prioritizeNextOutput = true
+      this.beginOutputPriority()
       this.pendingWriteHasUserIntent = true
       this.onInput?.(this.descriptor)
     }
@@ -272,14 +275,14 @@ export class ManagedTerminalSession {
     this.view.scrollToBottom()
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId || !this.descriptor.tmuxBacked) return
-    this.prioritizeNextOutput = true
+    this.beginOutputPriority()
     this.enqueueTmuxNavigation(() => terminalBridge.returnToBottom({ sessionId }))
   }
 
   pageTmux(direction: TerminalTmuxPageDirection): void {
     const sessionId = this.runtime.currentSessionId()
     if (!sessionId || !this.descriptor.tmuxBacked) return
-    this.prioritizeNextOutput = true
+    this.beginOutputPriority()
     this.enqueueTmuxNavigation(() => terminalBridge.pageTmux({ sessionId, direction }))
   }
 
@@ -338,7 +341,7 @@ export class ManagedTerminalSession {
     this.syncViewForOwnership(wasController)
     if (previousSessionId !== input.sessionId) {
       this.backgroundBellScanner.reset()
-      this.prioritizeNextOutput = false
+      this.clearOutputPriority()
     }
     if (previousSessionId && previousSessionId !== input.sessionId) this.applyHydratedSnapshotToActiveView()
     if (changed) this.notify()
@@ -376,7 +379,7 @@ export class ManagedTerminalSession {
   handleExit(event: TerminalExitEvent): boolean {
     if (!this.runtime.handleExit(event)) return false
     this.backgroundBellScanner.reset()
-    this.prioritizeNextOutput = false
+    this.clearOutputPriority()
     this.flushOutput()
     this.clearTerminalFocusIfOwned()
     this.view.blurIfFocused()
@@ -685,7 +688,7 @@ export class ManagedTerminalSession {
       this.pendingResize = null
       this.pendingWriteBuffer = ''
       this.pendingWriteHasUserIntent = false
-      this.prioritizeNextOutput = false
+      this.clearOutputPriority()
       this.applyCanonicalSizeToView()
     }
     if (!this.view.currentTerminal()) {
@@ -704,9 +707,9 @@ export class ManagedTerminalSession {
   private queueOutput(data: string): void {
     if (!this.view.currentTerminal()) return
     this.pendingOutput.push(data)
-    if (this.prioritizeNextOutput) {
-      this.prioritizeNextOutput = false
+    if (this.prioritizeOutput) {
       this.flushOutput()
+      this.scheduleOutputPriorityEnd()
       return
     }
     if (this.outputFlushFrame !== null) return
@@ -725,6 +728,45 @@ export class ManagedTerminalSession {
     const output = this.pendingOutput.join('')
     this.pendingOutput = []
     this.view.currentTerminal()?.write(output)
+  }
+
+  private beginOutputPriority(): void {
+    this.prioritizeOutput = true
+    this.cancelOutputPriorityEnd()
+    this.scheduleOutputPriorityTimeout()
+  }
+
+  private scheduleOutputPriorityTimeout(): void {
+    if (this.outputPriorityTimer !== null) window.clearTimeout(this.outputPriorityTimer)
+    this.outputPriorityTimer = window.setTimeout(() => {
+      this.outputPriorityTimer = null
+      this.clearOutputPriority()
+    }, OUTPUT_PRIORITY_FALLBACK_MS)
+  }
+
+  private scheduleOutputPriorityEnd(): void {
+    if (this.outputPriorityFrame !== null) return
+    this.scheduleOutputPriorityTimeout()
+    this.outputPriorityFrame = requestAnimationFrame(() => {
+      this.outputPriorityFrame = null
+      this.clearOutputPriority()
+    })
+  }
+
+  private clearOutputPriority(): void {
+    this.prioritizeOutput = false
+    this.cancelOutputPriorityEnd()
+  }
+
+  private cancelOutputPriorityEnd(): void {
+    if (this.outputPriorityFrame !== null) {
+      cancelScheduledAnimationFrame(this.outputPriorityFrame)
+      this.outputPriorityFrame = null
+    }
+    if (this.outputPriorityTimer !== null) {
+      window.clearTimeout(this.outputPriorityTimer)
+      this.outputPriorityTimer = null
+    }
   }
 
   private recoverActiveView(): void {
@@ -747,7 +789,7 @@ export class ManagedTerminalSession {
     this.pendingWriteBuffer = ''
     this.pendingWriteHasUserIntent = false
     this.inputFlushScheduled = false
-    this.prioritizeNextOutput = false
+    this.clearOutputPriority()
     // The xterm view was parsing the stream up to now; scanning resumes from a
     // clean state rather than the middle of whatever sequence it last saw.
     this.backgroundBellScanner.reset()

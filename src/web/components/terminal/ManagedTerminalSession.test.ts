@@ -2918,7 +2918,7 @@ describe('ManagedTerminalSession', () => {
   test.each([
     { name: 'direct keyboard input', data: 'x' },
     { name: 'committed CJK input', data: '中文' },
-  ])('prioritizes the first authoritative output after $name and then resumes frame batching', async ({ data }) => {
+  ])('prioritizes authoritative output through the next frame after $name', async ({ data }) => {
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
@@ -2936,13 +2936,121 @@ describe('ManagedTerminalSession', () => {
     expect(term.write).toHaveBeenCalledTimes(1)
     expect(term.write).toHaveBeenCalledWith(`pending-${data}`)
 
+    session.handleOutput({ sessionId: 'session-1', data: 'same-frame', seq: 3, processName: 'zsh' })
+    expect(term.write).toHaveBeenCalledTimes(2)
+    expect(term.write).toHaveBeenNthCalledWith(2, 'same-frame')
+
+    await flushTerminalStart()
     term.write.mockClear()
-    session.handleOutput({ sessionId: 'session-1', data: 'later', seq: 3, processName: 'zsh' })
+    session.handleOutput({ sessionId: 'session-1', data: 'later', seq: 4, processName: 'zsh' })
 
     expect(term.write).not.toHaveBeenCalled()
     await flushTerminalStart()
     expect(term.write).toHaveBeenCalledTimes(1)
     expect(term.write).toHaveBeenCalledWith('later')
+  })
+
+  test.each([
+    { name: 'Backspace', data: '\x7f' },
+    { name: 'Delete', data: '\x1b[3~' },
+  ])('keeps $name echo low-latency when a TUI status frame arrives first', async ({ data }) => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.write.mockClear()
+    term.emitCoreUserData(data)
+    session.handleOutput({ sessionId: 'session-1', data: 'status-frame', seq: 1, processName: 'codex' })
+    session.handleOutput({ sessionId: 'session-1', data: '\b \b', seq: 2, processName: 'codex' })
+
+    expect(term.write).toHaveBeenCalledTimes(2)
+    expect(term.write).toHaveBeenNthCalledWith(1, 'status-frame')
+    expect(term.write).toHaveBeenNthCalledWith(2, '\b \b')
+  })
+
+  test('bounds the low-latency output window when render frames are suspended', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: originalRequestAnimationFrame,
+    })
+    vi.useFakeTimers()
+    globalThis.requestAnimationFrame = vi.fn(() => 42)
+    try {
+      const term = xtermMocks.terminals[0]!
+      term.write.mockClear()
+      term.emitCoreUserData('\x7f')
+      session.handleOutput({ sessionId: 'session-1', data: 'status-frame', seq: 1, processName: 'codex' })
+      expect(term.write).toHaveBeenCalledWith('status-frame')
+
+      vi.advanceTimersByTime(1_000)
+      term.write.mockClear()
+      session.handleOutput({ sessionId: 'session-1', data: 'later', seq: 2, processName: 'codex' })
+
+      expect(term.write).not.toHaveBeenCalled()
+    } finally {
+      session.dispose()
+      vi.useRealTimers()
+      Object.defineProperty(globalThis, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      })
+    }
+  })
+
+  test('reanchors a suspended-frame fallback when the first prioritized output arrives', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host)
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      configurable: true,
+      writable: true,
+      value: originalRequestAnimationFrame,
+    })
+    vi.useFakeTimers()
+    globalThis.requestAnimationFrame = vi.fn(() => 42)
+    try {
+      const term = xtermMocks.terminals[0]!
+      term.write.mockClear()
+      term.emitCoreUserData('\x7f')
+      vi.advanceTimersByTime(99)
+
+      session.handleOutput({ sessionId: 'session-1', data: 'status-frame', seq: 1, processName: 'codex' })
+      expect(term.write).toHaveBeenCalledWith('status-frame')
+
+      vi.advanceTimersByTime(1)
+      session.handleOutput({ sessionId: 'session-1', data: '\b \b', seq: 2, processName: 'codex' })
+
+      expect(term.write).toHaveBeenCalledTimes(2)
+      expect(term.write).toHaveBeenNthCalledWith(2, '\b \b')
+    } finally {
+      session.dispose()
+      vi.useRealTimers()
+      Object.defineProperty(globalThis, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      })
+    }
   })
 
   test('does not prioritize output after terminal-emulator protocol input', async () => {
