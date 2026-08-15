@@ -6,22 +6,16 @@ on:
   pull_request:
     paths:
       - .github/workflows/windows-test.yml
-      - electron-builder.ts
       - package.json
-      - bun.lock
-      - scripts/**
-      - src/**
+      - windows/**
   push:
     branches:
       - main
       - windows
     paths:
       - .github/workflows/windows-test.yml
-      - electron-builder.ts
       - package.json
-      - bun.lock
-      - scripts/**
-      - src/**
+      - windows/**
 
 permissions:
   contents: read
@@ -56,17 +50,31 @@ jobs:
         with:
           bun-version: 1.3.11
 
+      - name: Verify Windows package version
+        shell: pwsh
+        run: |
+          $rootVersion = (Get-Content "package.json" -Raw | ConvertFrom-Json).version
+          $windowsVersion = (Get-Content "windows/package.json" -Raw | ConvertFrom-Json).version
+          if ($rootVersion -ne $windowsVersion) {
+            throw "Windows package version $windowsVersion must equal root release version $rootVersion"
+          }
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
+        working-directory: windows
 
       - name: Typecheck
         run: bun run typecheck
+        working-directory: windows
 
       - name: Test Windows compatibility
         run: >-
           bun run test --
+          scripts/build-release-artifacts.test.ts
+          scripts/build-windows-fast.test.ts
           src/main/external-open.test.ts
           src/main/terminal.test.ts
+          src/main/windows-cli-project-open.test.ts
           src/server/terminal/terminal-pty-runtime.test.ts
           src/server/terminal/terminal-scope.test.ts
           src/server/terminal/windows-terminal-shell.test.ts
@@ -75,16 +83,20 @@ jobs:
           src/shared/worktree-guards.test.ts
           src/system/open-app.test.ts
           src/system/terminals.test.ts
+          src/system/hob-cli-windows.test.ts
           src/system/windows-terminal.test.ts
+          src/system/windows-user-path.test.ts
           src/web/components/terminal/TerminalSessionRegistry.test.ts
           src/web/components/terminal/terminal-repo-index.test.ts
           src/web/components/terminal/terminal-session-keys.test.ts
           src/web/components/terminal/terminal-path-links.test.ts
           src/web/lib/editor-open-targets.test.ts
           src/web/lib/paths.test.ts
+        working-directory: windows
 
       - name: Build Windows artifact
-        run: bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}
+        run: bun run build:release -- --arch ${{ matrix.arch }}
+        working-directory: windows
 
       - name: Smoke test packaged Windows app startup
         shell: pwsh
@@ -364,10 +376,11 @@ jobs:
             }
           }
 
-          $exe = Get-ChildItem -Path "release" -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
+          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE "windows/release"
+          $exe = Get-ChildItem -Path $releaseRoot -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
           if (-not $exe) {
             Write-Host "Could not find unpacked Hobgoblin.exe. Release tree:"
-            Get-ChildItem -Path "release" -Recurse | Select-Object FullName
+            Get-ChildItem -Path $releaseRoot -Recurse | Select-Object FullName
             throw "Missing unpacked Hobgoblin.exe for smoke test"
           }
 
@@ -449,6 +462,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}
-          path: release/Hobgoblin-*-${{ matrix.arch }}.exe
+          path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 7

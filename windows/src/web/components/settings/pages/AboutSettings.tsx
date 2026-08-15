@@ -1,0 +1,80 @@
+import { ExternalLink, FileText, Hash, Tag } from 'lucide-react'
+import { Button } from '#/web/components/ui/button.tsx'
+import { GitHubMark } from '#/web/components/GitHubMark.tsx'
+import { SettingsCard, SettingsListItem } from '#/web/components/settings/SettingsPrimitives.tsx'
+import { ThirdPartyLicensesDialog } from '#/web/components/settings/pages/ThirdPartyLicensesDialog.tsx'
+import { openProjectGitHub } from '#/web/app-shell-client.ts'
+import { useT } from '#/web/stores/i18n.ts'
+import { cn } from '#/web/lib/cn.ts'
+
+const appIconUrl = '/goblin.png'
+
+export function AboutSettings() {
+  const t = useT()
+  const commit = __BUILD_INFO__.commit
+
+  return (
+    <SettingsCard as="ul">
+      <SettingsListItem as="li" size="xl">
+        <img src={appIconUrl} alt="Hobgoblin" className="size-8 shrink-0 rounded-lg" />
+        <div className="min-w-0 flex-1">
+          <span className="truncate text-sm font-medium text-foreground">{t('about.app')}</span>
+        </div>
+      </SettingsListItem>
+      <SettingsListItem as="li" size="xl">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
+          <Tag size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="truncate text-sm font-medium text-foreground">{t('about.version')}</span>
+        </div>
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">v{__APP_VERSION__}</span>
+      </SettingsListItem>
+      <SettingsListItem as="li" size="xl">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
+          <Hash size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="truncate text-sm font-medium text-foreground">{t('about.build')}</span>
+        </div>
+        <span className={cn('shrink-0 text-xs text-muted-foreground', commit ? 'font-mono' : 'font-sans')}>
+          {commit || t('about.build.unknown')}
+        </span>
+      </SettingsListItem>
+      <SettingsListItem as="li" size="xl">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
+          <GitHubMark className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="truncate text-sm font-medium text-foreground">{t('about.github')}</span>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{t('about.github.body')}</p>
+        </div>
+        <Button
+          type="button"
+          data-interactive
+          variant="ghost"
+          size="icon-lg"
+          onClick={() => void openProjectGitHub()}
+          className="shrink-0 text-muted-foreground hover:text-accent-foreground"
+          aria-label={t('settings.open-github')}
+        >
+          <ExternalLink className="size-3.5" />
+        </Button>
+      </SettingsListItem>
+      <SettingsListItem as="li" size="xl">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[var(--goblin-brand-radius-md,var(--radius-md))] bg-control text-muted-foreground">
+          <FileText size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="truncate text-sm font-medium text-foreground">
+            {t('about.third-party-licenses')}
+          </span>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {t('about.third-party-licenses.body')}
+          </p>
+        </div>
+        <ThirdPartyLicensesDialog />
+      </SettingsListItem>
+    </SettingsCard>
+  )
+}

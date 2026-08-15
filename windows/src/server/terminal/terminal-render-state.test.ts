@@ -1,0 +1,301 @@
+import { describe, expect, test } from 'vitest'
+import { TERMINAL_SCROLLBACK_LINES } from '#/shared/terminal.ts'
+import {
+  appendTerminalReplayData,
+  createEmptyTerminalRenderState,
+  createTerminalRenderModel,
+  queueTerminalRenderWrite,
+  readTerminalRenderOutputExcerpt,
+  readTerminalRenderScreenSnapshot,
+  snapshotTerminalRenderState,
+} from '#/server/terminal/terminal-render-state.ts'
+
+describe('terminal-render-state', () => {
+  describe('createTerminalRenderModel', () => {
+    test('configures headless terminal scrollback from the shared retention constant', () => {
+      const model = createTerminalRenderModel(80, 24)
+
+      try {
+        expect((model.term as unknown as { options: { scrollback: number } }).options.scrollback).toBe(
+          TERMINAL_SCROLLBACK_LINES,
+        )
+      } finally {
+        model.term.dispose()
+      }
+    })
+
+    test('passes Windows PTY compatibility to the headless terminal model', () => {
+      const windowsPty = { backend: 'conpty' as const, buildNumber: 22631 }
+      const model = createTerminalRenderModel(80, 24, windowsPty)
+
+      try {
+        expect((model.term as unknown as { options: { windowsPty?: typeof windowsPty } }).options.windowsPty).toEqual(
+          windowsPty,
+        )
+      } finally {
+        model.term.dispose()
+      }
+    })
+
+    test('does not keep erased viewport lines in headless scrollback snapshots', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(40, 6)
+      try {
+        queueTerminalRenderWrite(state, 'old-1\r\nold-2\r\nold-3\r\nold-4\r\n' + '\x1b[2J\x1b[H' + 'new-1\r\nnew-2\r\n')
+        await state.model.chain
+
+        const buffer = (state.model.term as unknown as HeadlessTerminalWithBuffer)._core._bufferService.buffer
+        const lines = Array.from({ length: buffer.lines.length }, (_, index) =>
+          buffer.lines.get(index)?.translateToString(true),
+        )
+        expect(buffer.ybase).toBe(0)
+        expect(lines).toEqual(expect.arrayContaining(['new-1', 'new-2']))
+        expect(lines).not.toEqual(expect.arrayContaining(['old-1', 'old-2', 'old-3', 'old-4']))
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('serializes the active alternate screen while alternate screen is active', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(40, 6)
+      try {
+        appendTerminalReplayData(state, 'chat-1\r\nchat-2\r\n')
+        queueTerminalRenderWrite(state, 'chat-1\r\nchat-2\r\n')
+        appendTerminalReplayData(state, '\x1b[?1049hresume menu\r\nold session')
+        queueTerminalRenderWrite(state, '\x1b[?1049hresume menu\r\nold session')
+        const snapshot = await snapshotTerminalRenderState('term_1234567890123456', state)
+
+        expect(snapshot?.snapshot).toContain('\x1b[?1049h')
+        expect(snapshot?.snapshot).toContain('resume menu')
+        expect(snapshot?.snapshotSeq).toBe(2)
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+  })
+
+  describe('appendTerminalReplayData', () => {
+    test('increments sequence and appends data without truncation when under limit', () => {
+      const state = createEmptyTerminalRenderState()
+      const seq1 = appendTerminalReplayData(state, 'hello')
+      expect(seq1).toBe(1)
+      expect(state.buffer).toBe('hello')
+      expect(state.bufferTruncated).toBe(false)
+
+      const seq2 = appendTerminalReplayData(state, ' world')
+      expect(seq2).toBe(2)
+      expect(state.buffer).toBe('hello world')
+      expect(state.bufferTruncated).toBe(false)
+    })
+
+    test('truncates to maxChars and sets bufferTruncated flag', () => {
+      const state = createEmptyTerminalRenderState()
+      const big = 'a'.repeat(20 * 1024 * 1024) // 20 MB, over 16 MB limit
+      appendTerminalReplayData(state, big)
+      expect(state.buffer.length).toBeLessThanOrEqual(16 * 1024 * 1024 + 10) // allow margin for reset prefix
+      expect(state.bufferTruncated).toBe(true)
+    })
+
+    test('preserves the tail of a long buffer', () => {
+      const state = createEmptyTerminalRenderState()
+      const prefix = 'x'.repeat(5 * 1024 * 1024)
+      const suffix = 'tail-marker-12345'
+      appendTerminalReplayData(state, prefix + suffix)
+      expect(state.buffer).toContain(suffix)
+    })
+
+    test('prefixes ANSI reset after truncation for state safety', () => {
+      const state = createEmptyTerminalRenderState()
+      const big = 'a'.repeat(20 * 1024 * 1024)
+      appendTerminalReplayData(state, big)
+      expect(state.buffer.startsWith('\x1b[0m')).toBe(true)
+    })
+
+    test('does not break surrogate pairs at truncation boundary', () => {
+      const state = createEmptyTerminalRenderState()
+      // Build a string where a surrogate pair sits exactly at the 16 MB boundary
+      const pad = 'a'.repeat(16 * 1024 * 1024 - 1)
+      const pair = '\uD83D\uDE00' // 😀
+      appendTerminalReplayData(state, pad + pair + 'tail')
+      expect(state.buffer).toContain('tail')
+      // Should not contain a lone high or low surrogate at start of tail
+      const tailStart = state.buffer.indexOf('\x1b[0m') + 5
+      const firstCode = state.buffer.charCodeAt(tailStart)
+      const isLoneLow = firstCode >= 0xdc00 && firstCode <= 0xdfff
+      expect(isLoneLow).toBe(false)
+    })
+
+    test('strips incomplete CSI sequence at truncation boundary', () => {
+      const state = createEmptyTerminalRenderState()
+      // \x1b[31m sets red; truncate so tail starts inside the sequence
+      const pad = 'a'.repeat(16 * 1024 * 1024 - 3)
+      appendTerminalReplayData(state, pad + '\x1b[31mred-text')
+      // Tail should not start with an incomplete ESC sequence
+      const afterReset = state.buffer.slice(5) // after \x1b[0m
+      expect(afterReset.startsWith('\x1b[')).toBe(false)
+      expect(state.buffer).toContain('red-text')
+    })
+
+    test('preserves complete CSI sequence at truncation boundary', () => {
+      const state = createEmptyTerminalRenderState()
+      const pad = 'a'.repeat(16 * 1024 * 1024 - 10)
+      appendTerminalReplayData(state, pad + '\x1b[38;2;255;0;0mcolor')
+      expect(state.buffer).toContain('color')
+    })
+
+    test('prefers line boundary for clean visual cut', () => {
+      const state = createEmptyTerminalRenderState()
+      const line1 = 'first-line\n'
+      const line2 = 'second-line\n'
+      const line3 = 'third-line-tail'
+      const pad = 'x'.repeat(16 * 1024 * 1024 - line1.length - line2.length - line3.length + 1)
+      appendTerminalReplayData(state, pad + line1 + line2 + line3)
+      // Truncation discards the first line in the tail (it may be partial at the cut boundary)
+      // \x1b[0m is 4 chars
+      const afterReset = state.buffer.slice(4)
+      expect(afterReset.startsWith('second-line')).toBe(true)
+    })
+  })
+
+  describe('readTerminalRenderOutputExcerpt', () => {
+    test('returns final screen text without tmux redraw frames or SCS residue', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(60, 6)
+      try {
+        queueTerminalRenderWrite(state, 'build complete\r\n')
+        queueTerminalRenderWrite(state, '\x1b[6;1H\x1b[2K\x1b(B[hobgoblin0:node* "⠴ workspace"]')
+        queueTerminalRenderWrite(state, '\x1b[6;1H\x1b[2K\x1b(B[hobgoblin0:node* "done workspace"]')
+
+        const excerpt = await readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)
+
+        expect(excerpt).toMatchObject({ sessionId: 'term_1234567890123456' })
+        expect(excerpt?.output).toContain('build complete')
+        expect(excerpt?.output).toContain('[hobgoblin0:node* "done workspace"]')
+        expect(excerpt?.output).not.toContain('⠴')
+        expect(excerpt?.output).not.toContain('B[')
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('joins wrapped screen lines before truncating', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(5, 3)
+      try {
+        queueTerminalRenderWrite(state, 'abcdefghij')
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 20)).resolves.toMatchObject({
+          output: 'abcdefghij',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('reads the active alternate screen and applies Unicode-safe bounds', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(20, 3)
+      try {
+        queueTerminalRenderWrite(state, 'normal screen\x1b[?1049halt ab🙂de')
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 3)).resolves.toMatchObject({
+          output: '🙂de',
+        })
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 1)).resolves.toMatchObject({
+          output: 'e',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('returns an empty excerpt for an empty screen', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(20, 3)
+      try {
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)).resolves.toMatchObject({
+          output: '',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('includes retained normal-buffer scrollback', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(20, 2)
+      try {
+        queueTerminalRenderWrite(state, 'one\r\ntwo\r\nthree')
+        await expect(readTerminalRenderOutputExcerpt('term_1234567890123456', state, 400)).resolves.toMatchObject({
+          output: 'one two three',
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+  })
+
+  describe('readTerminalRenderScreenSnapshot', () => {
+    test('waits for parsing and returns the bounded tail of the active viewport', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(8, 3)
+      try {
+        appendTerminalReplayData(state, 'one\r\ntwo\r\nthree\r\nfour')
+        queueTerminalRenderWrite(state, 'one\r\ntwo\r\nthree\r\nfour')
+
+        await expect(
+          readTerminalRenderScreenSnapshot('term_1234567890123456', state, {
+            sessionId: 'term_1234567890123456',
+            maxColumns: 4,
+            maxRows: 2,
+          }),
+        ).resolves.toEqual({
+          sessionId: 'term_1234567890123456',
+          lines: ['thre', 'four'],
+          columns: 4,
+          rows: 2,
+          sequence: 1,
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+
+    test('preserves blank viewport rows without reading retained scrollback', async () => {
+      const state = createEmptyTerminalRenderState()
+      state.model = createTerminalRenderModel(12, 4)
+      try {
+        queueTerminalRenderWrite(state, 'visible')
+
+        await expect(
+          readTerminalRenderScreenSnapshot('term_1234567890123456', state, {
+            sessionId: 'term_1234567890123456',
+            maxColumns: 12,
+            maxRows: 4,
+          }),
+        ).resolves.toEqual({
+          sessionId: 'term_1234567890123456',
+          lines: ['visible', '', '', ''],
+          columns: 12,
+          rows: 4,
+          sequence: 0,
+        })
+      } finally {
+        state.model.term.dispose()
+      }
+    })
+  })
+})
+
+interface HeadlessTerminalWithBuffer {
+  _core: {
+    _bufferService: {
+      buffer: {
+        ybase: number
+        lines: {
+          length: number
+          get(index: number): { translateToString(trimRight?: boolean): string } | undefined
+        }
+      }
+    }
+  }
+}

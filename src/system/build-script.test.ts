@@ -177,6 +177,7 @@ describe('desktop build scripts', () => {
     for (const windowsTestPath of [
       'src/main/external-open.test.ts',
       'src/main/terminal.test.ts',
+      'src/main/windows-cli-project-open.test.ts',
       'src/server/terminal/terminal-pty-runtime.test.ts',
       'src/server/terminal/terminal-scope.test.ts',
       'src/shared/file-path-target.test.ts',
@@ -184,22 +185,26 @@ describe('desktop build scripts', () => {
       'src/shared/worktree-guards.test.ts',
       'src/system/open-app.test.ts',
       'src/system/terminals.test.ts',
+      'src/system/hob-cli-windows.test.ts',
       'src/system/windows-terminal.test.ts',
+      'src/system/windows-user-path.test.ts',
       'src/web/components/terminal/terminal-path-links.test.ts',
       'src/web/lib/editor-open-targets.test.ts',
       'src/web/lib/paths.test.ts',
     ]) {
       expect(windowsWorkflow).toContain(windowsTestPath)
     }
-    expect(windowsWorkflow).toContain(
-      'bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}',
-    )
+    expect(windowsWorkflow).toContain('scripts/build-release-artifacts.test.ts')
+    expect(windowsWorkflow).toContain('scripts/build-windows-fast.test.ts')
+    expect(windowsWorkflow).toContain('bun run build:release -- --arch ${{ matrix.arch }}')
+    expect(windowsWorkflow).toContain('working-directory: windows')
+    expect(windowsWorkflow).toContain('windows/package.json')
     expect(windowsWorkflow).toContain('Smoke test packaged Windows app startup')
     expect(windowsWorkflow).toContain('Hobgoblin Smoke 用户 Data')
     expect(windowsWorkflow).toContain('Hobgoblin Terminal 路径 Workspace')
     expect(windowsWorkflow).toContain('name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}')
-    expect(windowsWorkflow).toContain('path: release/Hobgoblin-*-${{ matrix.arch }}.exe')
+    expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(workflow).toContain('actions/setup-java@v4')
     expect(workflow).toContain('distribution: temurin')
     expect(workflow).toContain('java-version: 17')
@@ -253,9 +258,9 @@ describe('desktop build scripts', () => {
     } finally {
       rmSync(outputDir, { recursive: true, force: true })
     }
-  })
+  }, 20_000)
 
-  test('release artifact script validates platform-specific standard artifact names', () => {
+  test('root release artifact script only builds macOS artifacts', () => {
     const releaseScriptPath = path.join(repoRoot, 'scripts/build-release-artifacts.ts')
 
     expect(existsSync(releaseScriptPath)).toBe(true)
@@ -263,19 +268,20 @@ describe('desktop build scripts', () => {
     const releaseScript = readText('scripts/build-release-artifacts.ts')
 
     expect(releaseScript).toContain("const APP_NAME = 'Hobgoblin'")
-    expect(releaseScript).toContain("type ReleasePlatform = 'macos' | 'windows'")
+    expect(releaseScript).toContain("type ReleasePlatform = 'macos'")
     expect(releaseScript).toContain("type ReleaseArch = 'arm64' | 'x64'")
-    expect(releaseScript).toContain("macos: ['arm64', 'x64']")
-    expect(releaseScript).toContain("windows: ['arm64', 'x64']")
+    expect(releaseScript).toContain("const SUPPORTED_ARCHES: ReleaseArch[] = ['arm64', 'x64']")
     expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.dmg`')
-    expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.exe`')
-    expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))")
+    expect(releaseScript).not.toContain("'windows'")
+    expect(releaseScript).not.toContain('return `${APP_NAME}-${version}-${arch}.exe`')
+    expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, arch))")
     expect(releaseScript).toContain("const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')")
     expect(releaseScript).toContain('await $`bun ${viteCli} build`')
     expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
     expect(releaseScript).toContain(
       "const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')",
     )
+    expect(releaseScript).toContain("const platformArgs = ['--mac', 'dmg']")
     expect(releaseScript).toContain('await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`')
   })
 
@@ -300,13 +306,10 @@ describe('desktop build scripts', () => {
     expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
-  test('desktop release packaging config includes Windows ARM64 and x64 NSIS output', () => {
+  test('root desktop packaging delegates Windows artifacts to the Windows package', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
-    expect(config.win?.target).toEqual([{ target: 'nsis', arch: ['arm64', 'x64'] }])
-    expect(config.win?.artifactName).toBe('${productName}-${version}-${arch}.${ext}')
-    expect(config.nsis?.oneClick).toBe(false)
-    expect(config.nsis?.perMachine).toBe(false)
-    expect(config.nsis?.allowToChangeInstallationDirectory).toBe(true)
+    expect(config.win).toBeUndefined()
+    expect(config.nsis).toBeUndefined()
   })
 })

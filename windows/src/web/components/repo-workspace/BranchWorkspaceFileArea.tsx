@@ -1,0 +1,154 @@
+import { useState, type ReactNode } from 'react'
+import {
+  ChevronsLeft,
+  ChevronsRight,
+  FolderGit,
+  FolderTree,
+  GitBranch,
+  GitCompareArrows,
+  GitFork,
+  History,
+} from 'lucide-react'
+import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { localRepoSessionEntry, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import { Toolbar } from '#/web/components/Layout.tsx'
+import { BranchWorkspaceAggregatePanel } from '#/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx'
+import { BranchWorkspaceFileTree } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
+import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
+import { cn } from '#/web/lib/cn.ts'
+import { useT } from '#/web/stores/i18n.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { useDetachFileArea } from '#/web/hooks/useDetachFileArea.ts'
+
+export type BranchWorkspaceFileAreaTab = 'status' | 'files' | 'changes' | 'history' | 'local' | 'remoteBranches'
+
+export function BranchWorkspaceFileArea({
+  workspace,
+  context,
+  activeTab,
+  onTabChange,
+  onRevealPath,
+  revealRequest,
+  toolbarLeading,
+}: {
+  workspace: BranchWorkspaceSnapshot
+  context: BranchWorkspaceFolderContext
+  activeTab: BranchWorkspaceFileAreaTab
+  onTabChange: (tab: BranchWorkspaceFileAreaTab) => void
+  onRevealPath?: (relativePath: string) => void
+  revealRequest?: { id: number; relativePath: string } | null
+  toolbarLeading?: ReactNode
+}) {
+  const t = useT()
+  const remoteTarget = useReposStore((state) => state.repos[context.rootId]?.remote.target)
+  const root = remoteTarget ? remoteRepoSessionEntry(remoteTarget) : localRepoSessionEntry(context.rootId)
+  const detach = useDetachFileArea({
+    kind: 'branch-workspace',
+    root,
+    branchWorkspaceId: workspace.id,
+    tab: activeTab,
+  })
+  const [overflowExpanded, setOverflowExpanded] = useState(false)
+  const tabs = [
+    { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
+    { id: 'files' as const, label: t('file-tree.title'), icon: FolderTree },
+    { id: 'changes' as const, label: t('tab.changes'), icon: GitCompareArrows },
+    { id: 'history' as const, label: t('tab.history'), icon: History },
+    { id: 'local' as const, label: t('tab.local'), icon: FolderGit },
+    { id: 'remoteBranches' as const, label: t('tab.remote-branches'), icon: GitFork },
+  ]
+  const primaryTabs = tabs.slice(0, 3)
+  const overflowTabs = tabs.slice(3)
+
+  const renderTab = (tab: (typeof tabs)[number]) => {
+    return (
+      <BranchWorkspaceFileAreaTabButton
+        key={tab.id}
+        tab={tab}
+        selected={tab.id === activeTab}
+        onSelect={() => onTabChange(tab.id)}
+      />
+    )
+  }
+
+  return (
+    <section
+      data-branch-workspace-file-area={workspace.id}
+      className="project-file-area-tone flex min-h-0 flex-1 flex-col overflow-hidden bg-pane"
+    >
+      <Toolbar
+        data-testid="branch-workspace-file-area-toolbar"
+        className={cn('gap-0.5 border-y-0 px-2', detach.dragging && 'opacity-70 ring-1 ring-ring')}
+        variant="detail"
+        tabIndex={detach.enabled ? 0 : undefined}
+        {...detach.bindings}
+      >
+        {toolbarLeading}
+        <div role="tablist" aria-label={t('file-tree.title')} className="flex min-w-0 items-center gap-0.5">
+          {primaryTabs.map(renderTab)}
+          {(overflowExpanded ? overflowTabs : overflowTabs.filter((tab) => tab.id === activeTab)).map(renderTab)}
+          <Button
+            type="button"
+            variant="ghost"
+            data-testid="branch-workspace-tabs-overflow-toggle"
+            aria-expanded={overflowExpanded}
+            aria-label={t(overflowExpanded ? 'file-tree.tabs.collapse' : 'file-tree.tabs.expand')}
+            onClick={() => setOverflowExpanded((expanded) => !expanded)}
+            className="h-7 border border-separator px-2 text-muted-foreground hover:bg-tab-hover hover:text-foreground"
+          >
+            {overflowExpanded ? (
+              <ChevronsLeft className="size-3.5 shrink-0" aria-hidden="true" />
+            ) : (
+              <ChevronsRight className="size-3.5 shrink-0" aria-hidden="true" />
+            )}
+          </Button>
+        </div>
+      </Toolbar>
+      {activeTab === 'files' ? (
+        <BranchWorkspaceFileTree context={context} revealRequest={revealRequest} />
+      ) : (
+        <BranchWorkspaceAggregatePanel
+          workspace={workspace}
+          kind={activeTab}
+          onRevealPath={
+            activeTab === 'changes' || activeTab === 'history'
+              ? (memberName, relativePath) => onRevealPath?.(`${memberName}/${relativePath}`)
+              : undefined
+          }
+        />
+      )}
+    </section>
+  )
+}
+
+function BranchWorkspaceFileAreaTabButton({
+  tab,
+  selected,
+  onSelect,
+}: {
+  tab: { id: BranchWorkspaceFileAreaTab; label: string; icon: typeof FolderTree }
+  selected: boolean
+  onSelect: () => void
+}) {
+  const Icon = tab.icon
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      role="tab"
+      aria-selected={selected}
+      tabIndex={selected ? 0 : -1}
+      onClick={onSelect}
+      className={cn(
+        'h-7 gap-1 border px-2 text-[length:var(--goblin-file-tree-topbar-font-size)] font-normal',
+        selected
+          ? 'border-input bg-tab-active text-foreground'
+          : 'border-separator text-muted-foreground hover:bg-tab-hover hover:text-foreground',
+      )}
+    >
+      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+      {tab.label}
+    </Button>
+  )
+}

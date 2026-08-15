@@ -1,0 +1,31 @@
+export const SETTINGS_PAGES = [
+  'general',
+  'terminal',
+  'shortcuts',
+  'notifications',
+  'ssh',
+  'sync',
+  'proxy',
+  'apps',
+  'lan',
+  'about',
+] as const
+
+export type SettingsPage = (typeof SETTINGS_PAGES)[number]
+
+export function isSettingsPage(value: string | null | undefined): value is SettingsPage {
+  return value !== undefined && value !== null && SETTINGS_PAGES.includes(value as SettingsPage)
+}
+
+export const SETTINGS_PAGE_CONFIG = {
+  general: { titleKey: 'settings.group.general', labelKey: 'settings.group.general' },
+  terminal: { titleKey: 'settings.terminal-custom-buttons.title', labelKey: 'settings.nav.terminal' },
+  shortcuts: { titleKey: 'settings.shortcuts', labelKey: 'settings.nav.shortcuts' },
+  notifications: { titleKey: 'settings.nav.notifications', labelKey: 'settings.nav.notifications' },
+  ssh: { titleKey: 'settings.ssh.title', labelKey: 'settings.nav.ssh' },
+  sync: { titleKey: 'settings.nav.refresh', labelKey: 'settings.nav.refresh' },
+  proxy: { titleKey: 'settings.proxy.title', labelKey: 'settings.nav.proxy' },
+  apps: { titleKey: 'settings.group.apps', labelKey: 'settings.group.apps' },
+  lan: { titleKey: 'settings.lan.title', labelKey: 'settings.nav.lan' },
+  about: { titleKey: 'settings.about', labelKey: 'settings.about' },
+} as const satisfies Record<SettingsPage, { titleKey: string; labelKey: string }>

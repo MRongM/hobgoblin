@@ -115,7 +115,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION="$(bun -e "const pkg = await Bun.file('package.json').json(); console.log(pkg.version)")"
+          VERSION="$(bun -e "const root = await Bun.file('package.json').json(); const windows = await Bun.file('windows/package.json').json(); if (root.version !== windows.version) { throw new Error(\`windows/package.json version \${windows.version} must equal root package.json version \${root.version}\`) }; console.log(root.version)")"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid package.json version: $VERSION" >&2
             exit 1

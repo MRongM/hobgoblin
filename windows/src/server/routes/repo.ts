@@ -1,0 +1,793 @@
+import { Hono } from 'hono'
+import { getBackgroundSyncRepos, setBackgroundSyncRepos } from '#/server/modules/background-sync.ts'
+import { exportRepositoryFilesToLocalDirectory } from '#/server/modules/repo-file-export.ts'
+import { transferRepositoryFiles } from '#/server/modules/repo-file-transfer.ts'
+import {
+  generateRepositoryCommitMessage,
+  getCommitMessageProviders,
+  getRepositoryCommitDetail,
+  getRepositoryFileTree,
+  getRepositoryHistory,
+  getRepositoryLocalTags,
+  getRepositoryPatch,
+  searchRepositoryFileTree,
+  getRepositorySnapshot,
+  getRepositoryStatus,
+  probeRepository,
+  readRepositoryFileTreeTextFile,
+  readRepositoryFileTreeBinaryFile,
+} from '#/server/modules/repo-read-paths.ts'
+import {
+  abortCloneOperation,
+  abortRepositoryOperation,
+  checkoutRepositoryBranch,
+  checkoutWorktreeBranch,
+  cleanupRepositoryWorktree,
+  cloneRepository,
+  commitRepositoryChanges,
+  createRepositoryBranch,
+  createRepositoryFileTreeDirectory,
+  createRepositoryFileTreeFile,
+  createRepositoryWorktree,
+  discardRepositoryChanges,
+  deleteRepositoryFileTreeEntries,
+  deleteRepositoryBranch,
+  deleteRepositoryRemoteBranch,
+  deleteRepositoryRemoteTag,
+  deleteRepositoryLocalTag,
+  pushRepositoryLocalTag,
+  fetchRepository,
+  getRepositoryRemoteBranches,
+  getRepositoryRemoteTags,
+  createRepositoryLocalTag,
+  initRepository,
+  mergeRepositoryBranchSelection,
+  moveRepositoryFileTreeEntries,
+  openRepositoryEditor,
+  openRepositoryRemote,
+  openRepositoryTerminal,
+  pullRepositoryBranch,
+  pushRepositoryBranch,
+  renameRepositoryFileTreeEntry,
+  replaceRepositoryFileTreeBinaryFile,
+  replaceRepositoryFileTreeTextFile,
+  removeRepositoryWorktree,
+  resetRepositoryHard,
+  setRepositoryBranchUpstream,
+  trackRepositoryRemoteBranch,
+} from '#/server/modules/repo-write-paths.ts'
+import { getServerFetchIntervalSec } from '#/server/modules/settings-source.ts'
+import { buildRepositoryBranchMergeOutPlan } from '#/server/modules/repository-branch-merge-plan.ts'
+import { executeRepositoryBranchMergeOut } from '#/server/modules/repository-branch-merge-write-paths.ts'
+import { routeEditorTarget } from '#/server/routes/editor-target.ts'
+import {
+  normalizeWorktreeBootstrapSourcePath,
+  normalizeWorktreeBootstrapSelections,
+  type WorktreeBootstrapDecision,
+} from '#/shared/worktree-bootstrap-summary.ts'
+import {
+  isRepoFileTreeBinaryFileReadRequest,
+  isRepoFileTreeBinaryFileReplaceRequest,
+  normalizeFileTreeSearchLimit,
+} from '#/shared/file-tree.ts'
+import { normalizeRepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
+
+export function createRepoRoutes() {
+  const app = new Hono()
+  async function jsonOr<T>(run: () => Promise<T>, fallback: T, label: string) {
+    try {
+      return await run()
+    } catch (err) {
+      console.warn(`[server][repo] ${label} failed`, err)
+      return fallback
+    }
+  }
+  function boundedInt(value: unknown, fallback: number, min: number, max: number): number {
+    const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
+    if (!Number.isFinite(parsed)) return fallback
+    return Math.max(min, Math.min(max, parsed))
+  }
+  function normalizeRouteWorktreeBootstrapDecision(value: unknown): WorktreeBootstrapDecision {
+    if (!value || typeof value !== 'object') return { kind: 'skip' }
+    const raw = value as Record<string, unknown>
+    if (raw.kind === 'skip') return { kind: 'skip' }
+    if (raw.kind === 'materialize') {
+      const sourceWorktreePath = normalizeWorktreeBootstrapSourcePath(raw.sourceWorktreePath)
+      const selections = normalizeWorktreeBootstrapSelections(raw.selections)
+      return sourceWorktreePath && selections.length > 0
+        ? { kind: 'materialize', sourceWorktreePath, selections }
+        : { kind: 'skip' }
+    }
+    return { kind: 'skip' }
+  }
+  app.post('/probe', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => probeRepository(cwd), { ok: false, message: 'error.failed-read-repo' }, 'probe'))
+  })
+  app.post('/snapshot', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositorySnapshot(cwd, c.req.raw.signal), null, 'snapshot'))
+  })
+  app.post('/status', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositoryStatus(cwd, c.req.raw.signal), [], 'status'))
+  })
+  app.post('/history', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const limit = boundedInt(body?.limit, 100, 1, 200)
+    const skip = boundedInt(body?.skip, 0, 0, Number.MAX_SAFE_INTEGER)
+    return c.json(
+      await jsonOr(() => getRepositoryHistory(repoId, branch, { limit, skip }, c.req.raw.signal), [], 'history'),
+    )
+  })
+  app.post('/commit-detail', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const commit = typeof body?.commit === 'string' ? body.commit : ''
+    return c.json(
+      await jsonOr(() => getRepositoryCommitDetail(repoId, commit, c.req.raw.signal), null, 'commit-detail'),
+    )
+  })
+  app.post('/remote-branches', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositoryRemoteBranches(cwd, c.req.raw.signal), [], 'remote-branches'))
+  })
+  app.post('/remote-tags', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositoryRemoteTags(cwd, c.req.raw.signal), [], 'remote-tags'))
+  })
+  app.post('/local-tags', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => getRepositoryLocalTags(cwd, c.req.raw.signal), [], 'local-tags'))
+  })
+  app.post('/patch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    return c.json(
+      await jsonOr(
+        () => getRepositoryPatch(cwd, worktreePath, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'patch',
+      ),
+    )
+  })
+  app.post('/commit-message-providers', async (c) => {
+    return c.json(
+      await jsonOr(
+        () => getCommitMessageProviders(c.req.raw.signal),
+        { codex: false, claude: false },
+        'commit-message-providers',
+      ),
+    )
+  })
+  app.post('/generate-commit-message', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    return c.json(
+      await jsonOr(
+        () => generateRepositoryCommitMessage(repoId, worktreePath, body?.provider, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'generate-commit-message',
+      ),
+    )
+  })
+  app.post('/file-tree', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const dirPath = typeof body?.dirPath === 'string' ? body.dirPath : ''
+    return c.json(
+      await jsonOr(
+        () => getRepositoryFileTree(repoId, worktreePath, dirPath, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree',
+      ),
+    )
+  })
+  app.post('/file-search', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const query = typeof body?.query === 'string' ? body.query : ''
+    const limit = normalizeFileTreeSearchLimit(body?.limit)
+    return c.json(
+      await jsonOr(
+        () => searchRepositoryFileTree(repoId, worktreePath, query, limit, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-search',
+      ),
+    )
+  })
+  app.post('/file-tree/rename', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const oldPath = typeof body?.oldPath === 'string' ? body.oldPath : ''
+    const newName = typeof body?.newName === 'string' ? body.newName : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => renameRepositoryFileTreeEntry(repoId, worktreePath, oldPath, newName, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-rename',
+      ),
+    )
+  })
+  app.post('/file-tree/create-directory', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const parentDirPath = typeof body?.parentDirPath === 'string' ? body.parentDirPath : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () =>
+          createRepositoryFileTreeDirectory(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-create-directory',
+      ),
+    )
+  })
+  app.post('/file-tree/create-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const parentDirPath = typeof body?.parentDirPath === 'string' ? body.parentDirPath : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => createRepositoryFileTreeFile(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-create-file',
+      ),
+    )
+  })
+  app.post('/file-tree/read-text-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const filePath = typeof body?.filePath === 'string' ? body.filePath : ''
+    return c.json(
+      await jsonOr(
+        () => readRepositoryFileTreeTextFile(repoId, worktreePath, filePath, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-read-text-file',
+      ),
+    )
+  })
+  app.post('/file-tree/replace-text-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const filePath = typeof body?.filePath === 'string' ? body.filePath : ''
+    const content = typeof body?.content === 'string' ? body.content : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => replaceRepositoryFileTreeTextFile(repoId, worktreePath, filePath, content, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-replace-text-file',
+      ),
+    )
+  })
+  app.post('/file-tree/read-binary-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isRepoFileTreeBinaryFileReadRequest(body)) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(
+      await jsonOr(
+        () =>
+          readRepositoryFileTreeBinaryFile(
+            body.repoId,
+            body.worktreePath,
+            body.filePath,
+            body.maxBytes,
+            c.req.raw.signal,
+          ),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-read-binary-file',
+      ),
+    )
+  })
+  app.post('/file-tree/replace-binary-file', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const sourceToken =
+      typeof body === 'object' && body !== null && 'sourceToken' in body && typeof body.sourceToken === 'string'
+        ? body.sourceToken
+        : undefined
+    if (!isRepoFileTreeBinaryFileReplaceRequest(body)) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(
+      await jsonOr(
+        () =>
+          replaceRepositoryFileTreeBinaryFile(
+            body.repoId,
+            body.worktreePath,
+            body.filePath,
+            body.bytesBase64,
+            body.maxBytes,
+            c.req.raw.signal,
+            sourceToken,
+          ),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-replace-binary-file',
+      ),
+    )
+  })
+  app.post('/file-tree/delete', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const paths = Array.isArray(body?.paths)
+      ? body.paths.filter((item: unknown): item is string => typeof item === 'string')
+      : []
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryFileTreeEntries(repoId, worktreePath, paths, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-delete',
+      ),
+    )
+  })
+  app.post('/file-tree/move', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const paths = Array.isArray(body?.paths)
+      ? body.paths.filter((item: unknown): item is string => typeof item === 'string')
+      : []
+    const targetDirPath = typeof body?.targetDirPath === 'string' ? body.targetDirPath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => moveRepositoryFileTreeEntries(repoId, worktreePath, paths, targetDirPath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-tree-move',
+      ),
+    )
+  })
+  app.post('/file-transfer', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(
+        () => transferRepositoryFiles(body),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-transfer',
+      ),
+    )
+  })
+  app.post('/file-export', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(
+        () => exportRepositoryFilesToLocalDirectory(body),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-export',
+      ),
+    )
+  })
+  app.post('/fetch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const kind = body?.kind === 'background' ? 'background' : 'user'
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => fetchRepository(cwd, kind, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'fetch',
+      ),
+    )
+  })
+  app.post('/clone', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const operationId = typeof body?.operationId === 'string' ? body.operationId : ''
+    const url = typeof body?.url === 'string' ? body.url : ''
+    const parentPath = typeof body?.parentPath === 'string' ? body.parentPath : ''
+    const directoryName = typeof body?.directoryName === 'string' ? body.directoryName : ''
+    return c.json(
+      await jsonOr(
+        () => cloneRepository(operationId, url, parentPath, directoryName),
+        { ok: false, message: 'error.failed-read-repo' },
+        'clone',
+      ),
+    )
+  })
+  app.post('/abort-clone', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const operationId = typeof body?.operationId === 'string' ? body.operationId : ''
+    return c.json(await jsonOr(async () => abortCloneOperation(operationId), false, 'abort-clone'))
+  })
+  app.post('/checkout', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => checkoutRepositoryBranch(cwd, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'checkout',
+      ),
+    )
+  })
+  app.post('/pull', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : undefined
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => pullRepositoryBranch(cwd, branch, worktreePath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'pull',
+      ),
+    )
+  })
+  app.post('/push', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => pushRepositoryBranch(cwd, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'push',
+      ),
+    )
+  })
+  app.post('/create-worktree', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const input = {
+      worktreePath,
+      mode: body?.mode,
+      syncBeforeCreate: body?.syncBeforeCreate ?? false,
+    } as Parameters<typeof createRepositoryWorktree>[1]
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    const worktreeBootstrap = normalizeRouteWorktreeBootstrapDecision(body?.worktreeBootstrap)
+    return c.json(
+      await jsonOr(
+        () => createRepositoryWorktree(cwd, input, worktreeBootstrap, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'create-worktree',
+      ),
+    )
+  })
+  app.post('/create-branch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const baseBranch = typeof body?.baseBranch === 'string' ? body.baseBranch : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => createRepositoryBranch(cwd, branch, baseBranch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'create-branch',
+      ),
+    )
+  })
+  app.post('/track-remote-branch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const localBranch = typeof body?.localBranch === 'string' ? body.localBranch : ''
+    const remoteRef = typeof body?.remoteRef === 'string' ? body.remoteRef : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => trackRepositoryRemoteBranch(cwd, localBranch, remoteRef, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'track-remote-branch',
+      ),
+    )
+  })
+  app.post('/set-branch-upstream', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const remoteRef = body?.remoteRef === null ? null : typeof body?.remoteRef === 'string' ? body.remoteRef : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => setRepositoryBranchUpstream(cwd, branch, remoteRef, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'set-branch-upstream',
+      ),
+    )
+  })
+  app.post('/delete-branch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const force = body?.force === true
+    const alsoDeleteUpstream = body?.alsoDeleteUpstream === true
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryBranch(cwd, branch, { force, alsoDeleteUpstream }, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-branch',
+      ),
+    )
+  })
+  app.post('/delete-remote-branch', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const remote = typeof body?.remote === 'string' ? body.remote : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryRemoteBranch(cwd, remote, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-remote-branch',
+      ),
+    )
+  })
+  app.post('/delete-remote-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const remote = typeof body?.remote === 'string' ? body.remote : ''
+    const tag = typeof body?.tag === 'string' ? body.tag : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryRemoteTag(cwd, remote, tag, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-remote-tag',
+      ),
+    )
+  })
+  app.post('/create-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const ref = typeof body?.ref === 'string' ? body.ref : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => createRepositoryLocalTag(cwd, name, ref, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'create-local-tag',
+      ),
+    )
+  })
+  app.post('/delete-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => deleteRepositoryLocalTag(cwd, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'delete-local-tag',
+      ),
+    )
+  })
+  app.post('/push-local-tag', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const name = typeof body?.name === 'string' ? body.name : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => pushRepositoryLocalTag(cwd, name, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'push-local-tag',
+      ),
+    )
+  })
+  app.post('/remove-worktree', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const alsoDeleteBranch = body?.alsoDeleteBranch === true
+    const forceRemoveWorktree = body?.forceRemoveWorktree === true
+    const forceDeleteBranch = body?.forceDeleteBranch === true
+    const alsoDeleteUpstream = body?.alsoDeleteUpstream === true
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () =>
+          removeRepositoryWorktree(
+            cwd,
+            { branch, worktreePath, alsoDeleteBranch, forceRemoveWorktree, forceDeleteBranch, alsoDeleteUpstream },
+            c.req.raw.signal,
+            sourceToken,
+          ),
+        { ok: false, message: 'error.failed-read-repo' },
+        'remove-worktree',
+      ),
+    )
+  })
+  app.post('/cleanup-worktree', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => cleanupRepositoryWorktree(cwd, worktreePath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'cleanup-worktree',
+      ),
+    )
+  })
+  app.post('/open-remote', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : undefined
+    return c.json(
+      await jsonOr(
+        () => openRepositoryRemote(cwd, branch, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'open-remote',
+      ),
+    )
+  })
+  app.post('/open-terminal', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const projectRoot = typeof body?.projectRoot === 'string' ? body.projectRoot : ''
+    const workingDirectory = typeof body?.workingDirectory === 'string' ? body.workingDirectory : ''
+    return c.json(
+      await jsonOr(
+        () => openRepositoryTerminal({ projectRoot, workingDirectory }),
+        { ok: false, message: 'error.failed-read-repo' },
+        'open-terminal',
+      ),
+    )
+  })
+  app.post('/open-editor', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const target = routeEditorTarget(body?.target)
+    const path = typeof body?.path === 'string' ? body.path : ''
+    return c.json(
+      await jsonOr(
+        () => openRepositoryEditor(target ?? path),
+        { ok: false, message: 'error.failed-read-repo' },
+        'open-editor',
+      ),
+    )
+  })
+  app.post('/background-sync-repos', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoIds = Array.isArray(body?.repoIds)
+      ? body.repoIds.filter((repoId: unknown): repoId is string => typeof repoId === 'string' && repoId.length > 0)
+      : []
+    return c.json(
+      await jsonOr(
+        async () => {
+          await setBackgroundSyncRepos(repoIds)
+          return { ok: true, repoIds: getBackgroundSyncRepos(), intervalSec: await getServerFetchIntervalSec() }
+        },
+        { ok: true as const, repoIds: [], intervalSec: 0 },
+        'background-sync-repos',
+      ),
+    )
+  })
+  app.post('/abort', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(async () => abortRepositoryOperation(cwd), false, 'abort'))
+  })
+  app.post('/checkout-in-worktree', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => checkoutWorktreeBranch(repoId, worktreePath, branch, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'checkout-in-worktree',
+      ),
+    )
+  })
+  app.post('/commit', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const message = typeof body?.message === 'string' ? body.message : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => commitRepositoryChanges(repoId, worktreePath, message, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'commit',
+      ),
+    )
+  })
+  app.post('/merge', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const source =
+      normalizeRepositoryMergeBranchSelection(body?.source) ??
+      normalizeRepositoryMergeBranchSelection({ kind: 'local', branch: body?.branch })
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    if (!source) return c.json({ ok: false, message: 'error.invalid-arguments' })
+    return c.json(
+      await jsonOr(
+        () => mergeRepositoryBranchSelection(repoId, worktreePath, source, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'merge',
+      ),
+    )
+  })
+  app.post('/merge-out-plan', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    return c.json(
+      await jsonOr(
+        () => buildRepositoryBranchMergeOutPlan(body ?? {}, {}, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'merge-out-plan',
+      ),
+    )
+  })
+  app.post('/merge-out', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => executeRepositoryBranchMergeOut(body ?? {}, {}, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'merge-out',
+      ),
+    )
+  })
+  app.post('/reset-hard', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => resetRepositoryHard(repoId, worktreePath, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'reset-hard',
+      ),
+    )
+  })
+  app.post('/discard-changes', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const paths = Array.isArray(body?.paths) ? body.paths : []
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    return c.json(
+      await jsonOr(
+        () => discardRepositoryChanges(repoId, worktreePath, paths, c.req.raw.signal, sourceToken),
+        { ok: false, message: 'error.failed-read-repo' },
+        'discard-changes',
+      ),
+    )
+  })
+  app.post('/init', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
+    return c.json(await jsonOr(() => initRepository(cwd), { ok: false, message: 'error.failed-read-repo' }, 'init'))
+  })
+  return app
+}

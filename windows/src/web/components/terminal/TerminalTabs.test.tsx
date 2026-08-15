@@ -1,0 +1,1311 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import type { ReactNode } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
+import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
+
+const toastError = vi.hoisted(() => vi.fn())
+
+vi.mock('sonner', () => ({ toast: { error: toastError } }))
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+const reactActEnvironment = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT?: boolean
+  goblinNative?: unknown
+}
+
+beforeEach(() => {
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  vi.useFakeTimers()
+  toastError.mockClear()
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  })
+  reactActEnvironment.goblinNative = {
+    homeDir: '/Users/tester',
+    pathForFile: () => '',
+    invokeRpc: async () => null,
+    abortRpc: async () => true,
+    onEvent: () => () => {},
+  }
+})
+
+afterEach(() => {
+  act(() => {
+    root?.unmount()
+  })
+  container?.remove()
+  root = null
+  container = null
+  document.body.innerHTML = ''
+  delete reactActEnvironment.goblinNative
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView
+  vi.useRealTimers()
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+})
+
+describe('TerminalTabs', () => {
+  test('marks tab containers interactive so the Electron window drag region does not swallow tab drags', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', terminalId: 'terminal-1', index: 1, selected: true }),
+          session({ key: 't2', terminalId: 'terminal-2', index: 2, title: 'term-2', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    for (const key of ['t1', 't2']) {
+      const tab = document.body.querySelector(`[data-terminal-tab-tooltip-id="${key}"]`)
+      if (!(tab instanceof HTMLElement)) throw new Error(`missing terminal tab ${key}`)
+      expect(tab.hasAttribute('data-interactive')).toBe(true)
+    }
+  })
+
+  test('shows terminal tooltip content with only the original title', async () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({
+            key: 't1',
+            selected: true,
+            originalTitle: '~/repo/worktree — npm run dev',
+          }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('[data-terminal-tab-tooltip-id="t1"]')
+    if (!(tab instanceof HTMLElement)) throw new Error('missing terminal tab')
+    tab.getBoundingClientRect = () =>
+      ({
+        left: 12,
+        top: 8,
+        width: 120,
+        height: 28,
+        right: 132,
+        bottom: 36,
+        x: 12,
+        y: 8,
+        toJSON: () => ({}),
+      }) as DOMRect
+
+    act(() => {
+      tab.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }))
+    })
+    await flushTimers()
+
+    const tooltip = document.body.querySelector('[role="tooltip"]')
+    expect(tooltip?.textContent).toContain('~/repo/worktree — npm run dev')
+    expect(tooltip?.textContent).not.toContain('node')
+    expect(tooltip?.textContent).not.toContain('~/Developer/goblin')
+  })
+
+  test('uses the selected compact terminal chrome as the dropdown trigger and switches sessions', async () => {
+    const onSelect = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: false, title: 'term-1' }),
+          session({ key: 't2', selected: true, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.sessions"]')
+    const chrome = trigger?.closest<HTMLElement>('[data-terminal-tab-tooltip-id="t2"]')
+    expect(chrome).not.toBeNull()
+    expect(chrome?.className).toContain('w-full')
+    expect(chrome?.classList.contains('min-w-0')).toBe(true)
+    expect(chrome?.classList.contains('max-w-[100dvw]')).toBe(true)
+    expect(chrome?.classList.contains('shrink')).toBe(true)
+    expect(chrome?.classList.contains('shrink-0')).toBe(false)
+    expect(trigger?.querySelector('.lucide-chevron-down')).not.toBeNull()
+
+    await openCompactTerminalDropdown()
+
+    const selectedItem = [...document.body.querySelectorAll('[role="menuitem"]')].find((item) =>
+      item.textContent?.includes('term-2'),
+    )
+    expect(selectedItem?.getAttribute('aria-current')).toBe('true')
+    expect(document.body.textContent).toContain('terminal.new')
+
+    clickElementByText('term-1')
+    expect(onSelect).toHaveBeenCalledWith(String.raw`/repo\0/repo/worktree`, 't1')
+  })
+
+  test('keeps direct creation native and exposes explicit tmux creation in terminal menus', async () => {
+    const onNew = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[session()]}
+        onNew={onNew}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.new-with-tmux')
+    expect(onNew).toHaveBeenCalledWith('tmux-if-available')
+
+    onNew.mockClear()
+    await clickTabContextMenuItem('t1', 'terminal.new')
+    expect(onNew).toHaveBeenCalledWith('native')
+  })
+
+  test('keeps the compact close action outside the terminal dropdown trigger', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        panelActive
+        sessions={[session({ key: 't1', selected: true, title: 'term-1' })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.sessions"]')
+    const chrome = trigger?.closest<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
+    const closeButton = chrome?.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+    if (!closeButton) throw new Error('missing compact terminal close button')
+
+    act(() => {
+      closeButton.click()
+    })
+
+    expect(document.body.querySelector('[role="menu"]')).toBeNull()
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
+  })
+
+  test('closes an untouched compact terminal without confirmation', () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        panelActive
+        sessions={[session({ key: 't1', selected: true, title: 'term-1', hasUserInput: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    const chrome = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id="t1"]')
+    const closeButton = chrome?.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+    if (!closeButton) throw new Error('missing compact terminal close button')
+    act(() => closeButton.click())
+
+    expect(onClose).toHaveBeenCalledWith('t1')
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
+  test('requires confirmation before closing all compact dropdown terminals', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: false, title: 'term-1' }),
+          session({ key: 't2', selected: true, title: 'term-2' }),
+          session({ key: 't3', selected: false, title: 'term-3' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.close-all')
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-body')
+
+    clickElementByText('terminal.close-all-confirm-confirm')
+
+    expect(onClose.mock.calls).toEqual([['t1'], ['t2'], ['t3']])
+  })
+
+  test('cancels compact dropdown bulk close without closing terminals', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    clickElementByText('terminal.close-all')
+    clickElementByText('dialog.cancel')
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('terminal.close-all-confirm-title')
+  })
+
+  test('confirms terminal tab context-menu close scopes before closing sessions', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2' }),
+          session({ key: 't3', selected: false, title: 'term-3' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await clickTabContextMenuItem('t2', 'terminal.close-current')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
+    clickElementByText('terminal.close-confirm-confirm')
+    expect(onClose.mock.calls).toEqual([['t2']])
+
+    onClose.mockClear()
+    await clickTabContextMenuItem('t2', 'terminal.close-others')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-others-confirm-title')
+    clickElementByText('terminal.close-others-confirm-confirm')
+    expect(onClose.mock.calls).toEqual([['t1'], ['t3']])
+
+    onClose.mockClear()
+    await clickTabContextMenuItem('t2', 'terminal.close-all')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
+    clickElementByText('terminal.close-all-confirm-confirm')
+    expect(onClose.mock.calls).toEqual([['t1'], ['t2'], ['t3']])
+  })
+
+  test('closes only the untouched current terminal immediately while preserving bulk confirmation', async () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1', hasUserInput: false }),
+          session({ key: 't2', selected: false, title: 'term-2', hasUserInput: false }),
+          session({ key: 't3', selected: false, title: 'term-3', hasUserInput: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await clickTabContextMenuItem('t2', 'terminal.close-current')
+    expect(onClose).toHaveBeenCalledWith('t2')
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+
+    onClose.mockClear()
+    await clickTabContextMenuItem('t2', 'terminal.close-others')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-others-confirm-title')
+    clickElementByText('dialog.cancel')
+
+    await clickTabContextMenuItem('t2', 'terminal.close-all')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-all-confirm-title')
+  })
+
+  test('cancels terminal tab context-menu close without closing sessions', async () => {
+    const onClose = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    await clickTabContextMenuItem('t1', 'terminal.close-others')
+    clickElementByText('dialog.cancel')
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('terminal.close-others-confirm-title')
+  })
+
+  test('keeps close-other-terminals enabled on the compact selected tab when other sessions exist', async () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: false, title: 'term-1' }),
+          session({ key: 't2', selected: true, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openTabContextMenu('t2')
+
+    const closeOthers = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+      candidate.textContent?.includes('terminal.close-others'),
+    )
+    expect(closeOthers?.hasAttribute('data-disabled')).toBe(false)
+  })
+
+  test('focuses the selected terminal after scrolling it to bottom', () => {
+    const onScrollToBottom = vi.fn()
+    const onSelect = vi.fn()
+    const onFocusTerminal = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', selected: true, title: 'term-1' })]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={onScrollToBottom}
+        onFocusTerminal={onFocusTerminal}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('#detail-terminal-tab')
+    if (!(tab instanceof HTMLButtonElement)) throw new Error('missing selected terminal tab')
+
+    act(() => {
+      tab.click()
+    })
+
+    expect(onScrollToBottom).toHaveBeenCalledWith('t1')
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+    expect(onFocusTerminal).toHaveBeenCalledWith('t1')
+  })
+
+  test('focuses an unselected terminal after selecting it', () => {
+    const worktreeTerminalKey = '/repo\\0/repo/worktree'
+    const onScrollToBottom = vi.fn()
+    const onSelect = vi.fn()
+    const onFocusTerminal = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey={worktreeTerminalKey}
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', selected: true, title: 'term-1' }),
+          session({ key: 't2', selected: false, title: 'term-2', terminalId: 'terminal-2', index: 2 }),
+        ]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={onScrollToBottom}
+        onFocusTerminal={onFocusTerminal}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('#detail-terminal-tab-t2')
+    if (!(tab instanceof HTMLButtonElement)) throw new Error('missing unselected terminal tab')
+
+    act(() => {
+      tab.click()
+    })
+
+    expect(onSelect).toHaveBeenCalledWith(worktreeTerminalKey, 't2')
+    expect(onScrollToBottom).not.toHaveBeenCalled()
+    expect(onFocusTerminal).toHaveBeenCalledTimes(1)
+    expect(onFocusTerminal).toHaveBeenCalledWith('t2')
+  })
+
+  test('uses menu semantics instead of terminal-tab navigation in compact mode', () => {
+    const onNavigateOut = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[
+          session({ key: 't1', selected: false, title: 'term-1' }),
+          session({ key: 't2', selected: true, title: 'term-2' }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onNavigateOut={onNavigateOut}
+      />,
+    )
+
+    const tab = document.body.querySelector('#detail-terminal-tab')
+    if (!(tab instanceof HTMLButtonElement)) throw new Error('missing collapsed terminal tab')
+
+    act(() => {
+      tab.focus()
+      tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+      tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+      tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+      tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+    })
+
+    expect(onNavigateOut).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(tab)
+    expect(tab.getAttribute('role')).toBeNull()
+    expect(tab.getAttribute('aria-haspopup')).toBe('menu')
+    expect(tab.getAttribute('aria-posinset')).toBeNull()
+    expect(tab.getAttribute('aria-setsize')).toBeNull()
+  })
+
+  test('keeps all terminal tabs visible in a horizontal scroll area when not in compact mode', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tablist = document.body.querySelector('[role="tablist"][aria-label="terminal.sessions"]')
+    expect(tablist).not.toBeNull()
+    expect(tablist?.getAttribute('aria-orientation')).toBe('horizontal')
+    expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
+    expect(tablist?.className).toContain('h-full')
+    expect(tablist?.className).toContain('min-w-min')
+    expect(tablist?.className).not.toContain('flex-1')
+    expect(tablist?.parentElement?.className).toContain('w-fit')
+    expect(tablist?.parentElement?.className).not.toContain('w-max')
+    expect(tablist?.parentElement?.className).toContain('gap-0')
+    const terminalTabs = [...document.body.querySelectorAll<HTMLElement>('[data-terminal-tab-tooltip-id]')]
+    expect(terminalTabs).toHaveLength(3)
+    for (const tab of terminalTabs) {
+      expect(tab.className).toContain('w-full')
+      expect(tab.className).not.toContain('w-36')
+
+      const sortableItem = tab.parentElement
+      expect(sortableItem?.className).toContain('min-w-28')
+      expect(sortableItem?.className).toContain('max-w-56')
+      expect(sortableItem?.className).toContain('flex-[1_1_14rem]')
+    }
+    expect(document.body.querySelectorAll('[role="tab"]').length).toBe(3)
+    const firstTab = document.body.querySelector('#detail-terminal-tab')
+    expect(firstTab?.getAttribute('aria-posinset')).toBe('1')
+    expect(firstTab?.getAttribute('aria-setsize')).toBe('3')
+  })
+
+  test('uses the full terminal title and unread state in the tab aria-label', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({
+            key: 't1',
+            selected: true,
+            hasBell: true,
+            originalTitle: '~/repo/worktree — npm run dev',
+          }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab = document.body.querySelector('#detail-terminal-tab')
+    expect(tab?.getAttribute('aria-label')).toContain('~/repo/worktree — npm run dev')
+    expect(tab?.getAttribute('aria-label')).toContain('terminal.bell-unread')
+    const ping = tab?.querySelector('[data-terminal-bell-ping]')
+    expect(ping?.classList.contains('opacity-100')).toBe(true)
+    expect(ping?.classList.contains('opacity-75')).toBe(false)
+  })
+
+  test('moves focus across the full terminal tab strip and only navigates out at arrow-key edges', () => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    const onNavigateOut = vi.fn()
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onNavigateOut={onNavigateOut}
+      />,
+    )
+
+    const tab1 = document.body.querySelector('#detail-terminal-tab')
+    const tab2 = document.body.querySelector('#detail-terminal-tab-t2')
+    const tab3 = document.body.querySelector('#detail-terminal-tab-t3')
+    if (
+      !(tab1 instanceof HTMLButtonElement) ||
+      !(tab2 instanceof HTMLButtonElement) ||
+      !(tab3 instanceof HTMLButtonElement)
+    ) {
+      throw new Error('missing terminal tabs')
+    }
+
+    act(() => {
+      tab1.focus()
+      tab1.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(tab2)
+    expect(onNavigateOut).not.toHaveBeenCalled()
+
+    act(() => {
+      tab3.focus()
+      tab3.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    })
+    expect(onNavigateOut).toHaveBeenNthCalledWith(1, 'next')
+
+    act(() => {
+      tab2.focus()
+      tab2.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(tab1)
+
+    act(() => {
+      tab2.focus()
+      tab2.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))
+    })
+    expect(document.activeElement).toBe(tab3)
+  })
+
+  test('keeps the selected terminal tab semantically selected even when the panel is inactive', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1', selected: true }),
+          session({ key: 't2', title: 'term-2', selected: false, terminalId: 'terminal-2', index: 2 }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const tab1 = document.body.querySelector('#detail-terminal-tab')
+    const tab2 = document.body.querySelector('#detail-terminal-tab-t2')
+    if (!(tab1 instanceof HTMLButtonElement) || !(tab2 instanceof HTMLButtonElement)) {
+      throw new Error('missing terminal tabs')
+    }
+
+    expect(tab1.getAttribute('aria-selected')).toBe('true')
+    expect(tab1.tabIndex).toBe(0)
+    expect(tab2.getAttribute('aria-selected')).toBe('false')
+    expect(tab2.tabIndex).toBe(-1)
+  })
+
+  test('scrolls the tab strip to the far right when a new terminal session is added', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const viewport = document.body.querySelector('[data-radix-scroll-area-viewport]')
+    if (!(viewport instanceof HTMLDivElement)) throw new Error('missing scroll viewport')
+
+    Object.defineProperty(viewport, 'scrollWidth', { value: 1000, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'scrollLeft', { value: 0, writable: true, configurable: true })
+
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    expect(viewport.scrollLeft).toBe(1000)
+  })
+
+  test('does not scroll on initial mount', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const viewport = document.body.querySelector('[data-radix-scroll-area-viewport]')
+    if (!(viewport instanceof HTMLDivElement)) throw new Error('missing scroll viewport')
+
+    Object.defineProperty(viewport, 'scrollWidth', { value: 1000, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'scrollLeft', { value: 0, writable: true, configurable: true })
+
+    // Trigger a re-render with the same sessions to confirm the effect does not scroll.
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    expect(viewport.scrollLeft).toBe(0)
+  })
+
+  test('does not scroll when the tab strip does not overflow horizontally', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const viewport = document.body.querySelector('[data-radix-scroll-area-viewport]')
+    if (!(viewport instanceof HTMLDivElement)) throw new Error('missing scroll viewport')
+
+    // Content fits within the viewport (no horizontal overflow).
+    Object.defineProperty(viewport, 'scrollWidth', { value: 400, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'clientWidth', { value: 600, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'scrollLeft', { value: 0, writable: true, configurable: true })
+
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    expect(viewport.scrollLeft).toBe(0)
+  })
+
+  test('resets the inline scroll-behavior after a new session scroll settles', async () => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const viewport = document.body.querySelector('[data-radix-scroll-area-viewport]')
+    if (!(viewport instanceof HTMLDivElement)) throw new Error('missing scroll viewport')
+
+    Object.defineProperty(viewport, 'scrollWidth', { value: 1000, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'clientWidth', { value: 600, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'scrollLeft', { value: 0, writable: true, configurable: true })
+
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    // After the rAF callback runs, the inline scroll-behavior should be cleared so that
+    // subsequent user-driven scrolls (e.g. dragging the scrollbar) are not animated.
+    expect(viewport.style.scrollBehavior).toBe('')
+    expect(viewport.scrollLeft).toBe(1000)
+  })
+
+  test('does not scroll when a terminal session is removed', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[
+          session({ key: 't1', title: 'term-1' }),
+          session({ key: 't2', title: 'term-2', selected: false }),
+          session({ key: 't3', title: 'term-3', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    const viewport = document.body.querySelector('[data-radix-scroll-area-viewport]')
+    if (!(viewport instanceof HTMLDivElement)) throw new Error('missing scroll viewport')
+
+    Object.defineProperty(viewport, 'scrollWidth', { value: 1000, writable: true, configurable: true })
+    Object.defineProperty(viewport, 'scrollLeft', { value: 500, writable: true, configurable: true })
+
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    expect(viewport.scrollLeft).toBe(500)
+  })
+
+  test('requires confirmation before closing a terminal tab', () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+    if (!closeButton) throw new Error('missing terminal close button')
+
+    act(() => {
+      closeButton.click()
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
+    expect(document.body.textContent).toContain('terminal.close-confirm-body')
+    expect(document.body.querySelector('[role="checkbox"]')).toBeNull()
+
+    const confirmButton = [...document.body.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('terminal.close-confirm-confirm'),
+    )
+    if (!(confirmButton instanceof HTMLButtonElement)) throw new Error('missing terminal close confirmation button')
+
+    act(() => {
+      confirmButton.click()
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledWith('t1')
+  })
+
+  test('closes an untouched terminal immediately and focuses its adjacent tab', async () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', title: 'term-1', hasUserInput: false }),
+          session({ key: 't2', title: 'term-2', selected: false, hasUserInput: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    await flushTimers()
+
+    const adjacentTab = document.body.querySelector<HTMLButtonElement>(
+      '[data-terminal-tab-tooltip-id="t2"] button[role="tab"]',
+    )
+    expect(onClose).toHaveBeenCalledWith('t1')
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+    expect(document.activeElement).toBe(adjacentTab)
+  })
+
+  test('closes an untouched tmux-backed terminal without requesting exact tmux shutdown', () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true, hasUserInput: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+
+    expect(onClose).toHaveBeenCalledWith('t1')
+    expect(onClose).not.toHaveBeenCalledWith('t1', { closeTmuxSession: true })
+    expect(document.body.querySelector('[role="checkbox"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
+  test('offers an unchecked exact tmux close option for a tmux-backed terminal', async () => {
+    const onClose = vi.fn(async () => ({ ok: true as const }))
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    const checkbox = document.body.querySelector<HTMLElement>('[role="checkbox"]')
+    expect(checkbox?.getAttribute('data-state')).toBe('unchecked')
+    expect(document.body.textContent).toContain('terminal.close-tmux-session')
+    expect(document.body.textContent).toContain('terminal.close-tmux-session-hint')
+
+    act(() => checkbox?.click())
+    await clickSingleCloseConfirm()
+
+    expect(onClose).toHaveBeenCalledWith('t1', { closeTmuxSession: true })
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
+  test('tells users to run exit when the tmux name does not match the assigned terminal slot', async () => {
+    const onClose = vi.fn(async () => ({ ok: true as const }))
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true, tmuxCloseSupported: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+
+    expect(document.body.querySelector('[role="checkbox"]')).toBeNull()
+    expect(document.body.textContent).toContain('terminal.close-tmux-session-exit-required')
+
+    await clickSingleCloseConfirm()
+    expect(onClose).toHaveBeenCalledWith('t1')
+  })
+
+  test('resets the tmux close option after cancellation', () => {
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    act(() => document.body.querySelector<HTMLElement>('[role="checkbox"]')?.click())
+    clickElementByText('dialog.cancel')
+    clickCloseButton()
+
+    expect(document.body.querySelector<HTMLElement>('[role="checkbox"]')?.getAttribute('data-state')).toBe('unchecked')
+  })
+
+  test('keeps the dialog open and reports a checked tmux close failure', async () => {
+    const onClose = vi.fn(async () => ({ ok: false as const, message: 'error.tmux-command-failed' }))
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1', tmuxBacked: true })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    clickCloseButton()
+    act(() => document.body.querySelector<HTMLElement>('[role="checkbox"]')?.click())
+    await clickSingleCloseConfirm()
+
+    expect(document.body.textContent).toContain('terminal.close-confirm-title')
+    expect(toastError).toHaveBeenCalledWith('terminal.close-tmux-session-failed', {
+      description: 'error.tmux-command-failed',
+    })
+  })
+
+  test('cancels terminal close confirmation without closing the tab', () => {
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', title: 'term-1' })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+    if (!closeButton) throw new Error('missing terminal close button')
+
+    act(() => {
+      closeButton.click()
+    })
+
+    const cancelButton = [...document.body.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('dialog.cancel'),
+    )
+    if (!(cancelButton instanceof HTMLButtonElement)) throw new Error('missing terminal close cancel button')
+
+    act(() => {
+      cancelButton.click()
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('terminal.close-confirm-title')
+  })
+
+  test('restores the full tab strip after leaving compact mode', () => {
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        responsiveCompact
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    expect(document.body.querySelectorAll('[role="tab"]').length).toBe(0)
+    const compactTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
+    const compactTrigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.sessions"]')
+    expect(compactTab?.className).toContain('w-full')
+    expect(compactTab?.className).not.toContain('w-36')
+    expect(compactTrigger?.closest('[data-terminal-tab-tooltip-id]')).toBe(compactTab)
+
+    rerender(
+      <TerminalTabs
+        worktreeTerminalKey="/repo\0/repo/worktree"
+        detailId="detail"
+        sessions={[session({ key: 't1', title: 'term-1' }), session({ key: 't2', title: 'term-2', selected: false })]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    expect(document.body.querySelectorAll('[role="tab"]').length).toBe(2)
+    expect(document.body.querySelector('button[aria-label="terminal.sessions"]')).toBeNull()
+    const expandedTab = document.body.querySelector<HTMLElement>('[data-terminal-tab-tooltip-id]')
+    expect(expandedTab?.className).toContain('w-full')
+    expect(expandedTab?.className).not.toContain('w-36')
+    expect(expandedTab?.parentElement?.className).toContain('min-w-28')
+    expect(expandedTab?.parentElement?.className).toContain('max-w-56')
+    expect(expandedTab?.parentElement?.className).toContain('flex-[1_1_14rem]')
+  })
+})
+
+function render(element: ReactNode) {
+  container = document.createElement('div')
+  document.body.append(container)
+  root = createRoot(container)
+  act(() => {
+    root!.render(element)
+  })
+}
+
+function rerender(element: ReactNode) {
+  if (!container || !root) {
+    render(element)
+    return
+  }
+  act(() => {
+    root!.render(element)
+  })
+}
+
+function session(overrides: Partial<TerminalSessionSummary> = {}): TerminalSessionSummary {
+  return {
+    key: 't1',
+    worktreeTerminalKey: '/repo\0/repo/worktree',
+    terminalId: 'terminal-1',
+    index: 1,
+    title: 'term-1',
+    fullTitle: 'term-1',
+    originalTitle: 'term-1',
+    phase: 'open',
+    selected: true,
+    hasBell: false,
+    ...overrides,
+  }
+}
+
+async function openCompactTerminalDropdown() {
+  const trigger = document.body.querySelector('button[aria-label="terminal.sessions"]')
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('missing terminal menu trigger')
+
+  await act(async () => {
+    trigger.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+    trigger.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+    await Promise.resolve()
+  })
+}
+
+async function clickTabContextMenuItem(sessionKey: string, label: string) {
+  await openTabContextMenu(sessionKey)
+  const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
+  if (!item) throw new Error(`missing terminal context menu item: ${label}`)
+  await act(async () => {
+    item.click()
+    await Promise.resolve()
+  })
+}
+
+async function openTabContextMenu(sessionKey: string) {
+  const tab = document.body.querySelector(`[data-terminal-tab-tooltip-id="${sessionKey}"]`)
+  if (!(tab instanceof HTMLElement)) throw new Error(`missing terminal tab: ${sessionKey}`)
+
+  await act(async () => {
+    tab.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+}
+
+function elementByText(text: string): HTMLElement {
+  const element = [...document.body.querySelectorAll<HTMLElement>('button, [role="menuitem"]')].find((candidate) =>
+    candidate.textContent?.includes(text),
+  )
+  if (!(element instanceof HTMLElement)) throw new Error(`missing element: ${text}`)
+  return element
+}
+
+function clickElementByText(text: string) {
+  const element = elementByText(text)
+  act(() => {
+    element.click()
+  })
+}
+
+function clickCloseButton() {
+  const closeButton = document.body.querySelector<HTMLButtonElement>('button[aria-label="terminal.close-named"]')
+  if (!closeButton) throw new Error('missing terminal close button')
+  act(() => closeButton.click())
+}
+
+async function clickSingleCloseConfirm() {
+  const confirm = elementByText('terminal.close-confirm-confirm')
+  await act(async () => {
+    confirm.click()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+}
+
+async function flushTimers() {
+  await act(async () => {
+    vi.runAllTimers()
+    await Promise.resolve()
+  })
+}

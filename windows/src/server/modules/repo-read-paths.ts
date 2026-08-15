@@ -1,0 +1,176 @@
+import { resolveRemoteRepoTarget, runWithRepoBackend, type RepoSnapshotOptions } from '#/server/modules/repo-backend.ts'
+import {
+  getRepositoryFileTree as getRepositoryFileTreeRead,
+  searchRepositoryFileTree as searchRepositoryFileTreeRead,
+} from '#/server/modules/repo-file-tree.ts'
+import {
+  generateCodexCommitMessageFromContext,
+  generateCommitMessageFromPatch,
+  probeCommitMessageProviders,
+} from '#/system/commit-message-ai.ts'
+import { readLocalFileTreeTextFile } from '#/system/file-tree/local.ts'
+import { readLocalFileTreeBinaryFile } from '#/system/file-tree/local.ts'
+import {
+  readRemoteFileTreeBinaryFile,
+  readRemoteFileTreeTextFile,
+} from '#/system/ssh/git.ts'
+import {
+  isCommitMessageProvider,
+  type CommitMessageGenerationResult,
+  type CommitMessageProviderAvailability,
+} from '#/shared/commit-message-ai.ts'
+import type {
+  RepoFileSearchResult,
+  RepoFileTreeBinaryFileReadResult,
+  RepoFileTreeResult,
+  RepoFileTreeTextFileReadResult,
+} from '#/shared/file-tree.ts'
+import {
+  type CommitDetail,
+  type CommitHistoryEntry,
+  type ExecResult,
+  type WorktreeInfo,
+  type WorktreeStatus,
+} from '#/shared/git-types.ts'
+import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
+import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
+
+export async function probeRepository(cwd: string): Promise<ProbeResult> {
+  return await runWithRepoBackend(cwd, async (backend) => await backend.probe())
+}
+
+export async function getRepositorySnapshot(
+  cwd: string,
+  signal?: AbortSignal,
+  options?: RepoSnapshotOptions,
+): Promise<RepoSnapshot | null> {
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getSnapshot(signal, options))
+}
+
+export async function getRepositoryWorktrees(cwd: string, signal?: AbortSignal): Promise<WorktreeInfo[]> {
+  return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getWorktrees(signal))
+}
+
+export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
+  return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getStatus(signal))
+}
+
+export async function getRepositoryRemoteBranchInfo(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<RemoteTrackingBranchInfo[]> {
+  return signal?.aborted
+    ? []
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getRemoteBranchInfo(signal))
+}
+
+export async function getRepositoryHistory(
+  cwd: string,
+  branch: string,
+  input: { limit: number; skip: number },
+  signal?: AbortSignal,
+): Promise<CommitHistoryEntry[]> {
+  return signal?.aborted
+    ? []
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getHistory(branch, input, signal))
+}
+
+export async function getRepositoryCommitDetail(
+  cwd: string,
+  commit: string,
+  signal?: AbortSignal,
+): Promise<CommitDetail | null> {
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getCommitDetail(commit, signal))
+}
+
+export async function getRepositoryLocalTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
+  return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getLocalTags(signal))
+}
+
+export async function getRepositoryPatch(cwd: string, worktreePath: string, signal?: AbortSignal): Promise<ExecResult> {
+  return await runWithRepoBackend(cwd, async (backend) => await backend.getPatch(worktreePath, signal))
+}
+
+export async function getCommitMessageProviders(signal?: AbortSignal): Promise<CommitMessageProviderAvailability> {
+  return await probeCommitMessageProviders(signal)
+}
+
+export async function generateRepositoryCommitMessage(
+  cwd: string,
+  worktreePath: string,
+  provider: unknown,
+  signal?: AbortSignal,
+): Promise<CommitMessageGenerationResult> {
+  if (!isCommitMessageProvider(provider)) return { ok: false, message: 'error.commit-message-provider-unavailable' }
+  return await runWithRepoBackend(cwd, async (backend) => {
+    if (provider === 'codex' && backend.kind === 'local' && backend.getCommitMessageContext) {
+      const context = await backend.getCommitMessageContext(worktreePath, signal)
+      if (!context.ok) return { ok: false, message: context.message }
+      return await generateCodexCommitMessageFromContext(context.context, {
+        cwd: context.worktreePath,
+        signal,
+      })
+    }
+
+    const patch = await backend.getPatch(worktreePath, signal)
+    if (!patch.ok) return patch
+    const generationCwd = backend.kind === 'local' ? worktreePath : undefined
+    return await generateCommitMessageFromPatch(provider, patch.message, { cwd: generationCwd, signal })
+  })
+}
+
+export async function getRepositoryFileTree(
+  repoId: string,
+  worktreePath: string,
+  dirPath: string,
+  signal?: AbortSignal,
+): Promise<RepoFileTreeResult> {
+  return signal?.aborted
+    ? { ok: false, message: 'cancelled' }
+    : await getRepositoryFileTreeRead(repoId, worktreePath, dirPath, signal)
+}
+
+export async function searchRepositoryFileTree(
+  repoId: string,
+  worktreePath: string,
+  query: string,
+  limit?: number,
+  signal?: AbortSignal,
+): Promise<RepoFileSearchResult> {
+  return signal?.aborted
+    ? { ok: false, message: 'cancelled' }
+    : await searchRepositoryFileTreeRead(repoId, worktreePath, query, limit, signal)
+}
+
+export async function readRepositoryFileTreeTextFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<RepoFileTreeTextFileReadResult> {
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (isRemoteRepoId(repoId)) {
+    return await readRemoteFileTreeTextFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, { signal })
+  }
+  return await readLocalFileTreeTextFile(worktreePath, filePath)
+}
+
+export async function readRepositoryFileTreeBinaryFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<RepoFileTreeBinaryFileReadResult> {
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (isRemoteRepoId(repoId)) {
+    return await readRemoteFileTreeBinaryFile(await resolveRemoteRepoTarget(repoId), worktreePath, filePath, maxBytes, {
+      signal,
+    })
+  }
+  return await readLocalFileTreeBinaryFile(worktreePath, filePath, maxBytes)
+}

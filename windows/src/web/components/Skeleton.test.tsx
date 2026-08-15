@@ -1,0 +1,99 @@
+// @vitest-environment jsdom
+
+import { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
+
+vi.mock('#/web/components/SplitPane.tsx', () => ({
+  SplitPane: ({ before, after }: { before: React.ReactNode; after: React.ReactNode }) => (
+    <div data-testid="mock-split-pane">
+      {before}
+      {after}
+    </div>
+  ),
+}))
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+
+beforeEach(() => {
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => {
+    root?.unmount()
+  })
+  container?.remove()
+  root = null
+  container = null
+  reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
+})
+
+describe('RepoWorkspaceSkeleton', () => {
+  test('shows branch rows with list actions in the fixed split mode', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(14)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
+    expect(container?.querySelector('[data-testid="branch-detail-skeleton-action"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-search"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-layout-control"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
+  })
+
+  test('renders split workspace with list actions in left-right mode', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(14)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(6)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-search"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-layout-control"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
+  })
+
+  test('renders only the terminal detail placeholder while desktop focus is restored', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(8)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
+  })
+
+  test('keeps only the detail pane when focus preference is true', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(8)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
+  })
+
+  test('renders only the detail pane on small screens when persisted focus is disabled', () => {
+    render(<RepoWorkspaceSkeleton layout="left-right" detailFocusMode={false} compact />)
+
+    expect(container?.querySelectorAll('li')).toHaveLength(8)
+    expect(container?.querySelectorAll('[data-testid="branch-list-skeleton-action"]')).toHaveLength(0)
+    expect(container?.querySelector('[data-testid="mock-split-pane"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-pager"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-view"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-branch-search"]')).toBeNull()
+    expect(container?.querySelector('[data-testid="repo-toolbar-skeleton-layout-control"]')).toBeNull()
+  })
+})
+
+function render(element: React.ReactNode) {
+  act(() => {
+    root!.render(element)
+  })
+}

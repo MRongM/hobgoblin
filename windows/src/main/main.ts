@@ -1,0 +1,190 @@
+import { app, dialog } from 'electron'
+import path from 'node:path'
+import type { SettingsSnapshot } from '#/shared/rpc.ts'
+import { activateMainWindow } from '#/main/window.ts'
+import { initTheme } from '#/main/theme.ts'
+import { flushWindowState } from '#/main/window-state.ts'
+import { buildAppMenu } from '#/main/menu.ts'
+import { initializeMenuRuntimeState } from '#/main/menu-state.ts'
+import { syncRecentRepos } from '#/main/recent-repos.ts'
+import { assertDictionaryParity, resolveLang, setCurrentLang } from '#/main/i18n/index.ts'
+import { wireRpcIpc } from '#/main/rpc.ts'
+import { wireShellBridgeIpc } from '#/main/shell-bridge.ts'
+import { wireTerminalIpc } from '#/main/terminal.ts'
+import { closeDetachedFileAreaWindows, wireDetachedFileAreaWindowIpc } from '#/main/detached-file-area-window.ts'
+import { enqueueExternalOpenPath } from '#/main/external-open.ts'
+import { windowsCliProjectOpenPathFromArgv } from '#/main/windows-cli-project-open.ts'
+import { broadcastRendererEffectIntent } from '#/main/renderer-surface-events.ts'
+import { getSettingsSnapshot } from '#/main/settings-server-client.ts'
+import { startEmbeddedServer, stopEmbeddedServer } from '#/main/server-manager.ts'
+import { createStartupDiagnostics } from '#/main/startup-diagnostics.ts'
+import { configureChromiumKeychainPolicy } from '#/main/chromium-keychain-policy.ts'
+
+configureChromiumKeychainPolicy(app.commandLine, process.platform)
+
+function activateMainWindowFromEvent(): void {
+  void activationBarrier
+    .then(() => {
+      if (isQuitting) return null
+      return activateMainWindow()
+    })
+    .catch((err) => {
+      console.error('[window] failed to activate main window', err)
+    })
+}
+
+let activationBarrier: Promise<void> = Promise.resolve()
+let isQuitting = false
+
+function userDataDirOverride(): string | null {
+  const value = process.env.GOBLIN_USER_DATA_DIR?.trim()
+  return value ? value : null
+}
+
+function applyUserDataDirOverride(): void {
+  const override = userDataDirOverride()
+  if (!override) return
+  app.setPath('userData', override)
+}
+
+function startupLogPath(): string | null {
+  const override = userDataDirOverride()
+  if (override) return path.join(override, 'startup.log')
+  try {
+    return path.join(app.getPath('userData'), 'startup.log')
+  } catch {
+    return null
+  }
+}
+
+function logMainStartup(event: string, payload: Record<string, unknown> = {}): void {
+  const logPath = startupLogPath()
+  if (!logPath) return
+  createStartupDiagnostics(logPath).log(event, payload)
+}
+
+function externalOpenSingleInstanceData(path: string | null): Record<string, string> {
+  return path ? { hobOpenPath: path } : {}
+}
+
+function externalOpenPathFromSingleInstanceData(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null
+  const candidate = (value as Record<string, unknown>).hobOpenPath
+  return typeof candidate === 'string' && candidate.length > 0 ? candidate : null
+}
+
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  if (!enqueueExternalOpenPath(path)) return
+  activateMainWindowFromEvent()
+})
+
+async function main(): Promise<void> {
+  applyUserDataDirOverride()
+  logMainStartup('main-start', {
+    appPath: typeof app.getAppPath === 'function' ? app.getAppPath() : null,
+    isPackaged: app.isPackaged,
+    hasUserDataOverride: Boolean(userDataDirOverride()),
+  })
+  const initialExternalOpenPath = windowsCliProjectOpenPathFromArgv(process.argv)
+  if (!app.requestSingleInstanceLock(externalOpenSingleInstanceData(initialExternalOpenPath))) {
+    app.quit()
+    return
+  }
+
+  logMainStartup('external-open-initial', {
+    argv: process.argv,
+    path: initialExternalOpenPath,
+  })
+  if (initialExternalOpenPath) enqueueExternalOpenPath(initialExternalOpenPath)
+
+  activationBarrier = initializeMainProcess()
+
+  app.on('second-instance', (_event, commandLine, _workingDirectory, additionalData) => {
+    const commandLineExternalOpenPath = windowsCliProjectOpenPathFromArgv(commandLine)
+    const externalOpenPath = externalOpenPathFromSingleInstanceData(additionalData) ?? commandLineExternalOpenPath
+    logMainStartup('external-open-second-instance', {
+      argv: commandLine,
+      path: externalOpenPath,
+    })
+    if (externalOpenPath) enqueueExternalOpenPath(externalOpenPath)
+    activateMainWindowFromEvent()
+  })
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit()
+  })
+
+  // Drain debounced settings writes before exit so the last theme pick,
+  // window resize, or session change isn't lost. We exit explicitly
+  // after the flush: re-entering app.quit from before-quit is not
+  // reliable across Electron quit paths.
+  app.on('before-quit', async (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    isQuitting = true
+    await finalizeMainProcessExit()
+  })
+
+  await activationBarrier
+  if (isQuitting) return
+  await activateMainWindow()
+  if (isQuitting) return
+  app.on('activate', activateMainWindowFromEvent)
+}
+
+async function finalizeMainProcessExit(): Promise<void> {
+  try {
+    closeDetachedFileAreaWindows()
+    broadcastRendererEffectIntent({ type: 'app-quitting' })
+    const windowStateFlushed = await flushWindowState()
+    if (!windowStateFlushed) console.error('[window-state] final flush failed before quit')
+    await stopEmbeddedServer()
+  } finally {
+    app.exit(0)
+  }
+}
+
+async function initializeMainProcess(): Promise<void> {
+  await app.whenReady()
+  logMainStartup('app-ready', { userData: app.getPath('userData') })
+  await startEmbeddedServerForMainProcess()
+  const settingsSnapshot = await getSettingsSnapshot()
+  await initTheme({ theme: settingsSnapshot.theme, colorTheme: settingsSnapshot.colorTheme })
+  await initializeRuntimeState(settingsSnapshot)
+  wireMainProcessIpc()
+}
+
+async function startEmbeddedServerForMainProcess(): Promise<void> {
+  try {
+    await startEmbeddedServer()
+  } catch (err) {
+    console.warn('[server] failed to start embedded server', err)
+    const message = err instanceof Error ? err.message : String(err)
+    dialog.showErrorBox('Hobgoblin failed to start', `Embedded web server failed to start.\n\n${message}`)
+    throw err
+  }
+}
+
+async function initializeRuntimeState(settingsSnapshot: SettingsSnapshot): Promise<void> {
+  // Resolve language BEFORE buildMenu — every menu label runs through
+  // `t()` and would otherwise render in the default ('en') for the
+  // first frame.
+  assertDictionaryParity(!app.isPackaged)
+  initializeMenuRuntimeState({
+    shortcutsDisabled: settingsSnapshot.shortcutsDisabled,
+    langPref: settingsSnapshot.lang,
+  })
+  setCurrentLang(resolveLang(settingsSnapshot.lang))
+  syncRecentRepos(settingsSnapshot.recentRepos)
+  buildAppMenu()
+}
+
+function wireMainProcessIpc(): void {
+  wireRpcIpc()
+  wireShellBridgeIpc()
+  wireTerminalIpc()
+  wireDetachedFileAreaWindowIpc()
+}
+
+void main()

@@ -1,0 +1,403 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  localRepoSessionEntry,
+  normalizeRemoteRepoRef,
+  normalizeRemoteTarget,
+  remoteRepoSessionEntry,
+} from '#/shared/remote-repo.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import type { BranchSnapshotInfo } from '#/web/types.ts'
+import {
+  branchSnapshot,
+  flushRpc,
+  installGoblin,
+  REPO_A,
+  REPO_B,
+  resetLifecycleTest,
+} from '#/web/stores/repos/lifecycle-test-utils.ts'
+
+beforeEach(resetLifecycleTest)
+
+describe('repo session hydration', () => {
+  test('restores workspace repository list heights into restorable store state', async () => {
+    installGoblin()
+
+    await useReposStore
+      .getState()
+      .hydrateSession([localRepoSessionEntry(REPO_A)], REPO_A, {}, {}, REPO_A, { [REPO_A]: 224 })
+
+    expect(useReposStore.getState().workspaceRepositoryListHeightByRoot).toEqual({ [REPO_A]: 224 })
+  })
+
+  test('restores configured remote workspace children before activating the workspace Overview', async () => {
+    const rootTarget = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/workspace',
+    })!
+    const child = normalizeRemoteRepoRef({ alias: 'example', remotePath: '/srv/workspace/api' })!
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd === rootTarget.id ? 'example:workspace' : cwd,
+        isGitRepo: cwd !== rootTarget.id,
+      }),
+      'workspace.import': () => ({
+        ok: true,
+        rootId: rootTarget.id,
+        repositories: [{ id: child.id, name: 'api', remoteRef: child }],
+        candidates: [{ id: child.id, name: 'api', remoteRef: child, selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([remoteRepoSessionEntry(rootTarget)], child.id, {
+      [rootTarget.id]: { kind: 'repository', repositoryId: child.id },
+    })
+
+    expect(useReposStore.getState().order).toEqual([rootTarget.id])
+    expect(useReposStore.getState().activeId).toBe(rootTarget.id)
+    expect(useReposStore.getState().activeProjectId).toBe(rootTarget.id)
+    expect(useReposStore.getState().repos[child.id]?.remote.target).toEqual({ ...rootTarget, ...child })
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
+      [rootTarget.id]: { kind: 'overview' },
+    })
+    expect(calls.recent).toEqual([])
+  })
+
+  test('rediscovers workspace children before activating the workspace Overview', async () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    const calls = installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: child, name: 'api' }],
+        candidates: [{ id: child, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, {
+      [root]: { kind: 'repository', repositoryId: child },
+    })
+
+    expect(useReposStore.getState().order).toEqual([root])
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().activeProjectId).toBe(root)
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({
+      [root]: { kind: 'overview' },
+    })
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
+    expect(calls.recent).toEqual([])
+  })
+
+  test.each([
+    { label: 'workspace', activeProject: '/tmp/gbl-workspace' },
+    { label: 'standalone repository', activeProject: '/tmp/gbl-workspace/api' },
+  ])('restores a shared repository with the $label project active', async ({ activeProject }) => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/api`
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: child, name: 'api' }],
+        candidates: [{ id: child, name: 'api', selected: false, available: true }],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore
+      .getState()
+      .hydrateSession(
+        [localRepoSessionEntry(root), localRepoSessionEntry(child)],
+        child,
+        { [root]: { kind: 'repository', repositoryId: child } },
+        {},
+        activeProject,
+      )
+
+    expect(useReposStore.getState().order).toEqual([root, child])
+    expect(useReposStore.getState().activeId).toBe(activeProject)
+    expect(useReposStore.getState().activeProjectId).toBe(activeProject)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[root]).toEqual({ kind: 'overview' })
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([child])
+  })
+
+  test('drops a stale child selection when the root is no longer a multi-repository workspace', async () => {
+    const root = '/tmp/gbl-workspace'
+    const child = `${root}/removed`
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: false }),
+      'workspace.discover': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [],
+        candidates: [],
+        configuration: { kind: 'missing' },
+        skipped: [],
+      }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(root)], child, {
+      [root]: { kind: 'repository', repositoryId: child },
+    })
+
+    expect(useReposStore.getState().activeId).toBe(root)
+    expect(useReposStore.getState().workspaceProjects).toEqual({})
+    expect(useReposStore.getState().workspaceActiveContextByRoot).toEqual({})
+  })
+
+  test('hydrateSession restores tabs through the same initial local refresh path without recent-repo side effects', async () => {
+    const calls = installGoblin()
+
+    await useReposStore
+      .getState()
+      .hydrateSession([localRepoSessionEntry(REPO_A), localRepoSessionEntry(REPO_B)], REPO_B)
+
+    expect(useReposStore.getState().order).toEqual([REPO_A, REPO_B])
+    expect(useReposStore.getState().activeId).toBe(REPO_B)
+    expect(useReposStore.getState().sessionReady).toBe(true)
+    expect(calls.recent).toEqual([])
+    expect(calls.snapshot).toEqual([REPO_A, REPO_B])
+    await vi.waitFor(() => {
+      expect(calls.status).toEqual([REPO_A, REPO_B])
+    })
+  })
+
+  test('hydrateSession uses cached repo data while the initial refresh runs', async () => {
+    const savedAt = Date.now()
+    useReposStore.setState({
+      restorableRepoCache: {
+        [REPO_A]: {
+          savedAt,
+          name: 'cached-a',
+          data: {
+            branches: [branchSnapshot('cached', { worktree: { path: '/tmp/cached-wt' } })],
+            currentBranch: 'cached',
+          },
+          ui: {
+            selectedBranch: 'cached',
+            detailTab: 'status',
+            worktreePathOrder: [],
+          },
+        },
+      },
+    })
+    let resolveSnapshot!: (value: { branches: BranchSnapshotInfo[]; current: string }) => void
+    installGoblin({
+      snapshot: () =>
+        new Promise<{ branches: BranchSnapshotInfo[]; current: string }>((resolve) => {
+          resolveSnapshot = resolve
+        }),
+    })
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(REPO_A)], REPO_A)
+
+    const cachedRepo = useReposStore.getState().repos[REPO_A]
+    expect(cachedRepo?.name).toBe('cached-a')
+    expect(cachedRepo?.data.branches.map((b) => b.name)).toEqual(['cached'])
+    expect(cachedRepo?.ui.selectedBranch).toBe('cached')
+    expect(cachedRepo?.projection.source).toBe('cache')
+    expect(cachedRepo?.resources.snapshot.phase).toBe('refreshing')
+    expect(cachedRepo?.projection.savedAt).toBe(savedAt)
+
+    resolveSnapshot({ branches: [branchSnapshot('fresh')], current: 'fresh' })
+    await flushRpc()
+
+    await vi.waitFor(() => {
+      const freshRepo = useReposStore.getState().repos[REPO_A]
+      expect(freshRepo?.data.currentBranch).toBe('fresh')
+      expect(freshRepo?.projection.source).toBe('fresh')
+      expect(freshRepo?.resources.snapshot.phase).toBe('idle')
+      expect(freshRepo?.projection.savedAt).toBeNull()
+    })
+  })
+
+  test('hydrateSession exposes resolved cached repos before slower probes finish', async () => {
+    const savedAt = Date.now()
+    useReposStore.setState({
+      restorableRepoCache: {
+        [REPO_A]: {
+          savedAt,
+          name: 'cached-a',
+          data: {
+            branches: [branchSnapshot('cached')],
+            currentBranch: 'cached',
+          },
+          ui: {
+            selectedBranch: 'cached',
+            detailTab: 'status',
+            worktreePathOrder: [],
+          },
+        },
+      },
+    })
+    const probes = new Map<string, (value: { ok: true; root: string; name: string }) => void>()
+    installGoblin({
+      probe: (path: string) =>
+        new Promise<{ ok: true; root: string; name: string }>((resolve) => {
+          probes.set(path, resolve)
+        }),
+      snapshot: () => new Promise<{ branches: BranchSnapshotInfo[]; current: string }>(() => {}),
+    })
+
+    const work = useReposStore
+      .getState()
+      .hydrateSession([localRepoSessionEntry(REPO_A), localRepoSessionEntry(REPO_B)], REPO_A)
+    await vi.waitFor(() => {
+      expect(probes.size).toBe(2)
+    })
+    probes.get(REPO_A)?.({ ok: true, root: REPO_A, name: 'repo-a' })
+    await flushRpc()
+
+    await vi.waitFor(() => {
+      const cachedRepo = useReposStore.getState().repos[REPO_A]
+      expect(cachedRepo?.projection.source).toBe('cache')
+      expect(useReposStore.getState().activeId).toBe(REPO_A)
+      expect(useReposStore.getState().sessionReady).toBe(false)
+    })
+
+    probes.get(REPO_B)?.({ ok: true, root: REPO_B, name: 'repo-b' })
+    await work
+
+    expect(useReposStore.getState().order).toEqual([REPO_A, REPO_B])
+    expect(useReposStore.getState().sessionReady).toBe(true)
+  })
+
+  test('hydrateSession keeps a user-selected active repo when boot probing settles later', async () => {
+    installGoblin()
+    const result = await useReposStore.getState().ensureWorkspaceOpen(REPO_A)
+    if (result.ok) useReposStore.getState().setActive(result.id)
+
+    await useReposStore.getState().hydrateSession([localRepoSessionEntry(REPO_B)], REPO_B)
+
+    expect(useReposStore.getState().order).toEqual([REPO_A, REPO_B])
+    expect(useReposStore.getState().activeId).toBe(REPO_A)
+  })
+
+  test('hydrateSession restores unavailable repos as tabs', async () => {
+    installGoblin()
+
+    await useReposStore
+      .getState()
+      .hydrateSession([localRepoSessionEntry(REPO_A), localRepoSessionEntry('/missing')], '/missing')
+
+    expect(useReposStore.getState().order).toEqual([REPO_A, '/missing'])
+    expect(useReposStore.getState().activeId).toBe('/missing')
+    expect(useReposStore.getState().repos['/missing']).toMatchObject({
+      id: '/missing',
+      name: 'missing',
+      availability: { phase: 'unavailable', reason: 'missing' },
+    })
+  })
+
+  test('hydrateSession limits concurrent repo probes', async () => {
+    let active = 0
+    let maxActive = 0
+    const resolvers: Array<() => void> = []
+    const repos = Array.from({ length: 6 }, (_, index) => `/tmp/gbl-lifecycle-limit-${index}`)
+    installGoblin({
+      probe: async (path: string) => {
+        active += 1
+        maxActive = Math.max(maxActive, active)
+        await new Promise<void>((resolve) => {
+          resolvers.push(resolve)
+        })
+        active -= 1
+        return { ok: true, root: path, name: path.split('/').at(-1) ?? path }
+      },
+    })
+
+    const work = useReposStore.getState().hydrateSession(repos.map(localRepoSessionEntry), null)
+    for (let i = 0; i < 5 && resolvers.length < 4; i += 1) await Promise.resolve()
+
+    expect(maxActive).toBe(4)
+    expect(resolvers).toHaveLength(4)
+
+    resolvers.splice(0).forEach((resolve) => resolve())
+    for (let i = 0; i < 20 && resolvers.length < 2; i += 1) await Promise.resolve()
+    resolvers.splice(0).forEach((resolve) => resolve())
+    await work
+
+    expect(useReposStore.getState().order).toEqual(repos)
+  })
+
+  test('hydrateSession restores remote target metadata for remote repos', async () => {
+    const target = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/repo',
+    })
+    expect(target).not.toBeNull()
+    installGoblin({
+      probe: (path: string) => ({ ok: true, root: path, name: 'repo' }),
+    })
+
+    await useReposStore.getState().hydrateSession([remoteRepoSessionEntry(target!)], target!.id)
+
+    expect(useReposStore.getState().repos[target!.id]?.remote.target).toEqual(target)
+    expect(useReposStore.getState().activeId).toBe(target!.id)
+  })
+
+  test('hydrateSession keeps resolved remote target metadata when remote probe reports a missing path', async () => {
+    const target = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/repo',
+    })
+    expect(target).not.toBeNull()
+    installGoblin({
+      probe: () => ({ ok: false, message: 'path-missing' }),
+    })
+
+    await useReposStore.getState().hydrateSession([remoteRepoSessionEntry(target!)], target!.id)
+
+    expect(useReposStore.getState().repos[target!.id]).toMatchObject({
+      id: target!.id,
+      remote: { target },
+      availability: { phase: 'unavailable', reason: 'path-missing' },
+    })
+  })
+
+  test('hydrateSession does not resolve a failed remote target twice', async () => {
+    const target = normalizeRemoteTarget({
+      alias: 'example',
+      host: 'example.com',
+      user: 'alice',
+      port: 22,
+      remotePath: '/srv/repo',
+    })
+    expect(target).not.toBeNull()
+    const calls = installGoblin({
+      probe: () => ({ ok: false, message: 'unreachable' }),
+    })
+
+    await useReposStore.getState().hydrateSession([remoteRepoSessionEntry(target!)], target!.id)
+
+    expect(calls.resolveTarget).toEqual([{ alias: 'example', remotePath: '/srv/repo' }])
+  })
+})

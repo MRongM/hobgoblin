@@ -1,0 +1,213 @@
+// Preload bridge. Exposes low-level IPC under `window.goblinNative` to the renderer.
+// Keep this preload sandbox-compatible: only the `electron` module is
+// available in sandboxed renderers, so do NOT require Node built-ins like
+// `os`, `fs`, or `path`. Anything that needs Node lives in the main
+// process and is reached via IPC.
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
+const IPC = {
+  bootstrap: 'goblin:bootstrap',
+  rpc: {
+    call: 'goblin:rpc',
+    abort: 'goblin:rpc-abort',
+    event: 'goblin:event',
+    effectIntent: 'goblin:effect-intent',
+  },
+  shell: {
+    openSettingsWindow: 'goblin:shell-open-settings-window',
+    openExternalUrl: 'goblin:shell-open-external-url',
+    openDirectoryDialog: 'goblin:shell-open-directory-dialog',
+    openFileDialog: 'goblin:shell-open-file-dialog',
+    consumeExternalOpenPaths: 'goblin:shell-consume-external-open-paths',
+    openInFinder: 'goblin:shell-open-in-finder',
+    readClipboardFilePaths: 'goblin:shell-read-clipboard-file-paths',
+    saveClipboardBinaryFiles: 'goblin:shell-save-clipboard-binary-files',
+    writeFileTreeClipboardFile: 'goblin:shell-write-file-tree-clipboard-file',
+    readFileTreeClipboardFile: 'goblin:shell-read-file-tree-clipboard-file',
+    openDetachedFileAreaWindow: 'goblin:shell-open-detached-file-area-window',
+    projectWindowChromeTheme: 'goblin:shell-project-window-chrome-theme',
+  },
+  terminal: {
+    notifyBell: 'goblin:terminal-notify-bell',
+    sendTestNotification: 'goblin:terminal-send-test-notification',
+    setBadge: 'goblin:terminal-set-badge',
+  },
+}
+
+// `ipcRenderer.invoke` rejects when the main handler throws. We log the
+// channel once at the bridge, then rethrow so renderer call sites can
+// decide whether to surface a toast, fall back, or intentionally ignore
+// the failure with their own `.catch()`.
+function safeInvoke(channel, ...args) {
+  return ipcRenderer.invoke(channel, ...args).catch((err) => {
+    console.warn(`[ipc] ${channel} failed`, err)
+    throw err
+  })
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object'
+}
+
+function rpcCall(request) {
+  return safeInvoke(IPC.rpc.call, request)
+    .then((response) => {
+      if (!isObject(response) || typeof response.ok !== 'boolean') throw new Error('Malformed RPC response')
+      if (response.ok) return response.data
+      const error = isObject(response.error) ? response.error : null
+      throw Object.assign(new Error(typeof error?.message === 'string' ? error.message : 'RPC request failed'), {
+        name: typeof error?.name === 'string' ? error.name : 'RpcError',
+        code: typeof error?.code === 'string' ? error.code : undefined,
+      })
+    })
+    .catch((err) => {
+      console.warn(`[rpc] ${request.path} failed`, err)
+      throw err
+    })
+}
+
+// Prefer a short bootstrap id. Passing the full bootstrap JSON through
+// additionalArguments can exceed Windows' process command-line limits and
+// prevent the renderer process from launching at all.
+function safeReadBootstrapById(prefix, label) {
+  const bootstrapId = process.argv.find((a) => a.startsWith(prefix))?.slice(prefix.length) ?? ''
+  if (!bootstrapId) return null
+  try {
+    const payload = ipcRenderer.sendSync(IPC.bootstrap, bootstrapId)
+    return isObject(payload) ? payload : null
+  } catch (err) {
+    console.warn(`[preload] failed to read ${label}`, err)
+    return null
+  }
+}
+
+// Legacy fallback for older builds that injected the whole base64 payload.
+function safeParseBase64JsonArgument(prefix, label) {
+  const raw = process.argv.find((a) => a.startsWith(prefix))?.slice(prefix.length) ?? ''
+  if (!raw) return null
+  try {
+    return JSON.parse(Buffer.from(raw, 'base64').toString('utf8'))
+  } catch (err) {
+    console.warn(`[preload] failed to parse ${label}`, err)
+    return null
+  }
+}
+
+const BOOTSTRAP_PREFIX = '--goblin-bootstrap='
+const BOOTSTRAP_ID_PREFIX = '--goblin-bootstrap-id='
+const bootstrap =
+  safeReadBootstrapById(BOOTSTRAP_ID_PREFIX, 'bootstrap payload') ??
+  safeParseBase64JsonArgument(BOOTSTRAP_PREFIX, 'bootstrap payload')
+const runtime =
+  isObject(bootstrap?.runtime) &&
+  (bootstrap.runtime.kind === 'electron' || bootstrap.runtime.kind === 'web') &&
+  typeof bootstrap.runtime.bridgeVersion === 'number' &&
+  Array.isArray(bootstrap.runtime.capabilities) &&
+  bootstrap.runtime.capabilities.every((value) => typeof value === 'string')
+    ? bootstrap.runtime
+    : { kind: 'electron', bridgeVersion: 1, capabilities: [] }
+const homeDir = typeof bootstrap?.homeDir === 'string' ? bootstrap.homeDir : ''
+const hostPlatform = typeof bootstrap?.hostPlatform === 'string' ? bootstrap.hostPlatform : null
+const initialI18n = isObject(bootstrap?.i18n) ? bootstrap.i18n : null
+const initialSettings = isObject(bootstrap?.settings) ? bootstrap.settings : null
+const initialServer =
+  isObject(bootstrap?.server) &&
+  typeof bootstrap.server.url === 'string' &&
+  typeof bootstrap.server.secret === 'string' &&
+  (typeof bootstrap.server.clientId === 'undefined' || typeof bootstrap.server.clientId === 'string')
+    ? bootstrap.server
+    : null
+const surface = isObject(bootstrap?.surface) ? bootstrap.surface : { kind: 'main' }
+const rpcEventSubscribers = new Set()
+let rpcEventListener = null
+const effectIntentSubscribers = new Set()
+let effectIntentListener = null
+
+function ensureRpcEventListener() {
+  if (rpcEventListener) return
+  rpcEventListener = (_event, payload) => {
+    for (const cb of rpcEventSubscribers) {
+      try {
+        cb(payload)
+      } catch (err) {
+        console.warn('[ipc] goblin:event subscriber failed', err)
+      }
+    }
+  }
+  ipcRenderer.on(IPC.rpc.event, rpcEventListener)
+}
+
+function maybeDisposeRpcEventListener() {
+  if (rpcEventSubscribers.size > 0 || !rpcEventListener) return
+  ipcRenderer.off(IPC.rpc.event, rpcEventListener)
+  rpcEventListener = null
+}
+
+function ensureEffectIntentListener() {
+  if (effectIntentListener) return
+  effectIntentListener = (_event, payload) => {
+    for (const cb of effectIntentSubscribers) {
+      try {
+        cb(payload)
+      } catch (err) {
+        console.warn('[ipc] goblin:effect-intent subscriber failed', err)
+      }
+    }
+  }
+  ipcRenderer.on(IPC.rpc.effectIntent, effectIntentListener)
+}
+
+function maybeDisposeEffectIntentListener() {
+  if (effectIntentSubscribers.size > 0 || !effectIntentListener) return
+  ipcRenderer.off(IPC.rpc.effectIntent, effectIntentListener)
+  effectIntentListener = null
+}
+
+contextBridge.exposeInMainWorld('goblinNative', {
+  runtime,
+  homeDir,
+  ...(hostPlatform ? { hostPlatform } : {}),
+  initialI18n,
+  initialSettings,
+  initialServer,
+  surface,
+  invokeRpc: ({ path, input, requestId }) => rpcCall({ path, input, requestId }),
+  abortRpc: (requestId) => safeInvoke(IPC.rpc.abort, { requestId }),
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  shell: {
+    openSettingsWindow: (input) => safeInvoke(IPC.shell.openSettingsWindow, input),
+    openExternalUrl: (input) => safeInvoke(IPC.shell.openExternalUrl, input),
+    openDirectoryDialog: (input) => safeInvoke(IPC.shell.openDirectoryDialog, input),
+    openFileDialog: (input) => safeInvoke(IPC.shell.openFileDialog, input),
+    consumeExternalOpenPaths: () => safeInvoke(IPC.shell.consumeExternalOpenPaths),
+    openInFinder: (input) => safeInvoke(IPC.shell.openInFinder, input),
+    readClipboardFilePaths: () => safeInvoke(IPC.shell.readClipboardFilePaths),
+    saveClipboardBinaryFiles: (input) => safeInvoke(IPC.shell.saveClipboardBinaryFiles, input),
+    writeFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.writeFileTreeClipboardFile, input),
+    readFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.readFileTreeClipboardFile, input),
+    openDetachedFileAreaWindow: (input) => safeInvoke(IPC.shell.openDetachedFileAreaWindow, input),
+    projectWindowChromeTheme: (input) => safeInvoke(IPC.shell.projectWindowChromeTheme, input),
+  },
+  terminal: {
+    notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),
+    sendTestNotification: () => safeInvoke(IPC.terminal.sendTestNotification),
+    setBadge: (count) => {
+      ipcRenderer.send(IPC.terminal.setBadge, count)
+    },
+  },
+  onEvent: (cb) => {
+    rpcEventSubscribers.add(cb)
+    ensureRpcEventListener()
+    return () => {
+      rpcEventSubscribers.delete(cb)
+      maybeDisposeRpcEventListener()
+    }
+  },
+  onIntent: (cb) => {
+    effectIntentSubscribers.add(cb)
+    ensureEffectIntentListener()
+    return () => {
+      effectIntentSubscribers.delete(cb)
+      maybeDisposeEffectIntentListener()
+    }
+  },
+})

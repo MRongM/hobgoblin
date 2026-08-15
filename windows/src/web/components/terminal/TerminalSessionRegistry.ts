@@ -1,0 +1,1133 @@
+import { setTerminalFocused } from '#/web/terminal-focus.ts'
+import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
+import { createTerminalBellController } from '#/web/components/terminal/terminal-bell-controller.ts'
+import { terminalDescriptor } from '#/web/components/terminal/terminal-descriptor.ts'
+import {
+  parseTerminalSessionKey,
+  terminalSessionKey,
+  worktreeTerminalKey,
+} from '#/web/components/terminal/terminal-session-keys.ts'
+import { compactTerminalProcessName, compactTerminalTitle } from '#/web/components/terminal/terminal-title.ts'
+import { terminalBridge } from '#/web/terminal.ts'
+import { readOrCreateWebTerminalAttachmentId } from '#/web/renderer-terminal-bridge.ts'
+import { parseTerminalIdIndex, resolveTerminalOwnership } from '#/shared/terminal.ts'
+import type {
+  TerminalCatalogMutationResult,
+  TerminalCloseResult,
+  TerminalLaunchMode,
+  TerminalSessionSnapshot,
+  TerminalSessionSummary as ServerTerminalSessionSummary,
+  TerminalTmuxPageDirection,
+} from '#/shared/terminal.ts'
+import {
+  branchForTerminalWorktree,
+  repoRootForTerminalIdentity,
+  resolveTerminalRepoWorktree,
+} from '#/web/components/terminal/terminal-repo-index.ts'
+import { DEFAULT_TERMINAL_FONT_SIZE } from '#/shared/settings-defaults.ts'
+import { DEFAULT_TERMINAL_FONT_FAMILY, measureTerminalGeometry } from '#/web/components/terminal/terminal-geometry.ts'
+import {
+  terminalWindowsPtyAppearanceForCurrentDocument,
+  type TerminalThemeMode,
+} from '#/web/components/terminal/terminal-theme.ts'
+import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
+import type {
+  TerminalDescriptor,
+  TerminalRepoIndex,
+  WorktreeTerminalSnapshot,
+  TerminalSessionBase,
+  TerminalSessionAttachHandlers,
+  TerminalMobileSelectionPoint,
+  TerminalSessionSummary,
+  TerminalSnapshot,
+  TerminalTouchScrollInput,
+  TerminalWorktreeScope,
+  TerminalOutputCompletionIntent,
+  TerminalCloseOptions,
+} from '#/web/components/terminal/types.ts'
+
+const EMPTY_TERMINAL_SNAPSHOT: TerminalSnapshot = {
+  phase: 'opening',
+  message: null,
+  processName: 'terminal',
+  canonicalTitle: null,
+}
+const TERMINAL_OUTPUT_ACTIVE_IDLE_MS = 1_200
+// Output within this window after a keystroke is echo, not program activity.
+const TERMINAL_OUTPUT_ACTIVE_ECHO_MS = 500
+// Output must flow this long before the activity indicator lights, so brief
+// bursts (TUI redraw on attach/resize, one-shot writes) stay dark.
+const TERMINAL_OUTPUT_ACTIVE_SUSTAIN_MS = 1_000
+
+function isValidCreateFirstFrame(result: Extract<TerminalCatalogMutationResult, { ok: true }>): boolean {
+  return (
+    typeof result.sessionId === 'string' &&
+    typeof result.snapshot === 'string' &&
+    typeof result.snapshotSeq === 'number' &&
+    typeof result.processName === 'string' &&
+    typeof result.canonicalCols === 'number' &&
+    typeof result.canonicalRows === 'number' &&
+    typeof result.phase === 'string' &&
+    Object.prototype.hasOwnProperty.call(result, 'message') &&
+    result.sessions.some((session) => session.sessionId === result.sessionId)
+  )
+}
+
+function terminalDescriptorsEqual(left: TerminalDescriptor, right: TerminalDescriptor): boolean {
+  return (
+    left.key === right.key &&
+    left.worktreeTerminalKey === right.worktreeTerminalKey &&
+    left.terminalId === right.terminalId &&
+    left.index === right.index &&
+    left.repoRoot === right.repoRoot &&
+    left.branch === right.branch &&
+    left.worktreePath === right.worktreePath &&
+    left.targetKind === right.targetKind &&
+    left.branchWorkspaceId === right.branchWorkspaceId &&
+    left.tmuxBacked === right.tmuxBacked &&
+    left.tmuxCloseSupported === right.tmuxCloseSupported
+  )
+}
+
+interface ReattachSnapshotCacheEntry {
+  sessionId: string
+  snapshot: string
+  snapshotSeq: number
+}
+
+export class TerminalSessionRegistry {
+  private repoIndex: TerminalRepoIndex = {}
+  private parkingRoot: HTMLDivElement | null = null
+  private readonly sessions = new Map<string, ManagedTerminalSession>()
+  private readonly sessionKeyBySessionId = new Map<string, string>()
+  private readonly sessionIdByKey = new Map<string, string>()
+  private readonly selectedKeyByWorktree = new Map<string, string>()
+  private readonly preferredSelectedKeyByWorktree = new Map<string, string>()
+  private readonly snapshotCache = new Map<string, TerminalSnapshot>()
+  private readonly reattachSnapshotCache = new Map<string, ReattachSnapshotCacheEntry>()
+  private readonly worktreeSnapshotCache = new Map<string, WorktreeTerminalSnapshot>()
+  private terminalCatalogSnapshotCache: readonly TerminalDescriptor[] | null = null
+  private readonly pendingCreationsByWorktree = new Map<string, number>()
+  private readonly outputActiveKeys = new Set<string>()
+  private readonly outputActiveIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly lastTerminalInputAt = new Map<string, number>()
+  private readonly hasUserInputByKey = new Map<string, boolean>()
+  private readonly outputBurstStartAt = new Map<string, number>()
+  private readonly outputBurstLastAt = new Map<string, number>()
+  private readonly outputBurstLastSeq = new Map<string, number>()
+  private readonly worktreeListeners = new Map<string, Set<() => void>>()
+  private readonly snapshotListeners = new Map<string, Set<() => void>>()
+  private readonly terminalCatalogListeners = new Set<() => void>()
+  private readonly displayOrderByKey = new Map<string, number>()
+  private readonly hostByWorktree = new Map<string, HTMLElement>()
+  private terminalFontSize = DEFAULT_TERMINAL_FONT_SIZE
+  private terminalFontFamily = DEFAULT_TERMINAL_FONT_FAMILY
+  private terminalThemeMode: TerminalThemeMode = 'theme'
+  private readonly getTerminalThemeMode = (): TerminalThemeMode => this.terminalThemeMode
+  private readonly bellController = createTerminalBellController(
+    (key) => {
+      if (key) {
+        const terminalWorktreeKey = this.sessions.get(key)?.descriptor.worktreeTerminalKey
+        if (terminalWorktreeKey) this.notifyWorktree(terminalWorktreeKey)
+        return
+      }
+      this.notifyAllWorktrees()
+    },
+    (count) => terminalBridge.setBadge(count),
+  )
+
+  constructor(
+    private readonly onSelectedWorktreeChange: (worktreeTerminalKey: string, key: string | null) => void = () => {},
+    private readonly onWorktreeEmpty: (repoRoot: string, worktreePath: string) => void = () => {},
+    private readonly onOutputCompletion: (intent: TerminalOutputCompletionIntent) => void = () => {},
+  ) {}
+
+  setRepoIndex(repoIndex: TerminalRepoIndex): void {
+    this.repoIndex = repoIndex
+    this.syncDescriptorsFromRepoIndex()
+  }
+
+  setParkingRoot(root: HTMLDivElement | null): void {
+    this.parkingRoot = root
+  }
+
+  setFontSize(fontSize: number): void {
+    if (this.terminalFontSize === fontSize) return
+    this.terminalFontSize = fontSize
+    for (const session of this.sessions.values()) session.setFontSize(fontSize)
+  }
+
+  setFontFamily(fontFamily: string): void {
+    if (this.terminalFontFamily === fontFamily) return
+    this.terminalFontFamily = fontFamily
+    for (const session of this.sessions.values()) session.setFontFamily(fontFamily)
+  }
+
+  setTerminalThemeMode(mode: TerminalThemeMode): void {
+    if (this.terminalThemeMode === mode) return
+    this.terminalThemeMode = mode
+    for (const session of this.sessions.values()) session.setTerminalThemeMode(this.getTerminalThemeMode)
+  }
+
+  destroy(): void {
+    setTerminalFocused(false)
+    for (const session of this.sessions.values()) session.dispose({ closeSession: false })
+    this.sessions.clear()
+    this.sessionKeyBySessionId.clear()
+    this.sessionIdByKey.clear()
+    this.selectedKeyByWorktree.clear()
+    this.preferredSelectedKeyByWorktree.clear()
+    this.snapshotCache.clear()
+    this.reattachSnapshotCache.clear()
+    this.worktreeSnapshotCache.clear()
+    this.terminalCatalogSnapshotCache = null
+    this.pendingCreationsByWorktree.clear()
+    this.outputActiveKeys.clear()
+    for (const timer of this.outputActiveIdleTimers.values()) clearTimeout(timer)
+    this.outputActiveIdleTimers.clear()
+    this.lastTerminalInputAt.clear()
+    this.hasUserInputByKey.clear()
+    this.outputBurstStartAt.clear()
+    this.outputBurstLastAt.clear()
+    this.outputBurstLastSeq.clear()
+    this.worktreeListeners.clear()
+    this.snapshotListeners.clear()
+    this.terminalCatalogListeners.clear()
+    this.hostByWorktree.clear()
+    this.bellController.reset()
+  }
+
+  registerWorktreeHost = (worktreeTerminalKey: string, host: HTMLElement | null): void => {
+    if (host) {
+      this.hostByWorktree.set(worktreeTerminalKey, host)
+    } else {
+      this.hostByWorktree.delete(worktreeTerminalKey)
+    }
+  }
+
+  handleOutput(event: { sessionId: string; data: string; seq: number; processName: string }): void {
+    const directKey = this.sessionKeyBySessionId.get(event.sessionId)
+    const directSession = directKey ? this.sessions.get(directKey) : null
+    if (directKey && directSession) {
+      directSession.handleOutput(event)
+      if (event.data.length > 0) this.markOutputActive(directKey, event.seq)
+    }
+  }
+
+  handleServerTitle(event: { sessionId: string; canonicalTitle: string | null }): void {
+    const directKey = this.sessionKeyBySessionId.get(event.sessionId)
+    const directSession = directKey ? this.sessions.get(directKey) : null
+    if (directSession) {
+      directSession.handleServerTitle(event.canonicalTitle)
+    }
+  }
+
+  handleExit(event: { sessionId: string }): void {
+    const directKey = this.sessionKeyBySessionId.get(event.sessionId)
+    const directSession = directKey ? this.sessions.get(directKey) : null
+    if (directKey && directSession?.handleExit(event)) {
+      this.discardLocalSessionAndDismissDetailIfLast(directKey, directSession.descriptor)
+      return
+    }
+    if (directKey && directSession && !directSession.currentSessionId()) {
+      this.discardLocalSessionAndDismissDetailIfLast(directKey, directSession.descriptor)
+    }
+  }
+
+  handleOwnership(event: {
+    sessionId: string
+    role: 'controller' | 'viewer' | 'unowned'
+    controllerStatus: 'connected' | 'none'
+    canonicalCols: number
+    canonicalRows: number
+  }): void {
+    const directKey = this.sessionKeyBySessionId.get(event.sessionId)
+    const directSession = directKey ? this.sessions.get(directKey) : null
+    if (directSession) {
+      directSession.handleOwnership(event)
+    }
+  }
+
+  reconcileServerSessions(
+    repoRoot: string,
+    serverSessions: ServerTerminalSessionSummary[],
+    attachmentId: string,
+    snapshotsBySessionId: ReadonlyMap<string, TerminalSessionSnapshot>,
+  ): void {
+    const resolvedRepoRoot = repoRootForTerminalIdentity(this.repoIndex, repoRoot)
+    if (!resolvedRepoRoot) return
+    const serverSessionKeys = new Set(
+      serverSessions.map((session) => canonicalTerminalSessionKey(session.key) ?? session.key),
+    )
+    const controllerKeyByWorktree = new Map<string, string>()
+    const touchedWorktrees = new Set<string>()
+    const inputStateChangedWorktrees = new Set<string>()
+    const localKeys = Array.from(this.sessions.entries())
+      .filter(([, session]) => session.descriptor.repoRoot === resolvedRepoRoot)
+      .map(([key]) => key)
+
+    let missingLocalCount = 0
+    let orphanedLocalCount = 0
+
+    for (const serverSession of serverSessions) {
+      const parsed = parseTerminalSessionKey(serverSession.key)
+      if (!parsed) continue
+      const target = resolveTerminalRepoWorktree(this.repoIndex, parsed.repoRoot, parsed.worktreePath)
+      if (!target || target.repoRoot !== resolvedRepoRoot) continue
+      const terminalWorktreeKey = worktreeTerminalKey(target.repoRoot, target.worktreePath)
+      touchedWorktrees.add(terminalWorktreeKey)
+      const descriptor = {
+        ...terminalDescriptor(
+          { repoRoot: target.repoRoot, branch: target.branch, worktreePath: target.worktreePath },
+          parsed.terminalId,
+          parseTerminalIdIndex(parsed.terminalId) ?? 1,
+        ),
+        tmuxBacked: serverSession.tmuxBacked === true,
+        tmuxCloseSupported: serverSession.tmuxCloseSupported,
+        ...(target.branchWorkspaceId
+          ? { targetKind: 'branch-workspace' as const, branchWorkspaceId: target.branchWorkspaceId }
+          : {}),
+      }
+      const previousSessionId = this.sessionIdByKey.get(descriptor.key)
+      const previousHasUserInput = this.hasUserInputByKey.get(descriptor.key)
+      const hasUserInput =
+        serverSession.hasUserInput === true ||
+        (previousSessionId === serverSession.sessionId && previousHasUserInput === true)
+          ? true
+          : serverSession.hasUserInput === false
+            ? false
+            : true
+      this.hasUserInputByKey.set(descriptor.key, hasUserInput)
+      if (previousHasUserInput !== hasUserInput) inputStateChangedWorktrees.add(terminalWorktreeKey)
+      if (!this.sessions.has(descriptor.key)) {
+        missingLocalCount += 1
+        this.ensureSession(descriptor)
+      }
+      const reattachCache = this.reattachSnapshotCache.get(descriptor.key)
+      const isReattachMatch = reattachCache?.sessionId === serverSession.sessionId
+      const serverSnapshot = snapshotsBySessionId.get(serverSession.sessionId) ?? null
+      const ownership = resolveTerminalOwnership(serverSession.controller, attachmentId)
+      this.sessions.get(descriptor.key)?.hydrate({
+        sessionId: serverSession.sessionId,
+        processName: serverSession.processName,
+        canonicalTitle: serverSession.canonicalTitle,
+        role: ownership.role,
+        controllerStatus: ownership.controllerStatus,
+        canonicalCols: serverSession.cols,
+        canonicalRows: serverSession.rows,
+        phase: serverSession.phase,
+        message: serverSession.message,
+        windowsPty: serverSession.windowsPty,
+        snapshot: serverSnapshot?.snapshot ?? (isReattachMatch ? reattachCache?.snapshot : undefined),
+        snapshotSeq: serverSnapshot?.snapshotSeq ?? (isReattachMatch ? reattachCache?.snapshotSeq : undefined),
+      })
+      this.syncSessionIdIndex(descriptor.key, serverSession.sessionId)
+      // The server releases the controller when the previous app instance
+      // disconnects; reclaim live unowned sessions instead of waiting for a
+      // manual takeover. Races between windows are resolved server-side via
+      // authoritative ownership events (last claim wins, losers become viewers).
+      if (ownership.role === 'unowned' && serverSession.phase === 'open') {
+        const session = this.sessions.get(descriptor.key)
+        if (session && !session.snapshot().takeoverPending) session.takeover()
+      }
+      if (serverSession.controller?.attachmentId === attachmentId) {
+        controllerKeyByWorktree.set(terminalWorktreeKey, descriptor.key)
+      }
+      const previousDisplayOrder = this.displayOrderByKey.get(descriptor.key)
+      this.displayOrderByKey.set(descriptor.key, serverSession.displayOrder)
+      if (previousDisplayOrder !== serverSession.displayOrder) this.notifyTerminalCatalog()
+    }
+
+    for (const key of localKeys) {
+      const session = this.sessions.get(key)
+      if (!session) continue
+      if (serverSessionKeys.has(key)) continue
+      if (!this.sessionIdByKey.has(key)) continue
+      orphanedLocalCount += 1
+      this.discardLocalSessionAndDismissDetailIfLast(key, session.descriptor)
+    }
+
+    if (missingLocalCount > 0 || orphanedLocalCount > 0) {
+      console.debug('[TerminalSessionProvider] sync results for', repoRoot, ':', {
+        serverSessions: serverSessions.length,
+        localSessions: localKeys.length,
+        missingLocal: missingLocalCount,
+        orphanedLocal: orphanedLocalCount,
+      })
+    }
+
+    for (const worktreeTerminalKey of touchedWorktrees) {
+      const current = this.selectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+      const preferred = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+      const next = this.resolveSelectedTerminalKey(
+        worktreeTerminalKey,
+        preferred,
+        current,
+        controllerKeyByWorktree.get(worktreeTerminalKey) ?? null,
+      )
+      this.selectTerminalKey(worktreeTerminalKey, next)
+      if (inputStateChangedWorktrees.has(worktreeTerminalKey)) this.notifyWorktree(worktreeTerminalKey)
+    }
+  }
+
+  createTerminal = async (base: TerminalSessionBase, launchMode: TerminalLaunchMode = 'native'): Promise<string> => {
+    const attachmentId = readOrCreateWebTerminalAttachmentId()
+    const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
+    const geometry = this.measureCreateGeometry(terminalWorktreeKey)
+    const requestInput = {
+      repoRoot: base.repoRoot,
+      branch: base.branch,
+      worktreePath: base.worktreePath,
+      ...(base.targetKind ? { targetKind: base.targetKind } : {}),
+      ...(base.branchWorkspaceId ? { branchWorkspaceId: base.branchWorkspaceId } : {}),
+      attachmentId,
+      cols: geometry.cols,
+      rows: geometry.rows,
+      windowsPtyAppearance: terminalWindowsPtyAppearanceForCurrentDocument(this.terminalThemeMode),
+    }
+    this.beginTerminalCreation(terminalWorktreeKey)
+    try {
+      const result = await terminalBridge.create({
+        ...requestInput,
+        kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
+        launchMode,
+      })
+      if (!result.ok) {
+        throw new Error(result.message)
+      }
+      if (!isValidCreateFirstFrame(result)) {
+        throw new Error('error.terminal-create-failed')
+      }
+      const createdKey = canonicalTerminalSessionKey(result.key) ?? result.key
+      this.setPreferredSelectedTerminalKey(terminalWorktreeKey, createdKey)
+      this.reconcileServerSessions(
+        base.repoRoot,
+        result.sessions,
+        attachmentId,
+        new Map<string, TerminalSessionSnapshot>([
+          [
+            result.sessionId,
+            { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq },
+          ],
+        ]),
+      )
+      return createdKey
+    } finally {
+      this.endTerminalCreation(terminalWorktreeKey)
+    }
+  }
+
+  restoreTmuxSessions = async (base: TerminalSessionBase): Promise<number> => {
+    const attachmentId = readOrCreateWebTerminalAttachmentId()
+    const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
+    const geometry = this.measureCreateGeometry(terminalWorktreeKey)
+    const result = await terminalBridge.openTmuxSessions({
+      repoRoot: base.repoRoot,
+      branch: base.branch,
+      worktreePath: base.worktreePath,
+      ...(base.targetKind ? { targetKind: base.targetKind } : {}),
+      ...(base.branchWorkspaceId ? { branchWorkspaceId: base.branchWorkspaceId } : {}),
+      attachmentId,
+      cols: geometry.cols,
+      rows: geometry.rows,
+      windowsPtyAppearance: terminalWindowsPtyAppearanceForCurrentDocument(this.terminalThemeMode),
+    })
+    if (!result.ok) throw new Error(result.message)
+    if (result.restored === 0) {
+      this.reconcileServerSessions(base.repoRoot, result.sessions, attachmentId, new Map())
+      return 0
+    }
+    if (!('sessionId' in result) || !isValidCreateFirstFrame(result)) {
+      throw new Error('error.terminal-create-failed')
+    }
+    const restoredKey = canonicalTerminalSessionKey(result.key) ?? result.key
+    this.setPreferredSelectedTerminalKey(terminalWorktreeKey, restoredKey)
+    this.reconcileServerSessions(
+      base.repoRoot,
+      result.sessions,
+      attachmentId,
+      new Map<string, TerminalSessionSnapshot>([
+        [result.sessionId, { sessionId: result.sessionId, snapshot: result.snapshot, snapshotSeq: result.snapshotSeq }],
+      ]),
+    )
+    return result.restored
+  }
+
+  private measureCreateGeometry(worktreeTerminalKey: string): { cols: number; rows: number } {
+    const host = this.hostByWorktree.get(worktreeTerminalKey)
+    const geometry = host
+      ? measureTerminalGeometry({
+          host,
+          fontSize: this.terminalFontSize,
+          fontFamily: this.terminalFontFamily,
+        })
+      : null
+    if (!geometry) return { cols: 80, rows: 24 }
+    return geometry
+  }
+
+  private selectedDescriptor(worktreeTerminalKey: string): TerminalDescriptor | null {
+    const selectedKey = this.selectedKeyByWorktree.get(worktreeTerminalKey)
+    return selectedKey ? (this.sessions.get(selectedKey)?.descriptor ?? null) : null
+  }
+
+  setPreferredSelectedTerminalKeys(selectedKeysByWorktree: Record<string, string>): void {
+    const nextPreferred = new Map(Object.entries(selectedKeysByWorktree))
+    const worktrees = new Set<string>([
+      ...Array.from(this.preferredSelectedKeyByWorktree.keys()),
+      ...Array.from(nextPreferred.keys()),
+      ...Array.from(this.selectedKeyByWorktree.keys()),
+    ])
+    this.preferredSelectedKeyByWorktree.clear()
+    for (const [worktreeTerminalKey, key] of nextPreferred)
+      this.preferredSelectedKeyByWorktree.set(worktreeTerminalKey, key)
+    for (const worktreeTerminalKey of worktrees) {
+      const preferred = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+      if (!preferred || !this.isSelectedKeyValid(worktreeTerminalKey, preferred)) continue
+      this.selectTerminalKey(worktreeTerminalKey, preferred)
+    }
+  }
+
+  worktreeSnapshot = (worktreeTerminalKey: string): WorktreeTerminalSnapshot => {
+    const cached = this.worktreeSnapshotCache.get(worktreeTerminalKey)
+    if (cached) return cached
+    const sessions = this.sessionSummaries(worktreeTerminalKey)
+    const snapshot: WorktreeTerminalSnapshot = {
+      worktreeTerminalKey,
+      selectedDescriptor: this.selectedDescriptor(worktreeTerminalKey),
+      sessions,
+      count: sessions.length,
+      creating: (this.pendingCreationsByWorktree.get(worktreeTerminalKey) ?? 0) > 0,
+    }
+    this.worktreeSnapshotCache.set(worktreeTerminalKey, snapshot)
+    return snapshot
+  }
+
+  private sessionSummaries(worktreeTerminalKey: string): TerminalSessionSummary[] {
+    const selectedKey = this.selectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+    return this.sortedSessionsForWorktree(worktreeTerminalKey).map((session) => {
+      const snapshot = this.snapshotCache.get(session.descriptor.key) ?? session.snapshot()
+      this.snapshotCache.set(session.descriptor.key, snapshot)
+      const index = session.descriptor.index
+      return {
+        key: session.descriptor.key,
+        worktreeTerminalKey,
+        terminalId: session.descriptor.terminalId,
+        index,
+        title: withTerminalSequencePrefix(index, summarizeTerminalTitle(snapshot, index)),
+        fullTitle: withTerminalSequencePrefix(index, fullTerminalTitle(snapshot, index)),
+        originalTitle: terminalOriginalTitle(snapshot),
+        phase: snapshot.phase,
+        isOutputActive: this.outputActiveKeys.has(session.descriptor.key),
+        hasUserInput: this.hasUserInputByKey.get(session.descriptor.key) !== false,
+        selected: session.descriptor.key === selectedKey,
+        hasBell: this.bellController.hasBell(session.descriptor.key),
+        tmuxBacked: session.descriptor.tmuxBacked === true,
+        tmuxCloseSupported: session.descriptor.tmuxCloseSupported,
+      }
+    })
+  }
+
+  subscribeWorktree = (worktreeTerminalKey: string, listener: () => void): (() => void) => {
+    return this.subscribeToKeyedListeners(this.worktreeListeners, worktreeTerminalKey, listener)
+  }
+
+  selectTerminal = (worktreeTerminalKey: string, key: string): void => {
+    const session = this.sessions.get(key)
+    if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey) return
+    const wasSelected = this.selectedKeyByWorktree.get(worktreeTerminalKey) === key
+    const hadBell = this.bellController.hasBell(key)
+    if (wasSelected && !hadBell) return
+    this.selectTerminalKey(worktreeTerminalKey, key, { notify: !hadBell })
+    this.bellController.clear(key)
+  }
+
+  clearBell = (key: string): boolean => {
+    return this.bellController.clear(key)
+  }
+
+  scrollToBottom = (key: string): void => {
+    this.sessions.get(key)?.scrollToBottom()
+  }
+
+  pageTmux = (key: string, direction: TerminalTmuxPageDirection): void => {
+    this.sessions.get(key)?.pageTmux(direction)
+  }
+
+  focusTerminal = (key: string): void => {
+    this.sessions.get(key)?.focus()
+  }
+
+  focusSelectedTerminalForWorktree = (worktreeTerminalKey: string): boolean => {
+    const preferredKey = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+    const selectedKey = this.resolveSelectedTerminalKey(worktreeTerminalKey, preferredKey)
+    const session = selectedKey ? this.sessions.get(selectedKey) : null
+    if (!selectedKey || !session) return false
+    const phase = this.snapshot(selectedKey).phase
+    if (phase === 'closed' || phase === 'error') return false
+    session.focus()
+    return true
+  }
+
+  focusRunningTerminalForRepo = (repoRoot: string): boolean => {
+    const repoWorktreePrefix = `${repoRoot}\0`
+    for (const worktreeTerminalKey of this.hostByWorktree.keys()) {
+      if (!worktreeTerminalKey.startsWith(repoWorktreePrefix)) continue
+      if (this.focusSelectedTerminalForWorktree(worktreeTerminalKey)) return true
+    }
+    return false
+  }
+
+  scrollLines = (key: string, amount: number): void => {
+    this.sessions.get(key)?.scrollLines(amount)
+  }
+
+  scrollByTouch = (key: string, input: TerminalTouchScrollInput): void => {
+    this.sessions.get(key)?.scrollByTouch(input)
+  }
+
+  beginMobileSelection = (key: string, point: TerminalMobileSelectionPoint): boolean => {
+    return this.sessions.get(key)?.beginMobileSelection(point) ?? false
+  }
+
+  extendMobileSelection = (key: string, point: TerminalMobileSelectionPoint): void => {
+    this.sessions.get(key)?.extendMobileSelection(point)
+  }
+
+  finishMobileSelection = (key: string, point: TerminalMobileSelectionPoint): void => {
+    this.sessions.get(key)?.finishMobileSelection(point)
+  }
+
+  cancelMobileSelection = (key: string, point: TerminalMobileSelectionPoint): void => {
+    this.sessions.get(key)?.cancelMobileSelection(point)
+  }
+
+  mobileSelectionText = (key: string): string => {
+    return this.sessions.get(key)?.mobileSelectionText() ?? ''
+  }
+
+  clearMobileSelection = (key: string): void => {
+    this.sessions.get(key)?.clearMobileSelection()
+  }
+
+  closeTerminalAndDismissDetailIfLast = (
+    key: string,
+    scope: TerminalWorktreeScope,
+    options: TerminalCloseOptions = {},
+  ): void | Promise<TerminalCloseResult> => {
+    const session = this.sessions.get(key)
+    if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey(scope.repoRoot, scope.worktreePath))
+      return
+    if (options.closeTmuxSession === true) return this.closeTmuxBackedTerminal(key, session.currentSessionId())
+    this.closeTerminal(key)
+  }
+
+  attach = (descriptor: TerminalDescriptor, host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void => {
+    this.ensureSession(descriptor).attach(host, handlers)
+  }
+
+  detach = (key: string, host: HTMLElement): void => {
+    const session = this.sessions.get(key)
+    if (session && this.parkingRoot) {
+      const serialized = session.serialize()
+      const sessionId = session.currentSessionId()
+      if (serialized && sessionId) {
+        this.reattachSnapshotCache.set(key, { sessionId, snapshot: serialized, snapshotSeq: 0 })
+      }
+      session.detach(host, this.parkingRoot)
+    }
+  }
+
+  restart = (key: string): void => {
+    this.sessions.get(key)?.restart()
+  }
+
+  snapshot = (key: string): TerminalSnapshot => {
+    const cached = this.snapshotCache.get(key)
+    if (cached) return cached
+    const session = this.sessions.get(key)
+    if (!session) return EMPTY_TERMINAL_SNAPSHOT
+    const next = session.snapshot()
+    this.snapshotCache.set(key, next)
+    return next
+  }
+
+  terminalCatalogSnapshot = (): readonly TerminalDescriptor[] => {
+    if (this.terminalCatalogSnapshotCache) return this.terminalCatalogSnapshotCache
+    const sessions = Array.from(this.sessions.values()).sort((left, right) => {
+      const leftScope = left.descriptor.worktreeTerminalKey
+      const rightScope = right.descriptor.worktreeTerminalKey
+      if (leftScope !== rightScope) return leftScope < rightScope ? -1 : 1
+      const leftOrder = this.displayOrderByKey.get(left.descriptor.key) ?? left.descriptor.index - 1
+      const rightOrder = this.displayOrderByKey.get(right.descriptor.key) ?? right.descriptor.index - 1
+      return leftOrder - rightOrder || left.descriptor.index - right.descriptor.index
+    })
+    this.terminalCatalogSnapshotCache = sessions.map((session) => session.descriptor)
+    return this.terminalCatalogSnapshotCache
+  }
+
+  subscribeTerminalCatalog = (listener: () => void): (() => void) => {
+    this.terminalCatalogListeners.add(listener)
+    return () => this.terminalCatalogListeners.delete(listener)
+  }
+
+  isKnownSession = (key: string): boolean => {
+    return this.sessions.has(key)
+  }
+
+  subscribeSnapshot = (key: string, listener: () => void): (() => void) => {
+    return this.subscribeToKeyedListeners(this.snapshotListeners, key, listener)
+  }
+
+  isTerminalFocusTarget = (key: string, target: EventTarget | null): boolean => {
+    return this.sessions.get(key)?.isTerminalFocusTarget(target) ?? false
+  }
+
+  findNext = (key: string, term: string, incremental?: boolean) => {
+    return this.sessions.get(key)?.findNext(term, incremental) ?? { resultIndex: -1, resultCount: 0, found: false }
+  }
+
+  findPrevious = (key: string, term: string) => {
+    return this.sessions.get(key)?.findPrevious(term) ?? { resultIndex: -1, resultCount: 0, found: false }
+  }
+
+  clearSearch = (key: string): void => {
+    this.sessions.get(key)?.clearSearch()
+  }
+
+  waitForInputReady = (key: string): Promise<boolean> => {
+    const readiness = this.inputReadiness(key)
+    if (readiness !== null) return Promise.resolve(readiness)
+
+    return new Promise((resolve) => {
+      let unsubscribe = () => {}
+      const settleWhenReady = () => {
+        const next = this.inputReadiness(key)
+        if (next === null) return
+        unsubscribe()
+        resolve(next)
+      }
+      unsubscribe = this.subscribeSnapshot(key, settleWhenReady)
+      settleWhenReady()
+    })
+  }
+
+  writeInput = (key: string, data: string): void => {
+    this.sessions.get(key)?.writeInput(data)
+  }
+
+  writeExtraKey = (key: string, input: TerminalExtraKeyInput): void => {
+    this.sessions.get(key)?.writeExtraKey(input)
+  }
+
+  takeover = (key: string): void => {
+    this.sessions.get(key)?.takeover()
+  }
+
+  serialize = (key: string): string => {
+    return this.sessions.get(key)?.serialize() ?? ''
+  }
+
+  reorderSessions = async (scope: string, orderedKeys: string[]): Promise<boolean> => {
+    if (orderedKeys.length === 0) return true
+    if (new Set(orderedKeys).size !== orderedKeys.length) return false
+    let parsed: { repoRoot: string; worktreePath: string; terminalId: string } | null = null
+    for (const key of orderedKeys) {
+      const item = parseTerminalSessionKey(key)
+      if (!item) return false
+      if (worktreeTerminalKey(item.repoRoot, item.worktreePath) !== scope) return false
+      if (!parsed) parsed = item
+    }
+    if (!parsed) return false
+    // Snapshot current order so we can roll back if the server rejects the reorder.
+    const previousOrder = new Map<string, number | undefined>()
+    for (const key of orderedKeys) previousOrder.set(key, this.displayOrderByKey.get(key))
+    for (let i = 0; i < orderedKeys.length; i++) {
+      this.displayOrderByKey.set(orderedKeys[i], i)
+    }
+    this.notifyTerminalCatalog()
+    this.notifyWorktree(scope)
+    const result = await terminalBridge.reorder({
+      repoRoot: parsed.repoRoot,
+      worktreePath: parsed.worktreePath,
+      orderedKeys,
+    })
+    if (!result) {
+      for (const [key, order] of previousOrder) {
+        if (order === undefined) this.displayOrderByKey.delete(key)
+        else this.displayOrderByKey.set(key, order)
+      }
+      this.notifyTerminalCatalog()
+      this.notifyWorktree(scope)
+    }
+    return result
+  }
+
+  private notifyWorktree(worktreeTerminalKey: string): void {
+    this.worktreeSnapshotCache.delete(worktreeTerminalKey)
+    const listeners = this.worktreeListeners.get(worktreeTerminalKey)
+    if (!listeners) return
+    for (const listener of Array.from(listeners)) listener()
+  }
+
+  private notifyTerminalCatalog(): void {
+    this.terminalCatalogSnapshotCache = null
+    for (const listener of Array.from(this.terminalCatalogListeners)) listener()
+  }
+
+  private beginTerminalCreation(worktreeTerminalKey: string): void {
+    const pending = this.pendingCreationsByWorktree.get(worktreeTerminalKey) ?? 0
+    this.pendingCreationsByWorktree.set(worktreeTerminalKey, pending + 1)
+    this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private endTerminalCreation(worktreeTerminalKey: string): void {
+    const pending = this.pendingCreationsByWorktree.get(worktreeTerminalKey) ?? 0
+    if (pending <= 1) this.pendingCreationsByWorktree.delete(worktreeTerminalKey)
+    else this.pendingCreationsByWorktree.set(worktreeTerminalKey, pending - 1)
+    this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private notifySnapshot(key: string): void {
+    const listeners = this.snapshotListeners.get(key)
+    if (!listeners) return
+    for (const listener of Array.from(listeners)) listener()
+  }
+
+  private notifyAllWorktrees(): void {
+    for (const worktreeTerminalKey of Array.from(this.worktreeListeners.keys()))
+      this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private noteTerminalInput(key: string): void {
+    this.lastTerminalInputAt.set(key, Date.now())
+    if (this.hasUserInputByKey.get(key) === true) return
+    this.hasUserInputByKey.set(key, true)
+    const worktreeTerminalKey = this.sessions.get(key)?.descriptor.worktreeTerminalKey
+    if (worktreeTerminalKey) this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private isSustainedOutput(key: string): boolean {
+    const now = Date.now()
+    const lastInputAt = this.lastTerminalInputAt.get(key)
+    if (lastInputAt !== undefined && now - lastInputAt < TERMINAL_OUTPUT_ACTIVE_ECHO_MS) return false
+    const lastOutputAt = this.outputBurstLastAt.get(key)
+    let burstStartAt = this.outputBurstStartAt.get(key)
+    if (
+      burstStartAt === undefined ||
+      lastOutputAt === undefined ||
+      now - lastOutputAt >= TERMINAL_OUTPUT_ACTIVE_IDLE_MS
+    ) {
+      burstStartAt = now
+      this.outputBurstStartAt.set(key, now)
+    }
+    this.outputBurstLastAt.set(key, now)
+    return now - burstStartAt >= TERMINAL_OUTPUT_ACTIVE_SUSTAIN_MS
+  }
+
+  private markOutputActive(key: string, outputSeq: number): void {
+    const session = this.sessions.get(key)
+    if (!session) return
+    if (!this.isSustainedOutput(key)) return
+    const wasActive = this.outputActiveKeys.has(key)
+    this.outputActiveKeys.add(key)
+    this.outputBurstLastSeq.set(key, outputSeq)
+    const sessionId = session.currentSessionId()
+    const currentTimer = this.outputActiveIdleTimers.get(key)
+    if (currentTimer) clearTimeout(currentTimer)
+    const timer = setTimeout(() => {
+      this.outputActiveIdleTimers.delete(key)
+      if (!this.outputActiveKeys.delete(key)) return
+      const latestSession = this.sessions.get(key)
+      if (!latestSession) return
+      this.notifyWorktree(latestSession.descriptor.worktreeTerminalKey)
+      const finalOutputSeq = this.outputBurstLastSeq.get(key)
+      const burstStartAt = this.outputBurstStartAt.get(key)
+      const lastOutputAt = this.outputBurstLastAt.get(key)
+      const activityDurationMs =
+        burstStartAt !== undefined && lastOutputAt !== undefined ? Math.max(0, lastOutputAt - burstStartAt) : 0
+      const snapshot = latestSession.snapshot()
+      if (sessionId && latestSession.currentSessionId() === sessionId && finalOutputSeq !== undefined) {
+        this.onOutputCompletion({
+          descriptor: latestSession.descriptor,
+          sessionId,
+          finalOutputSeq,
+          activityDurationMs,
+          processName: snapshot.processName,
+          canonicalTitle: snapshot.canonicalTitle,
+        })
+      }
+    }, TERMINAL_OUTPUT_ACTIVE_IDLE_MS)
+    this.outputActiveIdleTimers.set(key, timer)
+    if (!wasActive) this.notifyWorktree(session.descriptor.worktreeTerminalKey)
+  }
+
+  private clearOutputActive(key: string): void {
+    const timer = this.outputActiveIdleTimers.get(key)
+    if (timer) clearTimeout(timer)
+    this.outputActiveIdleTimers.delete(key)
+    this.outputActiveKeys.delete(key)
+    this.lastTerminalInputAt.delete(key)
+    this.outputBurstStartAt.delete(key)
+    this.outputBurstLastAt.delete(key)
+    this.outputBurstLastSeq.delete(key)
+  }
+
+  private subscribeToKeyedListeners(
+    listenersMap: Map<string, Set<() => void>>,
+    key: string,
+    listener: () => void,
+  ): () => void {
+    let listeners = listenersMap.get(key)
+    if (!listeners) {
+      listeners = new Set()
+      listenersMap.set(key, listeners)
+    }
+    listeners.add(listener)
+    return () => {
+      const current = listenersMap.get(key)
+      if (!current) return
+      current.delete(listener)
+      if (current.size === 0) listenersMap.delete(key)
+    }
+  }
+
+  private inputReadiness(key: string): boolean | null {
+    if (!this.sessions.has(key)) return false
+    const snapshot = this.snapshot(key)
+    if (snapshot.phase === 'error' || snapshot.phase === 'closed') return false
+    if (snapshot.phase !== 'open' || snapshot.renderPending === true) return null
+    return snapshot.attachment?.active === true
+  }
+
+  private syncSessionIdIndex(key: string, sessionId: string | null): void {
+    const previousSessionId = this.sessionIdByKey.get(key)
+    if (
+      previousSessionId &&
+      previousSessionId !== sessionId &&
+      this.sessionKeyBySessionId.get(previousSessionId) === key
+    ) {
+      this.sessionKeyBySessionId.delete(previousSessionId)
+    }
+    if (!sessionId) {
+      this.sessionIdByKey.delete(key)
+      return
+    }
+    this.sessionIdByKey.set(key, sessionId)
+    this.sessionKeyBySessionId.set(sessionId, key)
+  }
+
+  private notifySession(key: string): void {
+    const session = this.sessions.get(key)
+    this.syncSessionIdIndex(key, session?.currentSessionId() ?? null)
+    if (session) {
+      this.snapshotCache.set(key, session.snapshot())
+    } else {
+      this.snapshotCache.delete(key)
+    }
+    this.notifySnapshot(key)
+    const worktreeTerminalKey = session?.descriptor.worktreeTerminalKey
+    if (worktreeTerminalKey) this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private removeSession(key: string, options: { dispose: boolean; closeSession?: boolean }): boolean {
+    const session = this.sessions.get(key)
+    if (!session) return false
+    const worktreeTerminalKey = session.descriptor.worktreeTerminalKey
+    const orderedKeysBeforeRemoval = this.sortedSessionsForWorktree(worktreeTerminalKey).map(
+      (item) => item.descriptor.key,
+    )
+    const closedOrderIndex = orderedKeysBeforeRemoval.indexOf(key)
+    const wasSelected = this.selectedKeyByWorktree.get(worktreeTerminalKey) === key
+    this.syncSessionIdIndex(key, null)
+    this.sessions.delete(key)
+    this.notifyTerminalCatalog()
+    this.snapshotCache.delete(key)
+    this.reattachSnapshotCache.delete(key)
+    this.displayOrderByKey.delete(key)
+    this.hasUserInputByKey.delete(key)
+    this.clearOutputActive(key)
+    this.notifySnapshot(key)
+    this.bellController.remove(key)
+    if (options.dispose) session.dispose({ closeSession: options.closeSession !== false })
+    if (wasSelected) {
+      const remaining = this.sortedSessionsForWorktree(worktreeTerminalKey)
+      const right = closedOrderIndex >= 0 ? remaining[closedOrderIndex] : null
+      const left = closedOrderIndex >= 1 ? remaining[closedOrderIndex - 1] : null
+      const nextKey = right?.descriptor.key ?? left?.descriptor.key ?? null
+      this.selectTerminalKey(worktreeTerminalKey, nextKey, { notify: false })
+    }
+    this.notifyWorktree(worktreeTerminalKey)
+    if (!this.hasSessionsForWorktree(worktreeTerminalKey)) {
+      this.onWorktreeEmpty(session.descriptor.repoRoot, session.descriptor.worktreePath)
+    }
+    return true
+  }
+
+  private hasSessionsForWorktree(worktreeTerminalKey: string): boolean {
+    for (const s of this.sessions.values()) {
+      if (s.descriptor.worktreeTerminalKey === worktreeTerminalKey) return true
+    }
+    return false
+  }
+
+  private closeTerminal(key: string): void {
+    this.removeSession(key, { dispose: true, closeSession: true })
+  }
+
+  private async closeTmuxBackedTerminal(key: string, sessionId: string | null): Promise<TerminalCloseResult> {
+    if (!sessionId) {
+      this.removeSession(key, { dispose: true, closeSession: false })
+      return { ok: true }
+    }
+    let result: TerminalCloseResult
+    try {
+      result = await terminalBridge.close({ sessionId, closeTmuxSession: true })
+    } catch {
+      return { ok: false, message: 'error.tmux-command-failed' }
+    }
+    if (!result.ok) return result
+    this.removeSession(key, { dispose: true, closeSession: false })
+    return result
+  }
+
+  private discardLocalSessionAndDismissDetailIfLast(key: string, base: TerminalSessionBase): void {
+    const session = this.sessions.get(key)
+    const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
+    if (!session || session.descriptor.worktreeTerminalKey !== terminalWorktreeKey) return
+    this.removeSession(key, { dispose: true, closeSession: false })
+  }
+
+  private syncDescriptorsFromRepoIndex(): void {
+    const changedWorktrees = new Set<string>()
+    for (const session of this.sessions.values()) {
+      const branch = branchForTerminalWorktree(
+        this.repoIndex,
+        session.descriptor.repoRoot,
+        session.descriptor.worktreePath,
+      )
+      if (!branch || branch === session.descriptor.branch) continue
+      session.updateDescriptor({ ...session.descriptor, branch })
+      changedWorktrees.add(session.descriptor.worktreeTerminalKey)
+    }
+    for (const worktreeTerminalKey of changedWorktrees) this.notifyWorktree(worktreeTerminalKey)
+    if (changedWorktrees.size > 0) this.notifyTerminalCatalog()
+  }
+
+  private ensureSession(descriptor: TerminalDescriptor): ManagedTerminalSession {
+    const current = this.sessions.get(descriptor.key)
+    if (current) {
+      const descriptorChanged = !terminalDescriptorsEqual(current.descriptor, descriptor)
+      current.updateDescriptor(descriptor)
+      this.syncSessionIdIndex(
+        descriptor.key,
+        current.currentSessionId() ?? this.sessionIdByKey.get(descriptor.key) ?? null,
+      )
+      if (descriptorChanged) this.notifyTerminalCatalog()
+      this.notifyWorktree(descriptor.worktreeTerminalKey)
+      return current
+    }
+    const session = new ManagedTerminalSession(
+      descriptor,
+      () => this.notifySession(descriptor.key),
+      this.bellController.handleBell,
+      this.terminalFontSize,
+      this.terminalFontFamily,
+      this.getTerminalThemeMode,
+      (inputDescriptor) => this.noteTerminalInput(inputDescriptor.key),
+    )
+    this.sessions.set(descriptor.key, session)
+    this.notifyTerminalCatalog()
+    this.syncSessionIdIndex(descriptor.key, session.currentSessionId())
+    this.snapshotCache.set(descriptor.key, session.snapshot())
+    if (!this.selectedKeyByWorktree.has(descriptor.worktreeTerminalKey)) {
+      const preferred = this.preferredSelectedKeyByWorktree.get(descriptor.worktreeTerminalKey)
+      if (!preferred || preferred === descriptor.key)
+        this.selectTerminalKey(descriptor.worktreeTerminalKey, descriptor.key, { notify: false })
+    }
+    this.notifyWorktree(descriptor.worktreeTerminalKey)
+    return session
+  }
+
+  private selectTerminalKey(worktreeTerminalKey: string, key: string | null, options: { notify?: boolean } = {}): void {
+    const next = key && this.isSelectedKeyValid(worktreeTerminalKey, key) ? key : null
+    const current = this.selectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+    if (current === next) {
+      this.setPreferredSelectedTerminalKey(worktreeTerminalKey, next)
+      return
+    }
+    if (next) {
+      this.selectedKeyByWorktree.set(worktreeTerminalKey, next)
+    } else {
+      this.selectedKeyByWorktree.delete(worktreeTerminalKey)
+    }
+    this.setPreferredSelectedTerminalKey(worktreeTerminalKey, next)
+    if (options.notify !== false) this.notifyWorktree(worktreeTerminalKey)
+  }
+
+  private setPreferredSelectedTerminalKey(worktreeTerminalKey: string, key: string | null): void {
+    const current = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
+    if (current === key) return
+    if (key) this.preferredSelectedKeyByWorktree.set(worktreeTerminalKey, key)
+    else this.preferredSelectedKeyByWorktree.delete(worktreeTerminalKey)
+    this.onSelectedWorktreeChange(worktreeTerminalKey, key)
+  }
+
+  private isSelectedKeyValid(worktreeTerminalKey: string, key: string): boolean {
+    return this.sessions.get(key)?.descriptor.worktreeTerminalKey === worktreeTerminalKey
+  }
+
+  private sortedSessionsForWorktree(worktreeTerminalKey: string): ManagedTerminalSession[] {
+    return Array.from(this.sessions.values())
+      .filter((session) => session.descriptor.worktreeTerminalKey === worktreeTerminalKey)
+      .sort((a, b) => {
+        const orderA = this.displayOrderByKey.get(a.descriptor.key) ?? a.descriptor.index - 1
+        const orderB = this.displayOrderByKey.get(b.descriptor.key) ?? b.descriptor.index - 1
+        return orderA - orderB || a.descriptor.index - b.descriptor.index
+      })
+  }
+
+  private resolveSelectedTerminalKey(
+    worktreeTerminalKey: string,
+    preferredKey: string | null,
+    currentKey: string | null = this.selectedKeyByWorktree.get(worktreeTerminalKey) ?? null,
+    controllerKey: string | null = null,
+  ): string | null {
+    if (preferredKey && this.isSelectedKeyValid(worktreeTerminalKey, preferredKey)) return preferredKey
+    if (currentKey && this.isSelectedKeyValid(worktreeTerminalKey, currentKey)) return currentKey
+    if (controllerKey && this.isSelectedKeyValid(worktreeTerminalKey, controllerKey)) return controllerKey
+    return this.sortedSessionsForWorktree(worktreeTerminalKey)[0]?.descriptor.key ?? null
+  }
+}
+
+function canonicalTerminalSessionKey(key: string): string | null {
+  const parsed = parseTerminalSessionKey(key)
+  return parsed ? terminalSessionKey(parsed.repoRoot, parsed.worktreePath, parsed.terminalId) : null
+}
+
+function formatTerminalSequencePrefix(index: number): string {
+  return `#${index}`
+}
+
+function withTerminalSequencePrefix(index: number, title: string): string {
+  const trimmedTitle = title.trim()
+  const displayTitle = trimmedTitle && trimmedTitle !== 'terminal' ? trimmedTitle : `terminal ${index}`
+  return `${formatTerminalSequencePrefix(index)} ${displayTitle}`
+}
+
+function summarizeTerminalTitle(snapshot: TerminalSnapshot, index: number): string {
+  const canonicalTitle = terminalOriginalTitle(snapshot) ?? ''
+  if (canonicalTitle) return compactTerminalTitle(canonicalTitle) || canonicalTitle
+  const processName = compactTerminalProcessName(snapshot.processName)
+  return processName || `terminal ${index}`
+}
+
+function fullTerminalTitle(snapshot: TerminalSnapshot, index: number): string {
+  const canonicalTitle = terminalOriginalTitle(snapshot) ?? ''
+  return canonicalTitle || snapshot.processName || `terminal ${index}`
+}
+
+function terminalOriginalTitle(snapshot: TerminalSnapshot): string | null {
+  const canonicalTitle = typeof snapshot.canonicalTitle === 'string' ? snapshot.canonicalTitle.trim() : ''
+  return canonicalTitle || null
+}

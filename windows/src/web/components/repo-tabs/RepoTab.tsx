@@ -1,0 +1,151 @@
+import { AlertCircle, Folder, FolderGit2, Server, Terminal } from 'lucide-react'
+import type { RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
+import type { FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
+import { ToolbarClosableTab } from '#/web/components/tab-strip/ToolbarClosableTab.tsx'
+import {
+  toolbarTabButtonClassName,
+  toolbarTabChromeClassName,
+  toolbarTabIconClassName,
+} from '#/web/components/tab-strip/tab-variants.ts'
+import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { Badge } from '#/web/components/ui/badge.tsx'
+import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
+import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
+import {
+  useRepoTerminalCount,
+  useRepoTerminalHasBell,
+  useRepoTerminalHasOutputActivity,
+} from '#/web/components/terminal/terminal-session-store.ts'
+import { useT } from '#/web/stores/i18n.ts'
+interface RepoTabProps {
+  repo: RepoTabSummary
+  isActive: boolean
+  index: number
+  total: number
+  showSeparator: boolean
+  focusRegistry?: FocusRegistry<string, HTMLButtonElement>
+  onHoverChange: (id: string | null) => void
+  onActivate: (id: string) => void
+  onClose: (id: string) => void
+  onKeyboardNavigate: (id: string, direction: 'prev' | 'next' | 'first' | 'last') => void
+  closeLabel: (name: string) => string
+  unavailableLabel: string
+}
+
+export function RepoTab({
+  repo,
+  isActive,
+  index,
+  total,
+  showSeparator,
+  focusRegistry,
+  onHoverChange,
+  onActivate,
+  onClose,
+  onKeyboardNavigate,
+  closeLabel,
+  unavailableLabel,
+}: RepoTabProps) {
+  const t = useT()
+  const terminalCount = useRepoTerminalCount(repo.id, repo.worktreePaths ?? [])
+  const hasTerminalBell = useRepoTerminalHasBell(repo.id, repo.worktreePaths ?? [])
+  const hasTerminalOutputActivity = useRepoTerminalHasOutputActivity(repo.id, repo.worktreePaths ?? [])
+  const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
+  const terminalBellLabel = t('terminal.bell-unread')
+  const terminalOutputActiveLabel = t('terminal.output-active')
+  const tabLabelBase = repo.unavailable ? `${repo.name} — ${unavailableLabel}` : repo.name
+  const tabLabel = [
+    tabLabelBase,
+    terminalCountLabel,
+    hasTerminalOutputActivity ? terminalOutputActiveLabel : null,
+    hasTerminalBell ? terminalBellLabel : null,
+  ]
+    .filter(Boolean)
+    .join(' — ')
+  const repoKind = isRemoteRepoId(repo.id) ? 'remote' : repo.isGitRepo === false ? 'plain' : 'git'
+  const sortable = useSortableTab(repo.id, { onButtonRef: focusRegistry?.setRef(repo.id) })
+
+  return (
+    <ToolbarClosableTab
+      containerRef={sortable.setContainerRef}
+      containerProps={{
+        style: sortable.style,
+        'data-interactive': true,
+        'data-repo-tab-tooltip-id': repo.id,
+        role: 'presentation',
+        onPointerEnter: () => onHoverChange(repo.id),
+        onPointerLeave: () => onHoverChange(null),
+      }}
+      containerClassName={toolbarTabChromeClassName({
+        variant: 'repo',
+        active: isActive,
+        dragging: sortable.isDragging,
+      })}
+      overlay={
+        showSeparator ? (
+          <span className="pointer-events-none absolute right-0 top-1/2 h-4 -translate-y-1/2 border-r border-topbar-border" />
+        ) : null
+      }
+      buttonRef={sortable.setButtonRef}
+      buttonProps={{
+        'data-repo-tab-id': repo.id,
+        'data-repo-kind': repoKind,
+        ...sortable.attributes,
+        ...sortable.sortableListeners,
+        role: 'tab',
+        tabIndex: isActive ? 0 : -1,
+        'aria-selected': isActive,
+        'aria-label': tabLabel,
+        'aria-posinset': index + 1,
+        'aria-setsize': total,
+        onClick: () => onActivate(repo.id),
+        onKeyDown: (e) => {
+          sortable.sortableOnKeyDown?.(e)
+          if (e.defaultPrevented || sortable.isDragging) return
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return
+          e.preventDefault()
+          onKeyboardNavigate(
+            repo.id,
+            e.key === 'ArrowLeft' ? 'prev' : e.key === 'ArrowRight' ? 'next' : e.key === 'Home' ? 'first' : 'last',
+          )
+        },
+      }}
+      buttonClassName={toolbarTabButtonClassName('repo')}
+      closeButtonClassName={isActive ? undefined : 'text-topbar-muted-foreground'}
+      closeLabel={closeLabel(repo.name)}
+      closeVisible={isActive}
+      onClose={(e) => {
+        e.stopPropagation()
+        onClose(repo.id)
+      }}
+    >
+      {repoKind === 'remote' ? (
+        <Server size={13} className={toolbarTabIconClassName(isActive)} />
+      ) : repoKind === 'plain' ? (
+        <Folder size={13} className={toolbarTabIconClassName(isActive)} />
+      ) : (
+        <FolderGit2 size={13} className={toolbarTabIconClassName(isActive)} />
+      )}
+      <span className="truncate font-medium">{repo.name}</span>
+      {terminalCount > 0 && (
+        <Badge
+          data-testid="repo-tab-terminal-count-badge"
+          aria-label={terminalCountLabel ?? undefined}
+          title={terminalCountLabel ?? undefined}
+          variant="brand"
+          className="h-4 gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+        >
+          {hasTerminalOutputActivity ? (
+            <TerminalOutputActivityIndicator label={terminalOutputActiveLabel} className="size-2.5" size={10} />
+          ) : (
+            <Terminal size={10} aria-hidden="true" />
+          )}
+          {terminalCount}
+        </Badge>
+      )}
+      {hasTerminalBell && <TerminalBellDot label={terminalBellLabel} />}
+      {repo.unavailable && <AlertCircle size={12} className="shrink-0 text-warning" aria-hidden />}
+    </ToolbarClosableTab>
+  )
+}

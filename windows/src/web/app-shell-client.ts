@@ -1,0 +1,185 @@
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
+import type { ExecResult } from '#/shared/git-types.ts'
+import type {
+  SaveClipboardBinaryFilesInput,
+  SaveClipboardBinaryFilesResult,
+} from '#/shared/clipboard-binary-temp-files.ts'
+import type {
+  FileTreeClipboardFilePayload,
+  FileTreeClipboardReadResult,
+  FileTreeClipboardWriteResult,
+} from '#/shared/file-tree-clipboard.ts'
+import { getRendererBridge } from '#/web/renderer-bridge.ts'
+import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
+import { openWebDetachedFileAreaWindow } from '#/web/lib/web-detached-file-area.ts'
+import type { NativeWindowChromeThemeProjection } from '#/shared/window-chrome.ts'
+const PROJECT_GITHUB_URL = 'https://github.com/MRongM/hobgoblin'
+
+function nativeShell() {
+  try {
+    return getRendererBridge().shell()
+  } catch {
+    return null
+  }
+}
+
+export function canUseNativeRpcBridge(): boolean {
+  try {
+    return getRendererBridge().hasCapability('settings-rpc')
+  } catch {
+    return false
+  }
+}
+
+export function hasNativeDirectoryPicker(): boolean {
+  try {
+    return getRendererBridge().hasCapability('open-directory-dialog')
+  } catch {
+    return false
+  }
+}
+
+export function hasNativeFilePicker(): boolean {
+  try {
+    return getRendererBridge().hasCapability('open-file-dialog')
+  } catch {
+    return false
+  }
+}
+
+export function canOpenDetachedFileAreaWindow(): boolean {
+  try {
+    const bridge = getRendererBridge()
+    return bridge.kind() === 'web' || bridge.hasCapability('open-detached-file-area-window')
+  } catch {
+    return false
+  }
+}
+
+export async function openDetachedFileAreaWindow(
+  input: DetachedFileAreaWindowRequest,
+): Promise<OpenDetachedFileAreaWindowResult> {
+  try {
+    const bridge = getRendererBridge()
+    if (bridge.kind() === 'web') return openWebDetachedFileAreaWindow(input)
+    return (
+      (await bridge.shell()?.openDetachedFileAreaWindow?.(input)) ?? {
+        ok: false,
+        message: 'error.unsupported-native-bridge',
+      }
+    )
+  } catch {
+    return { ok: false, message: 'error.unsupported-native-bridge' }
+  }
+}
+
+export function homeDirectory(): string {
+  return getInitialBootstrap().homeDir
+}
+
+export async function projectNativeWindowChromeTheme(input: NativeWindowChromeThemeProjection): Promise<boolean> {
+  try {
+    return (await nativeShell()?.projectWindowChromeTheme?.(input)) ?? false
+  } catch {
+    return false
+  }
+}
+
+export function pathForDroppedFile(file: File): string {
+  try {
+    return getRendererBridge().pathForFile(file)
+  } catch {
+    return ''
+  }
+}
+
+export async function readSystemClipboardFilePaths(): Promise<string[]> {
+  return (await nativeShell()?.readClipboardFilePaths?.()) ?? []
+}
+
+export async function saveClipboardBinaryFilesFromPaste(
+  input: SaveClipboardBinaryFilesInput,
+): Promise<SaveClipboardBinaryFilesResult> {
+  return (
+    (await nativeShell()?.saveClipboardBinaryFiles?.(input)) ?? {
+      ok: false,
+      message: 'error.unsupported-native-bridge',
+    }
+  )
+}
+
+export async function writeFileTreeClipboardFile(
+  input: FileTreeClipboardFilePayload,
+): Promise<FileTreeClipboardWriteResult> {
+  return (
+    (await nativeShell()?.writeFileTreeClipboardFile?.(input)) ?? {
+      ok: false,
+      message: 'error.unsupported-native-bridge',
+    }
+  )
+}
+
+export async function readFileTreeClipboardFile(maxBytes: number): Promise<FileTreeClipboardReadResult> {
+  return (
+    (await nativeShell()?.readFileTreeClipboardFile?.({ maxBytes })) ?? {
+      ok: false,
+      message: 'error.unsupported-native-bridge',
+    }
+  )
+}
+
+function isAllowedExternalUrl(url: string, allowHttp: boolean): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || (allowHttp && parsed.protocol === 'http:')
+  } catch {
+    return false
+  }
+}
+
+function openBrowserUrl(url: string): ExecResult {
+  const opened = window.open(url, '_blank', 'noopener,noreferrer')
+  return opened ? { ok: true, message: url } : { ok: false, message: 'error.failed-open-browser' }
+}
+
+function openExternalUrlInBrowser(url: string, allowHttp: boolean): ExecResult {
+  return isAllowedExternalUrl(url, allowHttp) ? openBrowserUrl(url) : { ok: false, message: 'error.invalid-url' }
+}
+
+async function openExternalUrlWithPolicy(url: string, allowHttp: boolean): Promise<ExecResult> {
+  const shell = nativeShell()
+  if (shell?.openExternalUrl) return await shell.openExternalUrl({ url, allowHttp })
+  return openExternalUrlInBrowser(url, allowHttp)
+}
+
+export async function openProjectGitHub(): Promise<ExecResult> {
+  return await openExternalUrlWithPolicy(PROJECT_GITHUB_URL, false)
+}
+
+export async function openExternalUrl(url: string): Promise<ExecResult> {
+  return await openExternalUrlWithPolicy(url, true)
+}
+
+export async function openInFinder(path: string): Promise<ExecResult> {
+  return (await nativeShell()?.openInFinder?.({ path })) ?? { ok: false, message: 'error.invalid-path' }
+}
+
+export async function chooseLocalRepositoryPath(): Promise<string | null> {
+  return (await nativeShell()?.openDirectoryDialog?.({ title: 'Open Git Repository' })) ?? null
+}
+
+export async function chooseCloneParentPath(): Promise<string | null> {
+  return (await nativeShell()?.openDirectoryDialog?.({ title: 'Choose Clone Destination' })) ?? null
+}
+
+export async function chooseFileTreeDownloadDirectory(): Promise<string | null> {
+  return (await nativeShell()?.openDirectoryDialog?.({ title: 'Download files' })) ?? null
+}
+
+export async function chooseFileTreeUploadFiles(): Promise<string[]> {
+  return (await nativeShell()?.openFileDialog?.({ title: 'Upload files' })) ?? []
+}
+
+export async function consumeExternalOpenPaths(): Promise<string[]> {
+  return (await nativeShell()?.consumeExternalOpenPaths?.()) ?? []
+}

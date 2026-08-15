@@ -1,0 +1,120 @@
+import { git, gitResultWithOptions } from '#/system/git/helper.ts'
+import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
+import { mapWithConcurrency } from '#/system/git/concurrency.ts'
+import { recordBranchCreatedFrom } from '#/system/git/branches.ts'
+import type { ExecResult, WorktreeInfo } from '#/shared/git-types.ts'
+import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+
+const WORKTREE_STATUS_CONCURRENCY = 16
+
+interface GetWorktreesOptions {
+  includeStatus?: boolean
+  signal?: AbortSignal
+  throwOnError?: boolean
+}
+
+export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): Promise<WorktreeInfo[]> {
+  try {
+    const output = await git(cwd, ['worktree', 'list', '--porcelain', '--expire', 'now'], { signal: options?.signal })
+    const worktrees = parseWorktrees(output)
+    if (options?.includeStatus === false) return worktrees
+
+    await mapWithConcurrency(
+      worktrees,
+      WORKTREE_STATUS_CONCURRENCY,
+      async (wt) => {
+        if (wt.isBare) return
+        try {
+          // -z so a filename containing a literal newline doesn't get
+          // counted as two changes. Reuse parseStatus so rename / copy
+          // pairs (R/C take TWO records under -z) collapse into one
+          // entry — matching what `git status` shows the user.
+          const out = await git(wt.path, ['status', '--porcelain', '-z'], { signal: options?.signal })
+          const entries = parseStatus(out)
+          wt.isDirty = entries.length > 0
+          wt.changeCount = entries.length
+        } catch {
+          if (options?.signal?.aborted) throw new Error('cancelled')
+          wt.isDirty = undefined
+        }
+      },
+      { signal: options?.signal, abort: 'throw' },
+    )
+
+    return worktrees
+  } catch (err) {
+    if (options?.signal?.aborted) throw new Error('cancelled')
+    if (options?.throwOnError === true) throw err
+    return []
+  }
+}
+
+/** Worktree create/remove can both touch tens of thousands of files
+ *  on large repos (mp-main: 7.8 GB, 91k files, ~22s on a hot SSD).
+ *  3 minutes gives ~8× headroom on the largest known repo so a slower
+ *  external disk or a busy filesystem still stays inside the budget. */
+const WORKTREE_OP_TIMEOUT_MS = 180_000
+
+/** A single `--force` may discard uncommitted changes but cannot override
+ *  a worktree lock. Callers pre-check the expected safety boundaries so
+ *  remaining failures retain Git's own diagnostic. */
+export async function removeWorktree(
+  cwd: string,
+  worktreePath: string,
+  options: { force?: boolean; signal?: AbortSignal } = {},
+): Promise<ExecResult> {
+  return gitResultWithOptions(
+    cwd,
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal: options.signal },
+    'worktree',
+    'remove',
+    ...(options.force ? ['--force'] : []),
+    '--',
+    worktreePath,
+  )
+}
+
+export async function pruneWorktrees(cwd: string, options: { signal?: AbortSignal } = {}): Promise<ExecResult> {
+  return gitResultWithOptions(
+    cwd,
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal: options.signal },
+    'worktree',
+    'prune',
+    '--expire',
+    'now',
+  )
+}
+
+export async function createWorktree(
+  cwd: string,
+  input: CreateWorktreeInput,
+  signal?: AbortSignal,
+): Promise<ExecResult> {
+  const created = await gitResultWithOptions(
+    cwd,
+    { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
+    'worktree',
+    'add',
+    ...createWorktreeArgs(input),
+  )
+  if (created.ok && input.mode.kind === 'newBranch') {
+    await recordBranchCreatedFrom(cwd, input.mode.newBranch, worktreeCreationBaseRef(input.mode.creationBase), signal)
+  }
+  if (created.ok && input.mode.kind === 'trackRemoteBranch') {
+    await recordBranchCreatedFrom(cwd, input.mode.localBranch, input.mode.remoteRef, signal)
+  }
+  return created
+}
+
+function createWorktreeArgs(input: CreateWorktreeInput): string[] {
+  switch (input.mode.kind) {
+    case 'newBranch':
+      return ['-b', input.mode.newBranch, '--', input.worktreePath, worktreeCreationBaseRef(input.mode.creationBase)]
+    case 'existingBranch':
+      return ['--', input.worktreePath, input.mode.branch]
+    case 'trackRemoteBranch':
+      return ['-b', input.mode.localBranch, '--track', '--', input.worktreePath, input.mode.remoteRef]
+    case 'detached':
+      return ['--detach', '--', input.worktreePath, input.mode.ref]
+  }
+}

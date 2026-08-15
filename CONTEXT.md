@@ -8,6 +8,10 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 
 ## Language
 
+**Windows platform package**:
+The standalone Hobgoblin product for Windows, maintained alongside the Android platform package and responsible for its own platform behavior and release assets. It is distinct from the primary desktop/web application and from a set of conditional Windows code paths inside that application.
+_Avoid_: Windows mode, Windows compatibility branch, shared Windows adaptation
+
 **Android terminals tab**:
 The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal by descending retained-terminal opened time so the newest item is first and an existing session can be reopened quickly. Each item shows that opened time in localized relative form, and its header status badge distinguishes running (green), disconnected/failed (red), exited (gray), and starting (neutral) states while preserving a text label. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
