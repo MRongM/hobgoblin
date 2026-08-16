@@ -8,9 +8,13 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 
 ## Language
 
-**Windows platform package**:
-The standalone Hobgoblin product for Windows, maintained alongside the Android platform package and responsible for its own platform behavior and release assets. It is distinct from the primary desktop/web application and from a set of conditional Windows code paths inside that application.
-_Avoid_: Windows mode, Windows compatibility branch, shared Windows adaptation
+**Independent Windows version**:
+The standalone Hobgoblin product for Windows, built from the independent `windows/` package and maintained alongside the Android platform package. It owns its platform behavior and release assets, and is distinct from the primary application Windows version built from the primary application’s root `src/` source tree.
+_Avoid_: primary application Windows version, Windows mode, Windows compatibility branch, shared Windows adaptation
+
+**Primary application Windows version**:
+The Windows Hobgoblin version built from the primary application’s root `src/` source tree and ordinary application package. It remains part of the primary desktop/web application and is distinct from the independently built Windows version under `windows/`.
+_Avoid_: independent Windows version, Windows mode, shared Windows adaptation
 
 **Android terminals tab**:
 The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal by descending retained-terminal opened time so the newest item is first and an existing session can be reopened quickly. Each item shows that opened time in localized relative form, and its header status badge distinguishes running (green), disconnected/failed (red), exited (gray), and starting (neutral) states while preserving a text label. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
@@ -117,7 +121,7 @@ The interactive command interpreter running inside one internal terminal session
 _Avoid_: Windows Terminal, terminal emulator, external terminal
 
 **WSL-preferred Windows internal terminal shell**:
-The automatic Windows internal-terminal shell policy that starts a usable WSL session before any native Windows shell, while retaining native-shell fallback when WSL is unavailable or cannot start. It applies equally to the primary application's Windows path and the Windows platform package, and is distinct from a user-selected distribution or an external Windows Terminal profile.
+The automatic Windows internal-terminal shell policy that starts a usable WSL session before any native Windows shell, while retaining native-shell fallback when WSL is unavailable or cannot start. It applies equally to the primary application Windows version and the independent Windows version, and is distinct from a user-selected distribution or an external Windows Terminal profile.
 _Avoid_: WSL-only terminal, Windows Terminal integration, configured WSL distribution
 
 **Internal terminal path identity**:
