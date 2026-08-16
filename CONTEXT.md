@@ -116,6 +116,10 @@ _Avoid_: New terminal, embedded terminal
 The interactive command interpreter running inside one internal terminal session. It is attached to Hobgoblin's PTY and rendered by the existing terminal surface; it is distinct from the terminal host, the PTY transport, and an external terminal application.
 _Avoid_: Windows Terminal, terminal emulator, external terminal
 
+**WSL-preferred Windows internal terminal shell**:
+The automatic Windows internal-terminal shell policy that starts a usable WSL session before any native Windows shell, while retaining native-shell fallback when WSL is unavailable or cannot start. It applies equally to the primary application's Windows path and the Windows platform package, and is distinct from a user-selected distribution or an external Windows Terminal profile.
+_Avoid_: WSL-only terminal, Windows Terminal integration, configured WSL distribution
+
 **Internal terminal path identity**:
 The renderer-and-server-stable identity of an internal terminal's project root or working-directory path. Equivalent Windows drive and UNC paths share one case-insensitive identity with normalized separators and dot segments, while the repository-owned original path remains authoritative for navigation, presentation, and the PTY working directory; symbolic links are never resolved as part of identity. It is distinct from a filesystem real path and from the operational working-directory spelling.
 _Avoid_: Normalized working directory, canonical filesystem path, real path

@@ -283,7 +283,7 @@ jobs:
 
               $sessionId = $createResponse.payload.sessionId
               $processName = [string]$createResponse.payload.processName
-              if ($processName -notmatch '(?i)(?:^|[\\/])(pwsh|powershell)(?:\.exe)?$') {
+              if ($processName -notmatch '(?i)(?:^|[\\/])(wsl|pwsh|powershell)(?:\.exe)?$') {
                 throw "Packaged terminal selected unexpected Windows shell: $processName"
               }
               if ($createResponse.payload.windowsPty.backend -ne "conpty") {
@@ -316,7 +316,17 @@ jobs:
 
               [void]$terminalOutput.Clear()
               $marker = "__HOBGOBLIN_终端_IO_OK__"
-              $command = "Write-Output ('__HOBGOBLIN_' + '终端_IO_OK__'); Write-Output ((Get-Location).Path)`r"
+              $expectedWorkingDirectory = $WorkspacePath
+              if ($processName -match '(?i)(?:^|[\\/])wsl(?:\.exe)?$') {
+                $expectedWorkingDirectory = @(& "$env:SystemRoot\System32\wsl.exe" wslpath -a $WorkspacePath)[0]
+                if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($expectedWorkingDirectory)) {
+                  throw "Could not resolve the WSL workspace path: $WorkspacePath"
+                }
+                $expectedWorkingDirectory = $expectedWorkingDirectory.Trim()
+                $command = "printf '%s\n' '__HOBGOBLIN_终端_IO_OK__'; pwd`r"
+              } else {
+                $command = "Write-Output ('__HOBGOBLIN_' + '终端_IO_OK__'); Write-Output ((Get-Location).Path)`r"
+              }
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_write"
@@ -332,7 +342,7 @@ jobs:
                 throw "Terminal write failed"
               }
               Write-Host "Terminal smoke write accepted"
-              Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $WorkspacePath)
+              Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $expectedWorkingDirectory)
 
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
@@ -360,7 +370,7 @@ jobs:
               if ($closeResponse.ok -ne $true -or $closeResponse.payload.ok -ne $true) {
                 throw "Terminal close failed"
               }
-              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId marker=$marker cwd=$WorkspacePath"
+              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId marker=$marker cwd=$expectedWorkingDirectory"
             } finally {
               try {
                 if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {

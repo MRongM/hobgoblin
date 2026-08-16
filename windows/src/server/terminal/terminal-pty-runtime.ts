@@ -1,7 +1,10 @@
 import * as pty from 'node-pty'
 import os from 'node:os'
 import path from 'node:path'
-import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
+import {
+  resolveWindowsTerminalShellCandidates,
+  type WindowsTerminalShellKind,
+} from '#/server/terminal/windows-terminal-shell.ts'
 import type { TerminalRgbColor, TerminalWindowsPty, TerminalWindowsPtyAppearance } from '#/shared/terminal.ts'
 
 export interface TerminalPtyRuntime {
@@ -69,9 +72,12 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
   }
 }
 
-function resolveTerminalPtySpawnCandidates(
-  input: SpawnTerminalPtyRuntimeInput,
-): Array<{ command: string; args: string[]; launchedProcessName?: string }> {
+function resolveTerminalPtySpawnCandidates(input: SpawnTerminalPtyRuntimeInput): Array<{
+  command: string
+  args: string[]
+  launchedProcessName?: string
+  windowsShellKind?: WindowsTerminalShellKind
+}> {
   const candidates = resolveDirectTerminalPtySpawnCandidates(input)
   const appearance = input.windowsPtyAppearance
   if (process.platform !== 'win32' || !appearance) return candidates
@@ -79,22 +85,28 @@ function resolveTerminalPtySpawnCandidates(
     (candidate) => candidate.kind === 'windows-powershell' || candidate.kind === 'powershell-core',
   )
   if (!bootstrap) return candidates
-  return candidates.map((candidate) => ({
-    command: bootstrap.command,
-    args: [
-      ...bootstrap.args,
-      '-NoProfile',
-      '-NonInteractive',
-      '-EncodedCommand',
-      encodeWindowsPtyBootstrap(candidate.command, candidate.args, appearance),
-    ],
-    launchedProcessName: candidate.launchedProcessName,
-  }))
+  return candidates.map((candidate) => {
+    if (candidate.windowsShellKind === 'wsl') return candidate
+    return {
+      command: bootstrap.command,
+      args: [
+        ...bootstrap.args,
+        '-NoProfile',
+        '-NonInteractive',
+        '-EncodedCommand',
+        encodeWindowsPtyBootstrap(candidate.command, candidate.args, appearance),
+      ],
+      launchedProcessName: candidate.launchedProcessName,
+    }
+  })
 }
 
-function resolveDirectTerminalPtySpawnCandidates(
-  input: SpawnTerminalPtyRuntimeInput,
-): Array<{ command: string; args: string[]; launchedProcessName?: string }> {
+function resolveDirectTerminalPtySpawnCandidates(input: SpawnTerminalPtyRuntimeInput): Array<{
+  command: string
+  args: string[]
+  launchedProcessName?: string
+  windowsShellKind?: WindowsTerminalShellKind
+}> {
   if (input.command) {
     return [
       {
@@ -110,6 +122,7 @@ function resolveDirectTerminalPtySpawnCandidates(
       command: candidate.command,
       args: input.args ?? candidate.args,
       launchedProcessName: path.win32.basename(candidate.command),
+      windowsShellKind: candidate.kind,
     }))
   }
 

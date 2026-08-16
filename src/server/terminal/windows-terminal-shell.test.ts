@@ -2,7 +2,76 @@ import path from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
 import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
 
+const { probeWslMock } = vi.hoisted(() => ({
+  probeWslMock: vi.fn(),
+}))
+
+vi.mock('node:child_process', () => ({
+  spawnSync: probeWslMock,
+}))
+
 describe('resolveWindowsTerminalShellCandidates', () => {
+  test('prefers a WSL shell with a registered distribution before native Windows shells', () => {
+    probeWslMock.mockReturnValue({ status: 0, stdout: 'Ubuntu\n' })
+    const fileExists = existingFiles(
+      'C:\\Windows\\System32\\wsl.exe',
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      'C:\\Windows\\System32\\cmd.exe',
+    )
+
+    expect(
+      resolveWindowsTerminalShellCandidates({
+        env: {
+          ProgramFiles: 'C:\\Program Files',
+          SystemRoot: 'C:\\Windows',
+        },
+        fileExists,
+      }),
+    ).toEqual([
+      { kind: 'wsl', command: 'C:\\Windows\\System32\\wsl.exe', args: [] },
+      {
+        kind: 'powershell-core',
+        command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+        args: ['-NoLogo'],
+      },
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+      { kind: 'cmd', command: 'C:\\Windows\\System32\\cmd.exe', args: [] },
+    ])
+    expect(probeWslMock).toHaveBeenCalledWith('C:\\Windows\\System32\\wsl.exe', ['--list', '--quiet'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      windowsHide: true,
+    })
+  })
+
+  test('falls back to native Windows shells when no WSL distribution is registered', () => {
+    probeWslMock.mockReturnValue({ status: 0, stdout: '' })
+    const fileExists = existingFiles(
+      'C:\\Windows\\System32\\wsl.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      'C:\\Windows\\System32\\cmd.exe',
+    )
+
+    expect(
+      resolveWindowsTerminalShellCandidates({
+        env: { SystemRoot: 'C:\\Windows' },
+        fileExists,
+      }),
+    ).toEqual([
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+      { kind: 'cmd', command: 'C:\\Windows\\System32\\cmd.exe', args: [] },
+    ])
+  })
+
   test('prefers the stable PowerShell 7 install before PATH and system fallbacks', () => {
     const fileExists = existingFiles(
       'C:\\Program Files\\PowerShell\\7\\pwsh.exe',

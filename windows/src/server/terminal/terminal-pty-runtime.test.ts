@@ -142,6 +142,36 @@ describe('spawnTerminalPtyRuntime', () => {
     expect(script).toContain('1249553')
   })
 
+  test('starts a preferred WSL candidate directly when Windows appearance is requested', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      { kind: 'wsl', command: 'C:\\Windows\\System32\\wsl.exe', args: [] },
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockReturnValue(terminalPty('wsl.exe'))
+
+    const result = spawnTerminalPtyRuntime({
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+      windowsPtyAppearance: {
+        foreground: { red: 0xf5, green: 0xf5, blue: 0xf7 },
+        background: { red: 0x11, green: 0x11, blue: 0x13 },
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    expect(spawnMock).toHaveBeenCalledWith(
+      'C:\\Windows\\System32\\wsl.exe',
+      [],
+      expect.objectContaining({ cwd: 'C:\\repo' }),
+    )
+  })
+
   test('falls back when the preferred Windows shell cannot be spawned', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     resolveWindowsShellCandidatesMock.mockReturnValue([
