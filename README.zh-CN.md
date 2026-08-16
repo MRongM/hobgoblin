@@ -89,6 +89,8 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 在 Windows 上，SmartScreen 可能会对未签名安装程序发出警告。只有在信任该 GitHub Release 来源时才继续安装。
 
+在 Windows 上，推荐使用 WSL + Unix-like 终端环境。安装并配置可用的默认 WSL 发行版后，Hobgoblin 会优先为内部终端和外部 Windows Terminal 启动使用 WSL；WSL 不可用时仍会回退到原生 Windows Shell。
+
 ### 在 macOS 终端中打开项目
 
 将 `Hobgoblin.app` 移到 `/Applications` 后，安装用户级 `hob` 启动器：

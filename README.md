@@ -89,6 +89,8 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 On Windows, SmartScreen may warn about the unsigned installer. Continue only if you trust the GitHub Release source.
 
+On Windows, WSL with a Unix-like terminal environment is recommended. When a usable default WSL distribution is installed, Hobgoblin prefers it for internal terminals and external Windows Terminal launches, while retaining native Windows shell fallbacks when WSL is unavailable.
+
 ### Open Projects from the Terminal on macOS
 
 After moving `Hobgoblin.app` to `/Applications`, install the user-scoped `hob` launcher:

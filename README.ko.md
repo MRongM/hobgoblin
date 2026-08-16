@@ -89,6 +89,8 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 
 Windows에서는 SmartScreen이 서명되지 않은 설치 파일에 대해 경고할 수 있습니다. GitHub Release 출처를 신뢰하는 경우에만 계속하세요.
 
+Windows에서는 WSL과 Unix-like 터미널 환경의 조합을 권장합니다. 사용 가능한 기본 WSL 배포판이 설치되어 있으면 Hobgoblin은 내부 터미널과 외부 Windows Terminal 실행에 WSL을 우선 사용하며, WSL을 사용할 수 없으면 Windows 네이티브 셸로 대체합니다.
+
 ### macOS 터미널에서 프로젝트 열기
 
 `Hobgoblin.app`을 `/Applications`로 이동한 뒤 사용자 범위의 `hob` 런처를 설치합니다:
