@@ -29,6 +29,7 @@ import type {
   TelegramOutputCompletionNotificationContext,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
+import type { ExecResult } from '#/shared/git-types.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import {
   nativeSettingsProjectionStateFromSettings,
@@ -181,6 +182,10 @@ export async function refreshExternalAppsSnapshot(): Promise<ExternalAppsSnapsho
   return await postServerJson('/api/settings/external-apps/refresh', {})
 }
 
+export async function openAppConfigEditor(): Promise<ExecResult> {
+  return await postServerJson<{}, ExecResult>('/api/settings/open-app-config-editor', {})
+}
+
 export async function addRecentRepo(repo: RepoSessionEntry): Promise<RecentReposUpdateResponse> {
   const result = await postServerJson<{ repo: RepoSessionEntry }, RecentReposUpdateResponse>(
     '/api/settings/recent-repos/add',
@@ -281,6 +286,10 @@ export async function setFontFamily(fontFamily: FontFamilyPref): Promise<FontFam
 
 export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
   await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
+}
+
+export async function setTerminalNavigationControlsVisible(visible: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalNavigationControlsVisible: visible })
 }
 
 export async function setTerminalCustomButtonSize(size: TerminalCustomButtonSize): Promise<void> {

@@ -33,6 +33,7 @@ import {
   setStatusRefreshInterval,
   setShortcutsDisabled,
   setTemporaryFilesDirectory,
+  setTerminalNavigationControlsVisible,
   setTerminalCustomButtons,
   setTerminalCustomButtonSize,
   setTerminalCustomButtonsVisible,
@@ -193,6 +194,14 @@ export async function setTerminalCustomButtonsVisiblePreference(visible: boolean
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
     ...current,
     terminalCustomButtonsVisible: visible,
+  }))
+}
+
+export async function setTerminalNavigationControlsVisiblePreference(visible: boolean): Promise<void> {
+  await setTerminalNavigationControlsVisible(visible)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    terminalNavigationControlsVisible: visible,
   }))
 }
 

@@ -71,6 +71,14 @@ describe('settings defaults', () => {
     expect((defaultSettingsPrefs() as { terminalCustomButtonSize?: string }).terminalCustomButtonSize).toBe('medium')
   })
 
+  test('shows terminal navigation controls by default without overriding opt-out', () => {
+    expect(defaultSettingsPrefs().terminalNavigationControlsVisible).toBe(true)
+    expect(defaultInitialSettingsSnapshot().terminalNavigationControlsVisible).toBe(true)
+    expect(defaultSettingsPrefs({ terminalNavigationControlsVisible: false }).terminalNavigationControlsVisible).toBe(
+      false,
+    )
+  })
+
   test('returns isolated built-in terminal button preset defaults', () => {
     const first = defaultSettingsPrefs().terminalCustomButtons
     const second = defaultSettingsPrefs().terminalCustomButtons

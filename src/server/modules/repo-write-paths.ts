@@ -532,6 +532,7 @@ export async function setRepositoryBranchUpstream(
   remoteRef: string | null,
   signal?: AbortSignal,
   sourceToken?: string,
+  options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
   return await runWithRepoBackend(cwd, async (backend) => {
@@ -539,6 +540,7 @@ export async function setRepositoryBranchUpstream(
       cwd,
       await backend.setBranchUpstream(branch, remoteRef, signal),
       sourceToken,
+      options,
     )
   })
 }

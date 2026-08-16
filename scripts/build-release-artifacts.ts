@@ -2,8 +2,6 @@
 // Build one standard release artifact for the current CI runner.
 // Usage: bun scripts/build-release-artifacts.ts --platform macos --arch arm64
 //        bun scripts/build-release-artifacts.ts --platform macos --arch x64
-//        bun scripts/build-release-artifacts.ts --platform windows --arch arm64
-//        bun scripts/build-release-artifacts.ts --platform windows --arch x64
 import { $ } from 'bun'
 import { existsSync, rmSync } from 'node:fs'
 import path from 'node:path'
@@ -17,13 +15,10 @@ const APP_NAME = 'Hobgoblin'
 const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')
 const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')
 
-type ReleasePlatform = 'macos' | 'windows'
+type ReleasePlatform = 'macos'
 type ReleaseArch = 'arm64' | 'x64'
 
-const SUPPORTED_ARCHES: Record<ReleasePlatform, ReleaseArch[]> = {
-  macos: ['arm64', 'x64'],
-  windows: ['arm64', 'x64'],
-}
+const SUPPORTED_ARCHES: ReleaseArch[] = ['arm64', 'x64']
 
 const { values } = parseArgs({
   options: {
@@ -38,8 +33,8 @@ function fail(message: string): never {
 }
 
 function parsePlatform(value: string | undefined): ReleasePlatform {
-  if (value === 'macos' || value === 'windows') return value
-  fail(`Error: --platform must be "macos" or "windows", got ${JSON.stringify(value)}.`)
+  if (value === 'macos') return value
+  fail(`Error: --platform must be "macos", got ${JSON.stringify(value)}.`)
 }
 
 function parseArch(value: string | undefined): ReleaseArch {
@@ -47,23 +42,18 @@ function parseArch(value: string | undefined): ReleaseArch {
   fail(`Error: --arch must be "arm64" or "x64", got ${JSON.stringify(value)}.`)
 }
 
-function assertSupported(platform: ReleasePlatform, arch: ReleaseArch): void {
-  if (SUPPORTED_ARCHES[platform].includes(arch)) return
-  fail(`Error: unsupported release target ${platform}/${arch}.`)
+function assertSupported(arch: ReleaseArch): void {
+  if (SUPPORTED_ARCHES.includes(arch)) return
+  fail(`Error: unsupported macOS release architecture ${arch}.`)
 }
 
-function assertHostCanBuild(platform: ReleasePlatform): void {
-  if (platform === 'macos' && process.platform !== 'darwin') {
-    fail('Error: macOS release artifacts must be built on a macOS runner.')
-  }
-  if (platform === 'windows' && process.platform !== 'win32') {
-    fail('Error: Windows release artifacts must be built on a Windows runner.')
-  }
+function assertHostCanBuild(): void {
+  if (process.platform === 'darwin') return
+  fail('Error: macOS release artifacts must be built on a macOS runner.')
 }
 
-function expectedArtifactName(version: string, platform: ReleasePlatform, arch: ReleaseArch): string {
-  if (platform === 'macos') return `${APP_NAME}-${version}-${arch}.dmg`
-  return `${APP_NAME}-${version}-${arch}.exe`
+function expectedArtifactName(version: string, arch: ReleaseArch): string {
+  return `${APP_NAME}-${version}-${arch}.dmg`
 }
 
 function assertFileExists(relativePath: string): void {
@@ -72,10 +62,10 @@ function assertFileExists(relativePath: string): void {
   fail(`Error: expected build artifact missing: ${relativePath}`)
 }
 
-const platform = parsePlatform(values.platform)
+parsePlatform(values.platform)
 const arch = parseArch(values.arch)
-assertSupported(platform, arch)
-assertHostCanBuild(platform)
+assertSupported(arch)
+assertHostCanBuild()
 
 const { version } = (await Bun.file(path.join(repoRoot, 'package.json')).json()) as {
   version: string
@@ -91,12 +81,12 @@ await $`bun ${viteCli} build`
 assertFileExists('dist/web/index.html')
 assertFileExists('dist/web/boot.js')
 
-const platformArgs = platform === 'macos' ? ['--mac', 'dmg'] : ['--win', 'nsis']
+const platformArgs = ['--mac', 'dmg']
 const archFlag = arch === 'arm64' ? '--arm64' : '--x64'
 const publishArgs = ['--publish', 'never']
 await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`
 
-const artifactPath = path.join(repoRoot, 'release', expectedArtifactName(version, platform, arch))
+const artifactPath = path.join(repoRoot, 'release', expectedArtifactName(version, arch))
 if (!existsSync(artifactPath)) {
   fail(`Error: expected release artifact missing: ${path.relative(repoRoot, artifactPath)}`)
 }

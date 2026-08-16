@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getServerExternalAppsSnapshot: vi.fn(),
   getSettingsSnapshot: vi.fn(),
   getServerSettingsPrefs: vi.fn(),
+  openAppConfigDirectoryInEditor: vi.fn(),
   applyServerFetchIntervalWrite: vi.fn(),
   applyServerGlobalShortcutRegistrationWrite: vi.fn(),
   applyServerRecentRepoAddWrite: vi.fn(),
@@ -26,6 +27,10 @@ vi.mock('#/server/modules/settings-snapshot.ts', () => ({
 
 vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerSettingsPrefs: mocks.getServerSettingsPrefs,
+}))
+
+vi.mock('#/server/modules/settings-external-actions.ts', () => ({
+  openAppConfigDirectoryInEditor: mocks.openAppConfigDirectoryInEditor,
 }))
 
 vi.mock('#/server/modules/settings-write-paths.ts', () => ({
@@ -66,6 +71,17 @@ describe('settings routes', () => {
       if (previousPort === undefined) delete process.env.GOBLIN_SERVER_PORT
       else process.env.GOBLIN_SERVER_PORT = previousPort
     }
+  })
+
+  test('delegates app-config editor opens without accepting a request path', async () => {
+    mocks.openAppConfigDirectoryInEditor.mockResolvedValue({ ok: true, message: '' })
+    const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
+    const app = createSettingsRoutes(createServerSettingsState())
+
+    const response = await app.request('/open-app-config-editor', { method: 'POST' })
+
+    await expect(response.json()).resolves.toEqual({ ok: true, message: '' })
+    expect(mocks.openAppConfigDirectoryInEditor).toHaveBeenCalledWith()
   })
 
   test('delegates prefs writes to the settings write-path application layer', async () => {

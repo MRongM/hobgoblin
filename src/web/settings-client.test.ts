@@ -91,6 +91,27 @@ describe('settings-client', () => {
     await expect(getThemeState()).resolves.toEqual({ pref: 'auto', resolved: 'dark', colorTheme: 'default' })
   })
 
+  test('opens the fixed app-config endpoint', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: '' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { openAppConfigEditor } = await import('#/web/settings-client.ts')
+
+    await expect(openAppConfigEditor()).resolves.toEqual({ ok: true, message: '' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/settings/open-app-config-editor',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({}),
+      }),
+    )
+  })
+
   test('returns authoritative theme state directly from the settings write response', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

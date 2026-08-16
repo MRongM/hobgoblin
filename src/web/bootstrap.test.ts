@@ -61,6 +61,7 @@ describe('renderer bootstrap', () => {
       fileTreeFontSize: 12,
       fileTreeClipboardMaxBytesMb: 30,
       terminalFontSize: 14,
+      terminalNavigationControlsVisible: true,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: [],

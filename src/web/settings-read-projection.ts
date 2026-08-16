@@ -137,6 +137,8 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
     terminalFontSize: data?.terminalFontSize ?? fallback?.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
     terminalThemeSyncEnabled: data?.terminalThemeSyncEnabled ?? fallback?.terminalThemeSyncEnabled ?? true,
     temporaryFilesDirectory: data?.temporaryFilesDirectory ?? fallback?.temporaryFilesDirectory ?? '',
+    terminalNavigationControlsVisible:
+      data?.terminalNavigationControlsVisible ?? fallback?.terminalNavigationControlsVisible ?? true,
     terminalCustomButtonsVisible: data?.terminalCustomButtonsVisible ?? fallback?.terminalCustomButtonsVisible ?? true,
     terminalCustomButtonSize:
       data?.terminalCustomButtonSize ?? fallback?.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,

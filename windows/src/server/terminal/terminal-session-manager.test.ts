@@ -1,0 +1,236 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { TerminalSessionManager } from '#/server/terminal/terminal-session-manager.ts'
+
+const ptys: Array<{ kill: ReturnType<typeof vi.fn>; emitData: (data: string) => void }> = []
+
+vi.mock('node-pty', () => ({
+  spawn: vi.fn(() => {
+    let onData: ((data: string) => void) | null = null
+    const pty = { kill: vi.fn(), emitData: (data: string) => onData?.(data) }
+    ptys.push(pty)
+    return {
+      process: 'zsh',
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: pty.kill,
+      onData: vi.fn((listener: (data: string) => void) => {
+        onData = listener
+        return { dispose: vi.fn() }
+      }),
+      onExit: vi.fn(() => ({ dispose: vi.fn() })),
+    }
+  }),
+}))
+
+beforeEach(() => {
+  ptys.length = 0
+  vi.clearAllMocks()
+})
+
+describe('terminal session manager administrative close', () => {
+  test('tracks the first accepted user input as a monotonic session fact', async () => {
+    const onUserInput = vi.fn()
+    const manager = new TerminalSessionManager<string>({
+      onOutput: vi.fn(),
+      onExit: vi.fn(),
+      onUserInput,
+    })
+    const created = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/feature\0terminal-1',
+      cwd: '/workspace/feature',
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_local',
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    await expect(manager.listSessions('/workspace')).resolves.toEqual([
+      expect.objectContaining({ hasUserInput: false }),
+    ])
+    expect(manager.writeSession('client_a', created.sessionId, '\x1b[1;1R', 'attachment_local', false)).toBe(true)
+    await expect(manager.listSessions('/workspace')).resolves.toEqual([
+      expect.objectContaining({ hasUserInput: false }),
+    ])
+
+    expect(manager.writeSession('client_a', created.sessionId, 'pwd', 'attachment_local')).toBe(true)
+    expect(manager.writeSession('client_a', created.sessionId, '\r', 'attachment_local')).toBe(true)
+    await expect(manager.listSessions('/workspace')).resolves.toEqual([expect.objectContaining({ hasUserInput: true })])
+    expect(onUserInput).toHaveBeenCalledTimes(1)
+    expect(onUserInput).toHaveBeenCalledWith('client_a', { sessionId: created.sessionId })
+  })
+
+  test('retains tmux identity and projects close capability for catalog recovery', async () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const created = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/feature\0terminal-1',
+      cwd: '/workspace/feature',
+      cols: 80,
+      rows: 24,
+      tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      tmuxWorkingDirectory: '/workspace/feature',
+      tmuxCloseSupported: false,
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    expect(await manager.listSessions('/workspace')).toEqual([
+      expect.objectContaining({
+        tmuxBacked: true,
+        tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+        tmuxCloseSupported: false,
+      }),
+    ])
+    expect(manager.getSession('client_a', created.sessionId)).toMatchObject({
+      tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      tmuxWorkingDirectory: '/workspace/feature',
+      tmuxCloseSupported: false,
+    })
+
+    manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/feature\0terminal-1',
+      cwd: '/workspace/feature',
+      cols: 100,
+      rows: 30,
+    })
+    expect(manager.getSession('client_a', created.sessionId)).toMatchObject({
+      tmuxSessionName: 'hobgoblin-v1-aebf050981ac829e36100020',
+      tmuxWorkingDirectory: '/workspace/feature',
+      tmuxCloseSupported: false,
+    })
+  })
+
+  test('closes specified sessions across owners and reports affected scopes and missing ids', () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const first = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    const second = manager.ensureSession({
+      ownerId: 'client_b',
+      scope: '/workspace/api',
+      key: '/workspace/api\0/workspace/goblin-feature/api\0terminal-1',
+      cwd: '/workspace/goblin-feature/api',
+      cols: 80,
+      rows: 24,
+    })
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    if (!first.ok || !second.ok) return
+
+    expect(manager.closeSessions([first.sessionId, 'term_missing_1234', second.sessionId, first.sessionId])).toEqual({
+      closed: [first.sessionId, second.sessionId],
+      missing: ['term_missing_1234'],
+      scopes: ['/workspace', '/workspace/api'],
+    })
+    expect(ptys.map((pty) => pty.kill.mock.calls.length)).toEqual([1, 1])
+    expect(manager.getSession('client_a', first.sessionId)).toBeUndefined()
+    expect(manager.getSession('client_b', second.sessionId)).toBeUndefined()
+  })
+})
+
+describe('terminal session manager output excerpts', () => {
+  test('preserves PTY scroll-region output for the terminal parser', () => {
+    const onOutput = vi.fn()
+    const manager = new TerminalSessionManager<string>({ onOutput, onExit: vi.fn() })
+    const result = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const output = '\x1b[1;20r\x1b[3S\x1b[r'
+    ptys[0]?.emitData(output)
+
+    expect(onOutput).toHaveBeenCalledWith('client_a', {
+      sessionId: result.sessionId,
+      data: output,
+      seq: 1,
+      processName: result.processName,
+    })
+    const attached = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    expect(attached).toMatchObject({ ok: true, replay: output, replaySeq: 1 })
+  })
+
+  test('reads the canonical headless screen for an existing session', async () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const result = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 80,
+      rows: 24,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    ptys[0]?.emitData('build passed')
+
+    await expect(manager.outputExcerpt(result.sessionId, 400)).resolves.toMatchObject({
+      sessionId: result.sessionId,
+      output: 'build passed',
+      sequence: 1,
+    })
+    await expect(manager.outputExcerpt('term_missing_1234', 400)).resolves.toBeNull()
+  })
+
+  test('reads a bounded terminal screen snapshot for an existing session', async () => {
+    const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+    const result = manager.ensureSession({
+      ownerId: 'client_a',
+      scope: '/workspace',
+      key: '/workspace\0/workspace/goblin-feature\0terminal-1',
+      cwd: '/workspace/goblin-feature',
+      cols: 10,
+      rows: 3,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    ptys[0]?.emitData('first\r\nsecond')
+
+    await expect(
+      manager.screenSnapshot(result.sessionId, {
+        sessionId: result.sessionId,
+        maxColumns: 6,
+        maxRows: 2,
+      }),
+    ).resolves.toEqual({
+      sessionId: result.sessionId,
+      lines: ['second', ''],
+      columns: 6,
+      rows: 2,
+      sequence: 1,
+    })
+    await expect(
+      manager.screenSnapshot('term_missing_1234', {
+        sessionId: 'term_missing_1234',
+        maxColumns: 6,
+        maxRows: 2,
+      }),
+    ).resolves.toBeNull()
+  })
+})

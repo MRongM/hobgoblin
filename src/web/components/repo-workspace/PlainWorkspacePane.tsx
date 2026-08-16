@@ -77,7 +77,6 @@ export function PlainWorkspacePane({
               workspaceRootId={repoId}
               currentRepoId={repoId}
               fill
-              fileAreaCollapsed={desktopFileAreaCollapsed}
               onOpenFileArea={onOpenFileArea}
               onCollapseFileArea={onCollapseFileArea}
               onToggleFileArea={onFileAreaItemDoubleClick}
@@ -122,7 +121,6 @@ export function PlainWorkspacePane({
                     workspaceRootId={repoId}
                     currentRepoId={repoId}
                     fill
-                    fileAreaCollapsed={desktopFileAreaCollapsed}
                     onOpenFileArea={onOpenFileArea}
                     onCollapseFileArea={onCollapseFileArea}
                     onToggleFileArea={onFileAreaItemDoubleClick}

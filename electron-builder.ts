@@ -1,4 +1,33 @@
-import type { Configuration } from 'electron-builder'
+import { copyFile, mkdir } from 'node:fs/promises'
+import path from 'node:path'
+import type { AfterPackContext, Configuration } from 'electron-builder'
+
+const ELECTRON_BUILDER_WINDOWS_ARCH = {
+  x64: 1,
+  arm64: 3,
+} as const
+
+async function restoreNodePtyConptyAssets(context: AfterPackContext): Promise<void> {
+  if (context.electronPlatformName !== 'win32') return
+
+  const arch =
+    context.arch === ELECTRON_BUILDER_WINDOWS_ARCH.x64
+      ? 'x64'
+      : context.arch === ELECTRON_BUILDER_WINDOWS_ARCH.arm64
+        ? 'arm64'
+        : null
+  if (!arch) throw new Error(`Unsupported Windows architecture for node-pty assets: ${context.arch}`)
+
+  const nodePtyRoot = path.join(context.appOutDir, 'resources', 'app.asar.unpacked', 'node_modules', 'node-pty')
+  const sourceDir = path.join(nodePtyRoot, 'prebuilds', `win32-${arch}`, 'conpty')
+  const destinationDir = path.join(nodePtyRoot, 'build', 'Release', 'conpty')
+  await mkdir(destinationDir, { recursive: true })
+  await Promise.all(
+    ['conpty.dll', 'OpenConsole.exe'].map((fileName) =>
+      copyFile(path.join(sourceDir, fileName), path.join(destinationDir, fileName)),
+    ),
+  )
+}
 
 const config: Configuration = {
   appId: 'hobgoblin.app',
@@ -24,7 +53,13 @@ const config: Configuration = {
     '!**/*.map',
   ],
   extraResources: [{ from: 'bin/hob', to: 'bin/hob' }],
-  asarUnpack: ['node_modules/node-pty/prebuilds/**/*', 'node_modules/sharp/**/*', 'node_modules/@img/**/*'],
+  asarUnpack: [
+    'node_modules/node-pty/prebuilds/**/*',
+    'node_modules/node-pty/build/Release/**/*',
+    'node_modules/sharp/**/*',
+    'node_modules/@img/**/*',
+  ],
+  afterPack: restoreNodePtyConptyAssets,
   mac: {
     category: 'public.app-category.developer-tools',
     extendInfo: {
@@ -55,15 +90,6 @@ const config: Configuration = {
     // `Hobgoblin-0.1.0-arm64.dmg` (apple silicon) sort next to each other in
     // releases with no hint of which is which.
     artifactName: '${productName}-${version}-${arch}.${ext}',
-  },
-  win: {
-    target: [{ target: 'nsis', arch: ['arm64', 'x64'] }],
-    artifactName: '${productName}-${version}-${arch}.${ext}',
-  },
-  nsis: {
-    oneClick: false,
-    perMachine: false,
-    allowToChangeInstallationDirectory: true,
   },
 }
 

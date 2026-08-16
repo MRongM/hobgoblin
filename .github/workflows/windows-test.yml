@@ -2,26 +2,32 @@ name: Windows Test Build
 
 on:
   workflow_call:
+    inputs:
+      include_primary:
+        description: Build the primary application Windows x64 test artifact
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      include_primary:
+        description: Build the primary application Windows x64 test artifact
+        required: false
+        type: boolean
+        default: true
   pull_request:
     paths:
       - .github/workflows/windows-test.yml
-      - electron-builder.ts
       - package.json
-      - bun.lock
-      - scripts/**
-      - src/**
+      - windows/**
   push:
     branches:
       - main
       - windows
     paths:
       - .github/workflows/windows-test.yml
-      - electron-builder.ts
       - package.json
-      - bun.lock
-      - scripts/**
-      - src/**
+      - windows/**
 
 permissions:
   contents: read
@@ -31,8 +37,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-windows:
-    name: Build Windows ${{ matrix.arch }}
+  build-primary-windows:
+    if: ${{ inputs.include_primary }}
+    name: Build primary application Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck primary application
+        run: bun run typecheck
+
+      - name: Test primary Windows terminal compatibility
+        run: >-
+          bun run test --
+          src/server/terminal/terminal-pty-runtime.test.ts
+          src/server/terminal/windows-terminal-shell.test.ts
+
+      - name: Build primary application Windows test artifact
+        run: |
+          bun run build:web
+          bun run build:electron -- --win dir --x64 --publish never
+
+      - name: Upload primary application Windows test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-primary-windows-x64-${{ github.sha }}
+          path: release/win-unpacked/**/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-independent-windows:
+    name: Build independent Windows ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -56,17 +105,32 @@ jobs:
         with:
           bun-version: 1.3.11
 
+      - name: Verify Windows package version
+        shell: pwsh
+        run: |
+          $rootVersion = (Get-Content "package.json" -Raw | ConvertFrom-Json).version
+          $windowsVersion = (Get-Content "windows/package.json" -Raw | ConvertFrom-Json).version
+          if ($rootVersion -ne $windowsVersion) {
+            throw "Windows package version $windowsVersion must equal root release version $rootVersion"
+          }
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
+        working-directory: windows
 
       - name: Typecheck
         run: bun run typecheck
+        working-directory: windows
 
       - name: Test Windows compatibility
         run: >-
           bun run test --
+          --testTimeout=15000
+          scripts/build-release-artifacts.test.ts
+          scripts/build-windows-fast.test.ts
           src/main/external-open.test.ts
           src/main/terminal.test.ts
+          src/main/windows-cli-project-open.test.ts
           src/server/terminal/terminal-pty-runtime.test.ts
           src/server/terminal/terminal-scope.test.ts
           src/server/terminal/windows-terminal-shell.test.ts
@@ -75,16 +139,21 @@ jobs:
           src/shared/worktree-guards.test.ts
           src/system/open-app.test.ts
           src/system/terminals.test.ts
+          src/system/hob-cli-windows.test.ts
           src/system/windows-terminal.test.ts
+          src/system/windows-user-path.test.ts
           src/web/components/terminal/TerminalSessionRegistry.test.ts
           src/web/components/terminal/terminal-repo-index.test.ts
           src/web/components/terminal/terminal-session-keys.test.ts
           src/web/components/terminal/terminal-path-links.test.ts
           src/web/lib/editor-open-targets.test.ts
           src/web/lib/paths.test.ts
+        working-directory: windows
 
       - name: Build Windows artifact
-        run: bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}
+        id: build_artifact
+        run: bun run build:release -- --arch ${{ matrix.arch }}
+        working-directory: windows
 
       - name: Smoke test packaged Windows app startup
         shell: pwsh
@@ -271,7 +340,7 @@ jobs:
 
               $sessionId = $createResponse.payload.sessionId
               $processName = [string]$createResponse.payload.processName
-              if ($processName -notmatch '(?i)(?:^|[\\/])(pwsh|powershell)(?:\.exe)?$') {
+              if ($processName -notmatch '(?i)(?:^|[\\/])(wsl|pwsh|powershell)(?:\.exe)?$') {
                 throw "Packaged terminal selected unexpected Windows shell: $processName"
               }
               if ($createResponse.payload.windowsPty.backend -ne "conpty") {
@@ -304,7 +373,17 @@ jobs:
 
               [void]$terminalOutput.Clear()
               $marker = "__HOBGOBLIN_终端_IO_OK__"
-              $command = "Write-Output ('__HOBGOBLIN_' + '终端_IO_OK__'); Write-Output ((Get-Location).Path)`r"
+              $expectedWorkingDirectory = $WorkspacePath
+              if ($processName -match '(?i)(?:^|[\\/])wsl(?:\.exe)?$') {
+                $expectedWorkingDirectory = @(& "$env:SystemRoot\System32\wsl.exe" wslpath -a $WorkspacePath)[0]
+                if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($expectedWorkingDirectory)) {
+                  throw "Could not resolve the WSL workspace path: $WorkspacePath"
+                }
+                $expectedWorkingDirectory = $expectedWorkingDirectory.Trim()
+                $command = "printf '%s\n' '__HOBGOBLIN_终端_IO_OK__'; pwd`r"
+              } else {
+                $command = "Write-Output ('__HOBGOBLIN_' + '终端_IO_OK__'); Write-Output ((Get-Location).Path)`r"
+              }
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
                 requestId = "terminal_smoke_write"
@@ -320,7 +399,7 @@ jobs:
                 throw "Terminal write failed"
               }
               Write-Host "Terminal smoke write accepted"
-              Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $WorkspacePath)
+              Wait-TerminalOutput -Socket $socket -Token $cts.Token -Output $terminalOutput -Expected @($marker, $expectedWorkingDirectory)
 
               Send-WebSocketJson -Socket $socket -Token $cts.Token -Payload @{
                 type = "request"
@@ -348,7 +427,7 @@ jobs:
               if ($closeResponse.ok -ne $true -or $closeResponse.payload.ok -ne $true) {
                 throw "Terminal close failed"
               }
-              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId marker=$marker cwd=$WorkspacePath"
+              Write-Host "Terminal smoke validated shell=$processName backend=$($createResponse.payload.windowsPty.backend) build=$($createResponse.payload.windowsPty.buildNumber) session=$sessionId marker=$marker cwd=$expectedWorkingDirectory"
             } finally {
               try {
                 if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
@@ -364,10 +443,11 @@ jobs:
             }
           }
 
-          $exe = Get-ChildItem -Path "release" -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
+          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE "windows/release"
+          $exe = Get-ChildItem -Path $releaseRoot -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
           if (-not $exe) {
             Write-Host "Could not find unpacked Hobgoblin.exe. Release tree:"
-            Get-ChildItem -Path "release" -Recurse | Select-Object FullName
+            Get-ChildItem -Path $releaseRoot -Recurse | Select-Object FullName
             throw "Missing unpacked Hobgoblin.exe for smoke test"
           }
 
@@ -445,10 +525,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload Windows artifact
+      - name: Upload independent Windows artifact
+        if: ${{ !cancelled() && steps.build_artifact.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}
-          path: release/Hobgoblin-*-${{ matrix.arch }}.exe
+          name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}
+          path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 7

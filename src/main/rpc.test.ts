@@ -42,6 +42,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     fileTreeFontSize: 12,
     fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? 30,
     terminalFontSize: 14,
+    terminalNavigationControlsVisible: overrides.terminalNavigationControlsVisible ?? true,
     terminalCustomButtonsVisible: true,
     terminalCustomButtonSize: 'medium',
     terminalCustomButtons: [],

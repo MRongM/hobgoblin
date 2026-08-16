@@ -66,6 +66,7 @@ export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_FILE_TREE_FONT_SIZE = 13
 export const DEFAULT_APP_FONT_SIZE = DEFAULT_FILE_TREE_FONT_SIZE
 export const DEFAULT_TERMINAL_FONT_SIZE = 14
+export const DEFAULT_TERMINAL_NAVIGATION_CONTROLS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = createDefaultTerminalCustomButtons()
@@ -116,6 +117,8 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
     fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
     terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
+    terminalNavigationControlsVisible:
+      overrides.terminalNavigationControlsVisible ?? DEFAULT_TERMINAL_NAVIGATION_CONTROLS_VISIBLE,
     terminalCustomButtonsVisible: overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
     terminalCustomButtonSize: overrides.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
     terminalCustomButtons: overrides.terminalCustomButtons ?? createDefaultTerminalCustomButtons(),
@@ -171,6 +174,7 @@ export function initialSettingsFromSnapshot(
     | 'fileTreeFontSize'
     | 'fileTreeClipboardMaxBytesMb'
     | 'terminalFontSize'
+    | 'terminalNavigationControlsVisible'
     | 'terminalCustomButtonsVisible'
     | 'terminalCustomButtonSize'
     | 'terminalCustomButtons'
@@ -200,6 +204,7 @@ export function initialSettingsFromSnapshot(
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
+    terminalNavigationControlsVisible: snapshot.terminalNavigationControlsVisible,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,

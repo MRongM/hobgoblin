@@ -5,10 +5,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchWorkspacePane } from '#/web/components/repo-workspace/BranchWorkspacePane.tsx'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
 let compactUi = false
+const aggregateSelectedRepositoryRenders: Array<string | null | undefined> = []
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({ useIsCompactUi: () => compactUi }))
 vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
@@ -53,23 +55,18 @@ vi.mock('#/web/components/repo-workspace/SidebarProjectHeader.tsx', () => ({
 vi.mock('#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx', () => ({
   WorkspaceRepositoryRail: ({
     workspaceRootId,
-    fileAreaCollapsed,
     onOpenFileArea,
     onCollapseFileArea,
     onToggleFileArea,
     onOpenDetailArea,
   }: {
     workspaceRootId: string
-    fileAreaCollapsed?: boolean
     onOpenFileArea?: () => void
     onCollapseFileArea?: () => void
     onToggleFileArea?: () => void
     onOpenDetailArea?: () => void
   }) => (
-    <div
-      data-testid="rail"
-      data-file-area-collapsed={fileAreaCollapsed === undefined ? 'unset' : String(fileAreaCollapsed)}
-    >
+    <div data-testid="rail">
       {workspaceRootId}
       {onOpenFileArea ? (
         <button type="button" data-testid="rail-files" onClick={onOpenFileArea}>
@@ -115,18 +112,31 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx', () 
   BranchWorkspaceAggregatePanel: ({
     kind,
     onRevealPath,
+    selectedRepositoryName,
+    onSelectedRepositoryNameChange,
   }: {
     kind: 'status' | 'changes' | 'history' | 'local' | 'remoteBranches'
     onRevealPath?: (memberName: string, relativePath: string) => void
-  }) => (
-    <div data-testid={`branch-workspace-${kind}-panel`}>
-      {onRevealPath ? (
-        <button type="button" data-testid="aggregate-reveal" onClick={() => onRevealPath('api', 'src/app.ts')}>
-          reveal
-        </button>
-      ) : null}
-    </div>
-  ),
+    selectedRepositoryName?: string | null
+    onSelectedRepositoryNameChange?: (repositoryName: string) => void
+  }) => {
+    aggregateSelectedRepositoryRenders.push(selectedRepositoryName)
+    return (
+      <div data-testid={`branch-workspace-${kind}-panel`}>
+        <output data-testid="aggregate-selected-repository">{selectedRepositoryName}</output>
+        {onSelectedRepositoryNameChange ? (
+          <button type="button" data-testid="select-web" onClick={() => onSelectedRepositoryNameChange('web')}>
+            select web
+          </button>
+        ) : null}
+        {onRevealPath ? (
+          <button type="button" data-testid="aggregate-reveal" onClick={() => onRevealPath('api', 'src/app.ts')}>
+            reveal
+          </button>
+        ) : null}
+      </div>
+    )
+  },
 }))
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx', () => ({
   BranchWorkspaceTerminalPanel: ({
@@ -242,6 +252,7 @@ let root: Root
 
 beforeEach(() => {
   compactUi = false
+  aggregateSelectedRepositoryRenders.length = 0
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
   seedRepoState({ id: '/workspace', isGitRepo: false, branches: [], currentBranch: '', selectedBranch: null })
@@ -277,14 +288,20 @@ describe('BranchWorkspacePane', () => {
   })
 
   test('offers status, files, changes, history, local, and remote for the parent file area', () => {
-    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+    const targetWorkspace = {
+      ...workspace(),
+      repositories: [repositoryMember('api'), repositoryMember('web')],
+    }
+    seedMemberChangeCounts()
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={targetWorkspace} layout="left-right" />))
 
     const tabs = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
     )
     expect(tabs.every((tab) => !tab.draggable)).toBe(true)
     expect(container.querySelector('[data-testid="branch-workspace-file-area-toolbar"]')).not.toBeNull()
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes5'])
+    expect(container.querySelector('[data-testid="branch-workspace-changes-count-badge"]')?.textContent).toBe('5')
     expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false'])
 
     act(() =>
@@ -296,7 +313,7 @@ describe('BranchWorkspacePane', () => {
     expect(expandedTabs.map((tab) => tab.textContent)).toEqual([
       'tab.status',
       'file-tree.title',
-      'tab.changes',
+      'tab.changes5',
       'tab.history',
       'tab.local',
       'tab.remote-branches',
@@ -318,6 +335,53 @@ describe('BranchWorkspacePane', () => {
 
     act(() => expandedTabs[5]?.click())
     expect(container.querySelector('[data-testid="branch-workspace-remoteBranches-panel"]')).not.toBeNull()
+  })
+
+  test('shares the selected member across all Git tabs and resets it for another branch workspace', () => {
+    const initialWorkspace = {
+      ...workspace(),
+      repositories: [repositoryMember('api'), repositoryMember('web')],
+    }
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={initialWorkspace} layout="left-right" />))
+    const expandOverflow = () => {
+      const toggle = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-tabs-overflow-toggle"]')
+      if (toggle?.getAttribute('aria-expanded') !== 'true') act(() => toggle?.click())
+    }
+    expandOverflow()
+
+    const tabNamed = (name: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]')).find(
+        (tab) => tab.textContent === name,
+      )
+    const selectedRepository = () =>
+      container.querySelector('[data-testid="aggregate-selected-repository"]')?.textContent
+
+    act(() => tabNamed('tab.status')?.click())
+    expect(selectedRepository()).toBe('api')
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="select-web"]')?.click())
+    expect(selectedRepository()).toBe('web')
+    act(() => tabNamed('tab.changes')?.click())
+    expect(selectedRepository()).toBe('web')
+    act(() => tabNamed('tab.history')?.click())
+    expect(selectedRepository()).toBe('web')
+    act(() => tabNamed('tab.local')?.click())
+    expect(selectedRepository()).toBe('web')
+    act(() => tabNamed('tab.remote-branches')?.click())
+    expect(selectedRepository()).toBe('web')
+
+    const nextWorkspace = {
+      ...workspace(),
+      id: 'branch-2',
+      branch: 'feature/next',
+      repositories: [repositoryMember('docs')],
+    }
+    aggregateSelectedRepositoryRenders.length = 0
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={nextWorkspace} layout="left-right" />))
+    expandOverflow()
+    act(() => tabNamed('tab.history')?.click())
+
+    expect(selectedRepository()).toBe('docs')
+    expect(aggregateSelectedRepositoryRenders).not.toContain('web')
   })
 
   test('reopens the parent file area on files after another tab was selected', () => {
@@ -527,7 +591,7 @@ describe('BranchWorkspacePane', () => {
     expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
   })
 
-  test('opens a selected member on compact files and routes reveal requests back to files', () => {
+  test('opens a selected member on compact detail and routes reveal requests to files', () => {
     compactUi = true
     seedRepoState({
       id: '/workspace/api',
@@ -550,13 +614,9 @@ describe('BranchWorkspacePane', () => {
 
     act(() => root.render(<BranchWorkspacePane {...props} />))
 
-    expect(container.querySelector('[data-testid="repo-worktree-explorer"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="branch-detail"]')).toBeNull()
-    expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
-
-    act(() => container.querySelector<HTMLButtonElement>('[data-testid="show-detail"]')?.click())
     expect(container.querySelector('[data-testid="branch-detail"]')?.getAttribute('data-compact-focus')).toBe('true')
     expect(container.querySelector('[data-testid="repo-worktree-explorer"]')).toBeNull()
+    expect(container.querySelector('[data-testid="split-pane"]')).toBeNull()
 
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="detail-reveal"]')?.click())
     expect(container.querySelector('[data-testid="repo-worktree-explorer"]')).not.toBeNull()
@@ -600,13 +660,48 @@ describe('BranchWorkspacePane', () => {
     const statusBar = container.querySelector('[data-testid="status"]')
     expect(splitPane?.getAttribute('data-after-collapsed')).toBe('true')
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('true')
-    expect(container.querySelector('[data-testid="rail"]')?.getAttribute('data-file-area-collapsed')).toBe('true')
 
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="file-area-toggle"]')?.click())
 
     expect(splitPane?.getAttribute('data-after-collapsed')).toBe('false')
     expect(statusBar?.getAttribute('data-file-area-collapsed')).toBe('false')
-    expect(container.querySelector('[data-testid="rail"]')?.getAttribute('data-file-area-collapsed')).toBe('false')
+  })
+
+  test('keeps the desktop file area collapsed when a branch workspace member is selected', () => {
+    seedRepoState({
+      id: '/workspace/api',
+      branches: [createRepoBranch('feature/auth', { worktree: { path: '/workspace/goblin-feature-auth/api' } })],
+      currentBranch: 'main',
+      selectedBranch: 'feature/auth',
+    })
+    const initialWorkspace = { ...workspace(), repositories: [repositoryMember()] }
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={initialWorkspace} layout="left-right" />))
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={initialWorkspace}
+          memberTarget={{
+            repositoryId: '/workspace/api',
+            repositoryName: 'api',
+            targetBranch: 'feature/auth',
+            checkedOutBranch: 'feature/auth',
+            worktreePath: '/workspace/goblin-feature-auth/api',
+          }}
+          layout="left-right"
+        />,
+      ),
+    )
+
+    expect(
+      container
+        .querySelector('[data-testid="repo-worktree-explorer"]')
+        ?.closest('[data-testid="split-pane"]')
+        ?.getAttribute('data-after-collapsed'),
+    ).toBe('true')
+    expect(container.querySelector('[data-testid="branch-detail"]')).not.toBeNull()
   })
 
   test('collapses both the local and parent File areas from workspace navigation', () => {
@@ -718,6 +813,49 @@ function fileAreaSplitPane(): Element | null {
   )
 }
 
+function seedMemberChangeCounts() {
+  const current = useReposStore.getState()
+  const memberRepo = (repositoryName: string, changeCount: number) =>
+    replaceRepo(emptyRepo(`/workspace/${repositoryName}`, repositoryName), (repo) => {
+      const worktreePath = `/workspace/goblin-feature-auth/${repositoryName}`
+      repo.data.branches = [createRepoBranch('feature/auth', { worktree: { path: worktreePath } })]
+      repo.data.status = [
+        {
+          path: worktreePath,
+          branch: 'feature/auth',
+          isMain: false,
+          entries: Array.from({ length: changeCount }, (_, index) => ({
+            x: 'M',
+            y: ' ',
+            path: `src/${repositoryName}-${index}.ts`,
+          })),
+        },
+      ]
+    })
+  useReposStore.setState({
+    repos: {
+      ...current.repos,
+      '/workspace/api': memberRepo('api', 2),
+      '/workspace/web': memberRepo('web', 3),
+    },
+    workspaceProjects: {
+      '/workspace': {
+        rootId: '/workspace',
+        repositoryIds: ['/workspace/api', '/workspace/web'],
+        candidates: [
+          { id: '/workspace/api', name: 'api', selected: true, available: true },
+          { id: '/workspace/web', name: 'web', selected: true, available: true },
+        ],
+        configured: true,
+        configurationError: null,
+        phase: 'ready',
+        skipped: [],
+        error: null,
+      },
+    },
+  })
+}
+
 function workspace(): BranchWorkspaceSnapshot {
   return {
     id: 'branch-1',
@@ -733,14 +871,14 @@ function workspace(): BranchWorkspaceSnapshot {
   }
 }
 
-function repositoryMember(): BranchWorkspaceSnapshot['repositories'][number] {
+function repositoryMember(repositoryName = 'api'): BranchWorkspaceSnapshot['repositories'][number] {
   return {
-    repositoryName: 'api',
+    repositoryName,
     targetBranch: 'feature/auth',
     creationBase: { kind: 'localBranch', branch: 'main' },
     syncBeforeCreate: false,
     branchOrigin: 'created',
-    worktreePath: '/workspace/goblin-feature-auth/api',
+    worktreePath: `/workspace/goblin-feature-auth/${repositoryName}`,
     progress: 'complete',
     ready: true,
   }

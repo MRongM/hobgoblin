@@ -60,6 +60,7 @@ describe('native shell projection helpers', () => {
         fileTreeFontSize: 12,
         fileTreeClipboardMaxBytesMb: 30,
         terminalFontSize: 14,
+        terminalNavigationControlsVisible: true,
         terminalCustomButtonsVisible: true,
         terminalCustomButtonSize: 'medium',
         terminalCustomButtons: [],

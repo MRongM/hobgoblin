@@ -1,0 +1,550 @@
+import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
+import { app } from 'electron'
+import { RPC_ABORT_CHANNEL, RPC_CHANNEL } from '#/shared/ipc-channels.ts'
+import { isAncestor, getCurrentBranch, getUpstream, isGitRepo } from '#/system/git/branches.ts'
+import { getWorktrees } from '#/system/git/worktrees.ts'
+import { getWorkingStatus } from '#/system/git/status.ts'
+import { resolveKnownWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
+import { pullBranch } from '#/system/git/remote.ts'
+import { registerTrustedAppUrl, registerTrustedWebContents } from '#/main/ipc/trusted-webcontents.ts'
+import { wireRpcIpc } from '#/main/rpc.ts'
+import type { RpcResponse, SettingsPrefs, ThemeState } from '#/shared/rpc.ts'
+
+const ipcHandlers = new Map<string, (_event: unknown, input: any) => Promise<unknown>>()
+const browserWindowFromWebContents = vi.hoisted(() => vi.fn(() => null))
+const listSshConfigHostsMock = vi.hoisted(() => vi.fn())
+const resolveRemoteTargetMock = vi.hoisted(() => vi.fn())
+const resolveTrackedRemoteTargetMock = vi.hoisted(() => vi.fn())
+const runRemoteCommandMock = vi.hoisted(() => vi.fn())
+const getEmbeddedServerRuntimeMock = vi.hoisted(() =>
+  vi.fn<() => { url: string; secret: string; clientId: string } | null>(() => null),
+)
+const subscribeThemeListeners = vi.hoisted(() => [] as Array<(state: ThemeState) => void>)
+
+function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
+  return {
+    lang: 'auto',
+    theme: 'auto',
+    colorTheme: 'macos',
+    fetchIntervalSec: 120,
+    gitNetworkProxyEnabled: false,
+    gitNetworkProxyUrl: '',
+    gitNetworkTimeoutSec: 120,
+    terminalNotificationsEnabled: false,
+    shortcutsDisabled: false,
+    globalShortcutDisabled: false,
+    swapCloseShortcuts: false,
+    terminalThemeSyncEnabled: true,
+    temporaryFilesDirectory: '',
+    globalShortcut: '',
+    terminalApp: 'auto',
+    editorApp: 'auto',
+    fileTreeFontSize: 12,
+    fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? 30,
+    terminalFontSize: 14,
+    terminalCustomButtonsVisible: true,
+    terminalCustomButtonSize: 'medium',
+    terminalCustomButtons: [],
+    lanEnabled: false,
+    serverPort: 32200,
+    ...overrides,
+    statusRefreshIntervalSec: overrides.statusRefreshIntervalSec ?? 120,
+    topbarHeightPx: overrides.topbarHeightPx ?? 34,
+    toolbarHeightPx: overrides.toolbarHeightPx ?? 34,
+    fontFamily: overrides.fontFamily ?? 'mono',
+  }
+}
+
+vi.mock('electron', () => ({
+  app: {
+    addRecentDocument: vi.fn(),
+    clearRecentDocuments: vi.fn(),
+  },
+  BrowserWindow: {
+    getAllWindows: () => [],
+    getFocusedWindow: () => null,
+    fromWebContents: browserWindowFromWebContents,
+  },
+  dialog: {
+    showOpenDialog: vi.fn(),
+  },
+  ipcMain: {
+    handle: vi.fn((channel: string, handler: (_event: unknown, input: any) => Promise<unknown>) => {
+      ipcHandlers.set(channel, handler)
+    }),
+  },
+  shell: {
+    showItemInFolder: vi.fn(),
+  },
+}))
+
+vi.mock('#/system/git/branches.ts', () => ({
+  checkoutBranch: vi.fn(),
+  deleteBranch: vi.fn(),
+  getBranches: vi.fn(),
+  getCurrentBranch: vi.fn(),
+  getDefaultBranch: vi.fn(),
+  getRepoName: vi.fn(),
+  getRepoRoot: vi.fn(() => '/repo'),
+  getUpstream: vi.fn(),
+  isAncestor: vi.fn(),
+  isGitRepo: vi.fn(),
+}))
+
+vi.mock('#/system/git/worktrees.ts', () => ({
+  createWorktree: vi.fn(),
+  getWorktrees: vi.fn(),
+  removeWorktree: vi.fn(),
+}))
+
+vi.mock('#/shared/worktree-guards.ts', () => ({
+  resolveKnownWorktree: vi.fn(),
+  resolveRemovableWorktree: vi.fn(),
+}))
+
+vi.mock('#/system/git/helper.ts', () => ({
+  checkGitAvailable: vi.fn(() => ({ ok: true })),
+}))
+
+vi.mock('#/system/git/remote.ts', () => ({
+  fetchAll: vi.fn(),
+  getBrowserRemoteUrl: vi.fn(),
+  getRemoteInfo: vi.fn(),
+  pullBranch: vi.fn(),
+  pushBranch: vi.fn(),
+}))
+
+vi.mock('#/system/git/status.ts', () => ({
+  getWorkingStatus: vi.fn(),
+}))
+
+vi.mock('#/system/git/patch.ts', () => ({
+  getWorktreePatch: vi.fn(),
+}))
+
+vi.mock('#/system/git/clone.ts', () => ({
+  cloneRepository: vi.fn(),
+}))
+
+vi.mock('#/main/window.ts', () => ({
+  applyMainWindowChromeTheme: vi.fn(),
+  activateMainWindow: vi.fn(() => Promise.resolve({ webContents: { send: vi.fn() } })),
+  applyMainWindowTopbarHeight: vi.fn(),
+  getMainWindow: vi.fn(() => null),
+}))
+
+vi.mock('#/main/window-registry.ts', () => ({
+  focusedRegisteredSurface: vi.fn(() => null),
+  allRegisteredSurfacesWithCapability: vi.fn(() => []),
+  isRegisteredRendererSurfaceId: vi.fn(() => false),
+  registeredRendererSurfaceByWebContentsId: vi.fn(() => null),
+}))
+
+vi.mock('#/main/theme.ts', () => ({
+  applyThemeSettingsProjection: vi.fn(),
+  getTheme: vi.fn(() => ({ pref: 'auto', resolved: 'light', colorTheme: 'macos' })),
+  setColorTheme: vi.fn(),
+  setThemePref: vi.fn(),
+  subscribeTheme: vi.fn((listener: (state: ThemeState) => void) => {
+    subscribeThemeListeners.push(listener)
+    return () => {}
+  }),
+}))
+
+vi.mock('#/main/menu.ts', () => ({
+  buildAppMenu: vi.fn(),
+}))
+
+vi.mock('#/main/i18n/index.ts', () => ({
+  applyLangPref: vi.fn(),
+  getCurrentLang: vi.fn(() => 'en'),
+  resolveLang: vi.fn((pref: string) => (pref === 'auto' ? 'en' : pref)),
+  setCurrentLang: vi.fn(),
+}))
+
+vi.mock('#/main/menu-state.ts', () => ({
+  applyMenuRuntimeState: vi.fn(),
+}))
+
+vi.mock('#/system/terminals.ts', () => ({
+  getTerminalActionAvailability: vi.fn(() => ({ ghostty: false, terminal: true })),
+  getTerminalAppAvailability: vi.fn(() => Promise.resolve({ ghostty: false, terminal: true })),
+  openInPreferredTerminal: vi.fn(),
+  resolveTerminalApp: vi.fn((_pref, availability) =>
+    availability.ghostty ? 'ghostty' : availability.terminal ? 'terminal' : null,
+  ),
+}))
+
+vi.mock('#/system/editors.ts', () => ({
+  getEditorAppAvailability: vi.fn(() => ({ vscode: false, cursor: false, windsurf: false })),
+  openInPreferredEditor: vi.fn(),
+  resolveEditorApp: vi.fn((_pref, availability) =>
+    availability.vscode ? 'vscode' : availability.cursor ? 'cursor' : availability.windsurf ? 'windsurf' : null,
+  ),
+}))
+
+vi.mock('#/main/renderer-surface-events.ts', () => ({
+  broadcastRpcEvent: vi.fn(),
+}))
+
+vi.mock('#/main/settings-server-client.ts', () => ({
+  setSettingsGlobalShortcutState: vi.fn(async () => true),
+  getSettingsPrefs: vi.fn(async () => settingsPrefs()),
+  getSettingsSnapshot: vi.fn(),
+}))
+
+vi.mock('#/main/terminal.ts', () => ({
+  closeWorktreeSession: vi.fn(),
+}))
+
+vi.mock('#/main/external-url.ts', () => ({
+  openHttpExternal: vi.fn(),
+  openHttpsExternal: vi.fn(),
+}))
+
+vi.mock('#/system/ssh/config.ts', () => ({
+  listSshConfigHosts: listSshConfigHostsMock,
+  resolveRemoteTarget: resolveRemoteTargetMock,
+  resolveTrackedRemoteTarget: resolveTrackedRemoteTargetMock,
+}))
+
+vi.mock('#/system/ssh/commands.ts', () => ({
+  runRemoteCommand: runRemoteCommandMock,
+}))
+
+vi.mock('#/main/server-manager.ts', () => ({
+  getEmbeddedServerRuntime: getEmbeddedServerRuntimeMock,
+}))
+
+const trustedSender = { id: 1 }
+const trustedEvent = {
+  sender: trustedSender,
+  senderFrame: { url: 'http://127.0.0.1:5173/?theme=light' },
+}
+
+async function invokeRpc(
+  path: string,
+  input?: unknown,
+  event: unknown = trustedEvent,
+  requestId?: string,
+): Promise<RpcResponse> {
+  const handler = ipcHandlers.get(RPC_CHANNEL)
+  if (!handler) throw new Error('RPC handler not wired')
+  return handler(event, { path, input, requestId }) as Promise<RpcResponse>
+}
+
+async function invokeAbortRpc(input: unknown, event: unknown = trustedEvent): Promise<unknown> {
+  const handler = ipcHandlers.get(RPC_ABORT_CHANNEL)
+  if (!handler) throw new Error('RPC abort handler not wired')
+  return handler(event, input)
+}
+
+describe('main repo rpc cancellation', () => {
+  beforeAll(() => {
+    registerTrustedAppUrl('http://127.0.0.1:5173/')
+    registerTrustedWebContents({ id: 1, once: vi.fn() } as any)
+    wireRpcIpc()
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllGlobals()
+    browserWindowFromWebContents.mockReturnValue(null)
+    getEmbeddedServerRuntimeMock.mockReturnValue(null)
+    listSshConfigHostsMock.mockResolvedValue([])
+    resolveRemoteTargetMock.mockImplementation(
+      async ({ alias, remotePath }: { alias: string; remotePath: string }) => ({
+        target: {
+          id: `ssh-config://${alias}${remotePath}`,
+          alias,
+          host: 'example.com',
+          user: 'alice',
+          port: 22,
+          remotePath,
+          displayName: `${alias}:repo`,
+        },
+      }),
+    )
+    resolveTrackedRemoteTargetMock.mockImplementation(async (target: any) => ({ target }))
+    runRemoteCommandMock.mockResolvedValue({ ok: true, stdout: '/home/alice', stderr: '' })
+    vi.mocked(isGitRepo).mockResolvedValue(true)
+    vi.mocked(getCurrentBranch).mockResolvedValue('main')
+    vi.mocked(getWorktrees).mockResolvedValue([{ path: '/repo', branch: 'main', isBare: false, isPrimary: true }])
+    vi.mocked(getUpstream).mockResolvedValue(null)
+    vi.mocked(isAncestor).mockImplementation(async () => {
+      await invokeRpc('repo.abort', { cwd: '/repo' })
+      return false
+    })
+    vi.mocked(resolveRemovableWorktree).mockReturnValue({
+      ok: true,
+      target: { path: '/repo-feature', branch: 'feature/cancel', isBare: false, isPrimary: false, isDirty: false },
+    })
+    vi.mocked(resolveKnownWorktree).mockReturnValue({
+      ok: true,
+      path: '/repo-feature',
+    })
+    vi.mocked(pullBranch).mockResolvedValue({ ok: true, message: 'ok' })
+  })
+
+  test('rejects RPC calls from untrusted senders', async () => {
+    const result = await invokeRpc(
+      'settings.applyShellProjection',
+      { recentRepos: { recentRepos: [] } },
+      {
+        sender: { id: 99 },
+        senderFrame: { url: 'https://example.com/' },
+      },
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'FORBIDDEN', message: 'Untrusted IPC sender' },
+    })
+  })
+
+  test('rejects RPC calls without a sender frame', async () => {
+    const result = await invokeRpc(
+      'settings.applyShellProjection',
+      { recentRepos: { recentRepos: [] } },
+      {
+        sender: trustedSender,
+        senderFrame: null,
+      },
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'FORBIDDEN', message: 'Untrusted IPC sender' },
+    })
+  })
+
+  test('returns NOT_FOUND for repo RPCs that now belong to the embedded server http path', async () => {
+    getEmbeddedServerRuntimeMock.mockReturnValue({
+      url: 'http://127.0.0.1:32100',
+      secret: 'secret',
+      clientId: 'client_sharedterminal',
+    })
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => [{ path: 'file.txt', staged: false, status: 'M' }],
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await invokeRpc('repo.status', { cwd: '/repo' })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: repo.status' },
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getWorkingStatus).not.toHaveBeenCalled()
+  })
+
+  test('returns NOT_FOUND for remote RPCs that now belong to the embedded server http path', async () => {
+    getEmbeddedServerRuntimeMock.mockReturnValue({
+      url: 'http://127.0.0.1:32100',
+      secret: 'secret',
+      clientId: 'client_sharedterminal',
+    })
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        target: {
+          id: 'ssh-config://prod/repo',
+          alias: 'prod',
+          host: 'example.com',
+          user: 'tester',
+          port: 22,
+          remotePath: '/repo',
+          displayName: 'prod:repo',
+        },
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await invokeRpc('remote.resolveTarget', { alias: 'prod', remotePath: '/repo' })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: remote.resolveTarget' },
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(resolveRemoteTargetMock).not.toHaveBeenCalled()
+  })
+
+  test('returns NOT_FOUND for removed business rpc procedures regardless of embedded server runtime', async () => {
+    const result = await invokeRpc('repo.deleteBranch', { cwd: '/repo', branch: 'feature/cancel' })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: repo.deleteBranch' },
+    })
+  })
+
+  test('returns false when aborting a missing native rpc request id', async () => {
+    getEmbeddedServerRuntimeMock.mockReturnValue({
+      url: 'http://127.0.0.1:32100',
+      secret: 'secret',
+      clientId: 'client_sharedterminal',
+    })
+    let observedSignal: AbortSignal | undefined
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          observedSignal = init?.signal ?? undefined
+          init?.signal?.addEventListener(
+            'abort',
+            () =>
+              resolve({
+                ok: true,
+                json: async () => [],
+              } as Response),
+            { once: true },
+          )
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const aborted = await invokeAbortRpc({ requestId: 'rpc-read-status' }, trustedEvent)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(observedSignal).toBeUndefined()
+    expect(aborted).toBe(false)
+  })
+
+  test('projects recent repos into native shell state, syncing both menu and Dock recents', async () => {
+    const repo = { kind: 'local' as const, id: '/repo' }
+
+    const result = await invokeRpc('settings.applyShellProjection', { recentRepos: { recentRepos: [repo] } })
+
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect(app.clearRecentDocuments).toHaveBeenCalledTimes(1)
+    expect(app.addRecentDocument).toHaveBeenCalledWith('/repo')
+  })
+
+  test('skips remote repos when syncing Dock recent documents', async () => {
+    const localRepo = { kind: 'local' as const, id: '/repo' }
+    const remoteRepo = {
+      kind: 'remote' as const,
+      id: 'gh:owner/repo',
+      ref: { id: 'gh:owner/repo', alias: 'gh', remotePath: '/owner/repo', displayName: 'gh:repo' },
+    }
+
+    const result = await invokeRpc('settings.applyShellProjection', {
+      recentRepos: { recentRepos: [localRepo, remoteRepo] },
+    })
+
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect(app.clearRecentDocuments).toHaveBeenCalledTimes(1)
+    expect(app.addRecentDocument).toHaveBeenCalledTimes(1)
+    expect(app.addRecentDocument).toHaveBeenCalledWith('/repo')
+  })
+
+  test('projects server-owned prefs into native shell state when the renderer updates them', async () => {
+    const result = await invokeRpc('settings.applyShellProjection', {
+      prefs: {
+        patch: {
+          lang: 'ja',
+          theme: 'dark',
+          colorTheme: 'github',
+          shortcutsDisabled: true,
+          topbarHeightPx: 39,
+        },
+        settings: {
+          lang: 'ja',
+          theme: 'dark',
+          colorTheme: 'github',
+          shortcutsDisabled: true,
+          topbarHeightPx: 39,
+        },
+      },
+    })
+
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect((await import('#/main/i18n/index.ts')).resolveLang).toHaveBeenCalledWith('ja')
+    expect((await import('#/main/i18n/index.ts')).setCurrentLang).toHaveBeenCalledWith('ja')
+    expect((await import('#/main/theme.ts')).applyThemeSettingsProjection).toHaveBeenCalledWith({
+      theme: 'dark',
+      colorTheme: 'github',
+    })
+    expect((await import('#/main/window.ts')).applyMainWindowTopbarHeight).toHaveBeenCalledWith(39)
+    expect((await import('#/main/menu-state.ts')).applyMenuRuntimeState).toHaveBeenCalledWith({
+      langPref: 'ja',
+      shortcutsDisabled: true,
+    })
+    expect((await import('#/main/menu.ts')).buildAppMenu).toHaveBeenCalled()
+  })
+
+  test('broadcasts theme changes to renderer surfaces', async () => {
+    const state = { pref: 'auto' as const, resolved: 'dark' as const, colorTheme: 'github' as const }
+    const listener = subscribeThemeListeners.at(-1)
+    if (!listener) throw new Error('Expected theme subscription to be wired')
+
+    listener(state)
+
+    expect((await import('#/main/renderer-surface-events.ts')).broadcastRpcEvent).toHaveBeenCalledWith({
+      type: 'theme-changed',
+      state,
+    })
+  })
+
+  test('rejects an empty native shell projection payload', async () => {
+    const result = await invokeRpc('settings.applyShellProjection', {})
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'BAD_REQUEST', message: 'Invalid RPC input' },
+    })
+  })
+
+  test('rejects recent repo projections with invalid remote paths', async () => {
+    const result = await invokeRpc('settings.applyShellProjection', {
+      recentRepos: {
+        recentRepos: [
+          {
+            kind: 'remote',
+            id: 'ssh-config://prodrepo',
+            ref: {
+              id: 'ssh-config://prodrepo',
+              alias: 'prod',
+              remotePath: 'repo',
+              displayName: 'prod:repo',
+            },
+          },
+        ],
+      },
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'BAD_REQUEST', message: 'Invalid RPC input' },
+    })
+  })
+
+  test('returns NOT_FOUND for the removed global shortcut mutation', async () => {
+    const result = await invokeRpc('settings.setGlobalShortcut', { accelerator: 'Alt+K' })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: settings.setGlobalShortcut' },
+    })
+  })
+
+  test('returns NOT_FOUND for settings mutations that now belong to the embedded server path', async () => {
+    const result = await invokeRpc('settings.setEditorApp', { pref: 'cursor' })
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: settings.setEditorApp' },
+    })
+  })
+
+  test('returns NOT_FOUND for removed native namespaces like externalApps', async () => {
+    const result = await invokeRpc('externalApps.get')
+
+    expect(result).toEqual({
+      ok: false,
+      error: { name: 'RpcError', code: 'NOT_FOUND', message: 'Unknown RPC procedure: externalApps.get' },
+    })
+  })
+})

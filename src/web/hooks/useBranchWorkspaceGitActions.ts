@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
   BranchWorkspaceBatchMergeOutTargetInput,
+  BranchWorkspaceBatchSetUpstreamInput,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionExecuteInput,
   BranchWorkspaceGitActionKind,
@@ -111,14 +112,15 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
 
       const pushPlan = await loadPlan('push', commitPlan.branchWorkspaceId)
       if (!pushPlan || pushPlan.kind !== 'push') return null
-      if (!pushPlan.ready) {
+      const repositoryNames = pushPlan.members.filter((member) => member.ready).map((member) => member.repositoryName)
+      if (repositoryNames.length === 0) {
         setError(
           pushPlan.members.find((member) => !member.ready)?.message ??
             'workspace.branch-workspace.git-action.execute-failed',
         )
         return null
       }
-      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token })
+      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token, repositoryNames })
     },
     [executePlan, loadPlan, plan],
   )
@@ -127,6 +129,14 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     if (!plan || plan.kind !== 'batch-discard') return null
     return await execute({ kind: 'batch-discard', planToken: plan.token })
   }, [execute, plan])
+
+  const executeBatchSetUpstream = useCallback(
+    async (upstreams: BranchWorkspaceBatchSetUpstreamInput[]) => {
+      if (!plan || plan.kind !== 'batch-set-upstream') return null
+      return await execute({ kind: 'batch-set-upstream', planToken: plan.token, upstreams })
+    },
+    [execute, plan],
+  )
 
   const executeBatchMergeIn = useCallback(
     async (mode: BranchWorkspaceMergeMode, sources: BranchWorkspaceBatchMergeInSourceInput[]) => {
@@ -145,9 +155,9 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   )
 
   const executeSync = useCallback(
-    async (kind: 'pull' | 'push') => {
+    async (kind: 'pull' | 'push', repositoryNames: string[]) => {
       if (!plan || plan.kind !== kind) return null
-      return await execute({ kind, planToken: plan.token })
+      return await execute({ kind, planToken: plan.token, repositoryNames })
     },
     [execute, plan],
   )
@@ -172,11 +182,13 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     executeBatchCommit,
     executeBatchCommitAndPush,
     executeBatchDiscard,
+    executeBatchSetUpstream,
     executeBatchMergeIn,
     executeBatchMergeOut,
     executeSync,
     retryBatchCommit: executeBatchCommit,
     retryBatchDiscard: executeBatchDiscard,
+    retryBatchSetUpstream: executeBatchSetUpstream,
     retryBatchMergeIn: executeBatchMergeIn,
     retryBatchMergeOut: executeBatchMergeOut,
     retrySync: executeSync,

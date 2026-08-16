@@ -39,6 +39,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     fileTreeFontSize: input.prefs.fileTreeFontSize,
     fileTreeClipboardMaxBytesMb: input.prefs.fileTreeClipboardMaxBytesMb,
     terminalFontSize: input.prefs.terminalFontSize,
+    terminalNavigationControlsVisible: input.prefs.terminalNavigationControlsVisible,
     terminalCustomButtonsVisible: input.prefs.terminalCustomButtonsVisible,
     terminalCustomButtonSize: input.prefs.terminalCustomButtonSize,
     terminalCustomButtons: input.prefs.terminalCustomButtons,
@@ -102,6 +103,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'fileTreeFontSize'
     | 'fileTreeClipboardMaxBytesMb'
     | 'terminalFontSize'
+    | 'terminalNavigationControlsVisible'
     | 'terminalCustomButtonsVisible'
     | 'terminalCustomButtonSize'
     | 'terminalCustomButtons'
@@ -134,6 +136,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     fileTreeFontSize: snapshot.fileTreeFontSize,
     fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
     terminalFontSize: snapshot.terminalFontSize,
+    terminalNavigationControlsVisible: snapshot.terminalNavigationControlsVisible,
     terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
     terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
     terminalCustomButtons: snapshot.terminalCustomButtons,

@@ -56,7 +56,7 @@ export function BranchWorkspacePane({
     id: number
     relativePath: string
   } | null>(null)
-  const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>(memberTarget ? 'files' : 'detail')
+  const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>('detail')
   const compactNavigationIntent = useRef<CompactWorkspaceSurface | null>(null)
   const [memberRevealRequest, setMemberRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const context = branchWorkspaceFolderContext(rootId, workspace)
@@ -96,10 +96,13 @@ export function BranchWorkspacePane({
   )
 
   useEffect(() => {
-    setFileAreaCollapsed(!memberTarget)
+    setFileAreaCollapsed(true)
+  }, [workspace.id])
+
+  useEffect(() => {
     setBranchWorkspaceFileAreaTab('files')
     setBranchWorkspaceRevealRequest(null)
-    setCompactSurface(compactNavigationIntent.current ?? (memberTarget ? 'files' : 'detail'))
+    setCompactSurface(compactNavigationIntent.current ?? 'detail')
     compactNavigationIntent.current = null
     setMemberRevealRequest(null)
   }, [memberTarget?.repositoryId, memberTarget?.repositoryName, memberTarget?.worktreePath, workspace.id])
@@ -239,7 +242,6 @@ export function BranchWorkspacePane({
                 workspaceRootId={rootId}
                 currentRepoId={rootId}
                 fill
-                fileAreaCollapsed={desktopFileAreaCollapsed}
                 onOpenFileArea={openFileArea}
                 onCollapseFileArea={collapseFileArea}
                 onToggleFileArea={toggleFileAreaFromWorkspaceItem}
@@ -301,7 +303,6 @@ export function BranchWorkspacePane({
             workspaceRootId={rootId}
             currentRepoId={rootId}
             fill
-            fileAreaCollapsed={desktopFileAreaCollapsed}
             onOpenFileArea={openCompactFileArea}
             onCollapseFileArea={collapseFileArea}
             onToggleFileArea={toggleFileAreaFromWorkspaceItem}

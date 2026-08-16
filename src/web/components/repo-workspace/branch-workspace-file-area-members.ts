@@ -10,6 +10,15 @@ export type BranchWorkspaceFileAreaMember =
   | { ok: true; repositoryName: string; repo: RepoState; target: BranchWorkspaceMemberTarget; warning?: string }
   | { ok: false; repositoryName: string; reason: string }
 
+export function branchWorkspaceFileAreaMemberChangeCount(member: BranchWorkspaceFileAreaMember): number {
+  if (!member.ok) return 0
+  return member.repo.data.status.find((status) => status.path === member.target.worktreePath)?.entries.length ?? 0
+}
+
+export function branchWorkspaceFileAreaTotalChangeCount(members: BranchWorkspaceFileAreaMember[]): number {
+  return members.reduce((total, member) => total + branchWorkspaceFileAreaMemberChangeCount(member), 0)
+}
+
 export function resolveBranchWorkspaceFileAreaMembers({
   workspace,
   project,

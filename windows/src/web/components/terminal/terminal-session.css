@@ -1,0 +1,634 @@
+.goblin-terminal-slot {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--goblin-pane-bg, var(--color-background));
+  --goblin-terminal-surface-inset: 4px;
+  --goblin-terminal-float-offset: 10px;
+  --goblin-terminal-overlay-offset: 12px;
+  --goblin-terminal-float-padding: 6px 8px;
+  --goblin-terminal-float-radius: var(--goblin-control-radius, 8px);
+  --goblin-terminal-control-radius: var(--goblin-control-radius, 6px);
+  --goblin-terminal-bottom-dock-height: 44px;
+  --goblin-terminal-visual-viewport-bottom-inset: 0px;
+}
+
+.goblin-terminal-slot__host {
+  display: flex;
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.goblin-terminal-slot__host--touch-scroll {
+  touch-action: pan-x pinch-zoom;
+}
+
+.goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-top: 8px;
+  --goblin-terminal-edge-scrubber-bottom: 8px;
+  --goblin-terminal-scrub-position: 0%;
+  position: absolute;
+  top: var(--goblin-terminal-edge-scrubber-top);
+  right: 0;
+  bottom: var(--goblin-terminal-edge-scrubber-bottom);
+  z-index: 1;
+  width: 32px;
+  border: 0;
+  background: transparent;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.goblin-terminal-edge-scrubber::before {
+  content: attr(data-position);
+  position: absolute;
+  top: clamp(18px, var(--goblin-terminal-scrub-position), calc(100% - 18px));
+  right: 20px;
+  min-width: 52px;
+  transform: translate(4px, -50%);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 46%, var(--color-toolbar-border));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-terminal-background) 88%, var(--color-toolbar));
+  padding: 5px 9px;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  color: var(--color-terminal-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+  transition:
+    opacity 90ms ease,
+    transform 90ms ease;
+}
+
+.goblin-terminal-edge-scrubber::after {
+  content: '';
+  position: absolute;
+  top: clamp(3px, var(--goblin-terminal-scrub-position), calc(100% - 3px));
+  right: 3px;
+  width: 17px;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 1px 0 0 1px;
+  background: var(--color-brand);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-terminal-background) 78%, transparent),
+    0 0 9px color-mix(in srgb, var(--color-brand) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease;
+}
+
+.goblin-terminal-edge-scrubber[data-active='true']::before,
+.goblin-terminal-edge-scrubber:focus-visible::before,
+.goblin-terminal-edge-scrubber[data-active='true']::after,
+.goblin-terminal-edge-scrubber:focus-visible::after {
+  opacity: 1;
+}
+
+.goblin-terminal-edge-scrubber[data-active='true']::before,
+.goblin-terminal-edge-scrubber:focus-visible::before {
+  transform: translate(0, -50%);
+}
+
+.goblin-terminal-edge-scrubber:focus-visible {
+  box-shadow: inset -2px 0 color-mix(in srgb, var(--color-ring) 72%, transparent);
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-bottom: calc(
+    var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-visual-viewport-bottom-inset) + 8px
+  );
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-slot__viewer-status) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-bottom: 88px;
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-focus-exit) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-top: 50px;
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-slot__search) .goblin-terminal-edge-scrubber {
+  --goblin-terminal-edge-scrubber-top: 58px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goblin-terminal-edge-scrubber::before,
+  .goblin-terminal-edge-scrubber::after {
+    transition: none;
+  }
+}
+
+.goblin-terminal-slot__host--original-width {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-slot__host--original-width > .goblin-managed-terminal-frame {
+  min-width: 720px;
+}
+
+.goblin-terminal-slot__host--canonical-readonly {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-slot__host--canonical-readonly > .goblin-managed-terminal-frame,
+.goblin-terminal-slot__host--canonical-readonly .goblin-managed-terminal-host,
+.goblin-terminal-slot__host--canonical-readonly .xterm {
+  overflow: visible;
+}
+
+.goblin-terminal-selection-copy {
+  position: fixed;
+  left: clamp(52px, var(--goblin-terminal-selection-copy-x), calc(100vw - 52px));
+  top: clamp(56px, calc(var(--goblin-terminal-selection-copy-y) - 10px), calc(100dvh - 8px));
+  z-index: 4;
+  min-width: 44px;
+  min-height: 44px;
+  transform: translate(-50%, -100%);
+  border: 1px solid var(--color-toolbar-border);
+  background: color-mix(in srgb, var(--color-toolbar) 96%, var(--color-terminal-background));
+  box-shadow: var(--shadow-sm);
+  touch-action: manipulation;
+}
+
+.goblin-terminal-slot__empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.goblin-terminal-progress {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 2px;
+  background: color-mix(in srgb, var(--color-brand) 20%, transparent);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.goblin-terminal-progress__bar {
+  height: 100%;
+  background: var(--color-brand);
+  transition: width 200ms ease;
+}
+
+.goblin-terminal-progress--error {
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
+}
+
+.goblin-terminal-progress--error .goblin-terminal-progress__bar {
+  background: var(--color-danger);
+}
+
+.goblin-terminal-progress--warning {
+  background: color-mix(in srgb, var(--color-attention) 20%, transparent);
+}
+
+.goblin-terminal-progress--warning .goblin-terminal-progress__bar {
+  background: var(--color-attention);
+}
+
+.goblin-terminal-progress--indeterminate {
+  background: color-mix(in srgb, var(--color-brand) 20%, transparent);
+}
+
+.goblin-terminal-progress--indeterminate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--color-brand);
+  /* TEMP: 禁用动画测试 IME */
+  /* animation: goblin-terminal-progress-indeterminate 1.5s ease-in-out infinite; */
+  will-change: transform;
+  contain: layout style paint;
+}
+
+@keyframes goblin-terminal-progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.goblin-managed-terminal-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 3px;
+  overflow: hidden;
+}
+
+.goblin-managed-terminal-host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.goblin-managed-terminal-host .xterm {
+  width: 100%;
+  height: 100%;
+  overflow-anchor: none;
+}
+
+.goblin-managed-terminal-host.goblin-terminal-static-cursor .xterm-cursor.xterm-cursor-blink {
+  animation: none !important;
+}
+
+.goblin-managed-terminal-host .goblin-terminal-ime-anchor {
+  left: var(--goblin-terminal-ime-anchor-left) !important;
+  top: var(--goblin-terminal-ime-anchor-top) !important;
+}
+
+.goblin-managed-terminal-host .xterm.goblin-terminal-ime-cursor-anchored .xterm-cursor.xterm-cursor-bar {
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+.goblin-terminal-ime-cursor-proxy {
+  position: absolute;
+  z-index: 4;
+  display: none;
+  width: 1px;
+  background: var(--color-terminal-cursor);
+  pointer-events: none;
+}
+
+.goblin-terminal-ime-cursor-proxy.is-active {
+  display: block;
+  animation: none;
+}
+
+.goblin-managed-terminal-host .xterm-viewport {
+  background: var(--goblin-terminal-background, var(--color-terminal-background)) !important;
+  scrollbar-color: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.goblin-managed-terminal-host .xterm-scrollable-element > .scrollbar.vertical {
+  background: transparent;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-track,
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-terminal-foreground) 28%, transparent);
+  background-clip: content-box;
+}
+
+.goblin-managed-terminal-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-terminal-foreground) 42%, transparent);
+  background-clip: content-box;
+}
+
+.goblin-terminal-slot:has(.goblin-terminal-bottom-dock) .goblin-managed-terminal-frame {
+  padding-bottom: calc(var(--goblin-terminal-bottom-dock-height) + var(--goblin-terminal-visual-viewport-bottom-inset));
+}
+
+.goblin-terminal-slot__search {
+  display: flex;
+  max-width: calc(100% - 20px);
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: var(--goblin-terminal-float-radius);
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
+  padding: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.goblin-terminal-float-group {
+  position: absolute;
+  top: var(--goblin-terminal-float-offset);
+  right: var(--goblin-terminal-float-offset);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--goblin-terminal-float-offset);
+  align-items: flex-end;
+}
+
+.goblin-terminal-focus-exit {
+  height: 32px;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
+  padding-inline: 12px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+  font-size: 12px;
+}
+
+.goblin-terminal-slot__search-input {
+  height: 24px;
+  min-width: 80px;
+  width: clamp(80px, 32vw, 190px);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--goblin-terminal-control-radius);
+  background: var(--color-input-background);
+  padding: 0 8px;
+  color: var(--color-input-foreground);
+  font-size: 12px;
+  outline: none;
+}
+
+.goblin-terminal-slot__search-input:focus {
+  border-color: var(--color-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-ring) 25%, transparent);
+}
+
+.goblin-terminal-slot__search-input::placeholder {
+  color: var(--color-input-placeholder);
+}
+
+.goblin-terminal-slot__search-result {
+  flex: 0 0 auto;
+  min-width: 42px;
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  text-align: center;
+}
+
+.goblin-terminal-slot__status-overlay {
+  position: absolute;
+  right: var(--goblin-terminal-overlay-offset);
+  bottom: var(--goblin-terminal-overlay-offset);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: var(--goblin-terminal-control-radius);
+  background: color-mix(in srgb, var(--color-toolbar) 95%, transparent);
+  padding: var(--goblin-terminal-float-padding);
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.goblin-terminal-slot__drop-overlay {
+  position: absolute;
+  inset: var(--goblin-terminal-surface-inset);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--color-brand);
+  border-radius: var(--goblin-terminal-float-radius);
+  background: color-mix(in srgb, var(--color-background) 85%, transparent);
+  pointer-events: none;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.goblin-terminal-bottom-dock {
+  position: absolute;
+  right: 0;
+  bottom: var(--goblin-terminal-visual-viewport-bottom-inset);
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 6px max(4px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.goblin-terminal-custom-buttons {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: var(--goblin-terminal-float-radius);
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
+  padding: 5px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+.goblin-terminal-custom-buttons--desktop {
+  align-items: stretch;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.goblin-terminal-custom-buttons__row {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.goblin-terminal-custom-buttons__separator {
+  display: inline-flex;
+  height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--color-toolbar-border);
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+}
+
+.goblin-terminal-custom-buttons__button {
+  max-width: 180px;
+  min-width: 0;
+  flex: 0 0 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goblin-terminal-custom-buttons__button--small {
+  height: 22px;
+  max-width: 150px;
+  gap: 4px;
+  padding-inline: 7px;
+  font-size: 11px;
+}
+
+.goblin-terminal-custom-buttons__button--medium {
+  height: 24px;
+}
+
+.goblin-terminal-custom-buttons__button--large {
+  height: 30px;
+  max-width: 220px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+
+.goblin-terminal-slot__viewer-status {
+  position: absolute;
+  left: 6px;
+  right: auto;
+  bottom: var(--goblin-terminal-overlay-offset);
+  z-index: 2;
+  display: flex;
+  width: fit-content;
+  max-width: calc(100% - var(--goblin-terminal-overlay-offset) - var(--goblin-terminal-overlay-offset));
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: var(--goblin-terminal-float-radius);
+  background: color-mix(in srgb, var(--color-toolbar) 94%, transparent);
+  padding: var(--goblin-terminal-float-padding);
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.goblin-terminal-slot__viewer-message {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.goblin-terminal-slot__viewer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.goblin-terminal-parking {
+  position: fixed;
+  left: -10000px;
+  top: -10000px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.goblin-terminal-parking__item {
+  overflow: hidden;
+}
+
+.goblin-terminal-command-deck {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  border: 1px solid var(--color-toolbar-border);
+  border-radius: calc(var(--goblin-terminal-float-radius) + 2px);
+  background: color-mix(in srgb, var(--color-toolbar) 97%, var(--color-terminal-background));
+  padding: 5px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+.goblin-terminal-command-deck__row {
+  display: flex;
+  min-width: 0;
+  flex-direction: row;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.goblin-terminal-command-deck__row::-webkit-scrollbar {
+  display: none;
+}
+
+.goblin-terminal-command-deck__row--extra-keys > .goblin-terminal-command-deck__btn {
+  flex: 1 0 44px;
+}
+
+.goblin-terminal-command-deck__btn {
+  height: 32px;
+  min-width: 44px;
+  min-height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--color-toolbar-border) 82%, transparent);
+  padding-inline: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.goblin-terminal-command-deck__btn--action {
+  min-width: max-content;
+}
+
+.goblin-terminal-command-deck__btn.is-active {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ring) 70%, transparent);
+}
+
+.goblin-terminal-command-deck__composer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding-top: 1px;
+}
+
+.goblin-terminal-command-deck__composer-input {
+  height: 32px;
+  min-width: 0;
+  border-width: 2px;
+  font-size: 13px;
+}

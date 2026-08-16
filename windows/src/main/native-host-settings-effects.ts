@@ -1,0 +1,91 @@
+import { resolveLang, setCurrentLang } from '#/main/i18n/index.ts'
+import { buildAppMenu } from '#/main/menu.ts'
+import { applyMenuRuntimeState } from '#/main/menu-state.ts'
+import { syncRecentRepos } from '#/main/recent-repos.ts'
+import { applyThemeSettingsProjection } from '#/main/theme.ts'
+import { applyMainWindowTopbarHeight } from '#/main/window.ts'
+import type {
+  NativeShellProjection,
+  NativeSettingsProjectionPatch,
+  NativeSettingsProjectionState,
+} from '#/shared/rpc.ts'
+
+// Native-host application of server-owned settings changes.
+//
+// Naming rule:
+// - `broadcast*` = publish renderer-visible state that main has already resolved
+//   or validated.
+// - `apply*` = mutate native host chrome / menu / OS integration state.
+//
+// Keep this module narrow: only retain effects that are actually shared across
+// multiple main-side call sites.
+
+function menuStatePatchFromSettingsProjection(input: {
+  patch: NativeSettingsProjectionPatch
+  settings: NativeSettingsProjectionState
+}): {
+  langPref?: NativeSettingsProjectionState['lang']
+  shortcutsDisabled?: boolean
+} {
+  const menuStatePatch: {
+    langPref?: NativeSettingsProjectionState['lang']
+    shortcutsDisabled?: boolean
+  } = {}
+  if (input.patch.lang !== undefined) menuStatePatch.langPref = input.settings.lang
+  if (input.patch.shortcutsDisabled !== undefined) menuStatePatch.shortcutsDisabled = input.settings.shortcutsDisabled
+  return menuStatePatch
+}
+
+function shouldRebuildMenuFromSettingsProjection(patch: NativeSettingsProjectionPatch): boolean {
+  return patch.lang !== undefined || patch.shortcutsDisabled !== undefined
+}
+
+function applyI18nSettingsProjection(input: {
+  patch: NativeSettingsProjectionPatch
+  settings: NativeSettingsProjectionState
+}): void {
+  if (input.patch.lang === undefined) return
+  setCurrentLang(resolveLang(input.settings.lang))
+}
+
+function applyThemeSettingsPrefsProjection(input: {
+  patch: NativeSettingsProjectionPatch
+  settings: NativeSettingsProjectionState
+}): void {
+  if (input.patch.theme === undefined && input.patch.colorTheme === undefined) return
+  applyThemeSettingsProjection({ theme: input.settings.theme, colorTheme: input.settings.colorTheme })
+}
+
+function applyTopbarHeightSettingsProjection(input: {
+  patch: NativeSettingsProjectionPatch
+  settings: NativeSettingsProjectionState
+}): void {
+  if (input.patch.topbarHeightPx === undefined) return
+  applyMainWindowTopbarHeight(input.settings.topbarHeightPx)
+}
+
+export async function applyNativeHostSettingsPrefsProjection(input: {
+  patch: NativeSettingsProjectionPatch
+  settings: NativeSettingsProjectionState
+}): Promise<void> {
+  const shouldRebuildMenu = shouldRebuildMenuFromSettingsProjection(input.patch)
+  const menuStatePatch = menuStatePatchFromSettingsProjection(input)
+  applyI18nSettingsProjection(input)
+  applyThemeSettingsPrefsProjection(input)
+  applyTopbarHeightSettingsProjection(input)
+  if (Object.keys(menuStatePatch).length > 0) applyMenuRuntimeState(menuStatePatch)
+  if (shouldRebuildMenu) buildAppMenu()
+}
+
+export async function applyNativeHostShellProjection(input: NativeShellProjection): Promise<void> {
+  if (input.prefs) {
+    await applyNativeHostSettingsPrefsProjection({
+      patch: input.prefs.patch,
+      settings: input.prefs.settings,
+    })
+  }
+  if (input.recentRepos) {
+    syncRecentRepos(input.recentRepos.recentRepos)
+    buildAppMenu()
+  }
+}

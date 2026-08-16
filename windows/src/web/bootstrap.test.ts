@@ -1,0 +1,338 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
+import type { InitialSettingsSnapshot, RendererBootstrapSnapshot } from '#/shared/bootstrap.ts'
+import { ELECTRON_RENDERER_CAPABILITIES, RENDERER_BRIDGE_VERSION } from '#/shared/bootstrap.ts'
+
+function webBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): RendererBootstrapSnapshot {
+  return {
+    runtime: { kind: 'web', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [] },
+    homeDir: '',
+    initialI18n: null,
+    initialSettings: null,
+    initialServer: null,
+    surface: { kind: 'main' },
+    ...overrides,
+  }
+}
+
+function electronBootstrap(overrides: Partial<RendererBootstrapSnapshot> = {}): RendererBootstrapSnapshot {
+  return {
+    runtime: {
+      kind: 'electron',
+      bridgeVersion: RENDERER_BRIDGE_VERSION,
+      capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
+    },
+    homeDir: '/Users/test',
+    initialI18n: null,
+    initialSettings: null,
+    initialServer: null,
+    surface: { kind: 'main' },
+    ...overrides,
+  }
+}
+
+describe('renderer bootstrap', () => {
+  beforeEach(() => {
+    Reflect.deleteProperty(globalThis, 'window')
+    Reflect.deleteProperty(globalThis, 'document')
+    setRendererBridgeForTests(null)
+    vi.resetModules()
+  })
+
+  test('reads bootstrap snapshots from the goblin bridge', async () => {
+    const initialSettings: InitialSettingsSnapshot = {
+      fetchIntervalSec: 120,
+      statusRefreshIntervalSec: 120,
+      gitNetworkProxyEnabled: false,
+      gitNetworkProxyUrl: '',
+      gitNetworkTimeoutSec: 120,
+      terminalNotificationsEnabled: false,
+      shortcutsDisabled: false,
+      globalShortcutDisabled: false,
+      swapCloseShortcuts: false,
+      terminalThemeSyncEnabled: true,
+      temporaryFilesDirectory: '',
+      globalShortcut: 'CommandOrControl+Shift+G',
+      globalShortcutRegistered: false,
+      terminalApp: 'auto',
+      editorApp: 'windsurf',
+      topbarHeightPx: 34,
+      toolbarHeightPx: 34,
+      fileTreeFontSize: 12,
+      fileTreeClipboardMaxBytesMb: 30,
+      terminalFontSize: 14,
+      terminalCustomButtonsVisible: true,
+      terminalCustomButtonSize: 'medium',
+      terminalCustomButtons: [],
+      fontFamily: 'mono',
+      lanEnabled: false,
+      serverPort: 32200,
+    }
+    const bootstrap = {
+      ...electronBootstrap({
+        initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },
+        initialSettings,
+        initialServer: null,
+      }),
+      hostPlatform: 'win32' as const,
+    }
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        goblinNative: {
+          runtime: bootstrap.runtime,
+          homeDir: bootstrap.homeDir,
+          hostPlatform: bootstrap.hostPlatform,
+          initialI18n: bootstrap.initialI18n,
+          initialSettings: bootstrap.initialSettings,
+          initialServer: bootstrap.initialServer,
+        },
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual(bootstrap)
+  })
+
+  test('falls back when the goblin bridge is unavailable', async () => {
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual({
+      runtime: { kind: 'web', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [] },
+      homeDir: '',
+      initialI18n: null,
+      initialSettings: null,
+      initialServer: null,
+      surface: { kind: 'main' },
+    })
+  })
+
+  test('re-detects the Electron bridge after an early web-host bootstrap', async () => {
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual({
+      runtime: { kind: 'web', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [] },
+      homeDir: '',
+      initialI18n: null,
+      initialSettings: null,
+      initialServer: null,
+      surface: { kind: 'main' },
+    })
+
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        goblinNative: {
+          runtime: {
+            kind: 'electron',
+            bridgeVersion: RENDERER_BRIDGE_VERSION,
+            capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
+          },
+          homeDir: '/Users/later',
+          initialI18n: null,
+          initialSettings: null,
+          initialServer: null,
+          invokeRpc: async () => null,
+          abortRpc: async () => false,
+          onEvent: () => () => {},
+          pathForFile: () => '',
+          terminal: {
+            attach: async () => ({ ok: false, message: 'unavailable' }),
+            restart: async () => ({ ok: false, message: 'unavailable' }),
+            write: async () => false,
+            resize: async () => false,
+            close: async () => ({ ok: true }),
+            create: async () => ({ ok: false, message: 'unavailable' }),
+            pruneTerminals: async () => ({ pruned: 0, remaining: 0 }),
+            notifyBell: async () => false,
+            sendTestNotification: async () => false,
+            setBadge: () => {},
+            onOutput: () => () => {},
+            onTitle: () => () => {},
+            onExit: () => () => {},
+          },
+        },
+      },
+    })
+
+    expect(getInitialBootstrap()).toEqual({
+      runtime: {
+        kind: 'electron',
+        bridgeVersion: RENDERER_BRIDGE_VERSION,
+        capabilities: [...ELECTRON_RENDERER_CAPABILITIES],
+      },
+      homeDir: '/Users/later',
+      initialI18n: null,
+      initialSettings: null,
+      initialServer: null,
+      surface: { kind: 'main' },
+    })
+  })
+
+  test('prefers the configured renderer bridge over directly reading window.goblinNative', async () => {
+    const bootstrap: RendererBootstrapSnapshot = webBootstrap({
+      homeDir: '/Users/host',
+      initialServer: { url: 'http://127.0.0.1:32100', secret: 'secret', clientId: 'client_sharedterminal' },
+    })
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    bridgeModule.setRendererBridgeForTests({
+      kind: () => 'web',
+      hasCapability: () => false,
+      getBootstrap: () => bootstrap,
+      invokeRpc: async () => null,
+      abortRpc: async () => false,
+      onRpcEvent: () => () => {},
+      onEffectIntent: () => () => {},
+      pathForFile: () => '',
+      shell: () => null,
+      terminal: () => ({
+        attach: async () => ({ ok: false, message: 'unavailable' }),
+        restart: async () => ({ ok: false, message: 'unavailable' }),
+        write: async () => false,
+        resize: async () => false,
+        returnToBottom: async () => false,
+        pageTmux: async () => false,
+        takeover: async () => ({ ok: false as const, message: 'error.invalid-arguments' }),
+        close: async () => ({ ok: true }),
+        create: async (input?: { kind?: string }) =>
+          input?.kind === 'primary'
+            ? {
+                ok: true as const,
+                action: 'reused' as const,
+                key: 'repo\0worktree\0terminal-1',
+                sessionId: 'terminal-1',
+                processName: 'zsh',
+                canonicalTitle: null,
+                snapshot: '',
+                snapshotSeq: 0,
+                controller: null,
+                canonicalCols: 80,
+                canonicalRows: 24,
+                phase: 'open' as const,
+                message: null,
+                sessions: [],
+              }
+            : {
+                ok: true as const,
+                action: 'created' as const,
+                key: 'repo\0worktree\0terminal-2',
+                sessionId: 'terminal-2',
+                processName: 'zsh',
+                canonicalTitle: null,
+                snapshot: '',
+                snapshotSeq: 0,
+                controller: null,
+                canonicalCols: 80,
+                canonicalRows: 24,
+                phase: 'open' as const,
+                message: null,
+                sessions: [],
+              },
+        openTmuxSessions: async () => ({ ok: false as const, message: 'unavailable' }),
+        pruneTerminals: async () => ({ pruned: 0, remaining: 0 }),
+        listSessions: async () => [],
+        getSessionSnapshot: async () => null,
+        reorder: async () => false,
+        notifyBell: async () => false,
+        sendTestNotification: async () => false,
+        setBadge: () => {},
+        onOutput: () => () => {},
+        onTitle: () => () => {},
+        onExit: () => () => {},
+        onOwnership: () => () => {},
+        onSessionsChanged: () => () => {},
+      }),
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual(bootstrap)
+  })
+
+  test('reads injected web bootstrap when the Electron bridge is unavailable', async () => {
+    const bootstrap: RendererBootstrapSnapshot = webBootstrap({
+      initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret', clientId: 'client_sharedterminal' },
+    })
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        __GOBLIN_BOOTSTRAP__: bootstrap,
+        location: { href: 'http://127.0.0.1:32100/', origin: 'http://127.0.0.1:32100', search: '' },
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual(bootstrap)
+  })
+
+  test('normalizes a detached surface injected into a Web bootstrap back to the main surface', async () => {
+    const bootstrap = webBootstrap({
+      surface: {
+        kind: 'detached-file-area',
+        request: {
+          kind: 'git-worktree',
+          repo: { kind: 'local', id: '/repo' },
+          branch: 'main',
+          tab: 'files',
+        },
+      },
+    })
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        __GOBLIN_BOOTSTRAP__: bootstrap,
+        location: { href: 'http://127.0.0.1:32100/', origin: 'http://127.0.0.1:32100', search: '' },
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap().surface).toEqual({ kind: 'main' })
+  })
+
+  test('reads injected web bootstrap from the html json script when the Electron bridge is unavailable', async () => {
+    const bootstrap: RendererBootstrapSnapshot = webBootstrap({
+      homeDir: '/Users/tester',
+      initialI18n: { lang: 'ko', pref: 'ko', dict: { hello: '안녕' } },
+      initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret', clientId: 'client_sharedterminal' },
+    })
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: { href: 'http://127.0.0.1:32100/', origin: 'http://127.0.0.1:32100', search: '' },
+      },
+    })
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        getElementById: (id: string) => (id === 'goblin-bootstrap' ? { textContent: JSON.stringify(bootstrap) } : null),
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual(bootstrap)
+  })
+
+  test('builds a minimal web bootstrap from URL query parameters', async () => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        location: {
+          href: 'http://127.0.0.1:32100/?goblinServerSecret=test-secret',
+          origin: 'http://127.0.0.1:32100',
+          search: '?goblinServerSecret=test-secret',
+        },
+      },
+    })
+
+    const { getInitialBootstrap } = await import('#/web/bootstrap.ts')
+    expect(getInitialBootstrap()).toEqual({
+      runtime: { kind: 'web', bridgeVersion: RENDERER_BRIDGE_VERSION, capabilities: [] },
+      homeDir: '',
+      initialI18n: null,
+      initialSettings: null,
+      initialServer: {
+        url: 'http://127.0.0.1:32100/',
+        secret: 'test-secret',
+        clientId: expect.stringMatching(/^web_/),
+      },
+      surface: { kind: 'main' },
+    })
+  })
+})

@@ -2,6 +2,7 @@ import type { TerminalCustomButton, TerminalCustomButtonSize } from '#/shared/rp
 import { readRuntimeTerminalSettings, useRuntimeSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import {
   runSettingsControllerAction,
+  setTerminalNavigationControlsVisiblePreference,
   setTerminalCustomButtonsPreference,
   setTerminalCustomButtonSizePreference,
   setTerminalCustomButtonsVisiblePreference,
@@ -13,6 +14,11 @@ export function useRuntimeTerminalSettings() {
 
 export function useTerminalCustomButtonsController() {
   return {
+    async setTerminalNavigationControlsVisible(visible: boolean): Promise<void> {
+      await runSettingsControllerAction('terminal navigation controls visibility update', async () => {
+        await setTerminalNavigationControlsVisiblePreference(visible)
+      })
+    },
     async setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
       await runSettingsControllerAction('terminal custom buttons visibility update', async () => {
         await setTerminalCustomButtonsVisiblePreference(visible)

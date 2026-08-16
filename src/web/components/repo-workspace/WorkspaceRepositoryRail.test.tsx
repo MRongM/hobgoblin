@@ -13,7 +13,11 @@ import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import type { WorkspaceConfig } from '#/shared/workspace.ts'
-import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import type {
+  TerminalSessionContextValue,
+  TerminalSessionReadContextValue,
+  TerminalSessionSummary,
+} from '#/web/components/terminal/types.ts'
 import type {
   BranchWorkspacePlan,
   BranchWorkspaceReadResult,
@@ -143,6 +147,7 @@ const branchGitActionState = vi.hoisted(() => ({
   requestPlan: vi.fn(async () => true),
   executeBatchCommit: vi.fn(async () => null),
   executeBatchCommitAndPush: vi.fn(async () => null),
+  executeBatchSetUpstream: vi.fn(async () => null),
   executeBatchMergeIn: vi.fn(async () => null),
   executeBatchMergeOut: vi.fn(async () => null),
   executeSync: vi.fn(async () => null),
@@ -157,6 +162,7 @@ const branchGitPanelState = vi.hoisted(() => ({
     activeOperation: BranchWorkspaceSnapshot['activeOperation'] | null
     onOpenChange: (open: boolean) => void
     onBatchCommitAndPush: typeof branchGitActionState.executeBatchCommitAndPush
+    onBatchSetUpstream: typeof branchGitActionState.executeBatchSetUpstream
     onBatchErrorAiHandoff: (input: {
       provider: 'codex' | 'claude'
       kind: BranchWorkspaceGitActionKind
@@ -198,7 +204,6 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     items: BranchWorkspaceSnapshot[]
     activeId: string | null
     activeMemberRepositoryName?: string | null
-    fileAreaCollapsed?: boolean
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
     changeCountById?: Readonly<Record<string, number>>
     getMemberPresentation?: (
@@ -214,7 +219,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
       warning?: string
       actionTarget?: unknown
     }
-    onOpenRepositoryMember?: (
+    onSelectRepositoryMember?: (
       item: BranchWorkspaceSnapshot,
       member: BranchWorkspaceSnapshot['repositories'][number],
     ) => void
@@ -448,6 +453,7 @@ beforeEach(() => {
   branchGitActionState.requestPlan.mockResolvedValue(true)
   branchGitActionState.executeBatchCommit.mockReset()
   branchGitActionState.executeBatchCommitAndPush.mockReset()
+  branchGitActionState.executeBatchSetUpstream.mockReset()
   branchGitActionState.executeBatchMergeIn.mockReset()
   branchGitActionState.executeBatchMergeOut.mockReset()
   branchGitActionState.executeSync.mockReset()
@@ -1154,8 +1160,9 @@ describe('WorkspaceRepositoryRail', () => {
     expect(activateWorkspaceOverview).not.toHaveBeenCalled()
   })
 
-  test('derives exact member dirtiness and opens the member inside its branch workspace', () => {
+  test('derives exact member dirtiness and focuses its selected terminal inside the branch workspace', () => {
     const onOpenFileArea = vi.fn()
+    const onOpenDetailArea = vi.fn()
     const state = useReposStore.getState()
     const api = replaceRepo(state.repos[API]!, (repo) => {
       repo.data.branches = [
@@ -1178,10 +1185,18 @@ describe('WorkspaceRepositoryRail', () => {
     useReposStore.setState({
       repos: { ...state.repos, [API]: api },
       workspaceActiveContextByRoot: {
-        [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1', memberRepositoryName: 'api' },
+        [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
       },
     })
-    renderRail({ currentRepoId: ROOT, onOpenFileArea })
+    const memberPath = '/workspace/goblin-feature-auth/api'
+    const memberWorktreeKey = `${API}\0${memberPath}`
+    const memberTerminalKey = `${memberWorktreeKey}\0terminal-1`
+    const { terminalCommands } = renderRail({
+      currentRepoId: ROOT,
+      onOpenFileArea,
+      onOpenDetailArea,
+      terminalStateByPath: { [memberPath]: { count: 1 } },
+    })
 
     const item = branchWorkspaceState.items[0]!
     const apiMember = item.repositories[0]!
@@ -1206,22 +1221,31 @@ describe('WorkspaceRepositoryRail', () => {
       repositoryId: '/workspace/web',
       worktreePath: '/workspace/goblin-feature-auth/web',
     })
-    expect(branchWorkspaceListState.props?.activeMemberRepositoryName).toBe('api')
+    expect(branchWorkspaceListState.props?.activeMemberRepositoryName).toBeUndefined()
+    expect(branchWorkspaceListState.props?.onSelectRepositoryMember).toBeTypeOf('function')
 
-    act(() => branchWorkspaceListState.props?.onOpenRepositoryMember?.(item, apiMember))
+    act(() => branchWorkspaceListState.props?.onSelectRepositoryMember?.(item, apiMember))
     expect(selectBranch).toHaveBeenCalledWith(API, 'feature/auth')
+    expect(setDetailTab).toHaveBeenCalledWith(API, 'terminal')
     expect(activateBranchWorkspace).toHaveBeenCalledWith(ROOT, 'branch-1', 'api')
+    expect(terminalCommands.focusTerminal).toHaveBeenCalledWith(memberTerminalKey)
     expect(activateWorkspaceRepository).not.toHaveBeenCalled()
-    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onOpenDetailArea).toHaveBeenCalledTimes(1)
+    expect(onOpenFileArea).not.toHaveBeenCalled()
 
     selectBranch.mockClear()
+    setDetailTab.mockClear()
     activateWorkspaceRepository.mockClear()
     activateBranchWorkspace.mockClear()
     onOpenFileArea.mockClear()
-    act(() => branchWorkspaceListState.props?.onOpenRepositoryMember?.(item, webMember))
+    onOpenDetailArea.mockClear()
+    act(() => branchWorkspaceListState.props?.onSelectRepositoryMember?.(item, webMember))
     expect(selectBranch).not.toHaveBeenCalled()
+    expect(setDetailTab).not.toHaveBeenCalled()
     expect(activateWorkspaceRepository).not.toHaveBeenCalled()
     expect(activateBranchWorkspace).not.toHaveBeenCalled()
+    expect(terminalCommands.focusTerminal).toHaveBeenCalledTimes(1)
+    expect(onOpenDetailArea).not.toHaveBeenCalled()
     expect(onOpenFileArea).not.toHaveBeenCalled()
 
     useReposStore.setState({ activeId: ROOT })
@@ -1235,6 +1259,44 @@ describe('WorkspaceRepositoryRail', () => {
     expect(activateWorkspaceRepository).not.toHaveBeenCalled()
     expect(onOpenFileArea).not.toHaveBeenCalled()
     expect(useReposStore.getState().activeId).toBe(ROOT)
+  })
+
+  test('does not refocus a member that is already selected', () => {
+    useReposStore.setState({
+      workspaceActiveContextByRoot: {
+        [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1', memberRepositoryName: 'api' },
+      },
+    })
+    const item = branchWorkspaceState.items[0]!
+    const member = item.repositories[0]!
+    const { terminalCommands } = renderRail({
+      currentRepoId: ROOT,
+      terminalStateByPath: { [member.worktreePath]: { count: 1 } },
+    })
+
+    expect(branchWorkspaceListState.props?.onSelectRepositoryMember).toBeTypeOf('function')
+    act(() => branchWorkspaceListState.props?.onSelectRepositoryMember?.(item, member))
+
+    expect(terminalCommands.focusTerminal).not.toHaveBeenCalled()
+  })
+
+  test.each(['error', 'closed'] as const)('does not focus a selected member terminal in the %s phase', (phase) => {
+    useReposStore.setState({
+      workspaceActiveContextByRoot: {
+        [ROOT]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-1' },
+      },
+    })
+    const item = branchWorkspaceState.items[0]!
+    const member = item.repositories[0]!
+    const { terminalCommands } = renderRail({
+      currentRepoId: ROOT,
+      terminalStateByPath: { [member.worktreePath]: { count: 1, phase } },
+    })
+
+    expect(branchWorkspaceListState.props?.onSelectRepositoryMember).toBeTypeOf('function')
+    act(() => branchWorkspaceListState.props?.onSelectRepositoryMember?.(item, member))
+
+    expect(terminalCommands.focusTerminal).not.toHaveBeenCalled()
   })
 
   test('uses the checked-out branch for a repairable drifted member', () => {
@@ -1259,7 +1321,7 @@ describe('WorkspaceRepositoryRail', () => {
       },
     })
 
-    act(() => branchWorkspaceListState.props?.onOpenRepositoryMember?.(item, member))
+    act(() => branchWorkspaceListState.props?.onSelectRepositoryMember?.(item, member))
     expect(selectBranch).toHaveBeenCalledWith(API, 'release/previous')
   })
 
@@ -1271,14 +1333,6 @@ describe('WorkspaceRepositoryRail', () => {
     act(() => branchWorkspaceListState.props?.onToggleFileArea?.(item))
 
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
-  })
-
-  test('forwards the owning pane file area state to branch workspace members', () => {
-    renderRail({ currentRepoId: ROOT, fileAreaCollapsed: true })
-    expect(branchWorkspaceListState.props?.fileAreaCollapsed).toBe(true)
-
-    renderRail({ currentRepoId: ROOT, fileAreaCollapsed: false })
-    expect(branchWorkspaceListState.props?.fileAreaCollapsed).toBe(false)
   })
 
   test('forwards repository item file area toggles to the owning pane', () => {
@@ -1318,6 +1372,7 @@ describe('WorkspaceRepositoryRail', () => {
     )
     expect(branchGitPanelState.props?.activeOperation).toBeNull()
     expect(branchGitPanelState.props?.onBatchCommitAndPush).toBe(branchGitActionState.executeBatchCommitAndPush)
+    expect(branchGitPanelState.props?.onBatchSetUpstream).toBe(branchGitActionState.executeBatchSetUpstream)
   })
 
   test('hands aggregated batch errors to a new branch workspace root terminal', async () => {
@@ -1858,7 +1913,6 @@ function renderRail({
   currentRepoId = API,
   onOpenFileArea,
   onCollapseFileArea,
-  fileAreaCollapsed,
   onToggleFileArea,
   onOpenDetailArea,
   fill,
@@ -1866,11 +1920,13 @@ function renderRail({
   terminalCount?: number
   outputActive?: boolean
   hasBell?: boolean
-  terminalStateByPath?: Record<string, { count: number; outputActive?: boolean; hasBell?: boolean }>
+  terminalStateByPath?: Record<
+    string,
+    { count: number; outputActive?: boolean; hasBell?: boolean; phase?: TerminalSessionSummary['phase'] }
+  >
   currentRepoId?: string
   onOpenFileArea?: () => void
   onCollapseFileArea?: () => void
-  fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
   onOpenDetailArea?: () => void
   fill?: boolean
@@ -1892,7 +1948,7 @@ function renderRail({
           terminalId: `terminal-${index + 1}`,
           index: index + 1,
           title: 'terminal',
-          phase: 'open',
+          phase: terminalState.phase ?? 'open',
           selected: index === 0,
           hasBell: index === 0 && !!terminalState.hasBell,
           isOutputActive: index === 0 && !!terminalState.outputActive,
@@ -1916,7 +1972,6 @@ function renderRail({
             fill={fill}
             onOpenFileArea={onOpenFileArea}
             onCollapseFileArea={onCollapseFileArea}
-            fileAreaCollapsed={fileAreaCollapsed}
             onToggleFileArea={onToggleFileArea}
             onOpenDetailArea={onOpenDetailArea}
           />

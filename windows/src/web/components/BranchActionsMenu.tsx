@@ -1,0 +1,185 @@
+import { ChevronDown, Loader2 } from 'lucide-react'
+import { Fragment, useState } from 'react'
+import { useT } from '#/web/stores/i18n.ts'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '#/web/components/ui/dropdown-menu.tsx'
+import { type BranchActionItem, type BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
+import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
+import { cn } from '#/web/lib/cn.ts'
+import { rememberedQuickActions, persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+
+export type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
+
+const DEFAULT_QUICK_ACTION_ID: BranchActionItem['id'] = 'commit'
+
+function branchQuickActionKey(repoId: string, branchName: string): string {
+  return `${repoId}\0${branchName}`
+}
+
+function findVisibleNonDestructiveAction(
+  items: BranchActionItem[],
+  id: BranchActionItem['id'],
+): BranchActionItem | null {
+  return items.find((item) => item.id === id && item.visible && !item.destructive) ?? null
+}
+
+function resolveQuickAction(
+  items: BranchActionItem[],
+  rememberedId: BranchActionItem['id'] | undefined,
+): BranchActionItem | null {
+  const fallback = findVisibleNonDestructiveAction(items, DEFAULT_QUICK_ACTION_ID)
+  const remembered = rememberedId ? findVisibleNonDestructiveAction(items, rememberedId) : null
+  if (remembered && !remembered.disabled) return remembered
+  return fallback
+}
+
+export function BranchActionsDropdown({
+  repoId,
+  branchName,
+  patchItems,
+  mainItems,
+  externalItems,
+  destructiveItems,
+  open,
+  onOpenChange,
+  hideQuickAction = false,
+}: Pick<BranchActionItemGroups, 'patchItems' | 'mainItems' | 'externalItems' | 'destructiveItems'> & {
+  repoId?: string
+  branchName?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Render only the menu trigger, without the remembered quick-action
+   *  split button (used by the focus-mode toolbar chrome). */
+  hideQuickAction?: boolean
+}) {
+  const t = useT()
+  const [, setQuickActionRevision] = useState(0)
+  const { pending: pendingAction, run } = useAsyncPending<BranchActionItem['id']>()
+  const visiblePatchItems = patchItems.filter((item) => item.visible)
+  const visibleMainItems = mainItems.filter((item) => item.visible)
+  const visibleExternalItems = externalItems.filter((item) => item.visible)
+  const visibleDestructiveItems = destructiveItems.filter((item) => item.visible)
+  const itemGroups = [visibleExternalItems, visibleMainItems, visiblePatchItems, visibleDestructiveItems].filter(
+    (items) => items.length > 0,
+  )
+  const visibleItems = itemGroups.flat()
+  const busyAction = pendingAction ?? visibleItems.find((item) => item.busy)?.id ?? null
+  const memoryKey = repoId && branchName ? branchQuickActionKey(repoId, branchName) : null
+  const rememberedActionId = memoryKey ? rememberedQuickActions.get(memoryKey) : undefined
+  const quickAction = resolveQuickAction(visibleItems, rememberedActionId)
+  const quickActionDisabled = !quickAction || branchActionMenuItemDisabled(quickAction, busyAction)
+
+  function runItem(item: BranchActionItem) {
+    if (branchActionMenuItemDisabled(item, busyAction)) return
+    if (memoryKey && !item.destructive) {
+      rememberedQuickActions.set(memoryKey, item.id)
+      setQuickActionRevision((revision) => revision + 1)
+
+      // 触发持久化：读取当前 repo state 并写入 snapshot
+      if (repoId) {
+        const store = useReposStore.getState()
+        const repo = store.repos[repoId]
+        const token = repo?.instanceToken
+        if (repo && token !== undefined) {
+          persistRestorableRepoSnapshot(useReposStore.setState, repo, token)
+        }
+      }
+    }
+    void run(item.id, item.onSelect)
+  }
+
+  function runQuickAction() {
+    if (!quickAction || quickActionDisabled) return
+    void run(quickAction.id, quickAction.onSelect)
+  }
+
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <div
+        className="inline-flex items-center"
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
+        {!hideQuickAction && (
+          <AsyncButton
+            variant="ghost"
+            size="icon-sm"
+            loading={quickAction?.busy}
+            disabled={quickActionDisabled}
+            onClick={runQuickAction}
+            title={quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+            aria-label={quickAction?.ariaLabel ?? quickAction?.title ?? quickAction?.label ?? t('action.menu')}
+            className={cn(
+              'rounded-r-none px-1.5',
+              quickAction?.destructive && 'text-danger hover:bg-danger-surface hover:text-danger',
+            )}
+          >
+            {({ busy }) => <>{busy ? <Loader2 className="size-4 animate-spin" /> : quickAction?.icon}</>}
+          </AsyncButton>
+        )}
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title={t('action.menu')}
+            aria-label={t('action.menu')}
+            aria-busy={busyAction ? true : undefined}
+            className={cn(
+              hideQuickAction ? 'px-1.5' : 'h-6 w-7 rounded-l-none px-1.5',
+              'data-[state=open]:bg-accent data-[state=open]:text-accent-foreground',
+            )}
+          >
+            {busyAction ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-3.5" />}
+          </Button>
+        </DropdownMenuTrigger>
+      </div>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        {itemGroups.map((items, groupIndex) => (
+          <Fragment key={groupIndex}>
+            {groupIndex > 0 && <DropdownMenuSeparator />}
+            {items.map((item) => (
+              <BranchActionMenuItem key={item.id} item={item} busy={busyAction} onSelect={() => runItem(item)} />
+            ))}
+          </Fragment>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function BranchActionMenuItem({
+  item,
+  busy,
+  onSelect,
+}: {
+  item: BranchActionItem
+  busy: BranchActionItem['id'] | null
+  onSelect: () => void
+}) {
+  return (
+    <DropdownMenuItem
+      disabled={branchActionMenuItemDisabled(item, busy)}
+      title={item.title}
+      onClick={onSelect}
+      variant={item.destructive ? 'destructive' : 'default'}
+      className={item.shortcut ? 'whitespace-nowrap' : undefined}
+    >
+      {busy === item.id || item.busy ? <Loader2 size={16} className="animate-spin" /> : item.icon}
+      {item.label}
+      {item.shortcut && <DropdownMenuShortcut>{item.shortcut}</DropdownMenuShortcut>}
+    </DropdownMenuItem>
+  )
+}
+
+export function branchActionMenuItemDisabled(item: BranchActionItem, busy: BranchActionItem['id'] | null): boolean {
+  return item.disabled || busy !== null
+}

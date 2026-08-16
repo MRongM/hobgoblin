@@ -1,0 +1,199 @@
+// Shared shell policy for trusted renderer windows.
+//
+// Boundary:
+// - This module owns BrowserWindow shell concerns: preload, security
+//   options, trusted entry URL normalization, navigation blocking, and
+//   external link handling.
+// - It does NOT own surface identity/capabilities; that lives in
+//   window-registry.ts / renderer-surface.ts.
+
+import { app, ipcMain, type BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
+import { randomUUID } from 'node:crypto'
+import os from 'node:os'
+import path from 'node:path'
+import { openHttpExternal } from '#/main/external-url.ts'
+import {
+  allowTrustedAppUrlForWebContents,
+  isTrustedAppUrlForWebContents,
+  registerTrustedAppUrl,
+} from '#/main/ipc/trusted-webcontents.ts'
+import { getCurrentLang } from '#/main/i18n/index.ts'
+import { getTheme } from '#/main/theme.ts'
+import { getEmbeddedServerRuntime } from '#/main/server-manager.ts'
+import { getSettingsSnapshot } from '#/main/settings-server-client.ts'
+import type { InitialSettingsSnapshot, RendererBootstrapPayload } from '#/shared/bootstrap.ts'
+import { ELECTRON_RENDERER_CAPABILITIES } from '#/shared/bootstrap.ts'
+import {
+  createRendererBootstrapPayload,
+  createRendererRuntimeSnapshot,
+  toInitialServerSnapshot,
+} from '#/shared/bootstrap-builders.ts'
+import { buildI18nSnapshot } from '#/shared/i18n/snapshot.ts'
+import { RENDERER_BOOTSTRAP_CHANNEL } from '#/shared/ipc-channels.ts'
+import type { LangPref } from '#/shared/rpc.ts'
+import { WINDOW_BACKGROUND_BY_COLOR_THEME } from '#/shared/theme-tokens.ts'
+import { DEFAULT_COLOR_THEME, initialSettingsFromSnapshot } from '#/shared/settings-defaults.ts'
+import type { RendererSurfaceBootstrap } from '#/shared/file-area.ts'
+
+const webDevUrl = process.env.GOBLIN_WEB_DEV_URL?.trim()
+const WEB_DIST_DIR = path.join(app.getAppPath(), 'dist/web')
+const PRELOAD_PATH = path.join(app.getAppPath(), 'src/preload/preload.cjs')
+const BOOTSTRAP_ID_PREFIX = '--goblin-bootstrap-id='
+const INTERNAL_CAPABILITY_HEADER = 'x-goblin-internal-secret'
+const rendererBootstrapPayloads = new Map<string, RendererBootstrapPayload>()
+let rendererBootstrapIpcWired = false
+
+export function windowCanvasBackground(): string {
+  const { resolved, colorTheme } = getTheme()
+  return WINDOW_BACKGROUND_BY_COLOR_THEME[colorTheme][resolved]
+}
+
+function buildRendererBootstrapPayload(
+  langPref: LangPref,
+  initialSettings: InitialSettingsSnapshot,
+  surface: RendererSurfaceBootstrap,
+): RendererBootstrapPayload {
+  const runtime = getEmbeddedServerRuntime()
+  return createRendererBootstrapPayload({
+    runtime: createRendererRuntimeSnapshot('electron', ELECTRON_RENDERER_CAPABILITIES),
+    homeDir: os.homedir(),
+    hostPlatform: process.platform,
+    i18n: buildI18nSnapshot({ lang: getCurrentLang(), pref: langPref }),
+    settings: initialSettings,
+    server: toInitialServerSnapshot(runtime ? { ...runtime, url: webDevUrl || runtime.url } : null),
+    surface,
+  })
+}
+
+function ensureRendererBootstrapIpc(): void {
+  if (rendererBootstrapIpcWired) return
+  ipcMain.on(RENDERER_BOOTSTRAP_CHANNEL, (event, bootstrapId) => {
+    event.returnValue = typeof bootstrapId === 'string' ? (rendererBootstrapPayloads.get(bootstrapId) ?? null) : null
+  })
+  rendererBootstrapIpcWired = true
+}
+
+function rendererBootstrapIdFromAdditionalArguments(additionalArguments: readonly string[] | undefined): string | null {
+  const arg = additionalArguments?.find((value) => value.startsWith(BOOTSTRAP_ID_PREFIX))
+  return arg ? arg.slice(BOOTSTRAP_ID_PREFIX.length) : null
+}
+
+export function disposeRendererBootstrapForWebPreferences(
+  webPreferences: BrowserWindowConstructorOptions['webPreferences'],
+): void {
+  const bootstrapId = rendererBootstrapIdFromAdditionalArguments(webPreferences?.additionalArguments)
+  if (bootstrapId) rendererBootstrapPayloads.delete(bootstrapId)
+}
+
+export async function createRendererWindowWebPreferences(
+  surface: RendererSurfaceBootstrap = { kind: 'main' },
+): Promise<BrowserWindowConstructorOptions['webPreferences']> {
+  ensureRendererBootstrapIpc()
+  const settingsSnapshot = await getSettingsSnapshot()
+  const initialSettings: InitialSettingsSnapshot = initialSettingsFromSnapshot(settingsSnapshot)
+  const bootstrapId = randomUUID()
+  rendererBootstrapPayloads.set(
+    bootstrapId,
+    buildRendererBootstrapPayload(settingsSnapshot.lang, initialSettings, surface),
+  )
+  return {
+    preload: PRELOAD_PATH,
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true,
+    additionalArguments: [`${BOOTSTRAP_ID_PREFIX}${bootstrapId}`],
+  }
+}
+
+interface RendererEntryUrlOptions {
+  entryHtml?: string
+  routePath?: string
+}
+
+export function getRendererBaseUrl(): string | null {
+  const runtime = getEmbeddedServerRuntime()
+  return webDevUrl || runtime?.url || null
+}
+
+export function getEmbeddedServerUrl(): string | null {
+  const runtime = getEmbeddedServerRuntime()
+  return runtime?.url || null
+}
+
+export function createRendererEntryUrl({ entryHtml = 'index.html', routePath = '/' }: RendererEntryUrlOptions): {
+  url: URL
+} {
+  const baseUrl = getRendererBaseUrl()
+  if (!baseUrl) {
+    throw new Error(
+      app.isPackaged
+        ? 'Embedded renderer server is unavailable in packaged app mode'
+        : `Renderer base URL is unavailable for ${path.join(WEB_DIST_DIR, entryHtml)}`,
+    )
+  }
+  const url = new URL(
+    routePath.startsWith('/') ? routePath : `/${routePath}`,
+    baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`,
+  )
+  const { resolved, colorTheme } = getTheme()
+  registerTrustedAppUrl(url.toString())
+  url.searchParams.set('theme', resolved)
+  url.searchParams.set('colorTheme', colorTheme || DEFAULT_COLOR_THEME)
+  return { url }
+}
+
+export function configureTrustedRendererWindow(win: BrowserWindow, logLabel: string): void {
+  win.webContents.on('will-navigate', (event, nextUrl) => {
+    // Renderer windows are expected to stay on their bootstrap entry and
+    // route internally via app state / browser-history updates, not
+    // arbitrary full-frame navigations. We still allow the exact entry URL
+    // that main explicitly bound to this webContents so dev/prod reloads and
+    // same-entry refresh remain possible. With the embedded app server +
+    // history routing we now trust the app origin, not individual entry
+    // files.
+    if (!isTrustedAppUrlForWebContents(win.webContents.id, nextUrl)) event.preventDefault()
+  })
+  win.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
+    void openHttpExternal(nextUrl).catch((err) => {
+      console.warn(`[${logLabel}] failed to open external window URL`, err)
+    })
+    return { action: 'deny' }
+  })
+}
+
+export function configureEmbeddedServerNavigationCapability(win: BrowserWindow): () => void {
+  const runtime = getEmbeddedServerRuntime()
+  const rendererBaseUrl = getRendererBaseUrl()
+  if (!runtime || !rendererBaseUrl) return () => {}
+
+  const embeddedOrigin = new URL(runtime.url).origin
+  if (new URL(rendererBaseUrl).origin !== embeddedOrigin) return () => {}
+
+  const webRequest = win.webContents.session.webRequest
+  webRequest.onBeforeSendHeaders({ urls: [`${embeddedOrigin}/*`] }, (details, callback) => {
+    if (details.webContentsId !== win.webContents.id || details.resourceType !== 'mainFrame') {
+      callback({ requestHeaders: details.requestHeaders })
+      return
+    }
+    callback({
+      requestHeaders: {
+        ...details.requestHeaders,
+        [INTERNAL_CAPABILITY_HEADER]: runtime.secret,
+      },
+    })
+  })
+
+  let disposed = false
+  return () => {
+    if (disposed) return
+    disposed = true
+    webRequest.onBeforeSendHeaders(null)
+  }
+}
+
+export function allowRendererWindowEntryUrl(win: BrowserWindow, value: string): void {
+  // Scope trust per BrowserWindow, not just per app origin. Once Hobgoblin has
+  // multiple renderer surfaces, a globally-trusted URL set is too broad.
+  allowTrustedAppUrlForWebContents(win.webContents, value)
+}

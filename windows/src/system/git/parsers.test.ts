@@ -1,0 +1,411 @@
+// Unit tests for the pure git output parsers. Run with `bun run test`.
+//
+// Each test feeds hand-crafted git output (with the actual byte
+// separators git emits) and asserts the resulting domain objects.
+// Tests double as documentation for the exact output shape we expect
+// from each git command.
+
+import { describe, expect, test } from 'vitest'
+import {
+  FIELD_SEP,
+  parseBranches,
+  parseCommitFileChanges,
+  parseCommitHistory,
+  parseStatus,
+  parseWorktrees,
+} from '#/system/git/parsers.ts'
+
+const SEP = FIELD_SEP
+
+describe('parseBranches', () => {
+  test('returns empty array for empty input', () => {
+    expect(parseBranches('', '')).toEqual([])
+  })
+
+  test('synthesizes the unborn current branch from the primary worktree', () => {
+    expect(
+      parseBranches('', 'main', [
+        {
+          path: '/repo',
+          branch: 'main',
+          head: '0000000000000000000000000000000000000000',
+          isBare: false,
+          isPrimary: true,
+          isDirty: false,
+          changeCount: 0,
+        },
+      ]),
+    ).toEqual([
+      {
+        name: 'main',
+        isCurrent: true,
+        ahead: 0,
+        behind: 0,
+        lastCommitHash: '',
+        lastCommitMessage: '',
+        lastCommitDate: '',
+        lastCommitAuthor: '',
+        worktree: {
+          path: '/repo',
+          isPrimary: true,
+          summary: {
+            dirty: false,
+            changeCount: 0,
+          },
+        },
+      },
+    ])
+  })
+
+  test('parses a single branch with no upstream', () => {
+    const line = ['main', 'abc1234', 'initial commit', '2026-05-20T10:00:00+08:00', 'Alice', '', ''].join(SEP)
+    const result = parseBranches(line, 'main')
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      name: 'main',
+      isCurrent: true,
+      ahead: 0,
+      behind: 0,
+      lastCommitHash: 'abc1234',
+      lastCommitMessage: 'initial commit',
+      lastCommitDate: '2026-05-20T10:00:00+08:00',
+      lastCommitAuthor: 'Alice',
+    })
+    expect(result[0]?.tracking).toBeUndefined()
+    expect(result[0]?.trackingGone).toBeUndefined()
+  })
+
+  test('parses ahead/behind from track string', () => {
+    const line = [
+      'feature',
+      'def5678',
+      'wip',
+      '2026-05-20T10:00:00+08:00',
+      'Bob',
+      'origin/feature',
+      '[ahead 3, behind 2]',
+    ].join(SEP)
+    const [b] = parseBranches(line, 'main')
+    expect(b?.ahead).toBe(3)
+    expect(b?.behind).toBe(2)
+    expect(b?.tracking).toBe('origin/feature')
+    expect(b?.trackingGone).toBe(false)
+  })
+
+  test('flags trackingGone when upstream marked [gone]', () => {
+    const line = ['stale', 'aaa1111', 'old', '2026-05-20T10:00:00+08:00', 'Carol', 'origin/stale', '[gone]'].join(SEP)
+    const [b] = parseBranches(line, 'main')
+    expect(b?.tracking).toBe('origin/stale')
+    expect(b?.trackingGone).toBe(true)
+    expect(b?.ahead).toBe(0)
+    expect(b?.behind).toBe(0)
+  })
+
+  test('marks isCurrent only for the matching branch', () => {
+    const out = [['main', 'a', 's', 'd', 'a1', '', ''].join(SEP), ['dev', 'b', 's', 'd', 'a1', '', ''].join(SEP)].join(
+      '\n',
+    )
+    const result = parseBranches(out, 'dev')
+    expect(result.find((b) => b.name === 'main')?.isCurrent).toBe(false)
+    expect(result.find((b) => b.name === 'dev')?.isCurrent).toBe(true)
+  })
+
+  test('attaches worktree info when branch matches', () => {
+    const line = ['feat', 'h', 's', 'd', 'a', '', ''].join(SEP)
+    const result = parseBranches(line, 'main', [
+      {
+        path: '/wt/feat',
+        branch: 'feat',
+        isBare: false,
+        isPrimary: false,
+        isDirty: true,
+        changeCount: 3,
+        isPrunable: true,
+      },
+    ])
+    expect(result[0]?.worktree?.path).toBe('/wt/feat')
+    expect(result[0]?.worktree?.summary?.dirty).toBe(true)
+    expect(result[0]?.worktree?.isPrimary).toBe(false)
+    expect(result[0]?.worktree?.isPrunable).toBe(true)
+    expect(result[0]?.worktree?.summary?.changeCount).toBe(3)
+  })
+
+  test('attaches primary worktree marker when branch matches the main worktree', () => {
+    const line = ['main', 'h', 's', 'd', 'a', '', ''].join(SEP)
+    const [branch] = parseBranches(line, 'feature', [{ path: '/repo', branch: 'main', isBare: false, isPrimary: true }])
+    expect(branch?.worktree?.path).toBe('/repo')
+    expect(branch?.worktree?.isPrimary).toBe(true)
+    expect(branch?.worktree).not.toHaveProperty('summary')
+  })
+
+  test('preserves SEP-free subjects with spaces and unicode', () => {
+    const subject = 'feat: 添加 i18n 🎉'
+    const line = ['main', 'a', subject, 'd', 'Z', '', ''].join(SEP)
+    const [b] = parseBranches(line, 'main')
+    expect(b?.lastCommitMessage).toBe(subject)
+  })
+})
+
+describe('parseCommitHistory', () => {
+  test('parses parents for regular and merge commits', () => {
+    const out = [
+      ['abc123456789', 'abc1234', 'feat: history', 'Alice', '2026-06-15T09:00:00+08:00', 'def456 ghi789'].join(SEP),
+      ['def456789012', 'def4567', 'fix: unicode 中文', 'Bob Smith', '2026-06-14T09:00:00+08:00', ''].join(SEP),
+    ].join('\n')
+
+    expect(parseCommitHistory(out)).toEqual([
+      {
+        hash: 'abc123456789',
+        shortHash: 'abc1234',
+        subject: 'feat: history',
+        author: 'Alice',
+        date: '2026-06-15T09:00:00+08:00',
+        parents: ['def456', 'ghi789'],
+      },
+      {
+        hash: 'def456789012',
+        shortHash: 'def4567',
+        subject: 'fix: unicode 中文',
+        author: 'Bob Smith',
+        date: '2026-06-14T09:00:00+08:00',
+        parents: [],
+      },
+    ])
+  })
+})
+
+describe('parseCommitFileChanges', () => {
+  test('merges name-status and numstat records including rename, copy, and binary stats', () => {
+    const nameStatus =
+      [
+        'A',
+        'src/new.ts',
+        'M',
+        'src/edit.ts',
+        'D',
+        'src/deleted.ts',
+        'R050',
+        'src/old name.ts',
+        'src/new name.ts',
+        'C100',
+        'src/source.ts',
+        'src/copied.ts',
+        'X',
+        'assets/logo.png',
+      ].join('\0') + '\0'
+    const numstat =
+      [
+        '10\t0\tsrc/new.ts',
+        '2\t3\tsrc/edit.ts',
+        '0\t8\tsrc/deleted.ts',
+        '1\t1\t',
+        'src/old name.ts',
+        'src/new name.ts',
+        '5\t0\t',
+        'src/source.ts',
+        'src/copied.ts',
+        '-\t-\tassets/logo.png',
+      ].join('\0') + '\0'
+
+    expect(parseCommitFileChanges(nameStatus, numstat)).toEqual([
+      { path: 'src/new.ts', status: 'added', additions: 10, deletions: 0 },
+      { path: 'src/edit.ts', status: 'modified', additions: 2, deletions: 3 },
+      { path: 'src/deleted.ts', status: 'deleted', additions: 0, deletions: 8 },
+      { path: 'src/new name.ts', oldPath: 'src/old name.ts', status: 'renamed', additions: 1, deletions: 1 },
+      { path: 'src/copied.ts', oldPath: 'src/source.ts', status: 'copied', additions: 5, deletions: 0 },
+      { path: 'assets/logo.png', status: 'unknown', additions: 0, deletions: 0 },
+    ])
+  })
+})
+
+describe('parseStatus', () => {
+  test('returns empty for empty input', () => {
+    expect(parseStatus('')).toEqual([])
+  })
+
+  test('parses simple modified entries', () => {
+    const out = ' M src/file.ts\0?? newfile.ts\0'
+    const result = parseStatus(out)
+    expect(result).toEqual([
+      { x: ' ', y: 'M', path: 'src/file.ts' },
+      { x: '?', y: '?', path: 'newfile.ts' },
+    ])
+  })
+
+  test('handles filenames with spaces (no quoting needed under -z)', () => {
+    const out = 'M  file with spaces.txt\0'
+    const [e] = parseStatus(out)
+    expect(e?.path).toBe('file with spaces.txt')
+  })
+
+  test('skips the second record of a rename pair', () => {
+    // R<space><space>newpath\0oldpath\0  followed by another entry
+    const out = 'R  new/path.ts\0old/path.ts\0 M other.ts\0'
+    const result = parseStatus(out)
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ x: 'R', y: ' ', path: 'new/path.ts', originalPath: 'old/path.ts' })
+    expect(result[1]).toEqual({ x: ' ', y: 'M', path: 'other.ts' })
+  })
+
+  test('preserves original path for rename pairs', () => {
+    const out = 'R  src/new.ts\0src/old.ts\0'
+    expect(parseStatus(out)).toEqual([{ x: 'R', y: ' ', path: 'src/new.ts', originalPath: 'src/old.ts' }])
+  })
+
+  test('preserves original path for copy pairs', () => {
+    const out = 'C  src/copied.ts\0src/source.ts\0'
+    expect(parseStatus(out)).toEqual([{ x: 'C', y: ' ', path: 'src/copied.ts', originalPath: 'src/source.ts' }])
+  })
+
+  test('keeps parsing entries after rename original record', () => {
+    const out = 'R  new/path.ts\0old/path.ts\0 M other.ts\0'
+    expect(parseStatus(out)).toEqual([
+      { x: 'R', y: ' ', path: 'new/path.ts', originalPath: 'old/path.ts' },
+      { x: ' ', y: 'M', path: 'other.ts' },
+    ])
+  })
+
+  test('handles unicode and special characters in paths', () => {
+    const out = ' M 中文/файл.txt\0'
+    expect(parseStatus(out)[0]?.path).toBe('中文/файл.txt')
+  })
+
+  test('skips records too short to be valid status lines', () => {
+    const out = 'M\0 M valid.ts\0'
+    const result = parseStatus(out)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.path).toBe('valid.ts')
+  })
+
+  test('tolerates trailing NUL with no further data', () => {
+    // git status -z always terminates the last record with \0; the
+    // split('\0') produces an empty trailing element which the filter
+    // must drop.
+    const out = ' M only.ts\0'
+    expect(parseStatus(out)).toEqual([{ x: ' ', y: 'M', path: 'only.ts' }])
+  })
+
+  test('handles consecutive NULs without crashing', () => {
+    // Defensive: should never come from real git, but a malformed
+    // output shouldn't crash the parser. Empty records are skipped by
+    // the length filter.
+    const out = ' M a.ts\0\0 M b.ts\0'
+    const result = parseStatus(out)
+    expect(result).toHaveLength(2)
+    expect(result.map((e) => e.path)).toEqual(['a.ts', 'b.ts'])
+  })
+})
+
+describe('parseWorktrees', () => {
+  test('returns empty for empty input', () => {
+    expect(parseWorktrees('')).toEqual([])
+  })
+
+  test('parses a single non-bare worktree on a branch', () => {
+    const out = ['worktree /repo', 'HEAD abc123', 'branch refs/heads/main'].join('\n')
+    const result = parseWorktrees(out)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({
+      path: '/repo',
+      branch: 'main',
+      head: 'abc123',
+      isBare: false,
+      isPrimary: true,
+      isLocked: false,
+    })
+  })
+
+  test('flags locked worktrees (with or without reason)', () => {
+    // `git worktree list --porcelain` emits either a bare `locked` line
+    // or `locked <reason>` when the user passed `--reason` to lock.
+    const out = ['worktree /repo/wt', 'HEAD a', 'branch refs/heads/feat', 'locked needed for release'].join('\n')
+    const [w] = parseWorktrees(out)
+    expect(w?.isLocked).toBe(true)
+
+    const bare = ['worktree /repo/wt2', 'HEAD a', 'branch refs/heads/x', 'locked'].join('\n')
+    expect(parseWorktrees(bare)[0]?.isLocked).toBe(true)
+  })
+
+  test('flags immediately prunable worktrees (with or without reason)', () => {
+    const withReason = [
+      'worktree /repo/wt',
+      'HEAD a',
+      'branch refs/heads/feat',
+      'prunable gitdir file points to non-existent location',
+    ].join('\n')
+    expect(parseWorktrees(withReason)[0]?.isPrunable).toBe(true)
+
+    const bare = ['worktree /repo/wt2', 'HEAD a', 'branch refs/heads/x', 'prunable'].join('\n')
+    expect(parseWorktrees(bare)[0]?.isPrunable).toBe(true)
+  })
+
+  test('detached HEAD has no branch line — branch left undefined', () => {
+    const out = ['worktree /repo/wt-detached', 'HEAD abc123', 'detached'].join('\n')
+    const [w] = parseWorktrees(out)
+    expect(w?.path).toBe('/repo/wt-detached')
+    expect(w?.branch).toBeUndefined()
+    expect(w?.head).toBe('abc123')
+    expect(w?.isBare).toBe(false)
+    expect(w?.isPrimary).toBe(true)
+  })
+
+  test('flags bare worktrees', () => {
+    const out = ['worktree /repo/bare', 'HEAD 0000000', 'bare'].join('\n')
+    const [w] = parseWorktrees(out)
+    expect(w?.isBare).toBe(true)
+    expect(w?.isPrimary).toBe(true)
+    expect(w?.branch).toBeUndefined()
+  })
+
+  test('parses multiple blocks separated by blank lines', () => {
+    const out = [
+      'worktree /repo',
+      'HEAD a',
+      'branch refs/heads/main',
+      '',
+      'worktree /repo/wt',
+      'HEAD b',
+      'branch refs/heads/feat',
+    ].join('\n')
+    const result = parseWorktrees(out)
+    expect(result).toHaveLength(2)
+    expect(result.map((w) => w.branch)).toEqual(['main', 'feat'])
+    expect(result.map((w) => w.isPrimary)).toEqual([true, false])
+  })
+
+  test('parses Windows CRLF records without merging worktrees', () => {
+    const out = [
+      'worktree C:/repo',
+      'HEAD a',
+      'branch refs/heads/main',
+      '',
+      'worktree C:/repo-feature',
+      'HEAD b',
+      'branch refs/heads/feature',
+    ].join('\r\n')
+
+    expect(parseWorktrees(out)).toEqual([
+      {
+        path: 'C:/repo',
+        branch: 'main',
+        head: 'a',
+        isBare: false,
+        isPrimary: true,
+        isLocked: false,
+      },
+      {
+        path: 'C:/repo-feature',
+        branch: 'feature',
+        head: 'b',
+        isBare: false,
+        isPrimary: false,
+        isLocked: false,
+      },
+    ])
+  })
+
+  test('strips refs/heads/ prefix from branch ref', () => {
+    const out = ['worktree /repo', 'HEAD a', 'branch refs/heads/feature/nested/name'].join('\n')
+    expect(parseWorktrees(out)[0]?.branch).toBe('feature/nested/name')
+  })
+})

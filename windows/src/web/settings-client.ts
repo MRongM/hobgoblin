@@ -1,0 +1,293 @@
+import { canUseNativeRpcBridge } from '#/web/app-shell-client.ts'
+import { invokeNativeRpcPath } from '#/web/native-host-client.ts'
+import { fetchServerJson, postServerJson } from '#/web/lib/server-fetch.ts'
+import type {
+  EditorAppState,
+  EditorPref,
+  ExternalAppsSnapshot,
+  FontFamilyPref,
+  I18nSnapshot,
+  LangPref,
+  LanInfo,
+  RuntimeRecentReposState,
+  SessionState,
+  SettingsPrefs,
+  SettingsPrefsUpdateResponse,
+  SettingsSnapshot,
+  TerminalCustomButton,
+  TerminalCustomButtonSize,
+  TerminalAppState,
+  TerminalPref,
+  ThemePref,
+  ThemeState,
+  WebAccessSettingsSnapshot,
+  WebAccessSettingsUpdateInput,
+  TelegramBellNotificationContext,
+  TelegramNotificationResult,
+  TelegramNotificationSettingsSnapshot,
+  TelegramNotificationSettingsUpdateInput,
+  TelegramOutputCompletionNotificationContext,
+} from '#/shared/rpc.ts'
+import type { ColorTheme } from '#/shared/color-theme.ts'
+import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
+import {
+  nativeSettingsProjectionStateFromSettings,
+  pickNativeSettingsProjectionPatch,
+} from '#/shared/native-shell-projection.ts'
+import { runtimeSettingsSnapshotFromSettingsSnapshot } from '#/shared/settings-snapshot.ts'
+
+type RecentReposUpdateResponse = { ok: boolean; addedRepo?: RepoSessionEntry | null } & RuntimeRecentReposState
+import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
+
+export async function getSettingsSnapshot(): Promise<SettingsSnapshot> {
+  return await fetchServerJson<SettingsSnapshot>('/api/settings')
+}
+
+export async function setWebAccessSettings(input: WebAccessSettingsUpdateInput): Promise<WebAccessSettingsSnapshot> {
+  const result = await postServerJson<WebAccessSettingsUpdateInput, { ok: true; webAccess: WebAccessSettingsSnapshot }>(
+    '/api/settings/web-access',
+    input,
+  )
+  return result.webAccess
+}
+
+export async function saveTelegramNotificationSettings(
+  input: TelegramNotificationSettingsUpdateInput,
+): Promise<TelegramNotificationSettingsSnapshot> {
+  const result = await postServerJson<
+    TelegramNotificationSettingsUpdateInput,
+    { ok: true; telegramNotifications: TelegramNotificationSettingsSnapshot } | { ok: false; error: { code: string } }
+  >('/api/settings/telegram', input)
+  if (!result.ok) throw new Error(result.error.code)
+  return result.telegramNotifications
+}
+
+export async function sendTelegramTestNotification(): Promise<TelegramNotificationResult> {
+  return await postServerJson<{}, TelegramNotificationResult>('/api/telegram-notifications/test', {})
+}
+
+export async function sendTelegramBellNotification(
+  context: TelegramBellNotificationContext,
+): Promise<TelegramNotificationResult> {
+  return await postServerJson<TelegramBellNotificationContext, TelegramNotificationResult>(
+    '/api/telegram-notifications/bell',
+    context,
+  )
+}
+
+export async function sendTelegramOutputCompletionNotification(
+  context: TelegramOutputCompletionNotificationContext,
+): Promise<TelegramNotificationResult> {
+  return await postServerJson<TelegramOutputCompletionNotificationContext, TelegramNotificationResult>(
+    '/api/telegram-notifications/output-completion',
+    context,
+  )
+}
+
+function resolveThemeStateFromPrefs(settings: Pick<SettingsPrefs, 'theme' | 'colorTheme'>): ThemeState {
+  const resolved =
+    settings.theme === 'auto'
+      ? window.matchMedia?.('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+      : settings.theme
+  return { pref: settings.theme, resolved, colorTheme: settings.colorTheme }
+}
+
+export function resolveThemeStateFromSettings(settings: Pick<SettingsPrefs, 'theme' | 'colorTheme'>): ThemeState {
+  return resolveThemeStateFromPrefs(settings)
+}
+
+export async function getThemeState(): Promise<ThemeState> {
+  return resolveThemeStateFromSettings(runtimeSettingsSnapshotFromSettingsSnapshot(await getSettingsSnapshot()))
+}
+
+async function updateSettingsPrefsPatch(settings: Record<string, unknown>): Promise<SettingsPrefsUpdateResponse> {
+  const result = await fetchServerJson<SettingsPrefsUpdateResponse>('/api/settings/prefs', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ settings }),
+  })
+  const patch = pickNativeSettingsProjectionPatch(settings as Partial<SettingsPrefs>)
+  if (!patch || !canUseNativeRpcBridge()) return result
+  await invokeNativeRpcPath<void>('settings.applyShellProjection', {
+    prefs: {
+      patch,
+      settings: nativeSettingsProjectionStateFromSettings(result.settings),
+    },
+  })
+  return result
+}
+
+export async function setThemePref(pref: ThemePref): Promise<ThemeState> {
+  return resolveThemeStateFromPrefs((await updateSettingsPrefsPatch({ theme: pref })).settings)
+}
+
+export async function setThemeColorTheme(colorTheme: ColorTheme): Promise<ThemeState> {
+  return resolveThemeStateFromPrefs((await updateSettingsPrefsPatch({ colorTheme })).settings)
+}
+
+export async function setProjectColorTheme(
+  repoId: string,
+  colorTheme: ColorTheme | null,
+): Promise<RepoSettingsEntry[]> {
+  const result = await postServerJson<
+    { repoId: string; colorTheme: ColorTheme | null },
+    { ok: true; repoSettings: RepoSettingsEntry[] }
+  >('/api/settings/repo-theme', { repoId, colorTheme })
+  return result.repoSettings
+}
+
+export async function getI18nSnapshot(): Promise<I18nSnapshot> {
+  return await fetchServerJson<I18nSnapshot>('/api/settings/i18n')
+}
+
+export async function setI18nPref(pref: LangPref): Promise<I18nSnapshot> {
+  const result = await updateSettingsPrefsPatch({ lang: pref })
+  return result.i18n ?? (await getI18nSnapshot())
+}
+
+export async function getLanInfo(): Promise<LanInfo> {
+  return await fetchServerJson('/api/settings/lan')
+}
+
+export async function setLanEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ lanEnabled: enabled })
+}
+
+export async function setServerPort(port: number): Promise<void> {
+  await updateSettingsPrefsPatch({ serverPort: port })
+}
+
+export async function setGitNetworkProxyEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ gitNetworkProxyEnabled: enabled })
+}
+
+export async function setGitNetworkProxyUrl(url: string): Promise<void> {
+  await updateSettingsPrefsPatch({ gitNetworkProxyUrl: url })
+}
+
+export async function setGitNetworkTimeoutSec(sec: number): Promise<void> {
+  await updateSettingsPrefsPatch({ gitNetworkTimeoutSec: sec })
+}
+
+export async function getExternalAppsSnapshot(): Promise<ExternalAppsSnapshot> {
+  return await fetchServerJson<ExternalAppsSnapshot>('/api/settings/external-apps')
+}
+
+export async function refreshExternalAppsSnapshot(): Promise<ExternalAppsSnapshot> {
+  return await postServerJson('/api/settings/external-apps/refresh', {})
+}
+
+export async function addRecentRepo(repo: RepoSessionEntry): Promise<RecentReposUpdateResponse> {
+  const result = await postServerJson<{ repo: RepoSessionEntry }, RecentReposUpdateResponse>(
+    '/api/settings/recent-repos/add',
+    { repo },
+  )
+  if (canUseNativeRpcBridge()) {
+    await invokeNativeRpcPath<void>('settings.applyShellProjection', {
+      recentRepos: { recentRepos: result.recentRepos },
+    })
+  }
+  return result
+}
+
+export async function clearRecentRepos(): Promise<void> {
+  await postServerJson<{}, { ok: boolean }>('/api/settings/recent-repos/clear', {})
+  if (!canUseNativeRpcBridge()) return
+  await invokeNativeRpcPath<void>('settings.applyShellProjection', {
+    recentRepos: { recentRepos: [] },
+  })
+}
+
+export async function saveSession(session: SessionState): Promise<SessionState> {
+  const result = await postServerJson<{ session: SessionState }, { ok: boolean; session: SessionState }>(
+    '/api/settings/session',
+    { session },
+  )
+  return result.session
+}
+
+export async function setSettingsFetchInterval(sec: number): Promise<number> {
+  const result = await postServerJson<{ sec: number }, { ok: boolean; fetchIntervalSec: number }>(
+    '/api/settings/fetch-interval',
+    { sec },
+  )
+  return result.fetchIntervalSec
+}
+
+export async function setStatusRefreshInterval(sec: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ statusRefreshIntervalSec: sec })
+  return result.settings.statusRefreshIntervalSec
+}
+
+export async function setTerminalNotificationsEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalNotificationsEnabled: enabled })
+}
+
+export async function setShortcutsDisabled(disabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ shortcutsDisabled: disabled })
+}
+
+export async function setTerminalThemeSyncEnabled(enabled: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalThemeSyncEnabled: enabled })
+}
+
+export async function setTemporaryFilesDirectory(path: string): Promise<void> {
+  await updateSettingsPrefsPatch({ temporaryFilesDirectory: path })
+}
+
+export async function setPreferredTerminalApp(pref: TerminalPref): Promise<TerminalAppState> {
+  const result = await updateSettingsPrefsPatch({ terminalApp: pref })
+  return result.externalApps?.terminal ?? (await getExternalAppsSnapshot()).terminal
+}
+
+export async function setPreferredEditorApp(pref: EditorPref): Promise<EditorAppState> {
+  const result = await updateSettingsPrefsPatch({ editorApp: pref })
+  return result.externalApps?.editor ?? (await getExternalAppsSnapshot()).editor
+}
+
+export async function setFileTreeFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ fileTreeFontSize: fontSize })
+  return result.settings.fileTreeFontSize
+}
+
+export async function setTopbarHeightPx(heightPx: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ topbarHeightPx: heightPx })
+  return result.settings.topbarHeightPx
+}
+
+export async function setToolbarHeightPx(heightPx: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ toolbarHeightPx: heightPx })
+  return result.settings.toolbarHeightPx
+}
+
+export async function setFileTreeClipboardMaxBytesMb(value: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ fileTreeClipboardMaxBytesMb: value })
+  return result.settings.fileTreeClipboardMaxBytesMb
+}
+
+export async function setTerminalFontSize(fontSize: number): Promise<number> {
+  const result = await updateSettingsPrefsPatch({ terminalFontSize: fontSize })
+  return result.settings.terminalFontSize
+}
+
+export async function setFontFamily(fontFamily: FontFamilyPref): Promise<FontFamilyPref> {
+  const result = await updateSettingsPrefsPatch({ fontFamily })
+  return result.settings.fontFamily
+}
+
+export async function setTerminalCustomButtonsVisible(visible: boolean): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalCustomButtonsVisible: visible })
+}
+
+export async function setTerminalCustomButtonSize(size: TerminalCustomButtonSize): Promise<void> {
+  await updateSettingsPrefsPatch({ terminalCustomButtonSize: size })
+}
+
+export async function setTerminalCustomButtons(buttons: TerminalCustomButton[]): Promise<TerminalCustomButton[]> {
+  const result = await updateSettingsPrefsPatch({ terminalCustomButtons: buttons })
+  return result.settings.terminalCustomButtons
+}

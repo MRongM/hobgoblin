@@ -1,0 +1,234 @@
+import { DEFAULT_GLOBAL_SHORTCUT } from '#/shared/accelerator.ts'
+import { DEFAULT_COLOR_THEME } from '#/shared/color-theme.ts'
+import type { InitialSettingsSnapshot } from '#/shared/bootstrap.ts'
+import type {
+  EditorPref,
+  FontFamilyPref,
+  LangPref,
+  SessionState,
+  SettingsPrefs,
+  SettingsSnapshot,
+  TerminalCustomButton,
+  TerminalCustomButtonSize,
+  TerminalPref,
+  ThemePref,
+} from '#/shared/rpc.ts'
+import {
+  DEFAULT_TOPBAR_HEIGHT_PX,
+  DEFAULT_TOOLBAR_HEIGHT_PX,
+  MIN_CHROME_HEIGHT_PX,
+  MAX_CHROME_HEIGHT_PX,
+} from '#/shared/window-chrome.ts'
+import {
+  MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+  MAX_GIT_NETWORK_TIMEOUT_SEC,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+  MIN_GIT_NETWORK_TIMEOUT_SEC,
+  MIN_SERVER_PORT,
+  MIN_TERMINAL_FONT_SIZE,
+  MAX_SERVER_PORT,
+  DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+} from '#/shared/settings.ts'
+import {
+  DEFAULT_DETAIL_COLLAPSED,
+  DEFAULT_DETAIL_FOCUS_MODE,
+  DEFAULT_DETAIL_PANE_SIZES,
+  DEFAULT_FILE_TREE_PANE_SIZES,
+  DEFAULT_WORKSPACE_LAYOUT,
+} from '#/shared/workspace-layout.ts'
+import {
+  TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
+  TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+} from '#/shared/telegram-notifications.ts'
+import { createDefaultTerminalCustomButtons } from '#/shared/terminal-custom-button-presets.ts'
+
+export const DEFAULT_FETCH_INTERVAL_SEC = 120
+export const DEFAULT_STATUS_REFRESH_INTERVAL_SEC = 120
+export const DEFAULT_GIT_NETWORK_PROXY_ENABLED = false
+export const DEFAULT_GIT_NETWORK_PROXY_URL = ''
+export const DEFAULT_GIT_NETWORK_TIMEOUT_SEC = 120
+export const MAX_RECENT_REPOS = 30
+export const DEFAULT_LANG_PREF: LangPref = 'auto'
+export const DEFAULT_THEME_PREF: ThemePref = 'auto'
+export const DEFAULT_FONT_FAMILY: FontFamilyPref = 'mono'
+export const DEFAULT_SESSION_DETAIL_FOCUS_MODE = DEFAULT_DETAIL_FOCUS_MODE
+export const DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED = true
+export const DEFAULT_SHORTCUTS_DISABLED = false
+export const DEFAULT_GLOBAL_SHORTCUT_DISABLED = false
+export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
+export const DEFAULT_TERMINAL_THEME_SYNC_ENABLED = true
+export const DEFAULT_TEMPORARY_FILES_DIRECTORY = ''
+export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
+export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
+export const DEFAULT_FILE_TREE_FONT_SIZE = 13
+export const DEFAULT_APP_FONT_SIZE = DEFAULT_FILE_TREE_FONT_SIZE
+export const DEFAULT_TERMINAL_FONT_SIZE = 14
+export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
+export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
+export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = createDefaultTerminalCustomButtons()
+export const DEFAULT_LAN_ENABLED = false
+export const DEFAULT_SERVER_PORT = 32200
+export const DEFAULT_PROJECT_LIST_EXPANDED = false
+
+export function defaultSessionState(): SessionState {
+  return {
+    openRepos: [],
+    activeRepo: null,
+    activeProject: null,
+    workspaceActiveContextByRoot: {},
+    workspaceRepositoryListExpandedByRoot: {},
+    workspaceRepositoryListHeightByRoot: {},
+    projectListExpanded: DEFAULT_PROJECT_LIST_EXPANDED,
+    detailCollapsed: DEFAULT_DETAIL_COLLAPSED,
+    detailFocusMode: DEFAULT_DETAIL_FOCUS_MODE,
+    workspaceLayout: DEFAULT_WORKSPACE_LAYOUT,
+    detailPaneSizes: { ...DEFAULT_DETAIL_PANE_SIZES },
+    fileTreePaneSizes: { ...DEFAULT_FILE_TREE_PANE_SIZES },
+    selectedTerminalByWorktree: {},
+  }
+}
+
+export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
+  return {
+    lang: overrides.lang ?? DEFAULT_LANG_PREF,
+    theme: overrides.theme ?? DEFAULT_THEME_PREF,
+    colorTheme: overrides.colorTheme ?? DEFAULT_COLOR_THEME,
+    fontFamily: overrides.fontFamily ?? DEFAULT_FONT_FAMILY,
+    fetchIntervalSec: overrides.fetchIntervalSec ?? DEFAULT_FETCH_INTERVAL_SEC,
+    statusRefreshIntervalSec: overrides.statusRefreshIntervalSec ?? DEFAULT_STATUS_REFRESH_INTERVAL_SEC,
+    gitNetworkProxyEnabled: overrides.gitNetworkProxyEnabled ?? DEFAULT_GIT_NETWORK_PROXY_ENABLED,
+    gitNetworkProxyUrl: overrides.gitNetworkProxyUrl ?? DEFAULT_GIT_NETWORK_PROXY_URL,
+    gitNetworkTimeoutSec: overrides.gitNetworkTimeoutSec ?? DEFAULT_GIT_NETWORK_TIMEOUT_SEC,
+    terminalNotificationsEnabled: overrides.terminalNotificationsEnabled ?? DEFAULT_TERMINAL_NOTIFICATIONS_ENABLED,
+    shortcutsDisabled: overrides.shortcutsDisabled ?? DEFAULT_SHORTCUTS_DISABLED,
+    globalShortcutDisabled: overrides.globalShortcutDisabled ?? DEFAULT_GLOBAL_SHORTCUT_DISABLED,
+    swapCloseShortcuts: overrides.swapCloseShortcuts ?? DEFAULT_SWAP_CLOSE_SHORTCUTS,
+    terminalThemeSyncEnabled: overrides.terminalThemeSyncEnabled ?? DEFAULT_TERMINAL_THEME_SYNC_ENABLED,
+    temporaryFilesDirectory: overrides.temporaryFilesDirectory ?? DEFAULT_TEMPORARY_FILES_DIRECTORY,
+    globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
+    terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
+    editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
+    topbarHeightPx: overrides.topbarHeightPx ?? DEFAULT_TOPBAR_HEIGHT_PX,
+    toolbarHeightPx: overrides.toolbarHeightPx ?? DEFAULT_TOOLBAR_HEIGHT_PX,
+    fileTreeFontSize: overrides.fileTreeFontSize ?? DEFAULT_FILE_TREE_FONT_SIZE,
+    fileTreeClipboardMaxBytesMb: overrides.fileTreeClipboardMaxBytesMb ?? DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+    terminalFontSize: overrides.terminalFontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
+    terminalCustomButtonsVisible: overrides.terminalCustomButtonsVisible ?? DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE,
+    terminalCustomButtonSize: overrides.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
+    terminalCustomButtons: overrides.terminalCustomButtons ?? createDefaultTerminalCustomButtons(),
+    lanEnabled: overrides.lanEnabled ?? DEFAULT_LAN_ENABLED,
+    serverPort: overrides.serverPort ?? DEFAULT_SERVER_PORT,
+  }
+}
+
+export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {}): SettingsSnapshot {
+  const prefs = defaultSettingsPrefs(overrides)
+  return {
+    ...prefs,
+    globalShortcutRegistered: overrides.globalShortcutRegistered ?? false,
+    session: overrides.session ?? defaultSessionState(),
+    recentRepos: overrides.recentRepos ?? [],
+    repoSettings: overrides.repoSettings ?? [],
+    webAccess: overrides.webAccess ?? { enabled: false, username: '', passwordConfigured: false },
+    telegramNotifications: overrides.telegramNotifications ?? {
+      enabled: false,
+      botTokenConfigured: false,
+      chatId: '',
+      proxyEnabled: true,
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
+      includeTerminalOutput: false,
+      outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+    },
+  }
+}
+
+export function initialSettingsFromSnapshot(
+  snapshot: Pick<
+    SettingsSnapshot,
+    | 'fetchIntervalSec'
+    | 'statusRefreshIntervalSec'
+    | 'fontFamily'
+    | 'gitNetworkProxyEnabled'
+    | 'gitNetworkProxyUrl'
+    | 'gitNetworkTimeoutSec'
+    | 'terminalNotificationsEnabled'
+    | 'shortcutsDisabled'
+    | 'globalShortcutDisabled'
+    | 'swapCloseShortcuts'
+    | 'terminalThemeSyncEnabled'
+    | 'temporaryFilesDirectory'
+    | 'globalShortcut'
+    | 'globalShortcutRegistered'
+    | 'terminalApp'
+    | 'editorApp'
+    | 'topbarHeightPx'
+    | 'toolbarHeightPx'
+    | 'fileTreeFontSize'
+    | 'fileTreeClipboardMaxBytesMb'
+    | 'terminalFontSize'
+    | 'terminalCustomButtonsVisible'
+    | 'terminalCustomButtonSize'
+    | 'terminalCustomButtons'
+    | 'lanEnabled'
+    | 'serverPort'
+  >,
+): InitialSettingsSnapshot {
+  return {
+    fetchIntervalSec: snapshot.fetchIntervalSec,
+    statusRefreshIntervalSec: snapshot.statusRefreshIntervalSec,
+    fontFamily: snapshot.fontFamily,
+    gitNetworkProxyEnabled: snapshot.gitNetworkProxyEnabled,
+    gitNetworkProxyUrl: snapshot.gitNetworkProxyUrl,
+    gitNetworkTimeoutSec: snapshot.gitNetworkTimeoutSec,
+    terminalNotificationsEnabled: snapshot.terminalNotificationsEnabled,
+    shortcutsDisabled: snapshot.shortcutsDisabled,
+    globalShortcutDisabled: snapshot.globalShortcutDisabled,
+    swapCloseShortcuts: snapshot.swapCloseShortcuts,
+    terminalThemeSyncEnabled: snapshot.terminalThemeSyncEnabled,
+    temporaryFilesDirectory: snapshot.temporaryFilesDirectory,
+    globalShortcut: snapshot.globalShortcut,
+    globalShortcutRegistered: snapshot.globalShortcutRegistered,
+    terminalApp: snapshot.terminalApp,
+    editorApp: snapshot.editorApp,
+    topbarHeightPx: snapshot.topbarHeightPx,
+    toolbarHeightPx: snapshot.toolbarHeightPx,
+    fileTreeFontSize: snapshot.fileTreeFontSize,
+    fileTreeClipboardMaxBytesMb: snapshot.fileTreeClipboardMaxBytesMb,
+    terminalFontSize: snapshot.terminalFontSize,
+    terminalCustomButtonsVisible: snapshot.terminalCustomButtonsVisible,
+    terminalCustomButtonSize: snapshot.terminalCustomButtonSize,
+    terminalCustomButtons: snapshot.terminalCustomButtons,
+    lanEnabled: snapshot.lanEnabled,
+    serverPort: snapshot.serverPort,
+  }
+}
+
+export function defaultInitialSettingsSnapshot(
+  overrides: Partial<InitialSettingsSnapshot> = {},
+): InitialSettingsSnapshot {
+  return initialSettingsFromSnapshot(defaultSettingsSnapshot(overrides))
+}
+
+export { DEFAULT_COLOR_THEME }
+export {
+  DEFAULT_TOPBAR_HEIGHT_PX,
+  DEFAULT_TOOLBAR_HEIGHT_PX,
+  MIN_CHROME_HEIGHT_PX,
+  MAX_CHROME_HEIGHT_PX,
+  DEFAULT_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+  MAX_FILE_TREE_FONT_SIZE,
+  MAX_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+  MAX_GIT_NETWORK_TIMEOUT_SEC,
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_FILE_TREE_FONT_SIZE,
+  MIN_FILE_TREE_CLIPBOARD_MAX_BYTES_MB,
+  MIN_GIT_NETWORK_TIMEOUT_SEC,
+  MIN_SERVER_PORT,
+  MIN_TERMINAL_FONT_SIZE,
+  MAX_SERVER_PORT,
+}

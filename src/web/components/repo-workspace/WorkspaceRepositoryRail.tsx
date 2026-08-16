@@ -61,7 +61,6 @@ interface Props {
   workspaceRootId: string
   currentRepoId: string
   fill?: boolean
-  fileAreaCollapsed?: boolean
   onOpenFileArea?: () => void
   onCollapseFileArea?: () => void
   onToggleFileArea?: () => void
@@ -72,7 +71,6 @@ export function WorkspaceRepositoryRail({
   workspaceRootId,
   currentRepoId,
   fill = false,
-  fileAreaCollapsed,
   onOpenFileArea,
   onCollapseFileArea,
   onToggleFileArea,
@@ -333,12 +331,27 @@ export function WorkspaceRepositoryRail({
       actionTarget: { repo: resolution.target.repo, branch: resolution.target.branch },
     }
   }
-  const openRepositoryMember = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
+  const selectRepositoryMember = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveMemberTarget(member)
     if (!resolution.ok) return
+    const selectionChanged =
+      activeContext.kind !== 'branch-workspace' ||
+      activeContext.branchWorkspaceId !== item.id ||
+      activeContext.memberRepositoryName !== member.repositoryName
     selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
-    onOpenFileArea?.()
+    setDetailTab(resolution.target.repositoryId, 'terminal')
+    onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
+    if (!selectionChanged || !terminalReadContext || !terminalCommands) return
+    const memberWorktreeKey = worktreeTerminalKey(
+      resolution.target.repositoryId,
+      resolution.target.worktreePath,
+    )
+    const selectedTerminal = terminalReadContext
+      .worktreeSnapshot(memberWorktreeKey)
+      .sessions.find((session) => session.selected)
+    if (!selectedTerminal || selectedTerminal.phase === 'closed' || selectedTerminal.phase === 'error') return
+    terminalCommands.focusTerminal(selectedTerminal.key)
   }
   const openRepositoryMemberTerminal = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveMemberTarget(member)
@@ -447,6 +460,7 @@ export function WorkspaceRepositoryRail({
               onBatchCommit={branchGitActions.executeBatchCommit}
               onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
               onBatchDiscard={branchGitActions.executeBatchDiscard}
+              onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
               onBatchMergeIn={branchGitActions.executeBatchMergeIn}
               onBatchMergeOut={branchGitActions.executeBatchMergeOut}
               onSync={branchGitActions.executeSync}
@@ -672,7 +686,6 @@ export function WorkspaceRepositoryRail({
                   activeId={selectedBranchWorkspaceId}
                   activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
                   disabled={branchActions.pending || branchDependencyActions.pending}
-                  fileAreaCollapsed={fileAreaCollapsed}
                   gitActionsDisabled={branchGitActions.pending}
                   onGitAction={openGitAction}
                   gitActionPanel={gitActionPanel}
@@ -704,7 +717,7 @@ export function WorkspaceRepositoryRail({
                     )
                   }
                   getMemberPresentation={(_item, member) => getMemberPresentation(member)}
-                  onOpenRepositoryMember={openRepositoryMember}
+                  onSelectRepositoryMember={selectRepositoryMember}
                   onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
                   onCancel={() => branchGitActions.cancel()}
                 />

@@ -1,0 +1,285 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  fetchRemote,
+  getBrowserRemoteUrl,
+  pushWorktreeHeadToRemoteBranch,
+  resolveFetchRemoteForRemotes,
+  resolvePushTargetForRemotes,
+} from '#/system/git/remote.ts'
+import type { GitRemoteInfo } from '#/shared/git-types.ts'
+
+const gitMock = vi.hoisted(() => vi.fn())
+const gitResultWithOptionsMock = vi.hoisted(() => vi.fn())
+
+vi.mock('#/system/git/helper.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/system/git/helper.ts')>('#/system/git/helper.ts')
+  return {
+    ...actual,
+    git: vi.fn((cwd: string, args: string[], options?: unknown) => gitMock(cwd, args, options)),
+    gitResultWithOptions: vi.fn((cwd: string, opts: unknown, ...args: string[]) =>
+      gitResultWithOptionsMock(cwd, opts, ...args),
+    ),
+  }
+})
+
+beforeEach(() => {
+  gitMock.mockReset()
+  gitResultWithOptionsMock.mockReset()
+  gitResultWithOptionsMock.mockResolvedValue({ ok: true, message: 'ok' })
+})
+
+describe('getBrowserRemoteUrl', () => {
+  test('returns the repository HTTPS URL from the configured remote when no branch is provided', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return [
+          'origin\tgit@code.example.test:acme/project.git (fetch)',
+          'origin\tgit@code.example.test:acme/project.git (push)',
+        ].join('\n')
+      }
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+
+    await expect(getBrowserRemoteUrl('/tmp/repo')).resolves.toBe('https://code.example.test/acme/project')
+    expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['remote', '-v'], { signal: undefined })
+  })
+
+  test('returns a branch external target URL when a branch is provided', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return 'origin\tgit@github.com:acme/project.git (fetch)\norigin\tgit@github.com:acme/project.git (push)'
+      }
+      if (args[0] === 'config' && args[1] === '--get' && args[2] === 'branch.feature/test.remote') return 'origin'
+      if (args[0] === 'config' && args[1] === '--get' && args[2] === 'branch.feature/test.merge') {
+        return 'refs/heads/feature/test'
+      }
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+
+    await expect(getBrowserRemoteUrl('/tmp/repo', { branch: 'feature/test' })).resolves.toBe(
+      'https://github.com/acme/project/pull/new/feature/test',
+    )
+  })
+})
+
+describe('local network git options', () => {
+  test('fetchRemote prunes the exact requested remote with configured network options', async () => {
+    const signal = new AbortController().signal
+
+    await expect(
+      fetchRemote('/repo', 'upstream', signal, {
+        timeoutMs: 120_000,
+        proxyUrl: 'socks5://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      expect.objectContaining({
+        timeoutMs: 120_000,
+        signal,
+        env: expect.objectContaining({ ALL_PROXY: 'socks5://127.0.0.1:7890' }),
+      }),
+      'fetch',
+      '--prune',
+      '--',
+      'upstream',
+    )
+  })
+
+  test.each(['bad remote', '-upstream', 'upstream/main'])('fetchRemote rejects invalid remote %s', async (remote) => {
+    await expect(fetchRemote('/repo', remote)).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+
+  test('fetchRemote preserves pre-aborted cancellation', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(fetchRemote('/repo', 'upstream', controller.signal)).resolves.toEqual({
+      ok: false,
+      message: 'cancelled',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+
+  test('pullBranch uses configured network options for a concrete worktree path', async () => {
+    const { pullBranch } = await import('#/system/git/remote.ts')
+    const signal = new AbortController().signal
+
+    await expect(
+      pullBranch('/repo', 'feature/a', '/repo-feature-a', signal, {
+        timeoutMs: 120_000,
+        proxyUrl: 'socks5://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo-feature-a',
+      expect.objectContaining({
+        timeoutMs: 120_000,
+        signal,
+        env: expect.objectContaining({ ALL_PROXY: 'socks5://127.0.0.1:7890' }),
+      }),
+      'pull',
+      '--ff-only',
+    )
+  })
+
+  test('pushBranch uses configured network options after resolving the push target', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return 'origin\thttps://example.com/acme/repo.git (fetch)\norigin\thttps://example.com/acme/repo.git (push)'
+      }
+      if (args[0] === 'config' && args[1] === '--get') throw new Error('no upstream')
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+    const { pushBranch } = await import('#/system/git/remote.ts')
+
+    await expect(
+      pushBranch('/repo', 'feature/a', undefined, {
+        timeoutMs: 180_000,
+        proxyUrl: 'http://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      expect.objectContaining({
+        timeoutMs: 180_000,
+        env: expect.objectContaining({ HTTPS_PROXY: 'http://127.0.0.1:7890' }),
+      }),
+      'push',
+      '-u',
+      '--',
+      'origin',
+      'feature/a:feature/a',
+    )
+  })
+
+  test('pushWorktreeHeadToRemoteBranch pushes detached HEAD to the exact remote branch without force', async () => {
+    const signal = new AbortController().signal
+
+    await expect(
+      pushWorktreeHeadToRemoteBranch('/repo-worktree', 'origin', 'release/v2', signal, {
+        timeoutMs: 180_000,
+        proxyUrl: 'http://127.0.0.1:7890',
+      }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo-worktree',
+      expect.objectContaining({
+        timeoutMs: 180_000,
+        signal,
+        env: expect.objectContaining({ HTTPS_PROXY: 'http://127.0.0.1:7890' }),
+      }),
+      'push',
+      '--',
+      'origin',
+      'HEAD:refs/heads/release/v2',
+    )
+    expect(gitResultWithOptionsMock.mock.calls[0]).not.toContain('--force')
+  })
+
+  test.each([
+    ['bad remote', 'release/v2'],
+    ['-origin', 'release/v2'],
+    ['origin/main', 'release/v2'],
+    ['origin', 'HEAD'],
+    ['origin', '-release'],
+  ])('pushWorktreeHeadToRemoteBranch rejects invalid target %s %s', async (remote, branch) => {
+    await expect(pushWorktreeHeadToRemoteBranch('/repo-worktree', remote, branch)).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolvePushTargetForRemotes', () => {
+  const origin = remote('origin')
+  const fork = remote('fork')
+
+  test('prefers an existing upstream remote and branch', () => {
+    expect(
+      resolvePushTargetForRemotes([origin, fork], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test'),
+    ).toEqual({
+      remote: 'fork',
+      branch: 'topic/feature-test',
+      setUpstream: false,
+    })
+  })
+
+  test('falls back to origin and sets upstream when no upstream is configured', () => {
+    expect(resolvePushTargetForRemotes([origin, fork], null, 'feature/test')).toEqual({
+      remote: 'origin',
+      branch: 'feature/test',
+      setUpstream: true,
+    })
+  })
+
+  test('falls back to the sole remote when origin is absent', () => {
+    expect(resolvePushTargetForRemotes([fork], null, 'feature/test')).toEqual({
+      remote: 'fork',
+      branch: 'feature/test',
+      setUpstream: true,
+    })
+  })
+
+  test('reports an ambiguous remote when multiple remotes exist without origin or upstream', () => {
+    expect(resolvePushTargetForRemotes([fork, remote('backup')], null, 'feature/test')).toEqual({
+      ok: false,
+      message: 'error.push-ambiguous-remote',
+    })
+  })
+
+  test('reports no remote when none are configured', () => {
+    expect(resolvePushTargetForRemotes([], null, 'feature/test')).toEqual({
+      ok: false,
+      message: 'error.push-no-remote',
+    })
+  })
+
+  test('falls back when the configured upstream remote no longer exists', () => {
+    expect(
+      resolvePushTargetForRemotes([origin], { remote: 'fork', branch: 'topic/feature-test' }, 'feature/test'),
+    ).toEqual({
+      remote: 'origin',
+      branch: 'feature/test',
+      setUpstream: true,
+    })
+  })
+})
+
+describe('resolveFetchRemoteForRemotes', () => {
+  const origin = remote('origin')
+  const fork = remote('fork')
+
+  test('prefers the upstream remote when present', () => {
+    expect(resolveFetchRemoteForRemotes([origin, fork], { remote: 'fork', branch: 'feature/test' })).toBe('fork')
+  })
+
+  test('falls back to origin when upstream is absent', () => {
+    expect(resolveFetchRemoteForRemotes([origin, fork], null)).toBe('origin')
+  })
+
+  test('falls back to the sole remote when origin is absent', () => {
+    expect(resolveFetchRemoteForRemotes([fork], null)).toBe('fork')
+  })
+
+  test('returns null when no remotes exist', () => {
+    expect(resolveFetchRemoteForRemotes([], null)).toBeNull()
+  })
+})
+
+function remote(name: string): GitRemoteInfo {
+  return {
+    name,
+    fetchUrl: `git@github.com:acme/${name}.git`,
+    pushUrl: `git@github.com:acme/${name}.git`,
+  }
+}

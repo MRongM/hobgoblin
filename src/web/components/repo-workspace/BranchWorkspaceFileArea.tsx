@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -13,9 +13,14 @@ import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { localRepoSessionEntry, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { BranchWorkspaceAggregatePanel } from '#/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx'
+import {
+  branchWorkspaceFileAreaTotalChangeCount,
+  resolveBranchWorkspaceFileAreaMembers,
+} from '#/web/components/repo-workspace/branch-workspace-file-area-members.ts'
 import { BranchWorkspaceFileTree } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import { Badge } from '#/web/components/ui/badge.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -42,6 +47,13 @@ export function BranchWorkspaceFileArea({
 }) {
   const t = useT()
   const remoteTarget = useReposStore((state) => state.repos[context.rootId]?.remote.target)
+  const project = useReposStore((state) => state.workspaceProjects[workspace.rootId])
+  const repos = useReposStore((state) => state.repos)
+  const fileAreaMembers = useMemo(
+    () => resolveBranchWorkspaceFileAreaMembers({ workspace, project, repos }),
+    [project, repos, workspace],
+  )
+  const totalChangeCount = branchWorkspaceFileAreaTotalChangeCount(fileAreaMembers)
   const root = remoteTarget ? remoteRepoSessionEntry(remoteTarget) : localRepoSessionEntry(context.rootId)
   const detach = useDetachFileArea({
     kind: 'branch-workspace',
@@ -50,6 +62,29 @@ export function BranchWorkspaceFileArea({
     tab: activeTab,
   })
   const [overflowExpanded, setOverflowExpanded] = useState(false)
+  const firstRepositoryName = workspace.repositories[0]?.repositoryName ?? null
+  const [aggregateSelection, setAggregateSelection] = useState<{
+    workspaceId: string
+    repositoryName: string | null
+  }>(() => ({ workspaceId: workspace.id, repositoryName: firstRepositoryName }))
+  const requestedRepositoryName =
+    aggregateSelection.workspaceId === workspace.id ? aggregateSelection.repositoryName : null
+  const selectedAggregateRepositoryName =
+    requestedRepositoryName &&
+    workspace.repositories.some((member) => member.repositoryName === requestedRepositoryName)
+      ? requestedRepositoryName
+      : firstRepositoryName
+
+  useEffect(() => {
+    if (
+      aggregateSelection.workspaceId === workspace.id &&
+      aggregateSelection.repositoryName === selectedAggregateRepositoryName
+    ) {
+      return
+    }
+    setAggregateSelection({ workspaceId: workspace.id, repositoryName: selectedAggregateRepositoryName })
+  }, [aggregateSelection, selectedAggregateRepositoryName, workspace.id])
+
   const tabs = [
     { id: 'status' as const, label: t('tab.status'), icon: GitBranch },
     { id: 'files' as const, label: t('file-tree.title'), icon: FolderTree },
@@ -67,6 +102,7 @@ export function BranchWorkspaceFileArea({
         key={tab.id}
         tab={tab}
         selected={tab.id === activeTab}
+        changeCount={tab.id === 'changes' ? totalChangeCount : 0}
         onSelect={() => onTabChange(tab.id)}
       />
     )
@@ -111,6 +147,10 @@ export function BranchWorkspaceFileArea({
         <BranchWorkspaceAggregatePanel
           workspace={workspace}
           kind={activeTab}
+          selectedRepositoryName={selectedAggregateRepositoryName}
+          onSelectedRepositoryNameChange={(repositoryName) =>
+            setAggregateSelection({ workspaceId: workspace.id, repositoryName })
+          }
           onRevealPath={
             activeTab === 'changes' || activeTab === 'history'
               ? (memberName, relativePath) => onRevealPath?.(`${memberName}/${relativePath}`)
@@ -125,10 +165,12 @@ export function BranchWorkspaceFileArea({
 function BranchWorkspaceFileAreaTabButton({
   tab,
   selected,
+  changeCount,
   onSelect,
 }: {
   tab: { id: BranchWorkspaceFileAreaTab; label: string; icon: typeof FolderTree }
   selected: boolean
+  changeCount: number
   onSelect: () => void
 }) {
   const Icon = tab.icon
@@ -149,6 +191,15 @@ function BranchWorkspaceFileAreaTabButton({
     >
       <Icon className="size-3.5 shrink-0" aria-hidden="true" />
       {tab.label}
+      {tab.id === 'changes' && changeCount > 0 ? (
+        <Badge
+          data-testid="branch-workspace-changes-count-badge"
+          variant="attention"
+          className="font-mono font-normal tabular-nums"
+        >
+          {changeCount}
+        </Badge>
+      ) : null}
     </Button>
   )
 }

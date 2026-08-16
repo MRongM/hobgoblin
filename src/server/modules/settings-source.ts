@@ -117,6 +117,7 @@ interface ServerSettingsData {
   fileTreeFontSize: number
   fileTreeClipboardMaxBytesMb: number
   terminalFontSize: number
+  terminalNavigationControlsVisible: boolean
   terminalCustomButtonsVisible: boolean
   terminalCustomButtonSize: TerminalCustomButtonSize
   terminalCustomButtons: TerminalCustomButton[]
@@ -258,6 +259,10 @@ function normalizeTerminalThemeSyncEnabled(value: unknown): boolean {
 }
 
 function normalizeTerminalCustomButtonsVisible(value: unknown): boolean {
+  return value !== false
+}
+
+function normalizeTerminalNavigationControlsVisible(value: unknown): boolean {
   return value !== false
 }
 
@@ -409,6 +414,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     fileTreeFontSize: data.fileTreeFontSize,
     fileTreeClipboardMaxBytesMb: data.fileTreeClipboardMaxBytesMb,
     terminalFontSize: data.terminalFontSize,
+    terminalNavigationControlsVisible: data.terminalNavigationControlsVisible,
     terminalCustomButtonsVisible: data.terminalCustomButtonsVisible,
     terminalCustomButtonSize: data.terminalCustomButtonSize,
     terminalCustomButtons: data.terminalCustomButtons,
@@ -685,6 +691,9 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       fileTreeFontSize: normalizeFileTreeFontSize(parsed.fileTreeFontSize),
       fileTreeClipboardMaxBytesMb: normalizeFileTreeClipboardMaxBytesMb(parsed.fileTreeClipboardMaxBytesMb),
       terminalFontSize: normalizeTerminalFontSize(parsed.terminalFontSize),
+      terminalNavigationControlsVisible: normalizeTerminalNavigationControlsVisible(
+        parsed.terminalNavigationControlsVisible,
+      ),
       terminalCustomButtonsVisible: normalizeTerminalCustomButtonsVisible(parsed.terminalCustomButtonsVisible),
       terminalCustomButtonSize: normalizeTerminalCustomButtonSize(parsed.terminalCustomButtonSize),
       terminalCustomButtons:
@@ -959,6 +968,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
       : normalizeFileTreeClipboardMaxBytesMb(patch.fileTreeClipboardMaxBytesMb)
   const nextTerminalFontSize =
     patch.terminalFontSize === undefined ? data.terminalFontSize : normalizeTerminalFontSize(patch.terminalFontSize)
+  const nextTerminalNavigationControlsVisible =
+    patch.terminalNavigationControlsVisible === undefined
+      ? data.terminalNavigationControlsVisible
+      : normalizeTerminalNavigationControlsVisible(patch.terminalNavigationControlsVisible)
   const nextTerminalCustomButtonsVisible =
     patch.terminalCustomButtonsVisible === undefined
       ? data.terminalCustomButtonsVisible
@@ -997,6 +1010,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.fileTreeFontSize !== nextFileTreeFontSize ||
     data.fileTreeClipboardMaxBytesMb !== nextFileTreeClipboardMaxBytesMb ||
     data.terminalFontSize !== nextTerminalFontSize ||
+    data.terminalNavigationControlsVisible !== nextTerminalNavigationControlsVisible ||
     data.terminalCustomButtonsVisible !== nextTerminalCustomButtonsVisible ||
     data.terminalCustomButtonSize !== nextTerminalCustomButtonSize ||
     JSON.stringify(data.terminalCustomButtons) !== JSON.stringify(nextTerminalCustomButtons) ||
@@ -1025,6 +1039,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.fileTreeFontSize = nextFileTreeFontSize
   data.fileTreeClipboardMaxBytesMb = nextFileTreeClipboardMaxBytesMb
   data.terminalFontSize = nextTerminalFontSize
+  data.terminalNavigationControlsVisible = nextTerminalNavigationControlsVisible
   data.terminalCustomButtonsVisible = nextTerminalCustomButtonsVisible
   data.terminalCustomButtonSize = nextTerminalCustomButtonSize
   data.terminalCustomButtons = nextTerminalCustomButtons

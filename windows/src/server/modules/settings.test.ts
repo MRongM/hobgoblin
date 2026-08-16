@@ -1,0 +1,76 @@
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { defaultSessionState } from '#/shared/settings-defaults.ts'
+import { createServerSettingsState } from '#/server/modules/settings-state.ts'
+
+const mocks = vi.hoisted(() => ({
+  getServerSettingsPrefs: vi.fn(),
+  getServerSessionState: vi.fn(),
+  getServerRecentRepos: vi.fn(),
+  getServerRepoSettings: vi.fn(),
+  getServerWebAccessSettings: vi.fn(),
+  getServerTelegramNotificationSettings: vi.fn(),
+}))
+
+vi.mock('#/server/modules/settings-source.ts', () => ({
+  getServerSettingsPrefs: mocks.getServerSettingsPrefs,
+  getServerSessionState: mocks.getServerSessionState,
+  getServerRecentRepos: mocks.getServerRecentRepos,
+  getServerRepoSettings: mocks.getServerRepoSettings,
+  getServerWebAccessSettings: mocks.getServerWebAccessSettings,
+  getServerTelegramNotificationSettings: mocks.getServerTelegramNotificationSettings,
+}))
+
+describe('server settings snapshot runtime state', () => {
+  afterEach(async () => {
+    vi.clearAllMocks()
+    vi.resetModules()
+  })
+
+  test('reports the mirrored global shortcut registration state', async () => {
+    mocks.getServerSettingsPrefs.mockResolvedValue({
+      lang: 'auto',
+      theme: 'dark',
+      colorTheme: 'macos',
+      fetchIntervalSec: 120,
+      terminalNotificationsEnabled: false,
+      shortcutsDisabled: false,
+      globalShortcutDisabled: false,
+      swapCloseShortcuts: false,
+      globalShortcut: 'Alt+G',
+      terminalApp: 'auto',
+      editorApp: 'auto',
+      fileTreeFontSize: 12,
+      terminalFontSize: 14,
+      terminalCustomButtonsVisible: true,
+      terminalCustomButtons: [],
+      lanEnabled: false,
+    })
+    mocks.getServerSessionState.mockResolvedValue({ ...defaultSessionState(), detailCollapsed: false })
+    mocks.getServerRecentRepos.mockResolvedValue([])
+    mocks.getServerRepoSettings.mockResolvedValue([])
+    mocks.getServerWebAccessSettings.mockResolvedValue({
+      enabled: false,
+      username: '',
+      passwordConfigured: false,
+    })
+    mocks.getServerTelegramNotificationSettings.mockResolvedValue({
+      enabled: false,
+      botTokenConfigured: false,
+      chatId: '',
+      proxyEnabled: true,
+      bellEnabled: true,
+      outputCompletionEnabled: false,
+      outputCompletionMinimumActivitySeconds: 10,
+      includeTerminalOutput: false,
+    })
+
+    const state = createServerSettingsState()
+    state.globalShortcutRegistered = true
+
+    const snapshotMod = await import('#/server/modules/settings-snapshot.ts')
+    await expect(snapshotMod.getSettingsSnapshot(state)).resolves.toMatchObject({
+      globalShortcut: 'Alt+G',
+      globalShortcutRegistered: true,
+    })
+  })
+})

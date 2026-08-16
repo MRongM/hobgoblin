@@ -1,0 +1,531 @@
+import { useEffect, useRef, useState } from 'react'
+import { FolderTree, RefreshCw, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
+import { Button } from '#/web/components/ui/button.tsx'
+import { CopyButton } from '#/web/components/CopyButton.tsx'
+import { FileListViewModeControl, type FileListViewMode } from '#/web/components/FileListViewModeControl.tsx'
+import {
+  FILE_TREE_FILE_NAME_CLASS,
+  FilePathTreeList,
+  fileTreeRowPadding,
+  type FilePathTreeFileRow,
+} from '#/web/components/FilePathTreeList.tsx'
+import { FilePathText } from '#/web/components/FilePathText.tsx'
+import { getRepositoryCommitDetail, getRepositoryHistory } from '#/web/repo-client.ts'
+import { useT } from '#/web/stores/i18n.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { cn } from '#/web/lib/cn.ts'
+import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import type { CommitDetail, CommitFileChange, CommitHistoryEntry } from '#/web/types.ts'
+import {
+  commitFileStatusLabel,
+  commitFileStatusTone,
+  formatHistoryDate,
+} from '#/web/components/repo-workspace/history-graph.ts'
+
+const HISTORY_PAGE_SIZE = 100
+
+interface ProjectHistoryPanelProps {
+  repoId: string
+  target?: HistoryView
+  onRevealPath?: (relativePath: string) => void
+}
+
+interface HistoryView {
+  branchName: string | null
+  worktreePath: string | null
+}
+
+function commitDetailClipboardText(detail: CommitDetail): string {
+  return [
+    `Subject: ${detail.subject}`,
+    `Hash: ${detail.hash}`,
+    `Author: ${detail.author}`,
+    `Date: ${detail.date}`,
+    `Parents: ${detail.parents.length > 0 ? detail.parents.join(', ') : '-'}`,
+  ].join('\n')
+}
+
+function commitFilePathsClipboardText(files: CommitFileChange[]): string {
+  return files.map((file) => file.path).join('\n')
+}
+
+export function ProjectHistoryPanel({ repoId, target, onRevealPath }: ProjectHistoryPanelProps) {
+  const t = useT()
+  const selectedView = useProjectHistoryView(repoId)
+  const view = target ?? selectedView
+  const [commits, setCommits] = useState<CommitHistoryEntry[]>([])
+  const [selectedHash, setSelectedHash] = useState<string | null>(null)
+  const [detailByHash, setDetailByHash] = useState<Record<string, CommitDetail | null>>({})
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [refreshToken, setRefreshToken] = useState(0)
+  const requestSeq = useRef(0)
+
+  useEffect(() => {
+    requestSeq.current += 1
+    const seq = requestSeq.current
+    setCommits([])
+    setSelectedHash(null)
+    setDetailByHash({})
+    setHistoryError(null)
+    setDetailError(null)
+    setHasMore(false)
+    if (!view.branchName) return
+
+    const controller = new AbortController()
+    setHistoryLoading(true)
+    void getRepositoryHistory(repoId, view.branchName, { limit: HISTORY_PAGE_SIZE, skip: 0 }, controller.signal)
+      .then((entries) => {
+        if (controller.signal.aborted || requestSeq.current !== seq) return
+        setCommits(entries)
+        setSelectedHash(entries[0]?.hash ?? null)
+        setHasMore(entries.length === HISTORY_PAGE_SIZE)
+      })
+      .catch((err) => {
+        if (controller.signal.aborted || requestSeq.current !== seq) return
+        setHistoryError(err instanceof Error ? err.message : 'history.load-error')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && requestSeq.current === seq) setHistoryLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [repoId, view.branchName, refreshToken])
+
+  useEffect(() => {
+    if (!selectedHash || detailByHash[selectedHash] !== undefined) return
+    const controller = new AbortController()
+    setDetailLoading(true)
+    setDetailError(null)
+    void getRepositoryCommitDetail(repoId, selectedHash, controller.signal)
+      .then((detail) => {
+        if (controller.signal.aborted) return
+        setDetailByHash((current) => ({ ...current, [selectedHash]: detail }))
+        if (!detail) setDetailError('history.detail-error')
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return
+        setDetailError(err instanceof Error ? err.message : 'history.detail-error')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDetailLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [detailByHash, repoId, selectedHash])
+
+  async function loadMore() {
+    if (!view.branchName || historyLoading) return
+    setHistoryLoading(true)
+    setHistoryError(null)
+    const controller = new AbortController()
+    try {
+      const entries = await getRepositoryHistory(
+        repoId,
+        view.branchName,
+        {
+          limit: HISTORY_PAGE_SIZE,
+          skip: commits.length,
+        },
+        controller.signal,
+      )
+      setCommits((current) => [...current, ...entries])
+      setHasMore(entries.length === HISTORY_PAGE_SIZE)
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'history.load-error')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const selectedDetail = selectedHash ? detailByHash[selectedHash] : null
+  async function handleOpenPathInEditor(target: FilePathTarget) {
+    if (!view.worktreePath) return
+    const result = await openWorktreeEditorTarget(repoId, view.worktreePath, target)
+    if (!result.ok) toast.error(t(result.message))
+  }
+
+  const trimmedQuery = searchQuery.trim().toLowerCase()
+  const filteredCommits = trimmedQuery
+    ? commits.filter(
+        (c) =>
+          c.subject.toLowerCase().includes(trimmedQuery) ||
+          c.hash.toLowerCase().includes(trimmedQuery) ||
+          c.shortHash.toLowerCase().includes(trimmedQuery) ||
+          c.author.toLowerCase().includes(trimmedQuery) ||
+          formatHistoryDate(c.date).toLowerCase().includes(trimmedQuery),
+      )
+    : commits
+
+  if (!view.branchName) {
+    return <EmptyState icon={<FolderTree size={16} />} title={t('branches.empty')} body={t('history.no-branch')} />
+  }
+
+  return (
+    <section className="grid min-h-0 flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] border-t border-separator/70 bg-pane">
+      <HistoryList
+        commits={filteredCommits}
+        allCommitsCount={commits.length}
+        selectedHash={selectedHash}
+        loading={historyLoading}
+        error={historyError}
+        hasMore={hasMore && !trimmedQuery}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSelect={setSelectedHash}
+        onLoadMore={loadMore}
+        onRefresh={() => setRefreshToken((token) => token + 1)}
+      />
+      <CommitDetailPane
+        detail={selectedDetail ?? null}
+        loading={detailLoading}
+        error={detailError}
+        canReveal={!!view.worktreePath}
+        onRevealPath={onRevealPath}
+        onOpenPathInEditor={handleOpenPathInEditor}
+      />
+    </section>
+  )
+}
+
+function useProjectHistoryView(repoId: string): HistoryView {
+  return useStoreWithEqualityFn(
+    useReposStore,
+    (state) => {
+      const repo = state.repos[repoId]
+      const branchName = repo?.ui.selectedBranch ?? null
+      const branch = repo?.data.branches.find((entry) => entry.name === branchName)
+      return { branchName, worktreePath: branch?.worktree?.path ?? null }
+    },
+    (a, b) => a.branchName === b.branchName && a.worktreePath === b.worktreePath,
+  )
+}
+
+function HistoryList({
+  commits,
+  allCommitsCount,
+  selectedHash,
+  loading,
+  error,
+  hasMore,
+  searchQuery,
+  onSearchChange,
+  onSelect,
+  onLoadMore,
+  onRefresh,
+}: {
+  commits: CommitHistoryEntry[]
+  allCommitsCount: number
+  selectedHash: string | null
+  loading: boolean
+  error: string | null
+  hasMore: boolean
+  searchQuery: string
+  onSearchChange: (query: string) => void
+  onSelect: (hash: string) => void
+  onLoadMore: () => void
+  onRefresh: () => void
+}) {
+  const t = useT()
+  const isSearching = searchQuery.trim().length > 0
+
+  if (error && commits.length === 0 && !isSearching)
+    return <EmptyState title={t('history.load-error')} body={t(error)} />
+  if (!loading && allCommitsCount === 0)
+    return <EmptyState title={t('history.empty-title')} body={t('history.empty-body')} />
+
+  return (
+    <div className="flex min-h-0 flex-col border-r border-separator/70">
+      <div className="flex items-center gap-1 border-b border-toolbar-border bg-toolbar px-2 py-1">
+        <button
+          data-testid="history-refresh"
+          type="button"
+          aria-label={t('history.refresh')}
+          title={t('history.refresh')}
+          disabled={loading}
+          onClick={onRefresh}
+          className="flex shrink-0 items-center rounded p-0.5 text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} aria-hidden="true" />
+        </button>
+        <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <input
+          type="text"
+          aria-label={t('history.search-label')}
+          placeholder={t('history.search-placeholder')}
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="min-w-0 flex-1 bg-transparent py-0.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+        />
+        {isSearching && (
+          <button
+            type="button"
+            aria-label={t('history.search-clear')}
+            onClick={() => onSearchChange('')}
+            className="flex shrink-0 items-center rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {!loading && isSearching && commits.length === 0 ? (
+        <EmptyState title={t('history.search-no-results')} />
+      ) : (
+        <ScrollPane>
+          <ul className="py-1.5">
+            {commits.map((commit) => (
+              <li key={commit.hash}>
+                <button
+                  type="button"
+                  aria-label={commit.hash}
+                  onClick={() => onSelect(commit.hash)}
+                  className={cn(
+                    'block w-full px-2 py-1.5 text-left hover:bg-list-row-hover',
+                    selectedHash === commit.hash && 'bg-list-row-selected text-list-row-selected-foreground',
+                  )}
+                >
+                  <span className="block min-w-0">
+                    <span className="block truncate text-sm">{commit.subject}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {commit.shortHash} · {commit.author} · {formatHistoryDate(commit.date)}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </ScrollPane>
+      )}
+      <div className="flex min-h-9 items-center justify-end border-t border-separator/70 px-2">
+        {error && <span className="mr-auto text-xs text-danger">{t(error)}</span>}
+        <Button
+          data-testid="history-load-more"
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={loading || !hasMore}
+          onClick={onLoadMore}
+        >
+          {loading ? t('common.loading') : t('history.load-more')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function CommitDetailPane({
+  detail,
+  loading,
+  error,
+  canReveal,
+  onRevealPath,
+  onOpenPathInEditor,
+}: {
+  detail: CommitDetail | null
+  loading: boolean
+  error: string | null
+  canReveal: boolean
+  onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
+}) {
+  const t = useT()
+  const [fileViewMode, setFileViewMode] = useState<FileListViewMode>('tree')
+  if (loading && !detail) return <EmptyState title={t('history.detail-loading')} />
+  if (error && !detail) return <EmptyState title={t('history.detail-error')} body={t(error)} />
+  if (!detail) return <EmptyState title={t('history.detail-empty')} />
+
+  return (
+    <div className="flex min-h-0 flex-col">
+      <div className="border-b border-app-region-border bg-app-region px-3 py-2">
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-medium">{detail.subject}</h3>
+            <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{detail.hash}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {detail.author} · {formatHistoryDate(detail.date)}
+            </p>
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+              {t('history.parents')}:{' '}
+              {detail.parents.length > 0 ? detail.parents.map((parent) => parent.slice(0, 7)).join(', ') : '-'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <CopyButton
+              value={commitDetailClipboardText(detail)}
+              copyLabel={t('history.copy-commit')}
+              copiedLabel={t('branch-status.copied')}
+            />
+          </div>
+        </div>
+      </div>
+      {detail.files.length > 0 && (
+        <div className="flex min-h-8 shrink-0 items-center justify-end gap-1 border-b border-toolbar-border bg-toolbar px-2">
+          <FileListViewModeControl value={fileViewMode} onChange={setFileViewMode} />
+          <CopyButton
+            value={commitFilePathsClipboardText(detail.files)}
+            copyLabel={t('history.copy-file-paths')}
+            copiedLabel={t('branch-status.copied')}
+            disabled={detail.files.length === 0}
+            className="shrink-0"
+          />
+        </div>
+      )}
+      <ScrollPane>
+        <CommitFileList
+          files={detail.files}
+          viewMode={fileViewMode}
+          canReveal={canReveal}
+          onRevealPath={onRevealPath}
+          onOpenPathInEditor={onOpenPathInEditor}
+        />
+      </ScrollPane>
+    </div>
+  )
+}
+
+function CommitFileList({
+  files,
+  viewMode,
+  canReveal,
+  onRevealPath,
+  onOpenPathInEditor,
+}: {
+  files: CommitFileChange[]
+  viewMode: FileListViewMode
+  canReveal: boolean
+  onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
+}) {
+  if (viewMode === 'tree') {
+    return (
+      <FilePathTreeList
+        items={files}
+        getPath={(file) => file.path}
+        className="py-1.5"
+        renderFile={(row) => (
+          <CommitFileTreeRow
+            key={`${row.item.status}-${row.path}-${row.item.oldPath ?? ''}`}
+            row={row}
+            canReveal={canReveal}
+            onRevealPath={onRevealPath}
+            onOpenPathInEditor={onOpenPathInEditor}
+          />
+        )}
+      />
+    )
+  }
+
+  return (
+    <ul className="py-1.5">
+      {files.map((file) => (
+        <CommitFileRow
+          key={`${file.status}-${file.path}-${file.oldPath ?? ''}`}
+          file={file}
+          canReveal={canReveal}
+          onRevealPath={onRevealPath}
+          onOpenPathInEditor={onOpenPathInEditor}
+        />
+      ))}
+    </ul>
+  )
+}
+
+function CommitFileTreeRow({
+  row,
+  canReveal,
+  onRevealPath,
+  onOpenPathInEditor,
+}: {
+  row: FilePathTreeFileRow<CommitFileChange>
+  canReveal: boolean
+  onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
+}) {
+  return (
+    <CommitFileRow
+      file={row.item}
+      canReveal={canReveal}
+      onRevealPath={onRevealPath}
+      onOpenPathInEditor={onOpenPathInEditor}
+      displayPath={row.name}
+      indent={fileTreeRowPadding(row.depth)}
+    />
+  )
+}
+
+function CommitFileRow({
+  file,
+  canReveal,
+  onRevealPath,
+  onOpenPathInEditor,
+  displayPath,
+  indent,
+}: {
+  file: CommitFileChange
+  canReveal: boolean
+  onRevealPath?: (relativePath: string) => void
+  onOpenPathInEditor?: (target: FilePathTarget) => void
+  displayPath?: string
+  indent?: string
+}) {
+  const pathContent = displayPath ? (
+    <span className={FILE_TREE_FILE_NAME_CLASS} title={file.path}>
+      {displayPath}
+    </span>
+  ) : (
+    <FilePathText path={file.path} />
+  )
+  const content = [
+    <span
+      key="status"
+      className={cn(
+        'inline-flex w-[2ch] justify-center font-mono text-sm font-semibold',
+        commitFileStatusTone(file.status),
+      )}
+    >
+      {commitFileStatusLabel(file.status)}
+    </span>,
+    <span key="path" className="min-w-0 truncate">
+      {pathContent}
+    </span>,
+    <span key="additions" className="font-mono text-xs text-success">
+      +{file.additions}
+    </span>,
+    <span key="deletions" className="font-mono text-xs text-danger">
+      -{file.deletions}
+    </span>,
+  ]
+  const rowClassName = cn(
+    'grid w-full grid-cols-[2ch_minmax(0,1fr)_auto_auto] items-center gap-3 py-0.5 pr-2 text-left',
+    !indent && 'px-2',
+  )
+  const style = indent ? { paddingLeft: indent } : undefined
+  return (
+    <li>
+      {canReveal && onRevealPath ? (
+        <button
+          type="button"
+          aria-label={file.path}
+          className={cn(rowClassName, 'hover:bg-list-row-hover')}
+          style={style}
+          onClick={() => onRevealPath(file.path)}
+          onDoubleClick={() => onOpenPathInEditor?.({ path: file.path })}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className={rowClassName} style={style}>
+          {content}
+        </div>
+      )}
+    </li>
+  )
+}

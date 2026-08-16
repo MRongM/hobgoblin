@@ -16,10 +16,10 @@ describe('workspace paths', () => {
     const first = branchWorkspaceDirectoryName('feature/auth', new Set())
     const collision = branchWorkspaceDirectoryName('feature/auth', new Set([first]))
 
-    expect(first).toBe('hobgoblin-feature-auth')
-    expect(collision).toMatch(/^hobgoblin-feature-auth-[a-f0-9]{8}$/)
+    expect(first).toBe('hob-feature-auth')
+    expect(collision).toMatch(/^hob-feature-auth-[a-f0-9]{8}$/)
     expect(branchWorkspaceDirectoryName('feature/auth', new Set([first]))).toBe(collision)
-    expect(branchWorkspaceDirectoryName('修复 登录', new Set())).toBe('hobgoblin-branch')
+    expect(branchWorkspaceDirectoryName('修复 登录', new Set())).toBe('hob-branch')
   })
 
   test('extends the deterministic hash when a shorter collision candidate is occupied', () => {
@@ -27,13 +27,15 @@ describe('workspace paths', () => {
     const second = branchWorkspaceDirectoryName('feature/auth', new Set([first]))
     const third = branchWorkspaceDirectoryName('feature/auth', new Set([first, second]))
 
-    expect(third).toMatch(/^hobgoblin-feature-auth-[a-f0-9]{12}$/)
+    expect(third).toMatch(/^hob-feature-auth-[a-f0-9]{12}$/)
   })
 
   test('joins branch workspace paths on the parent host', () => {
     const localRoot = path.resolve('/workspace')
     const remoteRoot = normalizeRemoteRepoId({ alias: 'dev', remotePath: '/srv/workspace' })
 
+    expect(branchWorkspacePath(localRoot, 'hob-feature-auth')).toBe(path.join(localRoot, 'hob-feature-auth'))
+    expect(branchWorkspacePath(remoteRoot, 'hob-feature-auth')).toBe('/srv/workspace/hob-feature-auth')
     expect(branchWorkspacePath(localRoot, 'hobgoblin-feature-auth')).toBe(
       path.join(localRoot, 'hobgoblin-feature-auth'),
     )

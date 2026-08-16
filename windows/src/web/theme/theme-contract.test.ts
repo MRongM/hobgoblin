@@ -1,0 +1,199 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import path from 'node:path'
+import { describe, expect, test } from 'vitest'
+
+const THEME_ROOT = new URL('./', import.meta.url)
+const THEMES_ROOT = new URL('./themes/', import.meta.url)
+const SCROLL_AREA_SOURCE = new URL('../components/ui/scroll-area.tsx', import.meta.url)
+const PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR = `:is(
+  .project-navigation-tone,
+  .project-file-area-tone,
+  .project-navigation-tone *,
+  .project-file-area-tone *
+)`
+const MENU_NATIVE_SCROLLBAR_SELECTOR = ":is([data-slot='dropdown-menu-content'], [data-slot='context-menu-content'])"
+
+const CONTRACT_TOKENS = [
+  '--color-app-region:',
+  '--color-app-region-border:',
+  '--color-toolbar:',
+  '--color-toolbar-border:',
+  '--color-input-background:',
+  '--color-input-hover:',
+  '--color-input-border:',
+  '--color-input-placeholder:',
+  '--color-terminal-activity:',
+  '--color-terminal-activity-rgb:',
+  '--color-terminal-activity-surface:',
+  '--color-terminal-activity-border:',
+  '--color-terminal-bell:',
+  '--color-terminal-bell-rgb:',
+  '--color-terminal-bell-surface:',
+  '--color-terminal-bell-border:',
+  '--color-topbar-muted-foreground:',
+  '--color-topbar-control:',
+  '--color-topbar-control-hover:',
+  '--color-topbar-control-border:',
+  '--color-topbar-control-foreground:',
+  '--color-scrollbar-thumb:',
+  '--color-scrollbar-thumb-hover:',
+  '--color-scrollbar-thumb-active:',
+]
+
+const CLASSIC_TERMINAL_TOKENS = [
+  '--color-terminal-classic-background:',
+  '--color-terminal-classic-foreground:',
+  '--color-terminal-classic-cursor:',
+  '--color-terminal-classic-selection-background:',
+  '--color-terminal-classic-ansi-black:',
+  '--color-terminal-classic-ansi-red:',
+  '--color-terminal-classic-ansi-green:',
+  '--color-terminal-classic-ansi-yellow:',
+  '--color-terminal-classic-ansi-blue:',
+  '--color-terminal-classic-ansi-magenta:',
+  '--color-terminal-classic-ansi-cyan:',
+  '--color-terminal-classic-ansi-white:',
+  '--color-terminal-classic-ansi-bright-black:',
+  '--color-terminal-classic-ansi-bright-red:',
+  '--color-terminal-classic-ansi-bright-green:',
+  '--color-terminal-classic-ansi-bright-yellow:',
+  '--color-terminal-classic-ansi-bright-blue:',
+  '--color-terminal-classic-ansi-bright-magenta:',
+  '--color-terminal-classic-ansi-bright-cyan:',
+  '--color-terminal-classic-ansi-bright-white:',
+  '--color-terminal-classic-search-match:',
+  '--color-terminal-classic-search-active-match:',
+  '--color-terminal-classic-search-active-border:',
+]
+
+function readText(url: URL): string {
+  return readFileSync(url, 'utf8')
+}
+
+function cssRule(css: string, selector: string): string {
+  const start = css.indexOf(selector)
+  expect(start, `${selector} exists`).toBeGreaterThanOrEqual(0)
+  const open = css.indexOf('{', start)
+  const close = css.indexOf('}', open)
+  expect(open, `${selector} opening brace`).toBeGreaterThanOrEqual(0)
+  expect(close, `${selector} closing brace`).toBeGreaterThan(open)
+  return css.slice(open + 1, close)
+}
+
+describe('web theme contract', () => {
+  test('exposes semantic tokens for region bars, toolbars, and inputs', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+
+    for (const token of CONTRACT_TOKENS) {
+      expect(contract, `missing ${token}`).toContain(token)
+    }
+  })
+
+  test('scopes topbar control semantics without replacing muted foreground', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+
+    for (const selector of ['.topbar', '.topbar-tone']) {
+      const topbar = cssRule(contract, selector)
+
+      expect(topbar).toContain('--color-control: var(--color-topbar-control);')
+      expect(topbar).toContain('--color-control-hover: var(--color-topbar-control-hover);')
+      expect(topbar).toContain('--color-input: var(--color-topbar-control-border);')
+      expect(topbar).toContain('--color-accent: var(--color-topbar-control-hover);')
+      expect(topbar).toContain('--color-accent-foreground: var(--color-topbar-control-foreground);')
+      expect(topbar).not.toContain('--color-muted-foreground:')
+    }
+  })
+
+  test('scopes project background tone to navigation and file areas', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const navigation = cssRule(contract, '.project-navigation-tone')
+    const fileArea = cssRule(contract, '.project-file-area-tone')
+
+    expect(navigation).toContain('--color-sidebar: var(--color-topbar);')
+    expect(navigation).not.toContain('--color-pane:')
+    expect(navigation).not.toContain('--color-toolbar:')
+
+    expect(fileArea).toContain('--color-sidebar: var(--color-topbar);')
+    expect(fileArea).toContain('--color-pane: var(--color-topbar);')
+    expect(fileArea).toContain('--color-toolbar: var(--color-topbar);')
+  })
+
+  test('themes native and Radix scrollbars inside navigation and file areas', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const scrollAreaSource = readText(SCROLL_AREA_SOURCE)
+    const toneSelector = ':is(.project-navigation-tone, .project-file-area-tone)'
+    const toneRule = cssRule(contract, toneSelector)
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedNativeScrollbarSelector = PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
+
+    expect(contract).toContain('@supports not selector(::-webkit-scrollbar)')
+    expect(toneRule).toContain('scrollbar-color: var(--color-scrollbar-thumb) transparent;')
+    expect(toneRule).toContain('scrollbar-width: thin;')
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-track,`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-corner {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-thumb {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-thumb:hover {`)
+    expect(normalizedContract).toContain(`${normalizedNativeScrollbarSelector}::-webkit-scrollbar-thumb:active {`)
+    expect(contract).toContain(`${toneSelector} [data-slot='scroll-area-thumb'] {`)
+    expect(contract).toContain(`${toneSelector} [data-slot='scroll-area-thumb']:hover {`)
+    expect(contract).toContain(`${toneSelector} [data-slot='scroll-area-thumb']:active {`)
+    expect(scrollAreaSource).toContain('data-slot="scroll-area-thumb"')
+  })
+
+  test('uses a thin, hover-enhanced horizontal scrollbar across project navigation and file areas', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedSelector = PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
+    const track = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar:horizontal`)
+    const thumb = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar-thumb:horizontal`)
+    const thumbHover = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar-thumb:horizontal:hover`)
+    const thumbActive = cssRule(normalizedContract, `${normalizedSelector}::-webkit-scrollbar-thumb:horizontal:active`)
+
+    expect(track).toContain('height: 8px;')
+    expect(thumb).toContain('border: 2px solid transparent;')
+    expect(thumbHover).toContain('border-width: 1px;')
+    expect(thumbActive).toContain('border-width: 1px;')
+    expect(contract).not.toContain('.project-file-tree-scroll::-webkit-scrollbar')
+  })
+
+  test('themes native scrollbars inside dropdown and context menus', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedMenuSelector = MENU_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
+    const firefoxRule = cssRule(normalizedContract, normalizedMenuSelector)
+    const scrollbar = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar`)
+    const track = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-track`)
+    const corner = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-corner`)
+    const thumb = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-thumb`)
+    const thumbHover = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-thumb:hover`)
+    const thumbActive = cssRule(normalizedContract, `${normalizedMenuSelector}::-webkit-scrollbar-thumb:active`)
+
+    expect(firefoxRule).toContain('scrollbar-color: var(--color-scrollbar-thumb) transparent;')
+    expect(firefoxRule).toContain('scrollbar-width: thin;')
+    expect(scrollbar).toContain('width: 10px;')
+    expect(scrollbar).toContain('height: 10px;')
+    expect(track).toContain('background-color: transparent;')
+    expect(corner).toContain('background-color: transparent;')
+    expect(thumb).toContain('border: 3px solid transparent;')
+    expect(thumb).toContain('border-radius: 999px;')
+    expect(thumb).toContain('background-color: var(--color-scrollbar-thumb);')
+    expect(thumb).toContain('background-clip: content-box;')
+    expect(thumbHover).toContain('background-color: var(--color-scrollbar-thumb-hover);')
+    expect(thumbActive).toContain('background-color: var(--color-scrollbar-thumb-active);')
+  })
+
+  test('defines classic terminal tokens for every color theme preset', () => {
+    const themeFiles = readdirSync(THEMES_ROOT)
+      .filter((file) => file.endsWith('.css'))
+      .sort()
+    expect(themeFiles).not.toEqual([])
+
+    for (const file of themeFiles) {
+      const text = readText(new URL(`themes/${file}`, THEME_ROOT))
+      for (const token of CLASSIC_TERMINAL_TOKENS) {
+        expect(text, `${path.basename(file)} missing ${token}`).toContain(token)
+      }
+    }
+  })
+})

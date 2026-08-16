@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { getServerExternalAppsSnapshot } from '#/server/modules/external-apps.ts'
 import { getServerI18nSnapshot } from '#/server/modules/i18n.ts'
+import { openAppConfigDirectoryInEditor } from '#/server/modules/settings-external-actions.ts'
 import { getSettingsSnapshot } from '#/server/modules/settings-snapshot.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
 import type { ServerSettingsState } from '#/server/modules/settings-state.ts'
@@ -45,6 +46,7 @@ export function createSettingsRoutes(
   app.get('/i18n', async (c) => c.json(await getServerI18nSnapshot(c.req.header('accept-language'))))
   app.get('/external-apps', async (c) => c.json(await getServerExternalAppsSnapshot(c.req.raw.signal)))
   app.post('/external-apps/refresh', async (c) => c.json(await getServerExternalAppsSnapshot(c.req.raw.signal)))
+  app.post('/open-app-config-editor', async (c) => c.json(await openAppConfigDirectoryInEditor()))
   app.get('/prefs', async (c) => c.json(await getServerSettingsPrefs()))
   app.get('/lan', async (c) => {
     const host = process.env.GOBLIN_SERVER_HOST?.trim() || '127.0.0.1'

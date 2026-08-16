@@ -1,0 +1,385 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { defaultSettingsPrefs, defaultSettingsSnapshot } from '#/shared/settings-defaults.ts'
+import { RENDERER_BOOTSTRAP_CHANNEL } from '#/shared/ipc-channels.ts'
+
+const mocks = vi.hoisted(() => {
+  const state = {
+    windows: [] as any[],
+    windowOptions: [] as any[],
+    webContentsOn: vi.fn(),
+    setWindowOpenHandler: vi.fn(),
+    windowOn: vi.fn(),
+    loadURL: vi.fn(),
+    onBeforeSendHeaders: vi.fn(),
+    ipcMainOn: vi.fn(),
+    openHttpExternal: vi.fn(() => Promise.resolve(true)),
+    getSettingsPrefs: vi.fn(),
+    getSettingsSnapshot: vi.fn(),
+    loadWindowState: vi.fn(() => Promise.resolve({ windowBounds: null })),
+    setTitleBarOverlay: vi.fn(),
+    setWindowButtonPosition: vi.fn(),
+    diagnosticsLog: vi.fn(),
+    getEmbeddedServerRuntime: vi.fn<() => { url: string; secret: string; clientId: string } | null>(() => ({
+      url: 'http://127.0.0.1:32100/',
+      secret: 'secret',
+      clientId: 'client_sharedterminal',
+    })),
+  }
+  const BrowserWindow = Object.assign(
+    vi.fn(function BrowserWindow(options: any) {
+      const win = {
+        webContents: {
+          id: 1,
+          on: state.webContentsOn,
+          setWindowOpenHandler: state.setWindowOpenHandler,
+          isDestroyed: () => false,
+          once: vi.fn(),
+          session: {
+            webRequest: {
+              onBeforeSendHeaders: state.onBeforeSendHeaders,
+            },
+          },
+        },
+        isDestroyed: () => false,
+        isVisible: () => true,
+        isMinimized: () => false,
+        isMaximized: () => false,
+        isFullScreen: () => false,
+        restore: vi.fn(),
+        show: vi.fn(),
+        focus: vi.fn(),
+        setTitleBarOverlay: state.setTitleBarOverlay,
+        setWindowButtonPosition: state.setWindowButtonPosition,
+        getNormalBounds: () => ({ x: 0, y: 0, width: 900, height: 600 }),
+        loadURL: state.loadURL,
+        on: state.windowOn,
+      }
+      state.windowOptions.push(options)
+      state.windows.push(win)
+      return win
+    }),
+    {
+      getAllWindows: () => state.windows,
+    },
+  )
+  return { ...state, BrowserWindow }
+})
+
+vi.mock('electron', () => ({
+  app: {
+    getAppPath: () => '/app',
+    getPath: () => '/home/user',
+    isPackaged: false,
+    whenReady: () => Promise.resolve(),
+    show: vi.fn(),
+    focus: vi.fn(),
+  },
+  BrowserWindow: mocks.BrowserWindow,
+  ipcMain: {
+    on: mocks.ipcMainOn,
+  },
+  screen: {
+    getDisplayMatching: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
+  },
+}))
+
+vi.mock('#/main/window-state.ts', () => ({
+  loadWindowState: mocks.loadWindowState,
+  setWindowBounds: vi.fn(),
+}))
+
+vi.mock('#/main/theme.ts', () => ({
+  getTheme: () => ({ resolved: 'light', colorTheme: 'macos' }),
+}))
+
+vi.mock('#/main/i18n/index.ts', () => ({
+  getCurrentLang: () => 'en',
+}))
+
+vi.mock('#/main/settings-server-client.ts', () => ({
+  getSettingsPrefs: mocks.getSettingsPrefs,
+  getSettingsSnapshot: mocks.getSettingsSnapshot,
+}))
+
+vi.mock('#/main/external-url.ts', () => ({
+  openHttpExternal: mocks.openHttpExternal,
+}))
+
+vi.mock('#/main/server-manager.ts', () => ({
+  getEmbeddedServerRuntime: mocks.getEmbeddedServerRuntime,
+}))
+
+vi.mock('#/main/startup-diagnostics.ts', () => ({
+  createStartupDiagnostics: () => ({ logPath: '/tmp/Hobgoblin/startup.log', log: mocks.diagnosticsLog }),
+}))
+
+describe('main window navigation boundaries', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    delete process.env.GOBLIN_WEB_DEV_URL
+    mocks.windows.length = 0
+    mocks.windowOptions.length = 0
+    mocks.getSettingsPrefs.mockResolvedValue(defaultSettingsPrefs({ topbarHeightPx: 39 }))
+    mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot())
+    mocks.loadWindowState.mockReturnValue(Promise.resolve({ windowBounds: null }))
+  })
+
+  function rendererBootstrapPayloadFromWindowOptions(): any {
+    const bootstrapArg = mocks.windowOptions[0]?.webPreferences?.additionalArguments?.find((arg: string) =>
+      arg.startsWith('--goblin-bootstrap-id='),
+    )
+    expect(bootstrapArg).toBeTypeOf('string')
+    expect(String(bootstrapArg).length).toBeLessThan(128)
+
+    const handler = mocks.ipcMainOn.mock.calls.find(([channel]) => channel === RENDERER_BOOTSTRAP_CHANNEL)?.[1]
+    expect(handler).toBeTypeOf('function')
+
+    const event = { returnValue: null as unknown }
+    handler(event, String(bootstrapArg).slice('--goblin-bootstrap-id='.length))
+    return event.returnValue
+  }
+
+  test('prevents renderer navigation away from the packaged app page', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+
+    const willNavigate = mocks.webContentsOn.mock.calls.find(([eventName]) => eventName === 'will-navigate')?.[1]
+    expect(willNavigate).toBeTypeOf('function')
+
+    const event = { preventDefault: vi.fn() }
+    willNavigate(event, 'https://example.com/')
+
+    expect(event.preventDefault).toHaveBeenCalled()
+  })
+
+  test('attaches the internal capability only to this window main-frame embedded-server navigation', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+
+    expect(mocks.onBeforeSendHeaders).toHaveBeenCalledTimes(1)
+    const [filter, listener] = mocks.onBeforeSendHeaders.mock.calls[0] ?? []
+    expect(filter).toEqual({ urls: ['http://127.0.0.1:32100/*'] })
+    expect(listener).toBeTypeOf('function')
+
+    const matchingCallback = vi.fn()
+    listener(
+      {
+        webContentsId: 1,
+        resourceType: 'mainFrame',
+        requestHeaders: { Accept: 'text/html' },
+      },
+      matchingCallback,
+    )
+    expect(matchingCallback).toHaveBeenCalledWith({
+      requestHeaders: {
+        Accept: 'text/html',
+        'x-goblin-internal-secret': 'secret',
+      },
+    })
+
+    for (const details of [
+      { webContentsId: 2, resourceType: 'mainFrame' },
+      { webContentsId: 1, resourceType: 'script' },
+    ]) {
+      const callback = vi.fn()
+      listener({ ...details, requestHeaders: { Accept: '*/*' } }, callback)
+      expect(callback).toHaveBeenCalledWith({ requestHeaders: { Accept: '*/*' } })
+    }
+
+    const closed = mocks.windowOn.mock.calls.find(([eventName]) => eventName === 'closed')?.[1]
+    expect(closed).toBeTypeOf('function')
+    closed()
+    expect(mocks.onBeforeSendHeaders).toHaveBeenLastCalledWith(null)
+  })
+
+  test('does not attach the internal capability to renderer development-server navigation', async () => {
+    process.env.GOBLIN_WEB_DEV_URL = 'http://127.0.0.1:5173/'
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    expect(mocks.onBeforeSendHeaders).not.toHaveBeenCalled()
+  })
+
+  test('denies new windows and opens web links externally', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+
+    const handler = mocks.setWindowOpenHandler.mock.calls[0]?.[0]
+    expect(handler).toBeTypeOf('function')
+
+    expect(handler({ url: 'https://example.com/' })).toEqual({ action: 'deny' })
+    expect(mocks.openHttpExternal).toHaveBeenCalledWith('https://example.com/')
+    expect(handler({ url: 'file:///tmp/other.html' })).toEqual({ action: 'deny' })
+  })
+
+  test('coalesces concurrent main window creation', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    let resolveSettingsPrefs: (settings: ReturnType<typeof defaultSettingsPrefs>) => void = () => {}
+    mocks.getSettingsPrefs.mockImplementationOnce(
+      () =>
+        new Promise<ReturnType<typeof defaultSettingsPrefs>>((resolve) => {
+          resolveSettingsPrefs = resolve
+        }),
+    )
+
+    const first = getOrCreateMainWindow()
+    const second = getOrCreateMainWindow()
+    resolveSettingsPrefs(defaultSettingsPrefs({ topbarHeightPx: 39 }))
+    const [firstWindow, secondWindow] = await Promise.all([first, second])
+
+    expect(firstWindow).toBe(secondWindow)
+    expect(mocks.BrowserWindow).toHaveBeenCalledTimes(1)
+  })
+
+  test('keeps the window singleton when app URL load fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.loadURL.mockRejectedValueOnce(new Error('load failed'))
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    const first = await getOrCreateMainWindow()
+    const second = await getOrCreateMainWindow()
+
+    expect(first).toBe(second)
+    expect(mocks.BrowserWindow).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('[window] failed to load app URL', expect.any(Error))
+    warn.mockRestore()
+  })
+
+  test('shows a startup error page when the initial renderer URL load fails', async () => {
+    mocks.loadURL.mockRejectedValueOnce(new Error('load failed')).mockResolvedValueOnce(undefined)
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+    expect(String(mocks.loadURL.mock.calls[1]?.[0])).toContain('data:text/html')
+    expect(decodeURIComponent(String(mocks.loadURL.mock.calls[1]?.[0]))).toContain('renderer-load')
+    expect(mocks.diagnosticsLog).toHaveBeenCalledWith(
+      'startup-error-page',
+      expect.objectContaining({ phase: 'renderer-load' }),
+    )
+  })
+
+  test('shows the renderer process startup error page only once', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+    expect(renderProcessGone).toBeTypeOf('function')
+
+    renderProcessGone({}, { reason: 'launch-failed', exitCode: 18 })
+    renderProcessGone({}, { reason: 'launch-failed', exitCode: 18 })
+
+    await vi.waitFor(() => {
+      expect(mocks.diagnosticsLog).toHaveBeenCalledWith(
+        'startup-error-page',
+        expect.objectContaining({ phase: 'renderer-process' }),
+      )
+    })
+
+    const startupErrorPageLogs = mocks.diagnosticsLog.mock.calls.filter(
+      ([eventName]) => eventName === 'startup-error-page',
+    )
+    expect(startupErrorPageLogs).toHaveLength(1)
+    expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+  })
+
+  test('loads the configured renderer dev server URL in development', async () => {
+    process.env.GOBLIN_WEB_DEV_URL = 'http://127.0.0.1:5173/'
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    expect(mocks.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173/?theme=light&colorTheme=macos')
+  })
+
+  test('uses the renderer dev server origin in bootstrap server config during development', async () => {
+    process.env.GOBLIN_WEB_DEV_URL = 'http://127.0.0.1:5173/'
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    const payload = rendererBootstrapPayloadFromWindowOptions()
+    expect(payload.server).toMatchObject({
+      url: 'http://127.0.0.1:5173/',
+      secret: expect.any(String),
+      clientId: expect.any(String),
+    })
+  })
+
+  test('uses the settings snapshot language preference in renderer bootstrap', async () => {
+    mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot({ lang: 'ja' }))
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    const payload = rendererBootstrapPayloadFromWindowOptions()
+    expect(payload.i18n).toMatchObject({ pref: 'ja' })
+  })
+
+  test('fails window creation when no renderer base URL is available', async () => {
+    mocks.getEmbeddedServerRuntime.mockReturnValue(null)
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await expect(getOrCreateMainWindow()).rejects.toThrow('Renderer base URL is unavailable')
+  })
+
+  test('configures chrome to match the current platform', async () => {
+    const { applyMainWindowChromeTheme, getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+
+    if (process.platform === 'darwin') {
+      expect(mocks.windowOptions[0]).toMatchObject({
+        titleBarStyle: 'hiddenInset',
+        titleBarOverlay: undefined,
+        autoHideMenuBar: false,
+      })
+
+      applyMainWindowChromeTheme('dark')
+      expect(mocks.setTitleBarOverlay).not.toHaveBeenCalled()
+      return
+    }
+
+    expect(mocks.windowOptions[0]).toMatchObject({
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: '#d8e7f8',
+        symbolColor: '#000000',
+        height: 39,
+      },
+      autoHideMenuBar: true,
+    })
+
+    applyMainWindowChromeTheme('dark')
+
+    expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
+      color: '#0d1622',
+      symbolColor: '#ffffff',
+      height: 39,
+    })
+  })
+
+  test('applies runtime topbar height updates to native chrome', async () => {
+    const { applyMainWindowTopbarHeight, getOrCreateMainWindow } = await import('#/main/window.ts')
+
+    await getOrCreateMainWindow()
+    applyMainWindowTopbarHeight(42)
+
+    if (process.platform === 'darwin') {
+      expect(mocks.setTitleBarOverlay).not.toHaveBeenCalled()
+      expect(mocks.windows[0].setWindowButtonPosition).toHaveBeenCalledWith({ x: 16, y: 15 })
+      return
+    }
+
+    expect(mocks.setTitleBarOverlay).toHaveBeenCalledWith({
+      color: '#d8e7f8',
+      symbolColor: '#000000',
+      height: 42,
+    })
+  })
+})

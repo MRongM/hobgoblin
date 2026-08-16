@@ -51,6 +51,7 @@ function defaultRpcResult(path: string, input?: unknown) {
       toolbarHeightPx: 34,
       fileTreeFontSize: 12,
       terminalFontSize: 14,
+      terminalNavigationControlsVisible: true,
       terminalCustomButtonsVisible: true,
       terminalCustomButtonSize: 'medium',
       terminalCustomButtons: terminalCustomButtonsFixture,
@@ -981,6 +982,29 @@ describe('SettingsSurface', () => {
           String(options?.body ?? '').includes('terminalCustomButtons') &&
           String(options?.body ?? '').includes('"action":"execute"')
         )
+      }),
+    ).toBe(true)
+  })
+
+  test('places terminal navigation control visibility before custom terminal buttons and persists opt-out', async () => {
+    await render(<SettingsSurface page="terminal" onPageChange={() => {}} />)
+
+    const navigationControlsTitle = 'settings.terminal-navigation-controls.title'
+    const customButtonsTitle = 'settings.terminal-custom-buttons.title'
+    const pageText = document.body.textContent ?? ''
+    expect(pageText.indexOf(navigationControlsTitle)).toBeGreaterThanOrEqual(0)
+    expect(pageText.indexOf(navigationControlsTitle)).toBeLessThan(pageText.indexOf(customButtonsTitle))
+
+    const navigationControlsVisibleSwitch = switchById('settings-terminal-navigation-controls-visible')
+    await act(async () => {
+      navigationControlsVisibleSwitch.click()
+      await Promise.resolve()
+    })
+
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const [, options] = call as unknown as [unknown, RequestInit | undefined]
+        return String(options?.body ?? '').includes('"terminalNavigationControlsVisible":false')
       }),
     ).toBe(true)
   })
