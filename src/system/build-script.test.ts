@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -7,6 +7,7 @@ import electronBuilderConfig from '../../electron-builder.ts'
 import viteConfig from '../../vite.config.ts'
 
 const repoRoot = path.resolve(import.meta.dirname, '../..')
+const ELECTRON_BUILDER_X64_ARCH = 1
 
 function readText(relativePath: string): string {
   return readFileSync(path.join(repoRoot, relativePath), 'utf8')
@@ -14,6 +15,7 @@ function readText(relativePath: string): string {
 
 interface DesktopBuilderConfig {
   asarUnpack?: string[]
+  afterPack?: (context: { appOutDir: string; electronPlatformName: string; arch: number }) => Promise<void> | void
   files?: string[]
   extraResources?: Array<{ from: string; to: string }>
   win?: {
@@ -307,6 +309,37 @@ describe('desktop build scripts', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
     expect(config.asarUnpack).toContain('node_modules/node-pty/build/Release/**/*')
+  })
+
+  test('desktop packaging restores x64 ConPTY companion assets after native rebuilds', async () => {
+    const appOutDir = mkdtempSync(path.join(tmpdir(), 'hobgoblin-primary-conpty-'))
+    const sourceDir = path.join(
+      appOutDir,
+      'resources/app.asar.unpacked/node_modules/node-pty/prebuilds/win32-x64/conpty',
+    )
+    const destinationDir = path.join(
+      appOutDir,
+      'resources/app.asar.unpacked/node_modules/node-pty/build/Release/conpty',
+    )
+    mkdirSync(sourceDir, { recursive: true })
+    writeFileSync(path.join(sourceDir, 'conpty.dll'), 'x64 dll')
+    writeFileSync(path.join(sourceDir, 'OpenConsole.exe'), 'x64 console')
+
+    try {
+      const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+      expect(config.afterPack).toBeTypeOf('function')
+
+      await config.afterPack?.({
+        appOutDir,
+        electronPlatformName: 'win32',
+        arch: ELECTRON_BUILDER_X64_ARCH,
+      })
+
+      expect(readFileSync(path.join(destinationDir, 'conpty.dll'), 'utf8')).toBe('x64 dll')
+      expect(readFileSync(path.join(destinationDir, 'OpenConsole.exe'), 'utf8')).toBe('x64 console')
+    } finally {
+      rmSync(appOutDir, { recursive: true, force: true })
+    }
   })
 
   test('desktop packaging includes the executable hob launcher outside asar', () => {
