@@ -4,6 +4,7 @@ import { statSync } from 'node:fs'
 import { execa } from 'execa'
 import { pathStyle } from '#/shared/path-semantics.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { resolveUsableWindowsWslExecutable } from '#/shared/windows-wsl.ts'
 import { hasCommand } from '#/system/command.ts'
 
 const OPEN_TIMEOUT_MS = 10_000
@@ -27,12 +28,16 @@ function isUsableWindowsDirectory(p: string): boolean {
 
 export async function openInWindowsTerminal(p: string): Promise<ExecResult> {
   if (!isUsableWindowsDirectory(p)) return { ok: false, message: 'error.invalid-path' }
+  let windowsTerminalError: string | null = null
+
   if (hasCommand('wt.exe')) {
+    const wslExecutable = resolveUsableWindowsWslExecutable()
+    const args = wslExecutable ? ['-d', p, wslExecutable] : ['-d', p]
     try {
-      await spawnDetached('wt.exe', ['-d', p])
+      await spawnDetached('wt.exe', args)
       return { ok: true, message: p }
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) }
+      windowsTerminalError = err instanceof Error ? err.message : String(err)
     }
   }
 
@@ -50,6 +55,7 @@ export async function openInWindowsTerminal(p: string): Promise<ExecResult> {
     }
   }
 
+  if (windowsTerminalError !== null) return { ok: false, message: windowsTerminalError }
   return { ok: false, message: 'error.terminal-not-installed' }
 }
 

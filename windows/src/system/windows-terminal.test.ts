@@ -1,15 +1,16 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 
 const mocks = vi.hoisted(() => ({
   execa: vi.fn(),
   hasCommand: vi.fn(),
   spawn: vi.fn(),
-  statSync: vi.fn(() => ({ isDirectory: () => true })),
+  spawnSync: vi.fn(),
+  statSync: vi.fn(() => ({ isDirectory: () => true, isFile: () => true })),
 }))
 
 vi.mock('execa', () => ({ execa: mocks.execa }))
-vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
+vi.mock('node:child_process', () => ({ spawn: mocks.spawn, spawnSync: mocks.spawnSync }))
 vi.mock('node:fs', () => ({ statSync: mocks.statSync }))
 vi.mock('#/system/command.ts', () => ({
   hasCommand: mocks.hasCommand,
@@ -20,10 +21,35 @@ describe('windows terminal backend', () => {
     vi.clearAllMocks()
     mocks.execa.mockResolvedValue({})
     mocks.spawn.mockImplementation(() => spawnedChild())
+    mocks.spawnSync.mockReturnValue({ status: 0, stdout: '' })
     mocks.hasCommand.mockImplementation((command: string) => command === 'wt.exe')
+    vi.stubEnv('SystemRoot', 'C:\\Windows')
   })
 
-  test('opens Windows Terminal in the requested directory', async () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  test('opens the default WSL distribution in Windows Terminal in the requested directory', async () => {
+    mocks.spawnSync.mockReturnValue({ status: 0, stdout: 'Ubuntu\n' })
+    const { openInWindowsTerminal } = await import('#/system/windows-terminal.ts')
+
+    await expect(openInWindowsTerminal('C:\\repo')).resolves.toEqual({ ok: true, message: 'C:\\repo' })
+
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'wt.exe',
+      ['-d', 'C:\\repo', 'C:\\Windows\\System32\\wsl.exe'],
+      expect.objectContaining({ detached: true, stdio: 'ignore' }),
+    )
+    expect(mocks.spawnSync).toHaveBeenCalledWith('C:\\Windows\\System32\\wsl.exe', ['--list', '--quiet'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      windowsHide: true,
+    })
+    expect(mocks.spawn.mock.results[0]!.value.unref).toHaveBeenCalledOnce()
+  })
+
+  test('opens the native Windows Terminal profile when no WSL distribution is registered', async () => {
     const { openInWindowsTerminal } = await import('#/system/windows-terminal.ts')
 
     await expect(openInWindowsTerminal('C:\\repo')).resolves.toEqual({ ok: true, message: 'C:\\repo' })
@@ -63,6 +89,24 @@ describe('windows terminal backend', () => {
       ok: false,
       message: 'spawn failed',
     })
+  })
+
+  test('falls back to PowerShell when Windows Terminal cannot be spawned', async () => {
+    mocks.hasCommand.mockImplementation((command: string) => command === 'wt.exe' || command === 'powershell.exe')
+    mocks.spawn.mockImplementationOnce(() => failedSpawn(new Error('spawn failed')))
+    const { openInWindowsTerminal } = await import('#/system/windows-terminal.ts')
+
+    await expect(openInWindowsTerminal('C:\\repo')).resolves.toEqual({ ok: true, message: 'C:\\repo' })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', expect.stringContaining('Start-Process')],
+      expect.objectContaining({
+        env: expect.objectContaining({ HOBGOBLIN_WINDOWS_TERMINAL_CWD: 'C:\\repo' }),
+        timeout: 10_000,
+        windowsHide: true,
+      }),
+    )
   })
 
   test('reports a PowerShell launcher failure', async () => {

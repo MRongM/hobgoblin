@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
 import path from 'node:path'
+import { resolveUsableWindowsWslExecutable } from '#/shared/windows-wsl.ts'
 
 export type WindowsTerminalShellKind = 'wsl' | 'powershell-core' | 'windows-powershell' | 'cmd'
 
@@ -35,10 +35,8 @@ export function resolveWindowsTerminalShellCandidates(
   }
 
   const systemRoot = environmentValue(env, 'SYSTEMROOT') ?? environmentValue(env, 'WINDIR')
-  if (systemRoot) {
-    const wslExecutable = path.win32.join(systemRoot, 'System32', 'wsl.exe')
-    if (hasRegisteredWslDistribution(wslExecutable, fileExists)) addCandidate('wsl', wslExecutable, [])
-  }
+  const wslExecutable = resolveUsableWindowsWslExecutable({ env, fileExists })
+  if (wslExecutable) addCandidate('wsl', wslExecutable, [])
 
   for (const programFiles of uniqueEnvironmentValues(env, ['PROGRAMW6432', 'PROGRAMFILES'])) {
     addCandidate('powershell-core', path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'), POWERSHELL_ARGS)
@@ -60,22 +58,6 @@ export function resolveWindowsTerminalShellCandidates(
   if (systemRoot) addCandidate('cmd', path.win32.join(systemRoot, 'System32', 'cmd.exe'), [])
 
   return candidates
-}
-
-function hasRegisteredWslDistribution(executable: string, fileExists: (filePath: string) => boolean): boolean {
-  const normalizedExecutable = normalizeAbsoluteWindowsPath(executable)
-  if (!normalizedExecutable || !fileExists(normalizedExecutable)) return false
-
-  try {
-    const result = spawnSync(normalizedExecutable, ['--list', '--quiet'], {
-      encoding: 'utf8',
-      timeout: 5_000,
-      windowsHide: true,
-    })
-    return result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length > 0
-  } catch {
-    return false
-  }
 }
 
 function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
