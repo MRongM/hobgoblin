@@ -13,6 +13,7 @@ function readText(relativePath: string): string {
 }
 
 interface DesktopBuilderConfig {
+  asarUnpack?: string[]
   files?: string[]
   extraResources?: Array<{ from: string; to: string }>
   win?: {
@@ -302,6 +303,12 @@ describe('desktop build scripts', () => {
     expect(readText('package.json')).not.toContain('"build:server"')
   })
 
+  test('desktop packaging unpacks rebuilt node-pty ConPTY assets', () => {
+    const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+
+    expect(config.asarUnpack).toContain('node_modules/node-pty/build/Release/**/*')
+  })
+
   test('desktop packaging includes the executable hob launcher outside asar', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
@@ -334,5 +341,8 @@ describe('desktop build scripts', () => {
     expect(windowsWorkflow).toContain('path: release/win-unpacked/**/*')
     expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
+    expect(windowsWorkflow).toContain('--testTimeout=15000')
+    expect(windowsWorkflow).toContain('id: build_artifact')
+    expect(windowsWorkflow).toContain("if: ${{ !cancelled() && steps.build_artifact.outcome == 'success' }}")
   })
 })

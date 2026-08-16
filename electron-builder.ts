@@ -24,7 +24,12 @@ const config: Configuration = {
     '!**/*.map',
   ],
   extraResources: [{ from: 'bin/hob', to: 'bin/hob' }],
-  asarUnpack: ['node_modules/node-pty/prebuilds/**/*', 'node_modules/sharp/**/*', 'node_modules/@img/**/*'],
+  asarUnpack: [
+    'node_modules/node-pty/prebuilds/**/*',
+    'node_modules/node-pty/build/Release/**/*',
+    'node_modules/sharp/**/*',
+    'node_modules/@img/**/*',
+  ],
   mac: {
     category: 'public.app-category.developer-tools',
     extendInfo: {

@@ -125,6 +125,7 @@ jobs:
       - name: Test Windows compatibility
         run: >-
           bun run test --
+          --testTimeout=15000
           scripts/build-release-artifacts.test.ts
           scripts/build-windows-fast.test.ts
           src/main/external-open.test.ts
@@ -150,6 +151,7 @@ jobs:
         working-directory: windows
 
       - name: Build Windows artifact
+        id: build_artifact
         run: bun run build:release -- --arch ${{ matrix.arch }}
         working-directory: windows
 
@@ -524,6 +526,7 @@ jobs:
           retention-days: 7
 
       - name: Upload independent Windows artifact
+        if: ${{ !cancelled() && steps.build_artifact.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}

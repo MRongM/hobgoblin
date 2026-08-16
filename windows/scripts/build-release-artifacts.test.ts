@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
+import electronBuilderConfig from '../electron-builder.ts'
 import { expectedWindowsArtifactName, parseWindowsReleaseArguments } from './build-release-artifacts.ts'
+
+interface WindowsBuilderConfig {
+  asarUnpack?: string[]
+}
 
 describe('parseWindowsReleaseArguments', () => {
   test('accepts one supported Windows architecture', () => {
@@ -15,5 +20,13 @@ describe('parseWindowsReleaseArguments', () => {
 describe('expectedWindowsArtifactName', () => {
   test('keeps architecture in the Windows installer filename', () => {
     expect(expectedWindowsArtifactName('2.2.5', 'x64')).toBe('Hobgoblin-2.2.5-x64.exe')
+  })
+})
+
+describe('Windows release packaging', () => {
+  test('unpacks rebuilt node-pty ConPTY assets', () => {
+    const config = electronBuilderConfig as unknown as WindowsBuilderConfig
+
+    expect(config.asarUnpack).toContain('node_modules/node-pty/build/Release/**/*')
   })
 })

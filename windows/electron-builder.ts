@@ -24,7 +24,12 @@ const config: Configuration = {
     '!**/*.map',
   ],
   extraResources: [{ from: 'bin/hob.cmd', to: 'bin/hob.cmd' }],
-  asarUnpack: ['node_modules/node-pty/prebuilds/**/*', 'node_modules/sharp/**/*', 'node_modules/@img/**/*'],
+  asarUnpack: [
+    'node_modules/node-pty/prebuilds/**/*',
+    'node_modules/node-pty/build/Release/**/*',
+    'node_modules/sharp/**/*',
+    'node_modules/@img/**/*',
+  ],
   win: {
     target: [{ target: 'nsis', arch: ['arm64', 'x64'] }],
     artifactName: '${productName}-${version}-${arch}.${ext}',
