@@ -32,7 +32,7 @@ windows/
 
 ## Release integration
 
-The root GitHub workflow remains the release orchestrator. Its own Electron Builder and release artifact script build macOS only. It installs and tests `windows/`, invokes its release command from that directory for both supported Windows architectures, smoke-tests the unpacked executable below `windows/release/`, and uploads installers from the same location. The release version remains the product version; CI checks that the Windows package version equals the root release version before publishing artifacts.
+The root GitHub workflow remains the release orchestrator. Its own Electron Builder and release artifact script build macOS only. It installs and tests `windows/`, invokes its release command from that directory for both supported Windows architectures, smoke-tests the unpacked executable below `windows/release/`, and uploads installers from the same location. A manually dispatched Windows Test Build may additionally package root `src/` as an x64 unpacked primary-application test artifact; reusable release calls leave that optional job disabled, so it is never published as a release asset. The release version remains the product version; CI checks that the Windows package version equals the root release version before publishing artifacts.
 
 ## Guardrails
 

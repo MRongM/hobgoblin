@@ -206,7 +206,7 @@ describe('desktop build scripts', () => {
     expect(windowsWorkflow).toContain('wslpath -a $WorkspacePath')
     expect(windowsWorkflow).toContain("printf '%s\\n' '__HOBGOBLIN_终端_IO_OK__'; pwd`r")
     expect(windowsWorkflow).toContain('name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}')
-    expect(windowsWorkflow).toContain('name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(workflow).toContain('actions/setup-java@v4')
     expect(workflow).toContain('distribution: temurin')
@@ -309,10 +309,30 @@ describe('desktop build scripts', () => {
     expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
-  test('root desktop packaging delegates Windows artifacts to the Windows package', () => {
+  test('root desktop release packaging remains macOS-only', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
     expect(config.win).toBeUndefined()
     expect(config.nsis).toBeUndefined()
+  })
+
+  test('Windows test workflow exposes separate primary and independent artifacts', () => {
+    const windowsWorkflow = readText('.github/workflows/windows-test.yml')
+
+    expect(windowsWorkflow).toContain('include_primary:')
+    expect(windowsWorkflow).toContain('description: Build the primary application Windows x64 test artifact')
+    expect(windowsWorkflow).toMatch(
+      /workflow_call:\s+inputs:\s+include_primary:\s+description: Build the primary application Windows x64 test artifact\s+required: false\s+type: boolean\s+default: false/,
+    )
+    expect(windowsWorkflow).toMatch(
+      /workflow_dispatch:\s+inputs:\s+include_primary:\s+description: Build the primary application Windows x64 test artifact\s+required: false\s+type: boolean\s+default: true/,
+    )
+    expect(windowsWorkflow).toContain('build-primary-windows:')
+    expect(windowsWorkflow).toContain('if: ${{ inputs.include_primary }}')
+    expect(windowsWorkflow).toContain('bun run build:electron -- --win dir --x64 --publish never')
+    expect(windowsWorkflow).toContain('name: hobgoblin-primary-windows-x64-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('path: release/win-unpacked/**/*')
+    expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
   })
 })

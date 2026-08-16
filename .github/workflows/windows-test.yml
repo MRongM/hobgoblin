@@ -2,7 +2,19 @@ name: Windows Test Build
 
 on:
   workflow_call:
+    inputs:
+      include_primary:
+        description: Build the primary application Windows x64 test artifact
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      include_primary:
+        description: Build the primary application Windows x64 test artifact
+        required: false
+        type: boolean
+        default: true
   pull_request:
     paths:
       - .github/workflows/windows-test.yml
@@ -25,8 +37,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-windows:
-    name: Build Windows ${{ matrix.arch }}
+  build-primary-windows:
+    if: ${{ inputs.include_primary }}
+    name: Build primary application Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck primary application
+        run: bun run typecheck
+
+      - name: Test primary Windows terminal compatibility
+        run: >-
+          bun run test --
+          src/server/terminal/terminal-pty-runtime.test.ts
+          src/server/terminal/windows-terminal-shell.test.ts
+
+      - name: Build primary application Windows test artifact
+        run: |
+          bun run build:web
+          bun run build:electron -- --win dir --x64 --publish never
+
+      - name: Upload primary application Windows test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-primary-windows-x64-${{ github.sha }}
+          path: release/win-unpacked/**/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-independent-windows:
+    name: Build independent Windows ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -468,10 +523,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload Windows artifact
+      - name: Upload independent Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-${{ matrix.arch }}-${{ github.sha }}
+          name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}
           path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 7
