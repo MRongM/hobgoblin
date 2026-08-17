@@ -143,7 +143,7 @@ describe('branch workspace create planner', () => {
       [path.join(ROOT, 'web')]: snapshot(branch('main')),
     })
     deps.getRemoteBranches.mockImplementation(async (repoId: string) =>
-      repoId.endsWith('/web') ? ['upstream/release'] : [],
+      path.basename(repoId) === 'web' ? ['upstream/release'] : [],
     )
 
     const result = await buildBranchWorkspacePlan(
@@ -311,7 +311,7 @@ describe('branch workspace create planner', () => {
       plan: {
         operation: 'create',
         branch: BRANCH,
-        directoryName: 'hobgoblin-feature-auth',
+        directoryName: 'hob-feature-auth',
         repositories: [
           {
             repositoryName: 'api',
@@ -336,7 +336,7 @@ describe('branch workspace create planner', () => {
     })
     if (!result.ok) throw new Error('Expected a create plan')
     expect(result.plan.steps.find((step) => step.kind === 'create-directory')).toMatchObject({
-      label: 'hobgoblin-feature-auth',
+      label: 'hob-feature-auth',
     })
   })
 
@@ -384,8 +384,8 @@ describe('branch workspace create planner', () => {
   })
 
   test('uses an existing branch and recognizes only its exact expected worktree as satisfied', async () => {
-    const expectedApi = path.join(ROOT, 'hobgoblin-feature-auth', 'api')
-    const expectedWeb = path.join(ROOT, 'hobgoblin-feature-auth', 'web')
+    const expectedApi = path.join(ROOT, 'hob-feature-auth', 'api')
+    const expectedWeb = path.join(ROOT, 'hob-feature-auth', 'web')
     const deps = dependencies({
       [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH)),
       [path.join(ROOT, 'web')]: snapshot(branch('develop'), branch(BRANCH, expectedWeb)),
@@ -423,6 +423,39 @@ describe('branch workspace create planner', () => {
             satisfied: true,
           },
         ],
+      },
+    })
+  })
+
+  test('recognizes an existing member worktree across Windows and WSL path spellings', async () => {
+    const rootId = process.platform === 'win32' ? 'C:\\Workspace' : '/mnt/c/Workspace'
+    const workspacePath = path.join(rootId, 'hob-feature-auth')
+    const expectedPath = path.join(workspacePath, 'api')
+    const gitPath =
+      process.platform === 'win32'
+        ? '/mnt/c/Workspace/hob-feature-auth/api'
+        : 'C:\\Workspace\\hob-feature-auth\\api'
+    const repoId = path.join(rootId, 'api')
+    const deps = dependencies({ [repoId]: snapshot(branch('main'), branch(BRANCH, gitPath)) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    const result = await buildBranchWorkspacePlan(
+      rootId,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    if (!result.ok) throw new Error(result.message)
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ repositoryName: 'api', worktreePath: expectedPath, satisfied: true }],
+        manifest: { repositories: [{ repositoryName: 'api', progress: 'complete' }] },
       },
     })
   })

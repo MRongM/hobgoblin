@@ -143,7 +143,7 @@ describe('branch workspace create planner', () => {
       [path.join(ROOT, 'web')]: snapshot(branch('main')),
     })
     deps.getRemoteBranches.mockImplementation(async (repoId: string) =>
-      repoId.endsWith('/web') ? ['upstream/release'] : [],
+      path.basename(repoId) === 'web' ? ['upstream/release'] : [],
     )
 
     const result = await buildBranchWorkspacePlan(
@@ -423,6 +423,39 @@ describe('branch workspace create planner', () => {
             satisfied: true,
           },
         ],
+      },
+    })
+  })
+
+  test('recognizes an existing member worktree across Windows and WSL path spellings', async () => {
+    const rootId = process.platform === 'win32' ? 'C:\\Workspace' : '/mnt/c/Workspace'
+    const workspacePath = path.join(rootId, 'hobgoblin-feature-auth')
+    const expectedPath = path.join(workspacePath, 'api')
+    const gitPath =
+      process.platform === 'win32'
+        ? '/mnt/c/Workspace/hobgoblin-feature-auth/api'
+        : 'C:\\Workspace\\hobgoblin-feature-auth\\api'
+    const repoId = path.join(rootId, 'api')
+    const deps = dependencies({ [repoId]: snapshot(branch('main'), branch(BRANCH, gitPath)) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+
+    const result = await buildBranchWorkspacePlan(
+      rootId,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    if (!result.ok) throw new Error(result.message)
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ repositoryName: 'api', worktreePath: expectedPath, satisfied: true }],
+        manifest: { repositories: [{ repositoryName: 'api', progress: 'complete' }] },
       },
     })
   })

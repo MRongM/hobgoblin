@@ -29,6 +29,7 @@ import {
   FolderKanban,
   FolderPlus,
   GitCompareArrows,
+  GitFork,
   GitMerge,
   RotateCcw,
   SendHorizontal,
@@ -360,6 +361,12 @@ function BranchWorkspaceRow({
             disabled: disabled || gitActionsDisabled,
             destructive: true,
             onSelect: () => onGitAction(item, 'batch-discard'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.batch-set-upstream',
+            icon: <GitFork aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            onSelect: () => onGitAction(item, 'batch-set-upstream'),
           },
           {
             label: 'workspace.branch-workspace.git-action.pull',

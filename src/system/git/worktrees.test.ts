@@ -53,7 +53,7 @@ describe('worktree git operations', () => {
         },
         syncBeforeCreate: false,
       },
-      ['worktree', 'add', '-b', 'feature/branch', '--', '/tmp/repo-feature', 'main'],
+      ['worktree', 'add', '--relative-paths', '-b', 'feature/branch', '--', '/tmp/repo-feature', 'main'],
     ],
     [
       'existingBranch',
@@ -62,7 +62,7 @@ describe('worktree git operations', () => {
         mode: { kind: 'existingBranch' as const, branch: 'feature/branch' },
         syncBeforeCreate: false,
       },
-      ['worktree', 'add', '--', '/tmp/repo-feature', 'feature/branch'],
+      ['worktree', 'add', '--relative-paths', '--', '/tmp/repo-feature', 'feature/branch'],
     ],
     [
       'trackRemoteBranch',
@@ -71,7 +71,7 @@ describe('worktree git operations', () => {
         mode: { kind: 'trackRemoteBranch' as const, remoteRef: 'origin/feature/branch', localBranch: 'feature/branch' },
         syncBeforeCreate: false,
       },
-      ['worktree', 'add', '-b', 'feature/branch', '--track', '--', '/tmp/repo-feature', 'origin/feature/branch'],
+      ['worktree', 'add', '--relative-paths', '-b', 'feature/branch', '--track', '--', '/tmp/repo-feature', 'origin/feature/branch'],
     ],
     [
       'detached',
@@ -80,7 +80,7 @@ describe('worktree git operations', () => {
         mode: { kind: 'detached' as const, ref: 'origin/feature/branch' },
         syncBeforeCreate: false,
       },
-      ['worktree', 'add', '--detach', '--', '/tmp/repo-detached', 'origin/feature/branch'],
+      ['worktree', 'add', '--relative-paths', '--detach', '--', '/tmp/repo-detached', 'origin/feature/branch'],
     ],
   ])(
     'delegates %s createWorktree to git worktree add with the shared timeout and signal',
@@ -97,6 +97,30 @@ describe('worktree git operations', () => {
       )
     },
   )
+
+  test('falls back to absolute worktree links when Git predates relative worktree support', async () => {
+    const input = {
+      worktreePath: '/tmp/repo-feature',
+      mode: { kind: 'existingBranch' as const, branch: 'feature/branch' },
+      syncBeforeCreate: false,
+    }
+    gitResultWithOptionsMock
+      .mockResolvedValueOnce({ ok: false, message: "error: unknown option `relative-paths'" })
+      .mockResolvedValueOnce({ ok: true, message: 'created' })
+
+    await expect(createWorktree('/tmp/repo', input)).resolves.toEqual({ ok: true, message: 'created' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/repo',
+      { timeoutMs: 180_000, signal: undefined },
+      'worktree',
+      'add',
+      '--',
+      '/tmp/repo-feature',
+      'feature/branch',
+    )
+  })
 
   test.each([
     [

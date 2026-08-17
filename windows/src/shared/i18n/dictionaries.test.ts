@@ -212,6 +212,33 @@ describe('i18n dictionaries', () => {
     expect(zh['action.branch-upstream-remove']).toBe('取消上游')
   })
 
+  test('localizes branch workspace batch upstream changes in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.git-action.batch-set-upstream',
+      'workspace.branch-workspace.git-action.batch-set-upstream-description',
+      'workspace.branch-workspace.git-action.current-upstream',
+      'workspace.branch-workspace.git-action.select-upstream',
+      'workspace.branch-workspace.git-action.select-upstream-for-member',
+      'workspace.branch-workspace.git-action.remote-branch-required',
+      'workspace.branch-workspace.git-action.step.upstream',
+      'workspace.branch-workspace.git-action.failure-step.upstream',
+    ] as const satisfies readonly DictKey[]
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.git-action.batch-set-upstream']).toBe('批量更换上游')
+    expect(en['workspace.branch-workspace.git-action.batch-set-upstream-description']).toContain('member worktrees')
+    expect(ja['workspace.branch-workspace.git-action.select-member']).toBe(
+      '{repository} をこの一括操作のメンバーとして選択',
+    )
+    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe(
+      '{repository} 구성원을 이 일괄 작업에 포함',
+    )
+    expect(ja['workspace.branch-workspace.git-action.select-member']).not.toContain('マージ')
+    expect(ko['workspace.branch-workspace.git-action.select-member']).not.toContain('병합')
+  })
+
   test('includes host tmux inventory and selected-close copy in every locale', () => {
     const keys = [
       'tmux.host-inventory.action',

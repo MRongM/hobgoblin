@@ -90,13 +90,23 @@ export async function createWorktree(
   input: CreateWorktreeInput,
   signal?: AbortSignal,
 ): Promise<ExecResult> {
-  const created = await gitResultWithOptions(
+  let created = await gitResultWithOptions(
     cwd,
     { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
     'worktree',
     'add',
+    '--relative-paths',
     ...createWorktreeArgs(input),
   )
+  if (!created.ok && relativePathsOptionUnavailable(created.message)) {
+    created = await gitResultWithOptions(
+      cwd,
+      { timeoutMs: WORKTREE_OP_TIMEOUT_MS, signal },
+      'worktree',
+      'add',
+      ...createWorktreeArgs(input),
+    )
+  }
   if (created.ok && input.mode.kind === 'newBranch') {
     await recordBranchCreatedFrom(cwd, input.mode.newBranch, worktreeCreationBaseRef(input.mode.creationBase), signal)
   }
@@ -104,6 +114,10 @@ export async function createWorktree(
     await recordBranchCreatedFrom(cwd, input.mode.localBranch, input.mode.remoteRef, signal)
   }
   return created
+}
+
+function relativePathsOptionUnavailable(message: string): boolean {
+  return /unknown option [`']?relative-paths|unknown option.*--relative-paths/iu.test(message)
 }
 
 function createWorktreeArgs(input: CreateWorktreeInput): string[] {

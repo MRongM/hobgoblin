@@ -64,6 +64,29 @@ export function windowsPathIdentityKey(value: string): string | null {
   return null
 }
 
+/** Compare local paths that may cross the native Windows / WSL boundary. */
+export function sameLocalHostPath(left: string, right: string): boolean {
+  const leftWindows = windowsOrWslPathIdentityKey(left)
+  const rightWindows = windowsOrWslPathIdentityKey(right)
+  if (leftWindows || rightWindows) return leftWindows !== null && leftWindows === rightWindows
+  if (pathStyle(left) !== 'posixAbsolute' || pathStyle(right) !== 'posixAbsolute') return left === right
+  return posixPathIdentityKey(left) === posixPathIdentityKey(right)
+}
+
+function windowsOrWslPathIdentityKey(value: string): string | null {
+  const windows = windowsPathIdentityKey(value)
+  if (windows) return windows
+  const match = /^\/mnt\/([A-Za-z])(?:\/(.*))?$/u.exec(posixPathIdentityKey(value))
+  if (!match) return null
+  const drive = (match[1] ?? '').toUpperCase()
+  const tail = normalizeAbsoluteParts((match[2] ?? '').split('/'))
+  return `${drive}:\\${tail.map((part) => part.toLowerCase()).join('\\')}`
+}
+
+function posixPathIdentityKey(value: string): string {
+  return `/${normalizeAbsoluteParts(value.split('/')).join('/')}`
+}
+
 function posixRelativeInside(worktreePath: string, candidatePath: string): string | null {
   const rootParts = splitPosix(worktreePath)
   const candidateParts = splitPosix(candidatePath)

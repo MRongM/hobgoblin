@@ -5,6 +5,18 @@ import {
 } from '#/shared/branch-workspace-git-actions.ts'
 
 describe('branch workspace Git action inputs', () => {
+  test('normalizes a batch upstream plan request', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionPlanRequest({
+        kind: 'batch-set-upstream',
+        branchWorkspaceId: ' branch-1 ',
+      }),
+    ).toEqual({
+      ok: true,
+      request: { kind: 'batch-set-upstream', branchWorkspaceId: 'branch-1' },
+    })
+  })
+
   test('normalizes a batch commit plan request', () => {
     expect(
       normalizeBranchWorkspaceGitActionPlanRequest({
@@ -37,6 +49,61 @@ describe('branch workspace Git action inputs', () => {
           { repositoryName: 'web', message: 'feat: add UI\n\n- Render the form.' },
         ],
       },
+    })
+  })
+
+  test('normalizes ordered batch upstream mappings', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-set-upstream',
+        planToken: ' sha256:plan ',
+        upstreams: [
+          { repositoryName: ' api ', remoteRef: ' origin/release ' },
+          { repositoryName: 'web', remoteRef: 'upstream/feature/web' },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      input: {
+        kind: 'batch-set-upstream',
+        planToken: 'sha256:plan',
+        upstreams: [
+          { repositoryName: 'api', remoteRef: 'origin/release' },
+          { repositoryName: 'web', remoteRef: 'upstream/feature/web' },
+        ],
+      },
+    })
+  })
+
+  test.each([
+    { kind: 'batch-set-upstream', planToken: 'sha256:plan', upstreams: [] },
+    {
+      kind: 'batch-set-upstream',
+      planToken: 'sha256:plan',
+      upstreams: [{ repositoryName: 'api', remoteRef: 'origin/HEAD' }],
+    },
+    {
+      kind: 'batch-set-upstream',
+      planToken: 'sha256:plan',
+      upstreams: [
+        { repositoryName: 'api', remoteRef: 'origin/main' },
+        { repositoryName: 'api', remoteRef: 'origin/release' },
+      ],
+    },
+    {
+      kind: 'batch-set-upstream',
+      planToken: 'sha256:plan',
+      upstreams: [{ repositoryName: '../api', remoteRef: 'origin/main' }],
+    },
+    {
+      kind: 'batch-set-upstream',
+      planToken: 'sha256:plan',
+      upstreams: [{ repositoryName: 'api', remoteRef: 'origin/ bad' }],
+    },
+  ])('rejects invalid batch upstream input: %j', (value) => {
+    expect(normalizeBranchWorkspaceGitActionExecuteInput(value)).toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
     })
   })
 
@@ -159,14 +226,12 @@ describe('branch workspace Git action inputs', () => {
     ).toMatchObject({
       ok: true,
       input: {
-        targets: [
-          { repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'upstream/release/v2' } },
-        ],
+        targets: [{ repositoryName: 'api', destination: { kind: 'remote', remoteRef: 'upstream/release/v2' } }],
       },
     })
   })
 
-  test.each(['pull', 'push'] as const)('normalizes a coordinated %s plan and execution input', (kind) => {
+  test.each(['pull', 'push'] as const)('normalizes a selected coordinated %s execution input', (kind) => {
     expect(
       normalizeBranchWorkspaceGitActionPlanRequest({
         kind,
@@ -180,12 +245,11 @@ describe('branch workspace Git action inputs', () => {
       normalizeBranchWorkspaceGitActionExecuteInput({
         kind,
         planToken: ' sha256:plan ',
-        mode: 'ignored',
-        messages: [{ repositoryName: 'ignored', message: 'ignored' }],
+        repositoryNames: [' web ', 'api'],
       }),
     ).toEqual({
       ok: true,
-      input: { kind, planToken: 'sha256:plan' },
+      input: { kind, planToken: 'sha256:plan', repositoryNames: ['web', 'api'] },
     })
   })
 
@@ -226,6 +290,10 @@ describe('branch workspace Git action inputs', () => {
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'squash', targets: [] },
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', targets: [] },
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', sources: [] },
+    { kind: 'pull', planToken: 'sha256:plan' },
+    { kind: 'push', planToken: 'sha256:plan', repositoryNames: [] },
+    { kind: 'pull', planToken: 'sha256:plan', repositoryNames: ['api', 'api'] },
+    { kind: 'push', planToken: 'sha256:plan', repositoryNames: ['../api'] },
     {
       kind: 'batch-merge-in',
       planToken: 'sha256:plan',
