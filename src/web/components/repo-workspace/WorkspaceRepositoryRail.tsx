@@ -1,12 +1,18 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
+import { Eye, EyeOff, Folder, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '#/web/components/ui/context-menu.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
@@ -174,6 +180,12 @@ export function WorkspaceRepositoryRail({
       revealTerminal: () => setDetailCollapsed(false),
     })
   }
+  const handleOverviewFileAreaOpen = onOpenFileArea
+    ? () => {
+        activateWorkspaceOverview(workspaceRootId)
+        onOpenFileArea()
+      }
+    : undefined
   const candidateNameById = useMemo(
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
@@ -616,6 +628,7 @@ export function WorkspaceRepositoryRail({
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
               onActivate={handleOverviewActivate}
+              onOpenFileArea={handleOverviewFileAreaOpen}
               onToggleFileArea={onToggleFileArea}
             />
             <WorkspaceRepositoryList
@@ -625,6 +638,7 @@ export function WorkspaceRepositoryRail({
               onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
               onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
               onToggleFileArea={onToggleFileArea}
+              onOpenFileArea={onOpenFileArea}
             />
           </WorkspaceRepositoryListPane>
         ) : null}
@@ -692,6 +706,7 @@ export function WorkspaceRepositoryRail({
                   changeCountById={branchWorkspaceChangeCountById}
                   onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                   onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
+                  onOpenFileArea={onOpenFileArea}
                   onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                   onInspect={(item) =>
                     openBranchDialog(
@@ -802,6 +817,7 @@ function ManifestRow({
   hasTerminalBell,
   hasTerminalOutputActivity,
   onActivate,
+  onOpenFileArea,
   onToggleFileArea,
 }: {
   active: boolean
@@ -810,10 +826,11 @@ function ManifestRow({
   hasTerminalBell: boolean
   hasTerminalOutputActivity: boolean
   onActivate: () => void
+  onOpenFileArea?: () => void
   onToggleFileArea?: () => void
 }) {
   const t = useT()
-  return (
+  const row = (
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
@@ -847,5 +864,17 @@ function ManifestRow({
         {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
       </span>
     </button>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem disabled={!onOpenFileArea} onSelect={() => onOpenFileArea?.()}>
+          <FolderTree aria-hidden="true" />
+          {t('file-area.open')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

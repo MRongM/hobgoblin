@@ -850,6 +850,84 @@ describe('BranchWorkspaceList', () => {
     expect(onToggleFileArea).toHaveBeenCalledWith(item)
   })
 
+  test('selects the exact branch workspace before opening its file area from the context menu', async () => {
+    const item = workspace('ready')
+    const onActivate = vi.fn()
+    const onOpenFileArea = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            onActivate={onActivate}
+            onOpenFileArea={onOpenFileArea}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    const row = container.querySelector('[data-branch-workspace-state="ready"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing branch workspace row')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onActivate).toHaveBeenCalledWith(item.id)
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onActivate.mock.invocationCallOrder[0]).toBeLessThan(onOpenFileArea.mock.invocationCallOrder[0]!)
+  })
+
+  test('selects the exact member worktree before opening its file area from the context menu', async () => {
+    const member = repositoryMember()
+    const item = { ...workspace('ready'), repositories: [member] }
+    const onSelectRepositoryMember = vi.fn()
+    const onOpenFileArea = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={item.id}
+            getMemberPresentation={() => ({
+              dirty: false,
+              changeCount: null,
+              navigable: true,
+              repositoryId: '/workspace/api',
+              worktreePath: member.worktreePath,
+            })}
+            onActivate={() => {}}
+            onSelectRepositoryMember={onSelectRepositoryMember}
+            onOpenFileArea={onOpenFileArea}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
+    const row = container
+      .querySelector('[data-testid="branch-workspace-member-api"]')
+      ?.closest<HTMLElement>('[data-workspace-list-item]')
+    if (!row) throw new Error('missing member worktree row')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onSelectRepositoryMember).toHaveBeenCalledWith(item, member)
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onSelectRepositoryMember.mock.invocationCallOrder[0]).toBeLessThan(
+      onOpenFileArea.mock.invocationCallOrder[0]!,
+    )
+  })
+
   test('keeps a non-navigable repository member disabled while retaining tmux cleanup', async () => {
     const member = repositoryMember({ ready: false })
     const otherMember = repositoryMember({

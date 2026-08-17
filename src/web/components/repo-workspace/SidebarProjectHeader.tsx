@@ -49,6 +49,7 @@ interface Props {
   onShowCompactFiles?: () => void
   onMaximizeTerminal?: () => void
   onFileAreaItemDoubleClick?: () => void
+  onOpenFileArea?: () => void
 }
 
 export function SidebarProjectHeader({
@@ -57,6 +58,7 @@ export function SidebarProjectHeader({
   onShowCompactFiles,
   onMaximizeTerminal,
   onFileAreaItemDoubleClick,
+  onOpenFileArea,
 }: Props) {
   const t = useT()
   const listId = useId()
@@ -222,6 +224,7 @@ export function SidebarProjectHeader({
             onClose={navigation.closeRepo}
             onReorder={reorderRepos}
             onToggleFileArea={onFileAreaItemDoubleClick}
+            onOpenFileArea={onOpenFileArea}
           />
         </div>
       )}

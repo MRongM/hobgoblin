@@ -225,6 +225,7 @@ function renderList(
   const onActivate = vi.fn()
   const onReorder = vi.fn()
   const onToggleFileArea = vi.fn()
+  const onOpenFileArea = vi.fn()
   act(() => {
     root!.render(
       <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
@@ -236,12 +237,13 @@ function renderList(
             onActivate={onActivate}
             onReorder={onReorder}
             onToggleFileArea={onToggleFileArea}
+            onOpenFileArea={onOpenFileArea}
           />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onReorder, onToggleFileArea, closeTerminal }
+  return { onActivate, onReorder, onToggleFileArea, onOpenFileArea, closeTerminal }
 }
 
 describe('WorkspaceRepositoryList', () => {
@@ -308,6 +310,27 @@ describe('WorkspaceRepositoryList', () => {
     expect(onActivate).toHaveBeenCalledTimes(2)
     expect(onActivate).toHaveBeenLastCalledWith('/workspace/api')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('activates the exact repository before opening its file area from the context menu', async () => {
+    const { onActivate, onOpenFileArea } = renderList()
+    const row = repositoryItem('/workspace/api')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onActivate).toHaveBeenCalledWith('/workspace/api')
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onActivate.mock.invocationCallOrder[0]).toBeLessThan(onOpenFileArea.mock.invocationCallOrder[0]!)
+  })
+
+  test('keeps the file area action visible but disabled for an unavailable repository', async () => {
+    renderList()
+    const item = (await openContextMenu(repositoryItem('/workspace/web'))).find((candidate) =>
+      candidate.textContent?.includes('file-area.open'),
+    )
+
+    expect(item).toBeDefined()
+    expect(item?.hasAttribute('data-disabled')).toBe(true)
   })
 
   test('shows aggregate terminal count, output activity, changes, and unread bell on a repository row', () => {
@@ -394,6 +417,7 @@ describe('WorkspaceRepositoryList', () => {
     if (!(row instanceof HTMLElement)) throw new Error('missing workspace repository row')
 
     expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'file-area.open',
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',

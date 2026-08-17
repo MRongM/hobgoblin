@@ -70,6 +70,7 @@ export function PlainWorkspacePane({
           onShowCompactDetail={onShowCompactDetail}
           onShowCompactFiles={onShowCompactFiles}
           onFileAreaItemDoubleClick={onFileAreaItemDoubleClick}
+          onOpenFileArea={onOpenFileArea}
         />
         <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
           {surface === 'scope' && multiRepositoryWorkspace ? (
@@ -110,6 +111,7 @@ export function PlainWorkspacePane({
           repoId={repoId}
           onMaximizeTerminal={onMaximizeTerminal}
           onFileAreaItemDoubleClick={onFileAreaItemDoubleClick}
+          onOpenFileArea={onOpenFileArea}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {desktopWorkspaceOverview ? (

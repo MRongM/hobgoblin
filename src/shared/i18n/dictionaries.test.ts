@@ -705,7 +705,7 @@ describe('i18n dictionaries', () => {
   })
 
   test('includes file area collapse copy in every dictionary', () => {
-    const keys = ['file-area.collapse', 'file-area.expand'] as const
+    const keys = ['file-area.collapse', 'file-area.expand', 'file-area.open'] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) {

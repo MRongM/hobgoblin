@@ -63,6 +63,7 @@ const repositoryListState = vi.hoisted(() => ({
     onActivate: (id: string) => void
     onReorder: (fromId: string, toId: string) => void
     onToggleFileArea?: () => void
+    onOpenFileArea?: () => void
   },
 }))
 
@@ -205,6 +206,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     activeId: string | null
     activeMemberRepositoryName?: string | null
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
+    onOpenFileArea?: () => void
     changeCountById?: Readonly<Record<string, number>>
     getMemberPresentation?: (
       item: BranchWorkspaceSnapshot,
@@ -1355,6 +1357,30 @@ describe('WorkspaceRepositoryRail', () => {
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
+  test('opens the workspace root file area from the Overview context menu', async () => {
+    const onOpenFileArea = vi.fn()
+    renderRail({ currentRepoId: API, onOpenFileArea })
+
+    const openItem = (await openOverviewContextMenu()).find((item) => item.textContent?.includes('file-area.open'))
+    expect(openItem).toBeDefined()
+
+    await act(async () => {
+      openItem?.click()
+      await Promise.resolve()
+    })
+
+    expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('forwards the idempotent file area open intent to repository and branch workspace rows', () => {
+    const onOpenFileArea = vi.fn()
+    renderRail({ currentRepoId: ROOT, onOpenFileArea })
+
+    expect(repositoryListState.props?.onOpenFileArea).toBe(onOpenFileArea)
+    expect(branchWorkspaceListState.props?.onOpenFileArea).toBe(onOpenFileArea)
+  })
+
   test('plans a Git action for the clicked branch workspace and mounts its panel below that item', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[1]!
@@ -1903,6 +1929,14 @@ function overviewButton(): HTMLButtonElement | null | undefined {
   return Array.from(container?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) =>
     button.textContent?.includes('./'),
   )
+}
+
+async function openOverviewContextMenu(): Promise<HTMLElement[]> {
+  await act(async () => {
+    overviewButton()?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
 }
 
 function renderRail({

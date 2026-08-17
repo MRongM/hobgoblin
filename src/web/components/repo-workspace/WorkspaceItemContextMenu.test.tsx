@@ -41,6 +41,7 @@ afterEach(() => {
 
 describe('WorkspaceItemContextMenu', () => {
   test('renders the fixed action order and dispatches each open action', async () => {
+    const fileArea = vi.fn()
     const editor = vi.fn()
     const externalTerminal = vi.fn()
     const internalTerminal = vi.fn()
@@ -49,6 +50,7 @@ describe('WorkspaceItemContextMenu', () => {
     const createWorktree = vi.fn()
     const sync = vi.fn()
     renderMenu({
+      fileArea,
       editor,
       externalTerminal,
       internalTerminal,
@@ -61,6 +63,7 @@ describe('WorkspaceItemContextMenu', () => {
     })
 
     expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
+      'file-area.open',
       'worktrees.open-in-editor-label',
       'terminal.external',
       'terminal.internal',
@@ -71,6 +74,7 @@ describe('WorkspaceItemContextMenu', () => {
       'terminal.close-all',
     ])
 
+    await clickContextMenuItem('file-area.open')
     await clickContextMenuItem('worktrees.open-in-editor-label')
     await clickContextMenuItem('terminal.external')
     await clickContextMenuItem('terminal.internal')
@@ -79,6 +83,7 @@ describe('WorkspaceItemContextMenu', () => {
     await clickContextMenuItem('action.create-worktree')
     await clickContextMenuItem('action.refresh')
 
+    expect(fileArea).toHaveBeenCalledTimes(1)
     expect(editor).toHaveBeenCalledTimes(1)
     expect(externalTerminal).toHaveBeenCalledTimes(1)
     expect(internalTerminal).toHaveBeenCalledTimes(1)
@@ -151,6 +156,7 @@ describe('WorkspaceItemContextMenu', () => {
 
 function renderMenu(
   fixture: {
+    fileArea?: () => void
     editor?: () => void
     externalTerminal?: () => void
     internalTerminal?: () => void
@@ -173,6 +179,15 @@ function renderMenu(
       <TerminalSessionContext.Provider value={terminalCommandContext(closeTerminal)}>
         <TerminalSessionReadContext.Provider value={terminalReadContext(fixture.snapshots ?? new Map())}>
           <WorkspaceItemContextMenu
+            fileArea={
+              fixture.fileArea
+                ? {
+                    disabled: false,
+                    icon: <span data-testid="file-area-icon" />,
+                    onSelect: fixture.fileArea,
+                  }
+                : undefined
+            }
             editor={{
               disabled: fixture.editorDisabled ?? false,
               icon: <span data-testid="editor-icon" />,

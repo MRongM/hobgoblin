@@ -70,10 +70,18 @@ vi.mock('#/web/components/repo-workspace/project-switcher-model.tsx', () => ({
 }))
 
 vi.mock('#/web/components/repo-workspace/SidebarProjectList.tsx', () => ({
-  SidebarProjectList: ({ id, onToggleFileArea }: { id: string; onToggleFileArea?: () => void }) => (
+  SidebarProjectList: ({
+    id,
+    onToggleFileArea,
+    onOpenFileArea,
+  }: {
+    id: string
+    onToggleFileArea?: () => void
+    onOpenFileArea?: () => void
+  }) => (
     <ul id={id}>
       <li>
-        <button type="button" data-testid="mock-project-item" onDoubleClick={onToggleFileArea}>
+        <button type="button" data-testid="mock-project-item" onClick={onOpenFileArea} onDoubleClick={onToggleFileArea}>
           project
         </button>
       </li>
@@ -194,6 +202,18 @@ describe('SidebarProjectHeader', () => {
     )
 
     expect(onFileAreaItemDoubleClick).toHaveBeenCalledTimes(1)
+  })
+
+  test('forwards project item idempotent open intents to the owning file area', () => {
+    const onOpenFileArea = vi.fn()
+    repoState.projectListExpanded = true
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" onOpenFileArea={onOpenFileArea} />)
+    })
+
+    act(() => container!.querySelector<HTMLButtonElement>('[data-testid="mock-project-item"]')?.click())
+
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
   })
 
   test('uses a folder icon when the active project is a plain workspace', () => {

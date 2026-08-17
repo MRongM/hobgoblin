@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, PanelLeftOpen, PanelRightOpen, X } from 'lucide-react'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { BranchDetail } from '#/web/components/BranchDetail.tsx'
@@ -34,6 +34,7 @@ interface BranchWorkspacePaneProps {
   fallbackNotice?: { repositoryName: string; reason: string } | null
   onDismissFallbackNotice?: () => void
   layout: RepoWorkspaceLayout
+  fileAreaOpenRequested?: boolean
   onOpenFileArea?: () => void
   onCollapseFileArea?: () => void
 }
@@ -45,6 +46,7 @@ export function BranchWorkspacePane({
   fallbackNotice = null,
   onDismissFallbackNotice,
   layout,
+  fileAreaOpenRequested = false,
   onOpenFileArea,
   onCollapseFileArea,
 }: BranchWorkspacePaneProps) {
@@ -95,7 +97,7 @@ export function BranchWorkspacePane({
     [memberTarget?.repositoryId, setExplorerTab],
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setFileAreaCollapsed(true)
   }, [workspace.id])
 
@@ -106,6 +108,15 @@ export function BranchWorkspacePane({
     compactNavigationIntent.current = null
     setMemberRevealRequest(null)
   }, [memberTarget?.repositoryId, memberTarget?.repositoryName, memberTarget?.worktreePath, workspace.id])
+
+  useLayoutEffect(() => {
+    if (!fileAreaOpenRequested) return
+    if (memberTarget) setExplorerTab(memberTarget.repositoryId, 'files')
+    else setBranchWorkspaceFileAreaTab('files')
+    compactNavigationIntent.current = 'files'
+    setCompactSurface('files')
+    setFileAreaCollapsed(false)
+  }, [fileAreaOpenRequested, memberTarget?.repositoryId, setExplorerTab])
 
   useEffect(() => {
     if (!compact && memberTarget && detailFocusMode && memberRepo?.ui.detailTab !== 'terminal') {
@@ -121,6 +132,7 @@ export function BranchWorkspacePane({
   const openCompactFileArea = () => {
     if (!memberTarget) setBranchWorkspaceFileAreaTab('files')
     showCompactSurface('files')
+    onOpenFileArea?.()
   }
 
   const openFileArea = () => {
@@ -233,6 +245,7 @@ export function BranchWorkspacePane({
           repoId={memberTarget?.repositoryId ?? rootId}
           onMaximizeTerminal={maximizeTerminalFromExplorer}
           onFileAreaItemDoubleClick={toggleFileAreaFromWorkspaceItem}
+          onOpenFileArea={openFileArea}
         />
         <FileAreaSplitPane
           orientation="vertical"
@@ -298,6 +311,7 @@ export function BranchWorkspacePane({
             onShowCompactDetail={() => showCompactSurface('detail')}
             onShowCompactFiles={() => showCompactSurface('files')}
             onFileAreaItemDoubleClick={toggleFileAreaFromWorkspaceItem}
+            onOpenFileArea={openCompactFileArea}
           />
           <WorkspaceRepositoryRail
             workspaceRootId={rootId}

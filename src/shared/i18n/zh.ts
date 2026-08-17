@@ -699,6 +699,7 @@ export const zh: Record<DictKey, string> = {
   'error.failed-open-window': '无法打开窗口',
   'file-area.collapse': '折叠文件区',
   'file-area.expand': '展开文件区',
+  'file-area.open': '打开文件区',
   'file-tree.new-file': '新建文件',
   'file-tree.new-folder': '新建文件夹',
   'file-tree.refresh': '刷新',

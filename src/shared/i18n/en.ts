@@ -746,6 +746,7 @@ export const en = {
   'error.failed-open-window': 'Unable to open the window',
   'file-area.collapse': 'Collapse file area',
   'file-area.expand': 'Expand file area',
+  'file-area.open': 'Open file area',
   'file-tree.new-file': 'New file',
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',

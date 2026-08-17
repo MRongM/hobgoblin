@@ -28,6 +28,7 @@ import {
   FolderMinus,
   FolderKanban,
   FolderPlus,
+  FolderTree,
   GitCompareArrows,
   GitFork,
   GitMerge,
@@ -90,6 +91,7 @@ export interface BranchWorkspaceListProps {
   changeCountById?: Readonly<Record<string, number>>
   onActivate: (id: string) => void
   onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
+  onOpenFileArea?: () => void
   onReorder: (orderedIds: string[]) => void | Promise<void>
   onInspect: (item: BranchWorkspaceSnapshot) => void
   onRepair: (item: BranchWorkspaceSnapshot) => void
@@ -123,6 +125,7 @@ export function BranchWorkspaceList({
   changeCountById = {},
   onActivate,
   onToggleFileArea,
+  onOpenFileArea,
   onReorder,
   onInspect,
   onRepair,
@@ -190,6 +193,7 @@ export function BranchWorkspaceList({
               changeCountById={changeCountById}
               onActivate={selectRoot}
               onToggleFileArea={onToggleFileArea}
+              onOpenFileArea={onOpenFileArea}
               onToggleExpanded={() => toggleExpanded(item.id)}
               onInspect={onInspect}
               onRepair={onRepair}
@@ -227,6 +231,7 @@ function BranchWorkspaceRow({
   changeCountById,
   onActivate,
   onToggleFileArea,
+  onOpenFileArea,
   onToggleExpanded,
   onInspect,
   onRepair,
@@ -294,6 +299,10 @@ function BranchWorkspaceRow({
   const activate = () => {
     if (!folderAvailable || busy) return
     if (!rootSelected) onActivate(item.id)
+  }
+  const openFileArea = () => {
+    activate()
+    onOpenFileArea?.()
   }
   const openInternal = async (launchMode: TerminalLaunchMode = 'native') => {
     if (onOpenInternalTerminal) return await onOpenInternalTerminal(item, launchMode)
@@ -564,6 +573,7 @@ function BranchWorkspaceRow({
             presentation={presentation}
             onSelectRepositoryMember={onSelectRepositoryMember}
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
+            onOpenFileArea={onOpenFileArea}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
             onRemoveMember={
               recoveryAction !== 'continue-reduce' &&
@@ -581,6 +591,15 @@ function BranchWorkspaceRow({
 
   return (
     <WorkspaceItemContextMenu
+      fileArea={
+        onOpenFileArea
+          ? {
+              disabled: openActionsDisabled,
+              icon: <FolderTree aria-hidden="true" />,
+              onSelect: openFileArea,
+            }
+          : undefined
+      }
       editor={{
         ...externalActions.editor,
         disabled: openActionsDisabled || externalActions.editor.disabled,

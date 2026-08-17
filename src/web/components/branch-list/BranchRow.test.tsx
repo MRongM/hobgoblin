@@ -789,6 +789,34 @@ describe('BranchRow', () => {
     expect(branchActionState.syncOnSelect).toHaveBeenCalledTimes(1)
   })
 
+  test('selects the exact worktree before opening its file area from the context menu', async () => {
+    const repo = emptyRepo('/tmp/repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
+    const onSelectBranch = vi.fn()
+    const onOpenFileArea = vi.fn()
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={onSelectBranch}
+          onOpenFileArea={onOpenFileArea}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions={false}
+        />
+      </ul>,
+    )
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onSelectBranch).toHaveBeenCalledWith('feature/a')
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onSelectBranch.mock.invocationCallOrder[0]).toBeLessThan(onOpenFileArea.mock.invocationCallOrder[0]!)
+  })
+
   test('keeps branch action dialogs mounted when only the worktree context menu is shown', () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })

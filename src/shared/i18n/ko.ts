@@ -733,6 +733,7 @@ export const ko: Record<DictKey, string> = {
   'error.failed-open-window': '창을 열 수 없습니다',
   'file-area.collapse': '파일 영역 접기',
   'file-area.expand': '파일 영역 펼치기',
+  'file-area.open': '파일 영역 열기',
   'file-tree.new-file': '새 파일',
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',

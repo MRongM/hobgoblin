@@ -151,6 +151,7 @@ export function RepoExplorerPane({
           onShowCompactDetail={onShowCompactDetail}
           onShowCompactFiles={onShowCompactFiles}
           onFileAreaItemDoubleClick={handleWorktreeDoubleClick}
+          onOpenFileArea={onOpenFileArea}
         />
         {surface === 'scope' ? (
           <div className="project-navigation-tone flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
@@ -159,6 +160,7 @@ export function RepoExplorerPane({
               showActions={showActions}
               onBranchSelected={onBranchSelected}
               onWorktreeDoubleClick={handleWorktreeDoubleClick}
+              onOpenFileArea={onOpenFileArea}
             />
           </div>
         ) : (
@@ -182,6 +184,7 @@ export function RepoExplorerPane({
         repoId={repoId}
         onMaximizeTerminal={onMaximizeTerminal}
         onFileAreaItemDoubleClick={handleWorktreeDoubleClick}
+        onOpenFileArea={onOpenFileArea}
       />
       <FileAreaSplitPane
         orientation="vertical"
@@ -202,6 +205,7 @@ export function RepoExplorerPane({
               showActions={showActions}
               onBranchSelected={onBranchSelected}
               onWorktreeDoubleClick={handleWorktreeDoubleClick}
+              onOpenFileArea={onOpenFileArea}
             />
           </div>
         }
@@ -322,11 +326,13 @@ function BranchArea({
   showActions,
   onBranchSelected,
   onWorktreeDoubleClick,
+  onOpenFileArea,
 }: {
   repoId: string
   showActions: boolean
   onBranchSelected?: () => void
   onWorktreeDoubleClick?: () => void
+  onOpenFileArea?: () => void
 }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col">
@@ -335,6 +341,7 @@ function BranchArea({
         showActions={showActions}
         onBranchSelected={onBranchSelected}
         onWorktreeDoubleClick={onWorktreeDoubleClick}
+        onOpenFileArea={onOpenFileArea}
       />
     </section>
   )

@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ExternalLink, Folder, FolderGit2, FolderSearch, GitCompareArrows, Terminal, X } from 'lucide-react'
+import { ExternalLink, Folder, FolderGit2, FolderSearch, FolderTree, GitCompareArrows, Terminal, X } from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -61,6 +61,7 @@ interface SidebarProjectListProps {
   onClose: (id: string) => void
   onReorder: (fromId: string, toId: string) => void
   onToggleFileArea?: () => void
+  onOpenFileArea?: () => void
 }
 
 export function SidebarProjectList({
@@ -71,6 +72,7 @@ export function SidebarProjectList({
   onClose,
   onReorder,
   onToggleFileArea,
+  onOpenFileArea,
 }: SidebarProjectListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -99,6 +101,7 @@ export function SidebarProjectList({
               onActivate={onActivate}
               onClose={onClose}
               onToggleFileArea={onToggleFileArea}
+              onOpenFileArea={onOpenFileArea}
             />
           ))}
         </ul>
@@ -113,12 +116,14 @@ function SortableProjectRow({
   onActivate,
   onClose,
   onToggleFileArea,
+  onOpenFileArea,
 }: {
   project: ProjectSummary
   active: boolean
   onActivate: (id: string) => void
   onClose: (id: string) => void
   onToggleFileArea?: () => void
+  onOpenFileArea?: () => void
 }) {
   const t = useT()
   const terminalReadContext = useContext(TerminalSessionReadContext)
@@ -237,10 +242,25 @@ function SortableProjectRow({
       revealTerminal: () => setDetailCollapsed(false),
     })
   }
+  const handleOpenFileArea = onOpenFileArea
+    ? () => {
+        onActivate(project.id)
+        onOpenFileArea()
+      }
+    : undefined
 
   return (
     <>
       <WorkspaceItemContextMenu
+        fileArea={
+          handleOpenFileArea
+            ? {
+                disabled: project.unavailable,
+                icon: <FolderTree aria-hidden="true" />,
+                onSelect: handleOpenFileArea,
+              }
+            : undefined
+        }
         editor={{
           ...projectExternalActions.editor,
           icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,

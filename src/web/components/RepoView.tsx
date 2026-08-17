@@ -1,7 +1,7 @@
 // Active-repo body. Split layouts render the branch area plus detail,
 // while focus mode renders detail directly under the global topbar.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { BranchDetail } from '#/web/components/BranchDetail.tsx'
@@ -57,6 +57,7 @@ export function RepoView({ repoId }: Props) {
       a.detailPaneSizes['left-right'] === b.detailPaneSizes['left-right'],
   )
   const setDetailPaneSize = useReposStore((s) => s.setDetailPaneSize)
+  const setExplorerTab = useReposStore((s) => s.setExplorerTab)
   const setDetailTab = useReposStore((s) => s.setDetailTab)
   const setDetailFocusMode = useReposStore((s) => s.setDetailFocusMode)
   const repo = useReposStore((s) => s.repos[repoId])
@@ -64,9 +65,13 @@ export function RepoView({ repoId }: Props) {
   useRepoToasts(repoId)
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>('detail')
+  const [fileAreaOpenRequest, setFileAreaOpenRequest] = useState(0)
+  const [handledFileAreaOpenRequest, setHandledFileAreaOpenRequest] = useState(0)
   const [terminalRevealRequest, setTerminalRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const toggleFileArea = useCallback(() => setFileAreaCollapsed((collapsed) => !collapsed), [])
-  const openFileArea = useCallback(() => setFileAreaCollapsed(false), [])
+  const openFileArea = useCallback(() => {
+    setFileAreaOpenRequest((request) => request + 1)
+  }, [])
   const collapseFileArea = useCallback(() => setFileAreaCollapsed(true), [])
   const maximizeDesktopTerminal = useCallback(() => {
     setDetailTab(repoId, 'terminal')
@@ -92,10 +97,18 @@ export function RepoView({ repoId }: Props) {
     },
     [repoId],
   )
-  useEffect(() => {
+  const fileAreaOpenRequested = fileAreaOpenRequest !== handledFileAreaOpenRequest
+  useLayoutEffect(() => {
     setCompactSurface('detail')
     setTerminalRevealRequest(null)
   }, [repoId])
+  useLayoutEffect(() => {
+    if (!fileAreaOpenRequested) return
+    setExplorerTab(repoId, 'files')
+    setFileAreaCollapsed(false)
+    setCompactSurface('files')
+    setHandledFileAreaOpenRequest(fileAreaOpenRequest)
+  }, [fileAreaOpenRequest, fileAreaOpenRequested, repoId, setExplorerTab])
   const detailPaneSize = view.detailPaneSizes[layout]
   const isPlainWorkspace = repoIsPlainWorkspace(repo)
   const repoUnavailable = repo?.availability.phase === 'unavailable'
@@ -136,6 +149,7 @@ export function RepoView({ repoId }: Props) {
         branchWorkspaceId={view.branchWorkspaceId}
         memberRepositoryName={view.branchWorkspaceMemberRepositoryName}
         layout={layout}
+        fileAreaOpenRequested={fileAreaOpenRequested}
         onOpenFileArea={openFileArea}
         onCollapseFileArea={collapseFileArea}
       />
@@ -281,6 +295,7 @@ function ActiveBranchWorkspaceView({
   branchWorkspaceId,
   memberRepositoryName,
   layout,
+  fileAreaOpenRequested,
   onOpenFileArea,
   onCollapseFileArea,
 }: {
@@ -288,6 +303,7 @@ function ActiveBranchWorkspaceView({
   branchWorkspaceId: string
   memberRepositoryName: string | null
   layout: RepoWorkspaceLayout
+  fileAreaOpenRequested: boolean
   onOpenFileArea: () => void
   onCollapseFileArea: () => void
 }) {
@@ -351,6 +367,7 @@ function ActiveBranchWorkspaceView({
       fallbackNotice={fallbackNotice}
       onDismissFallbackNotice={() => setFallbackNotice(null)}
       layout={layout}
+      fileAreaOpenRequested={fileAreaOpenRequested}
       onOpenFileArea={onOpenFileArea}
       onCollapseFileArea={onCollapseFileArea}
     />

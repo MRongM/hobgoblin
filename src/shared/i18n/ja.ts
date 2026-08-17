@@ -746,6 +746,7 @@ export const ja: Record<DictKey, string> = {
   'error.failed-open-window': 'ウインドウを開けませんでした',
   'file-area.collapse': 'ファイル領域を折りたたむ',
   'file-area.expand': 'ファイル領域を展開',
+  'file-area.open': 'ファイル領域を開く',
   'file-tree.new-file': '新しいファイル',
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',
