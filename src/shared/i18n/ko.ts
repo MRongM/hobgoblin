@@ -147,6 +147,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.deep-link-fallback':
     '기존 브랜치 워크스페이스 범위를 사용할 수 없어 해당 저장소에서 터미널을 열었습니다.',
   'workspace.branch-workspace.branch': '공통 브랜치 이름',
+  'workspace.branch-workspace.branch-prefix.pick': '브랜치 접두사 선택',
+  'workspace.branch-workspace.branch-prefix.none': '접두사 없음',
   'workspace.branch-workspace.repositories': '저장소 작업 트리',
   'workspace.branch-workspace.repositories-select-all': '사용 가능한 모든 저장소 선택',
   'workspace.branch-workspace.repository-named': '저장소 {name} 포함',

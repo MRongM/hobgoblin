@@ -39,7 +39,10 @@ import {
   projectBranchWorkspaceBatchMergeInProgress,
   projectBranchWorkspaceBatchMergeOutProgress,
 } from '#/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts'
-import { projectBranchWorkspaceBatchProgress } from '#/web/components/repo-workspace/branch-workspace-batch-progress.ts'
+import {
+  branchWorkspaceActiveMemberStep,
+  projectBranchWorkspaceBatchProgress,
+} from '#/web/components/repo-workspace/branch-workspace-batch-progress.ts'
 import { BranchWorkspaceBatchProgress } from '#/web/components/repo-workspace/BranchWorkspaceBatchProgress.tsx'
 import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
 import type { BranchWorkspaceBatchErrorAiFailure } from '#/web/ai-terminal-handoff.ts'
@@ -868,7 +871,7 @@ function BranchWorkspaceBatchMergeInDialog({
                 const memberResult = result?.members.find(
                   (candidate) => candidate.repositoryName === member.repositoryName,
                 )
-                const active = activeOperation?.repositoryName === member.repositoryName
+                const activeStep = branchWorkspaceActiveMemberStep(activeOperation, member.repositoryName)
                 return (
                   <div
                     key={member.repositoryName}
@@ -944,8 +947,8 @@ function BranchWorkspaceBatchMergeInDialog({
                             ? t('workspace.branch-workspace.git-action.not-selected')
                             : !source
                               ? t('workspace.branch-workspace.git-action.source-branch-required')
-                              : active && activeOperation?.step
-                                ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                              : activeStep
+                                ? t(`workspace.branch-workspace.git-action.step.${activeStep}`)
                                 : memberResult
                                   ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
                                   : !member.pullMergePushReady
@@ -1362,7 +1365,7 @@ function BatchDiscardContent({
     <div className="overflow-hidden rounded-md border border-separator">
       {plan.members.map((member, index) => {
         const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
-        const active = activeOperation?.repositoryName === member.repositoryName
+        const activeStep = branchWorkspaceActiveMemberStep(activeOperation, member.repositoryName)
         return (
           <div
             key={member.repositoryName}
@@ -1372,8 +1375,8 @@ function BatchDiscardContent({
             <span className="truncate font-medium">{member.repositoryName}</span>
             <span className="truncate font-mono text-[10px] text-muted-foreground">{member.targetBranch}</span>
             <span className="text-[10px] text-muted-foreground">
-              {active && activeOperation.step
-                ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+              {activeStep
+                ? t(`workspace.branch-workspace.git-action.step.${activeStep}`)
                 : memberResult
                   ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
                   : member.paths.length > 0
@@ -1449,7 +1452,7 @@ function BatchSetUpstreamContent({
             remoteBranchRefMatchesQuery(candidate.remoteRef, queries[member.repositoryName] ?? ''),
           )
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
-          const active = activeOperation?.repositoryName === member.repositoryName
+          const activeStep = branchWorkspaceActiveMemberStep(activeOperation, member.repositoryName)
           const unavailable = !member.ready || (member.remoteBranches.length === 0 && member.currentUpstream === null)
           return (
             <div
@@ -1545,8 +1548,8 @@ function BatchSetUpstreamContent({
                         ? t('workspace.branch-workspace.git-action.not-selected')
                         : !selectedCandidate
                           ? t('workspace.branch-workspace.git-action.remote-branch-required')
-                          : active && activeOperation?.step
-                            ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                          : activeStep
+                            ? t(`workspace.branch-workspace.git-action.step.${activeStep}`)
                             : memberResult
                               ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
                               : t('workspace.branch-workspace.git-action.ready')}
@@ -1610,7 +1613,7 @@ function SyncContent({
       <div className="overflow-hidden rounded-md border border-separator">
         {plan.members.map((member, index) => {
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
-          const active = activeOperation?.repositoryName === member.repositoryName
+          const activeStep = branchWorkspaceActiveMemberStep(activeOperation, member.repositoryName)
           const isSelected = selected.has(member.repositoryName)
           return (
             <div
@@ -1630,8 +1633,8 @@ function SyncContent({
               <span className="truncate font-medium">{member.repositoryName}</span>
               <span className="truncate font-mono text-[10px] text-muted-foreground">{member.targetBranch}</span>
               <span className={cn('text-[10px] text-muted-foreground', !member.ready && 'text-warning')}>
-                {active && activeOperation.step
-                  ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                {activeStep
+                  ? t(`workspace.branch-workspace.git-action.step.${activeStep}`)
                   : memberResult
                     ? memberResult.phase === 'not-started' && !isSelected
                       ? t('workspace.branch-workspace.git-action.not-selected')

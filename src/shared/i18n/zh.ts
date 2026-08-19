@@ -140,6 +140,8 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.member-fallback': '所选成员工作树不可用，已返回子工作区概览。',
   'workspace.branch-workspace.deep-link-fallback': '原子工作区范围已不可用，终端已改为在所属仓库中打开。',
   'workspace.branch-workspace.branch': '公共分支名称',
+  'workspace.branch-workspace.branch-prefix.pick': '选择分支前缀',
+  'workspace.branch-workspace.branch-prefix.none': '无前缀',
   'workspace.branch-workspace.repositories': '仓库工作树',
   'workspace.branch-workspace.repositories-select-all': '选择全部可用仓库',
   'workspace.branch-workspace.repository-named': '包含仓库 {name}',

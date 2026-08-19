@@ -154,6 +154,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.deep-link-fallback':
     '元のブランチワークスペースの範囲を利用できないため、リポジトリ内でターミナルを開きました。',
   'workspace.branch-workspace.branch': '共通ブランチ名',
+  'workspace.branch-workspace.branch-prefix.pick': 'ブランチプレフィックスを選択',
+  'workspace.branch-workspace.branch-prefix.none': 'プレフィックスなし',
   'workspace.branch-workspace.repositories': 'リポジトリ worktree',
   'workspace.branch-workspace.repositories-select-all': '利用可能なリポジトリをすべて選択',
   'workspace.branch-workspace.repository-named': 'リポジトリ {name} を含める',

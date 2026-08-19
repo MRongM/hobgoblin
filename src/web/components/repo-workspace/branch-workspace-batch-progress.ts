@@ -95,13 +95,29 @@ function projectStepStatus(
     return 'pending'
   }
   if (memberResult) return 'pending'
+  const activeStep = branchWorkspaceActiveMemberStep(activeOperation, repositoryName)
+  if (activeStep) {
+    const currentIndex = steps.indexOf(activeStep)
+    const stepIndex = steps.indexOf(step)
+    if (stepIndex < currentIndex) return 'complete'
+    if (stepIndex === currentIndex) return 'active'
+    return 'pending'
+  }
+  if (activeOperation?.completedRepositoryNames?.includes(repositoryName)) return 'complete'
+  if (activeOperation?.completedRepositoryNames) return 'pending'
   if (selectedIndex < completedCount) return 'complete'
-  if (activeOperation?.repositoryName !== repositoryName || !activeOperation.step) return 'pending'
-  const currentIndex = steps.indexOf(activeOperation.step)
-  const stepIndex = steps.indexOf(step)
-  if (stepIndex < currentIndex) return 'complete'
-  if (stepIndex === currentIndex) return 'active'
   return 'pending'
+}
+
+export function branchWorkspaceActiveMemberStep(
+  activeOperation: BranchWorkspaceActiveOperation | null,
+  repositoryName: string,
+): BranchWorkspaceGitActionStep | undefined {
+  if (!activeOperation) return undefined
+  if (activeOperation.activeMembers) {
+    return activeOperation.activeMembers.find((member) => member.repositoryName === repositoryName)?.step
+  }
+  return activeOperation.repositoryName === repositoryName ? activeOperation.step : undefined
 }
 
 function memberStatus(steps: readonly BranchWorkspaceBatchStepProgress[]): BranchWorkspaceBatchMemberStatus {

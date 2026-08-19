@@ -154,6 +154,8 @@ export const en = {
   'workspace.branch-workspace.deep-link-fallback':
     'The original branch workspace scope is unavailable. The terminal was opened in its repository instead.',
   'workspace.branch-workspace.branch': 'Common branch name',
+  'workspace.branch-workspace.branch-prefix.pick': 'Pick branch prefix',
+  'workspace.branch-workspace.branch-prefix.none': 'No prefix',
   'workspace.branch-workspace.repositories': 'Repository worktrees',
   'workspace.branch-workspace.repositories-select-all': 'Select all available repositories',
   'workspace.branch-workspace.repository-named': 'Include repository {name}',

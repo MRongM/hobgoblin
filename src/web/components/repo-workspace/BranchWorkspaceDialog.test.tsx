@@ -68,6 +68,19 @@ describe('BranchWorkspaceDialog', () => {
     expect(inputValue('workspace.branch-workspace.branch')).toBe('feat/20260730')
   })
 
+  test('applies and removes a branch prefix through the prefix picker', () => {
+    renderDialog({})
+    setInput('workspace.branch-workspace.branch', 'topic')
+
+    openMenu('workspace.branch-workspace.branch-prefix.pick')
+    clickMenuItem('bugfix/')
+    expect(inputValue('workspace.branch-workspace.branch')).toBe('bugfix/topic')
+
+    openMenu('workspace.branch-workspace.branch-prefix.pick')
+    clickMenuItem('workspace.branch-workspace.branch-prefix.none')
+    expect(inputValue('workspace.branch-workspace.branch')).toBe('topic')
+  })
+
   test('shows live create progress and the completed step count after confirmation', () => {
     const workspace = existingWorkspace()
     const liveWorkspace: BranchWorkspaceSnapshot = {
@@ -353,7 +366,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(web.checked).toBe(false)
   })
 
-  test('loads grouped remote creation bases and submits the selected exact remote', async () => {
+  test('loads local and remote creation bases and submits the selected exact remote', async () => {
     mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'upstream/release'])
     const onPreview = vi.fn(async () => true)
     renderDialog({
@@ -371,17 +384,15 @@ describe('BranchWorkspaceDialog', () => {
     })
     setInput('workspace.branch-workspace.branch', 'feature/new')
     act(() => repositoryCheckbox('api').click())
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector('[aria-label="workspace.branch-workspace.base-named"] optgroup:nth-of-type(2)'),
-      ).not.toBeNull(),
-    )
 
-    const base = document.querySelector<HTMLSelectElement>('[aria-label="workspace.branch-workspace.base-named"]')
-    expect(Array.from(base?.querySelectorAll('optgroup') ?? []).map((group) => group.label)).toEqual([
-      'workspace.branch-workspace.creation-base-local',
-      'workspace.branch-workspace.creation-base-remote',
-    ])
+    await vi.waitFor(() => expect(mocks.getRepositoryRemoteBranches).toHaveBeenCalledTimes(1))
+    openSelect('workspace.branch-workspace.base-named')
+    const itemTexts = selectOptionTexts()
+    expect(itemTexts).toContain('main') // local branch
+    expect(itemTexts).toContain('origin/main') // remote branch
+    expect(itemTexts).toContain('upstream/release') // remote branch
+    closeSelect()
+
     const sync = document.querySelector<HTMLInputElement>(
       '[aria-label="workspace.branch-workspace.sync-before-create-named"]',
     )
@@ -404,6 +415,22 @@ describe('BranchWorkspaceDialog', () => {
     })
   })
 
+  test('filters local and remote creation bases and clears the query when closed', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'upstream/release'])
+    renderDialog({})
+    act(() => repositoryCheckbox('api').click())
+    await vi.waitFor(() => expect(mocks.getRepositoryRemoteBranches).toHaveBeenCalledTimes(1))
+
+    openSelect('workspace.branch-workspace.base-named')
+    setInput('branches.search-label', 'release')
+    expect(selectOptionTexts()).toEqual(['upstream/release'])
+
+    closeSelect()
+    openSelect('workspace.branch-workspace.base-named')
+    expect(inputValue('branches.search-label')).toBe('')
+    expect(selectOptionTexts()).toEqual(expect.arrayContaining(['main', 'develop', 'origin/main', 'upstream/release']))
+  })
+
   test('keeps local creation bases usable and retries a failed remote-branch read', async () => {
     mocks.getRepositoryRemoteBranches.mockRejectedValueOnce(new Error('offline'))
     renderDialog({
@@ -421,13 +448,10 @@ describe('BranchWorkspaceDialog', () => {
 
     mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main'])
     clickSelector('[role="alert"] button')
-    await vi.waitFor(() =>
-      expect(
-        document.querySelector(
-          '[aria-label="workspace.branch-workspace.base-named"] option[value="remote:origin/main"]',
-        ),
-      ).not.toBeNull(),
-    )
+
+    await vi.waitFor(() => expect(mocks.getRepositoryRemoteBranches).toHaveBeenCalledTimes(2))
+    openSelect('workspace.branch-workspace.base-named')
+    expect(selectOptionTexts()).toContain('origin/main')
   })
 
   test('keeps synchronization off and disabled without a usable upstream', () => {
@@ -466,11 +490,11 @@ describe('BranchWorkspaceDialog', () => {
     act(() => repositoryCheckbox('api').click())
     await flushAsyncWork()
 
-    const base = document.querySelector<HTMLSelectElement>('[aria-label="workspace.branch-workspace.base-named"]')
+    const base = document.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.base-named"]')
     const sync = document.querySelector<HTMLInputElement>(
       '[aria-label="workspace.branch-workspace.sync-before-create-named"]',
     )
-    expect(base?.value).toBe('feature/auth')
+    expect(base?.textContent).toContain('feature/auth')
     expect(base?.disabled).toBe(true)
     expect(sync?.checked).toBe(true)
     expect(document.body.textContent).toContain('workspace.branch-workspace.existing-target-used')
@@ -503,7 +527,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
     const repositoryRow = dependencySwitch?.closest('[data-branch-workspace-repository-row="api"]')
     expect(repositoryRow?.children[1]?.contains(dependencySwitch ?? null)).toBe(true)
-    expect(repositoryRow?.children[2]?.matches('select')).toBe(true)
+    expect(repositoryRow?.children[2]?.matches('[data-slot="select-trigger"]')).toBe(true)
 
     act(() => dependencySwitch?.click())
     await flushAsyncWork()
@@ -518,44 +542,41 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('selects a nested dependency from the source worktree tree and submits its exact source', async () => {
-    mocks.getRepositoryFileTree.mockImplementation(
-      async (_repoId: string, worktreePath: string, dirPath: string) =>
-        dirPath === worktreePath
-          ? {
-              ok: true,
-              worktreePath,
-              dirPath,
-              entries: [
-                {
-                  name: 'backend',
-                  absolutePath: `${worktreePath}/backend`,
-                  relativePath: 'backend',
-                  kind: 'directory',
-                },
-              ],
-            }
-          : {
-              ok: true,
-              worktreePath,
-              dirPath,
-              entries: [
-                {
-                  name: '.venv',
-                  absolutePath: `${worktreePath}/backend/.venv`,
-                  relativePath: 'backend/.venv',
-                  kind: 'directory',
-                },
-              ],
-            },
+    mocks.getRepositoryFileTree.mockImplementation(async (_repoId: string, worktreePath: string, dirPath: string) =>
+      dirPath === worktreePath
+        ? {
+            ok: true,
+            worktreePath,
+            dirPath,
+            entries: [
+              {
+                name: 'backend',
+                absolutePath: `${worktreePath}/backend`,
+                relativePath: 'backend',
+                kind: 'directory',
+              },
+            ],
+          }
+        : {
+            ok: true,
+            worktreePath,
+            dirPath,
+            entries: [
+              {
+                name: '.venv',
+                absolutePath: `${worktreePath}/backend/.venv`,
+                relativePath: 'backend/.venv',
+                kind: 'directory',
+              },
+            ],
+          },
     )
     const onPreview = vi.fn(async () => true)
     renderDialog({ onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
-    await vi.waitFor(() =>
-      expect(document.querySelector('[data-worktree-dependency-expand="backend"]')).not.toBeNull(),
-    )
+    await vi.waitFor(() => expect(document.querySelector('[data-worktree-dependency-expand="backend"]')).not.toBeNull())
 
     clickSelector('[data-worktree-dependency-expand="backend"]')
     await vi.waitFor(() =>
@@ -630,9 +651,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('aborts an in-flight repository dependency read when disabled', async () => {
-    let finishRead:
-      | ((result: { ok: true; worktreePath: string; dirPath: string; entries: [] }) => void)
-      | undefined
+    let finishRead: ((result: { ok: true; worktreePath: string; dirPath: string; entries: [] }) => void) | undefined
     mocks.getRepositoryFileTree.mockReturnValueOnce(
       new Promise((resolve) => {
         finishRead = resolve
@@ -785,24 +804,22 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('offers every existing worktree and clears selections when the source changes', async () => {
-    mocks.getRepositoryFileTree.mockImplementation(
-      async (_repoId: string, worktreePath: string, dirPath: string) => {
-        const name = worktreePath === '/workspace/api-main' ? '.env' : 'node_modules'
-        return {
-          ok: true,
-          worktreePath,
-          dirPath,
-          entries: [
-            {
-              name,
-              absolutePath: `${worktreePath}/${name}`,
-              relativePath: name,
-              kind: name === 'node_modules' ? 'directory' : 'file',
-            },
-          ],
-        }
-      },
-    )
+    mocks.getRepositoryFileTree.mockImplementation(async (_repoId: string, worktreePath: string, dirPath: string) => {
+      const name = worktreePath === '/workspace/api-main' ? '.env' : 'node_modules'
+      return {
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          {
+            name,
+            absolutePath: `${worktreePath}/${name}`,
+            relativePath: name,
+            kind: name === 'node_modules' ? 'directory' : 'file',
+          },
+        ],
+      }
+    })
     renderDialog({ repositories: [repositoryWithDependencySources()] })
     act(() => repositoryCheckbox('api').click())
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
@@ -820,33 +837,29 @@ describe('BranchWorkspaceDialog', () => {
     ])
     clickSelector('[data-worktree-dependency-path="node_modules"]')
     changeSelect('worktree-bootstrap.source-select', 'worktree:/workspace/api-main')
-    await vi.waitFor(() =>
-      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull(),
-    )
+    await vi.waitFor(() => expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull())
 
     expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).toBeNull()
     expect(document.querySelector<HTMLInputElement>('[data-worktree-dependency-path=".env"]')?.checked).toBe(false)
   })
 
   test('loads a non-base dependency source, clears old choices, and submits its exact path', async () => {
-    mocks.getRepositoryFileTree.mockImplementation(
-      async (_repoId: string, worktreePath: string, dirPath: string) => {
-        const name = worktreePath === '/workspace/api-feature' ? '.env' : 'node_modules'
-        return {
-          ok: true,
-          worktreePath,
-          dirPath,
-          entries: [
-            {
-              name,
-              absolutePath: `${worktreePath}/${name}`,
-              relativePath: name,
-              kind: name === 'node_modules' ? 'directory' : 'file',
-            },
-          ],
-        }
-      },
-    )
+    mocks.getRepositoryFileTree.mockImplementation(async (_repoId: string, worktreePath: string, dirPath: string) => {
+      const name = worktreePath === '/workspace/api-feature' ? '.env' : 'node_modules'
+      return {
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          {
+            name,
+            absolutePath: `${worktreePath}/${name}`,
+            relativePath: name,
+            kind: name === 'node_modules' ? 'directory' : 'file',
+          },
+        ],
+      }
+    })
     const onPreview = vi.fn(async () => true)
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
     setInput('workspace.branch-workspace.branch', 'feature/auth')
@@ -863,9 +876,7 @@ describe('BranchWorkspaceDialog', () => {
     )
 
     changeSelect('worktree-bootstrap.source-select', 'worktree:/workspace/api-feature')
-    await vi.waitFor(() =>
-      expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull(),
-    )
+    await vi.waitFor(() => expect(document.querySelector('[data-worktree-dependency-path=".env"]')).not.toBeNull())
 
     expect(mocks.getRepositoryFileTree).toHaveBeenLastCalledWith(
       '/workspace/api',
@@ -1536,12 +1547,34 @@ function clickSelector(selector: string) {
   act(() => element.click())
 }
 
+function clickMenuItem(text: string) {
+  const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+    (candidate) => candidate.textContent?.trim() === text,
+  )
+  if (!item) throw new Error(`Missing menu item: ${text}`)
+  act(() => item.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+}
+
+function openMenu(label: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)
+  if (!trigger) throw new Error(`Missing menu trigger: ${label}`)
+  act(() => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+}
+
 function changeSelect(label: string, value: string) {
-  const select = document.querySelector<HTMLSelectElement>(`[aria-label="${label}"]`)!
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(select, value)
-    select.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+  const element = document.querySelector<HTMLElement>(`[aria-label="${label}"]`)
+  if (!element) throw new Error(`Missing select: ${label}`)
+
+  if (element instanceof HTMLSelectElement) {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set?.call(element, value)
+      element.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    return
+  }
+
+  openSelect(label)
+  clickSelectOption(value.startsWith('remote:') ? value.slice('remote:'.length) : value)
 }
 
 async function clickAction(action: string) {
@@ -1561,7 +1594,38 @@ function checked(label: string): boolean {
 }
 
 function selectValue(label: string): string {
-  return document.querySelector<HTMLSelectElement>(`[aria-label="${label}"]`)?.value ?? ''
+  const element = document.querySelector<HTMLElement>(`[aria-label="${label}"]`)
+  if (!element) return ''
+  return element instanceof HTMLSelectElement ? element.value : (element.textContent?.trim() ?? '')
+}
+
+function openSelect(label: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)
+  if (!trigger) throw new Error(`Missing select trigger: ${label}`)
+  if (!Element.prototype.scrollIntoView) {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() })
+  }
+  act(() => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+}
+
+function closeSelect() {
+  const content = document.querySelector<HTMLElement>('[data-slot="select-content"]')
+  if (!content) throw new Error('Missing open select content')
+  act(() => content.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+}
+
+function clickSelectOption(text: string) {
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    (candidate) => candidate.textContent?.trim() === text,
+  )
+  if (!option) throw new Error(`Missing select option: ${text}. Available: ${selectOptionTexts().join(', ')}`)
+  act(() => option.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+}
+
+function selectOptionTexts(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).map(
+    (option) => option.textContent?.trim() ?? '',
+  )
 }
 
 function choiceState(item: string, choice: string): string | null | undefined {

@@ -1021,10 +1021,10 @@ describe('BranchWorkspaceGitActionPanel', () => {
         kind: 'batch-merge-out',
         currentStep: 2,
         completedCount: 1,
+        completedRepositoryNames: ['web'],
         totalCount: 2,
         cancellable: true,
-        repositoryName: 'web',
-        step: 'merge',
+        activeMembers: [{ repositoryName: 'api', step: 'merge' }],
       },
     })
 
@@ -1033,8 +1033,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(progress?.dataset.total).toBe('2')
     expect(mergeSelectAllCheckbox()?.disabled).toBe(true)
     expect(mergeCheckbox('api')?.disabled).toBe(true)
-    expect(document.querySelector<HTMLElement>('[data-merge-step="api:merge"]')?.dataset.status).toBe('complete')
-    expect(document.querySelector<HTMLElement>('[data-merge-step="web:merge"]')?.dataset.status).toBe('active')
+    expect(document.querySelector<HTMLElement>('[data-merge-step="api:merge"]')?.dataset.status).toBe('active')
+    expect(document.querySelector<HTMLElement>('[data-merge-step="web:merge"]')?.dataset.status).toBe('complete')
 
     finish?.({
       ok: true,

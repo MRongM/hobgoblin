@@ -458,7 +458,7 @@ An explicit recovery action for an unreadable branch workspace registry. It remo
 _Avoid_: Delete branch workspace, worktree cleanup, repository cleanup
 
 **Branch workspace batch commit**:
-An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it attempts exactly one commit per dirty member sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed commits are never rolled back.
+An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it attempts exactly one commit per dirty member with bounded cross-repository concurrency. A repository-member failure is recorded without blocking other members, all failures are returned together in manifest order, and completed commits are never rolled back.
 _Avoid_: AI commit handoff, shared commit message, automatic commit
 
 **Branch workspace batch discard**:
@@ -470,7 +470,7 @@ An explicit, per-open opt-in mode of branch workspace batch commit that hides ma
 _Avoid_: Atomic workspace transaction, shared commit message, persisted automatic commit
 
 **Branch workspace batch pull**:
-An application-coordinated action that fast-forward pulls every repository member's target branch from its configured upstream sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed pulls are never rolled back.
+An application-coordinated action that fast-forward pulls selected repository members' target branches from their configured upstreams with bounded cross-repository concurrency. A repository-member failure is recorded without blocking other members, all failures are returned together in manifest order, and completed pulls are never rolled back.
 _Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
 
 **Branch workspace batch push**:
@@ -478,11 +478,11 @@ An application-coordinated action that pushes every repository member's target b
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
 **Branch workspace batch merge-in**:
-An application-coordinated action that integrates one explicitly selected local branch or remote-tracking branch ref per selected repository member into that member's checked-out target branch. A remote source is fetched before merge; the clean member worktree remains the merge destination and conflict site. Selected member pipelines retain manifest order, isolate a failed member while later members continue, return all member failures together, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates one explicitly selected local branch or remote-tracking branch ref per selected repository member into that member's checked-out target branch. A remote source is fetched before merge; the clean member worktree remains the merge destination and conflict site. Different repository-member pipelines run with bounded concurrency while each member's Git steps remain sequential; results retain manifest order, isolate and aggregate failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-out, source worktree merge, atomic batch merge
 
 **Branch workspace batch merge-out**:
-An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local branch or remote-tracking branch ref per member. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Selected member pipelines retain manifest order, isolate and aggregate member failures, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local branch or remote-tracking branch ref per member. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Different repository-member pipelines run with bounded concurrency while each member's preparation, Git, and cleanup steps remain sequential; results retain manifest order, isolate and aggregate failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
 **Branch workspace batch upstream change**:

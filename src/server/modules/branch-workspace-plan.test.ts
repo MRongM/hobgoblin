@@ -429,12 +429,10 @@ describe('branch workspace create planner', () => {
 
   test('recognizes an existing member worktree across Windows and WSL path spellings', async () => {
     const rootId = process.platform === 'win32' ? 'C:\\Workspace' : '/mnt/c/Workspace'
-    const workspacePath = path.join(rootId, 'hobgoblin-feature-auth')
+    const workspacePath = path.join(rootId, 'hob-feature-auth')
     const expectedPath = path.join(workspacePath, 'api')
     const gitPath =
-      process.platform === 'win32'
-        ? '/mnt/c/Workspace/hobgoblin-feature-auth/api'
-        : 'C:\\Workspace\\hobgoblin-feature-auth\\api'
+      process.platform === 'win32' ? '/mnt/c/Workspace/hob-feature-auth/api' : 'C:\\Workspace\\hob-feature-auth\\api'
     const repoId = path.join(rootId, 'api')
     const deps = dependencies({ [repoId]: snapshot(branch('main'), branch(BRANCH, gitPath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
