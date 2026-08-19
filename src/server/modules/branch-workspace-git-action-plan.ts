@@ -484,8 +484,10 @@ async function buildBatchSetUpstreamPlan(
         continue
       }
       const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
-      const remoteBranches = [...facts.remoteBranches].sort((left, right) => left.remoteRef.localeCompare(right.remoteRef))
-      const ready = remoteBranches.length > 0
+      const remoteBranches = [...facts.remoteBranches].sort((left, right) =>
+        left.remoteRef.localeCompare(right.remoteRef),
+      )
+      const ready = remoteBranches.length > 0 || branch.tracking != null
       const message = ready ? undefined : 'workspace.branch-workspace.git-action.remote-branch-required'
       members.push({
         repositoryName: member.repositoryName,

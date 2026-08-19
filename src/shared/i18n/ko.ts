@@ -277,11 +277,13 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-set-upstream': '업스트림 일괄 변경',
   'workspace.branch-workspace.git-action.batch-set-upstream-description':
     '선택한 각 구성원 워크트리의 원격 브랜치를 선택한 뒤 대상 브랜치 업스트림을 저장소 순서대로 업데이트합니다.',
+  'workspace.branch-workspace.git-action.remove-upstream': '업스트림 제거',
+  'workspace.branch-workspace.git-action.remove-upstream-selected': '업스트림 제거로 표시됨',
   'workspace.branch-workspace.git-action.select-all-members': '사용 가능한 모든 멤버 선택',
   'workspace.branch-workspace.git-action.selected-count': '멤버 {selected}/{total}개 선택됨',
   'workspace.branch-workspace.git-action.select-member': '{repository} 구성원을 이 일괄 작업에 포함',
   'workspace.branch-workspace.git-action.not-selected': '선택 안 함',
-  'workspace.branch-workspace.git-action.progress': '일괄 병합 진행률',
+  'workspace.branch-workspace.git-action.progress': '일괄 작업 진행률',
   'workspace.branch-workspace.git-action.source-branch': '{repository}의 소스 브랜치',
   'workspace.branch-workspace.git-action.select-source': '소스 선택',
   'workspace.branch-workspace.git-action.source-branch-required': '소스 브랜치를 선택하세요.',
@@ -350,8 +352,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     '이 작업에는 선택한 각 대상 브랜치의 사용 가능한 업스트림이 필요합니다.',
   'workspace.branch-workspace.git-action.remote-required': '일괄 푸시에는 각 저장소의 원격이 필요합니다.',
-  'workspace.branch-workspace.git-action.remote-branches-unavailable':
-    '이 저장소의 원격 브랜치를 읽을 수 없습니다.',
+  'workspace.branch-workspace.git-action.remote-branches-unavailable': '이 저장소의 원격 브랜치를 읽을 수 없습니다.',
   'workspace.branch-workspace.git-action.remote-branch-required': '원격 브랜치를 선택하세요.',
   'workspace.branch-workspace.git-action.remote-destination-requires-push':
     '원격 대상에는 가져오기, 병합 및 푸시가 필요합니다.',
@@ -959,7 +960,8 @@ export const ko: Record<DictKey, string> = {
   'action.merge-in-and-push-confirm': '가져오기, 병합 및 푸시',
   'action.merge-in-remote-loading': '원격 소스 브랜치를 불러오는 중…',
   'action.merge-in-remote-empty': '사용 가능한 원격 소스 브랜치가 없습니다.',
-  'action.merge-in-remote-load-failed': '원격 소스 브랜치를 불러오지 못했습니다. 로컬 브랜치는 계속 선택할 수 있습니다.',
+  'action.merge-in-remote-load-failed':
+    '원격 소스 브랜치를 불러오지 못했습니다. 로컬 브랜치는 계속 선택할 수 있습니다.',
   'action.merge-in-remote-fetch-note': '병합 전에 이 원격 브랜치의 최신 상태를 가져옵니다.',
   'action.merge-in-remote-confirm': '원격 가져오기 및 병합',
   'action.merge-in-remote-and-push-confirm': '대상 가져오기, 원격 가져오기, 병합 및 푸시',
@@ -1503,7 +1505,8 @@ export const ko: Record<DictKey, string> = {
     'macOS에서는 터미널이나 스크립트에서 로컬 리포지토리 경로를 Hobgoblin으로 바로 열 수 있습니다.',
   'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
   'settings.general.open-app-config-title': '애플리케이션 구성 열기',
-  'settings.general.open-app-config-body': '선택한 편집기에서 애플리케이션 설정과 워크스페이스 구성이 있는 디렉터리를 엽니다.',
+  'settings.general.open-app-config-body':
+    '선택한 편집기에서 애플리케이션 설정과 워크스페이스 구성이 있는 디렉터리를 엽니다.',
   'settings.general.open-app-config-action': '구성 디렉터리 열기',
   'settings.general.open-app-config-failed': '애플리케이션 구성을 열 수 없습니다',
   'settings.fetch.off': '끄기',

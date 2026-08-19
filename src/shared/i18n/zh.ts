@@ -264,11 +264,13 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-set-upstream': '批量更换上游',
   'workspace.branch-workspace.git-action.batch-set-upstream-description':
     '为每个选中的成员工作树选择远程分支，再按仓库顺序更新其目标分支的上游。',
+  'workspace.branch-workspace.git-action.remove-upstream': '移除上游',
+  'workspace.branch-workspace.git-action.remove-upstream-selected': '已标记为移除上游',
   'workspace.branch-workspace.git-action.select-all-members': '选择全部可用成员',
   'workspace.branch-workspace.git-action.selected-count': '已选择 {selected}/{total} 个成员',
   'workspace.branch-workspace.git-action.select-member': '选择成员工作树 {repository}',
   'workspace.branch-workspace.git-action.not-selected': '未选择',
-  'workspace.branch-workspace.git-action.progress': '批量合并进度',
+  'workspace.branch-workspace.git-action.progress': '批量操作进度',
   'workspace.branch-workspace.git-action.source-branch': '{repository} 的来源分支',
   'workspace.branch-workspace.git-action.select-source': '选择来源分支',
   'workspace.branch-workspace.git-action.source-branch-required': '请选择来源分支。',
@@ -335,8 +337,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.remote-required': '批量推送要求每个成员工作树所属仓库都有可用远端。',
   'workspace.branch-workspace.git-action.remote-branches-unavailable': '无法读取此仓库的远程分支。',
   'workspace.branch-workspace.git-action.remote-branch-required': '请选择远程分支。',
-  'workspace.branch-workspace.git-action.remote-destination-requires-push':
-    '远程目标必须使用获取、合并并推送模式。',
+  'workspace.branch-workspace.git-action.remote-destination-requires-push': '远程目标必须使用获取、合并并推送模式。',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable': '无法使用目标分支工作树。',
   'workspace.branch-workspace.git-action.destination-worktree-dirty': '合并前必须先提交或清理目标分支工作树。',
   'workspace.branch-workspace.git-action.destination-upstream-required':

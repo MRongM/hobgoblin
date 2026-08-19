@@ -126,7 +126,6 @@ describe('BranchWorkspaceList', () => {
             onReduce={onReduce}
             onAddDependencies={onAddDependencies}
             onRemoveDependencies={onRemoveDependencies}
-            gitActionPanel={{ itemId: item.id, content: <div data-testid="mock-branch-git-panel" /> }}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
@@ -243,7 +242,6 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="mock-branch-git-panel"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="workspace.branch-workspace.open-editor"]')).toBeNull()
     act(() => toggle?.click())
     const memberRow = container.querySelector('[data-testid="branch-workspace-member-api"]')
@@ -326,41 +324,6 @@ describe('BranchWorkspaceList', () => {
 
     expect(onActivate).toHaveBeenCalledWith(item.id)
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
-  })
-
-  test('renders an inline Git action panel only below its target item', () => {
-    const first = { ...workspace('ready'), repositories: [repositoryMember()] }
-    const second = {
-      ...workspace('ready'),
-      id: 'branch-2',
-      branch: 'feature/payments',
-      path: '/workspace/goblin-feature-payments',
-    }
-    act(() =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[first, second]}
-            activeId={first.id}
-            gitActionPanel={{ itemId: second.id, content: <div data-testid="mock-branch-git-panel" /> }}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={() => {}}
-            onCancel={() => {}}
-          />,
-        ),
-      ),
-    )
-
-    expect(
-      container.querySelector('[data-branch-workspace-id="branch-1"] [data-testid="mock-branch-git-panel"]'),
-    ).toBeNull()
-    expect(
-      container.querySelector('[data-branch-workspace-id="branch-2"] [data-testid="mock-branch-git-panel"]'),
-    ).not.toBeNull()
   })
 
   test('expands an inactive workspace without selecting it', () => {

@@ -189,12 +189,14 @@ describe('useBranchWorkspaceGitActions', () => {
     )
 
     await act(async () => state!.requestPlan('batch-set-upstream', 'ws-1'))
-    await act(async () => state!.executeBatchSetUpstream([{ repositoryName: 'api', remoteRef: 'origin/release' }]))
+    await act(async () =>
+      state!.executeBatchSetUpstream([{ repositoryName: 'api', action: 'set', remoteRef: 'origin/release' }]),
+    )
 
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       kind: 'batch-set-upstream',
       planToken: 'sha256:upstream',
-      upstreams: [{ repositoryName: 'api', remoteRef: 'origin/release' }],
+      upstreams: [{ repositoryName: 'api', action: 'set', remoteRef: 'origin/release' }],
     })
   })
 

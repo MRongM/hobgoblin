@@ -1381,7 +1381,7 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceListState.props?.onOpenFileArea).toBe(onOpenFileArea)
   })
 
-  test('plans a Git action for the clicked branch workspace and mounts its panel below that item', async () => {
+  test('plans a Git action for the clicked branch workspace and renders its dialog at the rail level', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[1]!
 
@@ -1392,7 +1392,6 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(branchGitActionState.reset).toHaveBeenCalledTimes(1)
     expect(branchGitActionState.requestPlan).toHaveBeenCalledWith('push', item.id)
-    expect(branchWorkspaceListState.props?.gitActionPanel?.itemId).toBe(item.id)
     expect(container?.querySelector('[data-testid="mock-branch-git-action-panel"]')?.getAttribute('data-kind')).toBe(
       'push',
     )
@@ -1448,9 +1447,9 @@ describe('WorkspaceRepositoryRail', () => {
     })
     const command = vi.mocked(terminalCommandBridge.writeInput).mock.calls[0]![1]
     expect(command).toContain('batch-merge-in')
-    expect(command).toContain('/workspace/goblin-feature-auth/api')
-    expect(command).toContain('/workspace/goblin-feature-auth/web')
-    expect(command).toContain('remote rejected')
+    expect(command).not.toContain('/workspace/goblin-feature-auth/api')
+    expect(command).not.toContain('/workspace/goblin-feature-auth/web')
+    expect(command).not.toContain('remote rejected')
     expect(command).not.toMatch(/[\r\n]$/)
   })
 

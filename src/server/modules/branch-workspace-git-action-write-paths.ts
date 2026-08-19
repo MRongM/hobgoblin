@@ -77,9 +77,8 @@ type BranchWorkspaceBatchMergeOutExecutionMember = BranchWorkspaceBatchMergeOutM
   destination: BranchWorkspaceBatchMergeOutDestinationPlan
 }
 
-type BranchWorkspaceBatchSetUpstreamExecutionMember = BranchWorkspaceBatchSetUpstreamMemberPlan & {
-  remoteRef: string
-}
+type BranchWorkspaceBatchSetUpstreamExecutionMember = BranchWorkspaceBatchSetUpstreamMemberPlan &
+  BranchWorkspaceBatchSetUpstreamInput
 
 interface ActiveAction {
   branchWorkspaceId: string
@@ -247,13 +246,15 @@ export function createBranchWorkspaceGitActionWriteService(
         state.mergeExecution ??= { kind: input.kind, mode: input.mode, targets }
       }
       if (input.kind === 'batch-set-upstream' && upstreamMembers) {
-        const upstreams = upstreamMembers.map((member) => ({
-          repositoryName: member.repositoryName,
-          remoteRef: member.remoteRef,
-        }))
+        const upstreams = upstreamMembers.map<BranchWorkspaceBatchSetUpstreamInput>((member) =>
+          member.action === 'set'
+            ? { repositoryName: member.repositoryName, action: 'set', remoteRef: member.remoteRef }
+            : { repositoryName: member.repositoryName, action: 'unset' },
+        )
         if (
           state.upstreamExecution &&
-          (state.upstreamExecution.kind !== input.kind || !sameBatchSetUpstreams(state.upstreamExecution.upstreams, upstreams))
+          (state.upstreamExecution.kind !== input.kind ||
+            !sameBatchSetUpstreams(state.upstreamExecution.upstreams, upstreams))
         ) {
           return { ok: false, message: 'error.invalid-arguments' }
         }
@@ -451,10 +452,13 @@ function sameBatchSetUpstreams(
 ): boolean {
   return (
     left.length === right.length &&
-    left.every(
-      (upstream, index) =>
-        upstream.repositoryName === right[index]?.repositoryName && upstream.remoteRef === right[index]?.remoteRef,
-    )
+    left.every((upstream, index) => {
+      const candidate = right[index]
+      if (!candidate || upstream.repositoryName !== candidate.repositoryName || upstream.action !== candidate.action) {
+        return false
+      }
+      return upstream.action === 'unset' || (candidate.action === 'set' && upstream.remoteRef === candidate.remoteRef)
+    })
   )
 }
 
@@ -516,20 +520,21 @@ function selectedBatchMergeOutMembers(
 function selectedBatchSetUpstreamMembers(
   plan: BranchWorkspaceGitActionPlan,
   upstreams: BranchWorkspaceBatchSetUpstreamInput[],
-):
-  | { ok: true; members: BranchWorkspaceBatchSetUpstreamExecutionMember[] }
-  | { ok: false; message: string } {
+): { ok: true; members: BranchWorkspaceBatchSetUpstreamExecutionMember[] } | { ok: false; message: string } {
   if (plan.kind !== 'batch-set-upstream') return { ok: false, message: 'error.invalid-arguments' }
-  const selected = new Map(upstreams.map((upstream) => [upstream.repositoryName, upstream.remoteRef]))
+  const selected = new Map(upstreams.map((upstream) => [upstream.repositoryName, upstream]))
   const members: BranchWorkspaceBatchSetUpstreamExecutionMember[] = []
   for (const member of plan.members) {
-    const remoteRef = selected.get(member.repositoryName)
-    if (!remoteRef) continue
+    const upstream = selected.get(member.repositoryName)
+    if (!upstream) continue
     if (!member.ready) return { ok: false, message: member.message ?? 'error.invalid-arguments' }
-    if (!member.remoteBranches.some((candidate) => candidate.remoteRef === remoteRef)) {
+    if (
+      upstream.action === 'set' &&
+      !member.remoteBranches.some((candidate) => candidate.remoteRef === upstream.remoteRef)
+    ) {
       return { ok: false, message: 'error.invalid-arguments' }
     }
-    members.push({ ...member, remoteRef })
+    members.push({ ...member, ...upstream })
   }
   return members.length === selected.size && members.length > 0
     ? { ok: true, members }
@@ -1249,7 +1254,7 @@ async function executeBatchSetUpstream(
       setUpstream(
         member.repoId,
         member.targetBranch,
-        member.remoteRef,
+        member.action === 'set' ? member.remoteRef : null,
         signal,
         undefined,
         DEFER_REPOSITORY_INVALIDATION,
@@ -1260,7 +1265,9 @@ async function executeBatchSetUpstream(
       return executionResult(
         state.plan,
         state.completed,
-        new Map([[member.repositoryName, memberFailure(member.repositoryName, 'upstream', result, member.targetWorktreePath)]]),
+        new Map([
+          [member.repositoryName, memberFailure(member.repositoryName, 'upstream', result, member.targetWorktreePath)],
+        ]),
         skippedRepositoryNames,
       )
     }

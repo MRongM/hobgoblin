@@ -17,9 +17,7 @@ vi.mock('#/web/repo-client.ts', () => ({
 }))
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, values?: { repository?: string }) =>
-    key === 'workspace.branch-workspace.git-action.select-upstream-for-member'
-      ? `${key}:${values?.repository}`
-      : key,
+    key === 'workspace.branch-workspace.git-action.select-upstream-for-member' ? `${key}:${values?.repository}` : key,
 }))
 
 const batchPlan: BranchWorkspaceGitActionPlan = {
@@ -271,6 +269,18 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceGitActionPanel', () => {
+  test.each([
+    ['batch-commit', batchPlan],
+    ['batch-discard', discardPlan()],
+    ['batch-set-upstream', upstreamPlan()],
+    ['pull', syncPlan('pull')],
+    ['push', syncPlan('push')],
+  ] as const)('renders unified batch progress for %s', (kind, plan) => {
+    render({ kind, plan })
+
+    expect(document.querySelector('[data-testid="branch-workspace-batch-progress"]')).not.toBeNull()
+  })
+
   test('keeps the batch-merge-out identity while its plan is loading', async () => {
     render({ kind: 'batch-merge-out', plan: null })
     await flush()
@@ -364,12 +374,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
 
     const api = document.querySelector<HTMLButtonElement>('[data-upstream-remote="api"]')
     const web = document.querySelector<HTMLButtonElement>('[data-upstream-remote="web"]')
-    expect(api?.getAttribute('aria-label')).toBe(
-      'workspace.branch-workspace.git-action.select-upstream-for-member:api',
-    )
-    expect(web?.getAttribute('aria-label')).toBe(
-      'workspace.branch-workspace.git-action.select-upstream-for-member:web',
-    )
+    expect(api?.getAttribute('aria-label')).toBe('workspace.branch-workspace.git-action.select-upstream-for-member:api')
+    expect(web?.getAttribute('aria-label')).toBe('workspace.branch-workspace.git-action.select-upstream-for-member:web')
     expect(api?.textContent).toContain('workspace.branch-workspace.git-action.select-upstream')
   })
 
@@ -404,8 +410,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
       await Promise.resolve()
     })
     expect(onBatchSetUpstream).toHaveBeenCalledWith([
-      { repositoryName: 'api', remoteRef: 'origin/release' },
-      { repositoryName: 'web', remoteRef: 'upstream/web-release' },
+      { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
+      { repositoryName: 'web', action: 'set', remoteRef: 'upstream/web-release' },
     ])
     expect(upstreamCheckbox('api')?.disabled).toBe(true)
     expect(upstreamCheckbox('web')?.disabled).toBe(true)
@@ -413,6 +419,27 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector<HTMLButtonElement>('[data-upstream-remote="web"]')?.disabled).toBe(true)
 
     await act(async () => resolveExecution?.(null))
+  })
+
+  test('toggles a selected member to remove its upstream and submits an unset action', async () => {
+    const onBatchSetUpstream = vi.fn(async () => null)
+    render({ kind: 'batch-set-upstream', plan: upstreamPlan(), onBatchSetUpstream })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-batch-unset-upstream-api"]')?.click()
+      upstreamCheckbox('web')?.click()
+    })
+
+    expect(upstreamRow('api')?.textContent).toContain('workspace.branch-workspace.git-action.remove-upstream-selected')
+    expect(document.querySelector<HTMLButtonElement>('[data-upstream-remote="api"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.disabled).toBe(false)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(onBatchSetUpstream).toHaveBeenCalledWith([{ repositoryName: 'api', action: 'unset' }])
   })
 
   test('prioritizes upstream result phases over ready selection state and resets local state on reopen or plan token change', async () => {

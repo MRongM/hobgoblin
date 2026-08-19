@@ -216,7 +216,12 @@ function batchSetUpstreamPlan(repositoryNames = ['api', 'web']): BranchWorkspace
               { remoteRef: 'origin/release', head: 'origin-release-head' },
               { remoteRef: 'origin/other', head: 'origin-other-head' },
             ]
-          : [{ remoteRef: isWeb ? 'upstream/release' : `origin/${repositoryName}-release`, head: `${repositoryName}-release-head` }],
+          : [
+              {
+                remoteRef: isWeb ? 'upstream/release' : `origin/${repositoryName}-release`,
+                head: `${repositoryName}-release-head`,
+              },
+            ],
         ready: true,
         fingerprint: `sha256:${repositoryName}`,
       }
@@ -251,8 +256,8 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-set-upstream',
         planToken: plan.token,
         upstreams: [
-          { repositoryName: 'web', remoteRef: 'upstream/release' },
-          { repositoryName: 'api', remoteRef: 'origin/release' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/release' },
+          { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
         ],
       }),
     ).resolves.toMatchObject({
@@ -270,10 +275,43 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     expect(
       setUpstream.mock.calls.every((call) => {
         const options = call[5]
-        return typeof options === 'object' && options !== null && 'publishInvalidation' in options && options.publishInvalidation === false
+        return (
+          typeof options === 'object' &&
+          options !== null &&
+          'publishInvalidation' in options &&
+          options.publishInvalidation === false
+        )
       }),
     ).toBe(true)
     expect(publishRepoInvalidation.mock.calls.map(([repoId]) => repoId)).toEqual(['/workspace/api', '/workspace/web'])
+  })
+
+  test('removes a selected member upstream by passing a null remote ref', async () => {
+    const plan = batchSetUpstreamPlan()
+    const setUpstream = vi.fn(async () => ({ ok: true as const, message: '' }))
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      setUpstream,
+    })
+    await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
+
+    await expect(
+      service.execute(ROOT, {
+        kind: 'batch-set-upstream',
+        planToken: plan.token,
+        upstreams: [{ repositoryName: 'api', action: 'unset' }],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'satisfied' },
+      ],
+    })
+    expect(setUpstream).toHaveBeenCalledWith('/workspace/api', 'feature/a', null, expect.any(AbortSignal), undefined, {
+      publishInvalidation: false,
+    })
   })
 
   test('marks unselected upstream members satisfied after a partial success and invalidates only attempted members', async () => {
@@ -292,7 +330,7 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       service.execute(ROOT, {
         kind: 'batch-set-upstream',
         planToken: plan.token,
-        upstreams: [{ repositoryName: 'api', remoteRef: 'origin/release' }],
+        upstreams: [{ repositoryName: 'api', action: 'set', remoteRef: 'origin/release' }],
       }),
     ).resolves.toMatchObject({
       ok: true,
@@ -330,8 +368,8 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind: 'batch-set-upstream', branchWorkspaceId: 'ws-1' })
     const upstreams = [
-      { repositoryName: 'web', remoteRef: 'upstream/release' },
-      { repositoryName: 'api', remoteRef: 'origin/release' },
+      { repositoryName: 'web', action: 'set' as const, remoteRef: 'upstream/release' },
+      { repositoryName: 'api', action: 'set' as const, remoteRef: 'origin/release' },
     ]
 
     await expect(
@@ -349,8 +387,8 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-set-upstream',
         planToken: plan.token,
         upstreams: [
-          { repositoryName: 'api', remoteRef: 'origin/other' },
-          { repositoryName: 'web', remoteRef: 'upstream/release' },
+          { repositoryName: 'api', action: 'set', remoteRef: 'origin/other' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/release' },
         ],
       }),
     ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
@@ -397,8 +435,8 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-set-upstream',
         planToken: plan.token,
         upstreams: [
-          { repositoryName: 'api', remoteRef: 'origin/release' },
-          { repositoryName: 'web', remoteRef: 'upstream/release' },
+          { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/release' },
         ],
       }),
     ).resolves.toEqual({ ok: false, message: 'unavailable' })
@@ -426,8 +464,8 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-set-upstream',
         planToken: plan.token,
         upstreams: [
-          { repositoryName: 'api', remoteRef: 'origin/release' },
-          { repositoryName: 'web', remoteRef: 'upstream/release' },
+          { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/release' },
         ],
       }),
     ).resolves.toMatchObject({
@@ -464,8 +502,8 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
         kind: 'batch-set-upstream',
         planToken: plan.token,
         upstreams: [
-          { repositoryName: 'api', remoteRef: 'origin/release' },
-          { repositoryName: 'web', remoteRef: 'upstream/release' },
+          { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/release' },
         ],
       }),
     ).resolves.toMatchObject({

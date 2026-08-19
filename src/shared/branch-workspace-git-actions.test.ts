@@ -58,8 +58,8 @@ describe('branch workspace Git action inputs', () => {
         kind: 'batch-set-upstream',
         planToken: ' sha256:plan ',
         upstreams: [
-          { repositoryName: ' api ', remoteRef: ' origin/release ' },
-          { repositoryName: 'web', remoteRef: 'upstream/feature/web' },
+          { repositoryName: ' api ', action: 'set', remoteRef: ' origin/release ' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/feature/web' },
         ],
       }),
     ).toEqual({
@@ -68,9 +68,26 @@ describe('branch workspace Git action inputs', () => {
         kind: 'batch-set-upstream',
         planToken: 'sha256:plan',
         upstreams: [
-          { repositoryName: 'api', remoteRef: 'origin/release' },
-          { repositoryName: 'web', remoteRef: 'upstream/feature/web' },
+          { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
+          { repositoryName: 'web', action: 'set', remoteRef: 'upstream/feature/web' },
         ],
+      },
+    })
+  })
+
+  test('accepts an unset upstream action without a remote ref', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-set-upstream',
+        planToken: 'sha256:plan',
+        upstreams: [{ repositoryName: 'api', action: 'unset' }],
+      }),
+    ).toEqual({
+      ok: true,
+      input: {
+        kind: 'batch-set-upstream',
+        planToken: 'sha256:plan',
+        upstreams: [{ repositoryName: 'api', action: 'unset' }],
       },
     })
   })

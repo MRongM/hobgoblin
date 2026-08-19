@@ -227,6 +227,8 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.git-action.select-upstream',
       'workspace.branch-workspace.git-action.select-upstream-for-member',
       'workspace.branch-workspace.git-action.remote-branch-required',
+      'workspace.branch-workspace.git-action.remove-upstream',
+      'workspace.branch-workspace.git-action.remove-upstream-selected',
       'workspace.branch-workspace.git-action.step.upstream',
       'workspace.branch-workspace.git-action.failure-step.upstream',
     ] as const satisfies readonly DictKey[]
@@ -239,9 +241,7 @@ describe('i18n dictionaries', () => {
     expect(ja['workspace.branch-workspace.git-action.select-member']).toBe(
       '{repository} をこの一括操作のメンバーとして選択',
     )
-    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe(
-      '{repository} 구성원을 이 일괄 작업에 포함',
-    )
+    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe('{repository} 구성원을 이 일괄 작업에 포함')
     expect(ja['workspace.branch-workspace.git-action.select-member']).not.toContain('マージ')
     expect(ko['workspace.branch-workspace.git-action.select-member']).not.toContain('병합')
   })

@@ -187,10 +187,9 @@ export interface BranchWorkspaceBatchMergeOutTargetInput {
   destination: RepositoryMergeBranchSelection
 }
 
-export interface BranchWorkspaceBatchSetUpstreamInput {
-  repositoryName: string
-  remoteRef: string
-}
+export type BranchWorkspaceBatchSetUpstreamInput =
+  | { repositoryName: string; action: 'set'; remoteRef: string }
+  | { repositoryName: string; action: 'unset' }
 
 export type BranchWorkspaceGitActionExecuteInput =
   | {
@@ -371,18 +370,17 @@ function normalizedBatchUpstreams(value: unknown): BranchWorkspaceBatchSetUpstre
   for (const candidate of value) {
     const input = asRecord(candidate)
     const repositoryName = normalizedText(input?.repositoryName)
+    if (!repositoryName || !isWorkspaceRepositoryName(repositoryName) || names.has(repositoryName)) return null
+    names.add(repositoryName)
+    if (input?.action === 'unset') {
+      normalized.push({ repositoryName, action: 'unset' })
+      continue
+    }
     const remoteRef = normalizedText(input?.remoteRef)
-    if (
-      !repositoryName ||
-      !isWorkspaceRepositoryName(repositoryName) ||
-      names.has(repositoryName) ||
-      !remoteRef ||
-      !isRemoteTrackingRef(remoteRef)
-    ) {
+    if ((input?.action !== undefined && input.action !== 'set') || !remoteRef || !isRemoteTrackingRef(remoteRef)) {
       return null
     }
-    names.add(repositoryName)
-    normalized.push({ repositoryName, remoteRef })
+    normalized.push({ repositoryName, action: 'set', remoteRef })
   }
   return normalized
 }

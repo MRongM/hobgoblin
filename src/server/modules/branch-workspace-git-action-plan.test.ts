@@ -456,7 +456,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     expect(getRemoteBranchInfo).toHaveBeenNthCalledWith(2, '/workspace/web', undefined)
   })
 
-  test('keeps batch upstream members with no remote candidates visible but unselectable', async () => {
+  test('keeps batch upstream members with neither tracking nor remote candidates visible but unselectable', async () => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,
       { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
@@ -469,8 +469,33 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         kind: 'batch-set-upstream',
         ready: false,
         members: [
-          { ready: false, message: 'workspace.branch-workspace.git-action.remote-branch-required' },
-          { ready: false, message: 'workspace.branch-workspace.git-action.remote-branch-required' },
+          { ready: false, currentUpstream: null },
+          { ready: false, currentUpstream: null },
+        ],
+      },
+    })
+  })
+
+  test('keeps tracked members selectable for upstream removal without remote candidates', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', { targetTracking: 'origin/feature/a' }),
+        ),
+        getRemoteBranchInfo: vi.fn(async () => []),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-set-upstream',
+        ready: true,
+        members: [
+          { ready: true, currentUpstream: 'origin/feature/a', remoteBranches: [] },
+          { ready: true, currentUpstream: 'origin/feature/a', remoteBranches: [] },
         ],
       },
     })

@@ -355,10 +355,7 @@ export function WorkspaceRepositoryRail({
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
     if (!selectionChanged || !terminalReadContext || !terminalCommands) return
-    const memberWorktreeKey = worktreeTerminalKey(
-      resolution.target.repositoryId,
-      resolution.target.worktreePath,
-    )
+    const memberWorktreeKey = worktreeTerminalKey(resolution.target.repositoryId, resolution.target.worktreePath)
     const selectedTerminal = terminalReadContext
       .worktreeSnapshot(memberWorktreeKey)
       .sessions.find((session) => session.selected)
@@ -449,39 +446,34 @@ export function WorkspaceRepositoryRail({
     await branchQuery.refresh().catch(() => undefined)
     toast.success(t(`workspace.branch-workspace.cleanup-success.${result.outcome}`))
   }
-  const gitActionPanel =
-    gitActionOpen && gitActionTarget
-      ? {
-          itemId: gitActionTarget.id,
-          content: (
-            <BranchWorkspaceGitActionPanel
-              open
-              kind={gitActionKind}
-              plan={branchGitActions.plan}
-              result={branchGitActions.result}
-              activeOperation={gitActionTarget.activeOperation ?? null}
-              pending={branchGitActions.pending}
-              error={branchGitActions.error}
-              onOpenChange={(open) => {
-                setGitActionOpen(open)
-                if (!open) {
-                  setGitActionTargetId(null)
-                  if (!branchGitActions.pending) branchGitActions.reset()
-                }
-              }}
-              onBatchCommit={branchGitActions.executeBatchCommit}
-              onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
-              onBatchDiscard={branchGitActions.executeBatchDiscard}
-              onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
-              onBatchMergeIn={branchGitActions.executeBatchMergeIn}
-              onBatchMergeOut={branchGitActions.executeBatchMergeOut}
-              onSync={branchGitActions.executeSync}
-              onCancel={branchGitActions.cancel}
-              onBatchErrorAiHandoff={handoffBatchErrorsToBranchWorkspace}
-            />
-          ),
-        }
-      : null
+  const gitActionPanelElement =
+    gitActionOpen && gitActionTarget ? (
+      <BranchWorkspaceGitActionPanel
+        open
+        kind={gitActionKind}
+        plan={branchGitActions.plan}
+        result={branchGitActions.result}
+        activeOperation={gitActionTarget.activeOperation ?? null}
+        pending={branchGitActions.pending}
+        error={branchGitActions.error}
+        onOpenChange={(open) => {
+          setGitActionOpen(open)
+          if (!open) {
+            setGitActionTargetId(null)
+            if (!branchGitActions.pending) branchGitActions.reset()
+          }
+        }}
+        onBatchCommit={branchGitActions.executeBatchCommit}
+        onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
+        onBatchDiscard={branchGitActions.executeBatchDiscard}
+        onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
+        onBatchMergeIn={branchGitActions.executeBatchMergeIn}
+        onBatchMergeOut={branchGitActions.executeBatchMergeOut}
+        onSync={branchGitActions.executeSync}
+        onCancel={branchGitActions.cancel}
+        onBatchErrorAiHandoff={handoffBatchErrorsToBranchWorkspace}
+      />
+    ) : null
 
   const reorderRepositories = async (fromId: string, toId: string) => {
     if (!reorderReady) return
@@ -702,7 +694,6 @@ export function WorkspaceRepositoryRail({
                   disabled={branchActions.pending || branchDependencyActions.pending}
                   gitActionsDisabled={branchGitActions.pending}
                   onGitAction={openGitAction}
-                  gitActionPanel={gitActionPanel}
                   changeCountById={branchWorkspaceChangeCountById}
                   onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                   onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
@@ -755,6 +746,7 @@ export function WorkspaceRepositoryRail({
           </div>
         )}
       </div>
+      {gitActionPanelElement}
       <BranchWorkspaceDialog
         open={branchDialogOpen}
         mode={branchDialogMode}
