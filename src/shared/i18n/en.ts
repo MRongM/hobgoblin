@@ -245,7 +245,7 @@ export const en = {
   'workspace.branch-workspace.mode.symlink': 'Symbolic link',
   'workspace.branch-workspace.mode.copy': 'Copy',
   'workspace.branch-workspace.outside-root': 'Source resolves outside the workspace',
-  'workspace.branch-workspace.preview': 'Review plan',
+  'workspace.branch-workspace.preview': 'Next',
   'workspace.branch-workspace.planning': 'Checking branch workspace…',
   'workspace.branch-workspace.progress.create': 'Creating branch workspace…',
   'workspace.branch-workspace.progress.remove': 'Deleting branch workspace…',

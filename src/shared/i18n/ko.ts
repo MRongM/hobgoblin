@@ -235,7 +235,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.mode.symlink': '심볼릭 링크',
   'workspace.branch-workspace.mode.copy': '복사',
   'workspace.branch-workspace.outside-root': '소스가 워크스페이스 외부를 가리킵니다',
-  'workspace.branch-workspace.preview': '계획 검토',
+  'workspace.branch-workspace.preview': '다음',
   'workspace.branch-workspace.planning': '브랜치 워크스페이스 확인 중…',
   'workspace.branch-workspace.progress.create': '브랜치 워크스페이스 생성 중…',
   'workspace.branch-workspace.progress.remove': '브랜치 워크스페이스 삭제 중…',

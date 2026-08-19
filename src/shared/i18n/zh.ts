@@ -225,7 +225,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.mode.symlink': '软链接',
   'workspace.branch-workspace.mode.copy': '复制',
   'workspace.branch-workspace.outside-root': '来源解析到工作区外部',
-  'workspace.branch-workspace.preview': '检查计划',
+  'workspace.branch-workspace.preview': '下一步',
   'workspace.branch-workspace.planning': '正在检查子工作区…',
   'workspace.branch-workspace.progress.create': '正在创建子工作区…',
   'workspace.branch-workspace.progress.remove': '正在删除子工作区…',

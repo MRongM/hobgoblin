@@ -30,6 +30,13 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('labels every branch workspace plan-preview action as the next step', () => {
+    expect(en['workspace.branch-workspace.preview']).toBe('Next')
+    expect(zh['workspace.branch-workspace.preview']).toBe('下一步')
+    expect(ja['workspace.branch-workspace.preview']).toBe('次へ')
+    expect(ko['workspace.branch-workspace.preview']).toBe('다음')
+  })
+
   test('preserves official classic theme names in every dictionary', () => {
     const expected = {
       'settings.theme-preset.catppuccin': 'Catppuccin',

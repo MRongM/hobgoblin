@@ -242,7 +242,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.mode.symlink': 'シンボリックリンク',
   'workspace.branch-workspace.mode.copy': 'コピー',
   'workspace.branch-workspace.outside-root': 'ソースはワークスペース外を参照します',
-  'workspace.branch-workspace.preview': '計画を確認',
+  'workspace.branch-workspace.preview': '次へ',
   'workspace.branch-workspace.planning': 'ブランチワークスペースを確認中…',
   'workspace.branch-workspace.progress.create': 'ブランチワークスペースを作成中…',
   'workspace.branch-workspace.progress.remove': 'ブランチワークスペースを削除中…',
