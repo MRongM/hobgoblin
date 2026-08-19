@@ -111,6 +111,7 @@ export function BranchWorkspaceGitActionPanel({
   const [providers, setProviders] = useState<CommitMessageProviderAvailability>({ codex: false, claude: false })
   const [generatingProvider, setGeneratingProvider] = useState<CommitMessageProvider | null>(null)
   const [autoCommitAndPush, setAutoCommitAndPush] = useState(false)
+  const [selectedCommitRepositories, setSelectedCommitRepositories] = useState<string[]>([])
   const [selectedMergeRepositories, setSelectedMergeRepositories] = useState<string[]>([])
   const [selectedSyncRepositories, setSelectedSyncRepositories] = useState<string[]>([])
   const [selectedUpstreamRepositories, setSelectedUpstreamRepositories] = useState<string[]>([])
@@ -130,6 +131,11 @@ export function BranchWorkspaceGitActionPanel({
     setGenerationErrors({})
     setGeneratingProvider(null)
     setAutoCommitAndPush(false)
+    setSelectedCommitRepositories(
+      plan?.kind === 'batch-commit'
+        ? plan.members.filter((member) => member.dirty).map((member) => member.repositoryName)
+        : [],
+    )
     setSelectedMergeRepositories(
       plan?.kind === 'batch-merge-in'
         ? plan.members
@@ -295,7 +301,7 @@ export function BranchWorkspaceGitActionPanel({
     ? plan.kind === 'batch-commit'
       ? projectBranchWorkspaceBatchProgress({
           members: plan.members,
-          selectedRepositoryNames: plan.members.filter((m) => m.dirty).map((m) => m.repositoryName),
+          selectedRepositoryNames: selectedCommitRepositories,
           stepsFor: () => ['commit'],
           activeOperation,
           result,
@@ -354,6 +360,8 @@ export function BranchWorkspaceGitActionPanel({
             generatingProvider={generatingProvider}
             autoCommitAndPush={autoCommitAndPush}
             disabled={pending}
+            selectedRepositories={selectedCommitRepositories}
+            onSelectedRepositoriesChange={setSelectedCommitRepositories}
             onAutoCommitAndPushChange={setAutoCommitAndPush}
             onDraftChange={(repositoryName, message) =>
               setDrafts((current) => ({ ...current, [repositoryName]: message }))
@@ -425,16 +433,19 @@ export function BranchWorkspaceGitActionPanel({
               <Button
                 type="button"
                 data-action="batch-commit"
-                disabled={pending || generatingProvider !== null || !hasAllMessages(plan, drafts)}
+                disabled={
+                  pending ||
+                  generatingProvider !== null ||
+                  selectedCommitRepositories.length === 0 ||
+                  !hasAllMessages(plan, drafts, selectedCommitRepositories)
+                }
                 onClick={() =>
                   void runAndClose(() =>
                     onBatchCommit(
-                      plan.members
-                        .filter((member) => member.dirty)
-                        .map((member) => ({
-                          repositoryName: member.repositoryName,
-                          message: drafts[member.repositoryName]!.trim(),
-                        })),
+                      selectedCommitRepositories.map((repositoryName) => ({
+                        repositoryName,
+                        message: drafts[repositoryName]!.trim(),
+                      })),
                     ),
                   )
                 }
@@ -516,6 +527,8 @@ function BatchCommitContent({
   generatingProvider,
   autoCommitAndPush,
   disabled,
+  selectedRepositories,
+  onSelectedRepositoriesChange,
   onAutoCommitAndPushChange,
   onDraftChange,
   onGenerateAll,
@@ -530,14 +543,34 @@ function BatchCommitContent({
   generatingProvider: CommitMessageProvider | null
   autoCommitAndPush: boolean
   disabled: boolean
+  selectedRepositories: string[]
+  onSelectedRepositoriesChange: (repositoryNames: string[]) => void
   onAutoCommitAndPushChange: (checked: boolean) => void
   onDraftChange: (repositoryName: string, message: string) => void
   onGenerateAll: (provider: CommitMessageProvider) => void
   onGenerateOne: (repositoryName: string, provider: CommitMessageProvider) => void
 }) {
   const t = useT()
+  const selectableRepositories = plan.members.filter((member) => member.dirty).map((member) => member.repositoryName)
+  const selected = new Set(selectedRepositories)
+
+  const toggleRepository = (repositoryName: string, checked: boolean) => {
+    if (disabled) return
+    onSelectedRepositoriesChange(
+      checked
+        ? [...new Set([...selectedRepositories, repositoryName])]
+        : selectedRepositories.filter((name) => name !== repositoryName),
+    )
+  }
+
   return (
     <div className="grid gap-3">
+      <BatchMergeSelectionSummary
+        selectableRepositories={selectableRepositories}
+        selectedRepositories={selectedRepositories}
+        disabled={disabled}
+        onSelectedRepositoriesChange={onSelectedRepositoriesChange}
+      />
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-separator bg-muted/25 px-3 py-2">
         <span className="mr-auto text-[11px] text-muted-foreground">
           {t('workspace.branch-workspace.git-action.generate-description')}
@@ -582,12 +615,22 @@ function BatchCommitContent({
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           const state = generation[member.repositoryName] ?? 'idle'
           const locked = memberResult?.phase === 'succeeded'
+          const isSelected = selected.has(member.repositoryName)
           return (
             <div
               key={member.repositoryName}
               className="grid gap-2 border-b border-separator/60 px-3 py-3 last:border-b-0"
             >
               <div className="flex min-w-0 items-center gap-2 text-xs">
+                <Checkbox
+                  data-commit-repository={member.repositoryName}
+                  checked={isSelected}
+                  disabled={disabled || !member.dirty}
+                  aria-label={t('workspace.branch-workspace.git-action.select-member', {
+                    repository: member.repositoryName,
+                  })}
+                  onCheckedChange={(checked) => toggleRepository(member.repositoryName, checked === true)}
+                />
                 <span className="font-mono text-[10px] text-muted-foreground">
                   {String(index + 1).padStart(2, '0')}
                 </span>
@@ -599,10 +642,14 @@ function BatchCommitContent({
                     : t('workspace.branch-workspace.git-action.clean-skipped')}
                 </span>
                 <span className="ml-auto text-[10px] text-muted-foreground">
-                  {memberResult ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`) : null}
+                  {memberResult
+                    ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                    : !isSelected && member.dirty
+                      ? t('workspace.branch-workspace.git-action.not-selected')
+                      : null}
                 </span>
               </div>
-              {member.dirty ? (
+              {member.dirty && isSelected ? (
                 <>
                   {!autoCommitAndPush ? (
                     <textarea
@@ -627,6 +674,21 @@ function BatchCommitContent({
                     </span>
                     {!autoCommitAndPush ? (
                       <div className="ml-auto flex gap-1">
+                        {state === 'failed' && generationErrors[member.repositoryName] ? (
+                          <Button
+                            key="retry"
+                            type="button"
+                            size="sm"
+                            className="h-5 px-1.5"
+                            variant="ghost"
+                            data-action="retry-generate"
+                            disabled={disabled || locked || generatingProvider !== null}
+                            onClick={() => onGenerateOne(member.repositoryName, generatingProvider ?? 'codex')}
+                          >
+                            <RotateCcw className="size-3" aria-hidden="true" />
+                            {t('workspace.branch-workspace.retry')}
+                          </Button>
+                        ) : null}
                         {(['codex', 'claude'] as const).map((provider) => (
                           <Button
                             key={provider}
@@ -1603,20 +1665,25 @@ async function generateAll(
   controllerRef.current = controller
   setGeneratingProvider(provider)
   const dirtyMembers = plan.members.filter((member) => member.dirty)
-  const messages: BranchWorkspaceCommitMessageInput[] = []
-  for (const member of dirtyMembers) {
-    if (controller.signal.aborted) break
-    const message = await generateMember(
-      member,
-      provider,
-      controller.signal,
-      setDrafts,
-      setGeneration,
-      setErrors,
-      replaceExisting,
-    )
-    if (message) messages.push({ repositoryName: member.repositoryName, message })
-  }
+
+  const results = await Promise.all(
+    dirtyMembers.map(async (member) => {
+      if (controller.signal.aborted) return null
+      const message = await generateMember(
+        member,
+        provider,
+        controller.signal,
+        setDrafts,
+        setGeneration,
+        setErrors,
+        replaceExisting,
+      )
+      return message ? { repositoryName: member.repositoryName, message } : null
+    }),
+  )
+
+  const messages = results.filter((result): result is BranchWorkspaceCommitMessageInput => result !== null)
+
   if (controllerRef.current === controller) {
     controllerRef.current = null
     setGeneratingProvider(null)
@@ -1693,7 +1760,13 @@ async function generateMember(
   }
 }
 
-function hasAllMessages(plan: BranchWorkspaceBatchCommitPlan, drafts: Record<string, string>): boolean {
-  const dirtyMembers = plan.members.filter((member) => member.dirty)
-  return dirtyMembers.length > 0 && dirtyMembers.every((member) => Boolean(drafts[member.repositoryName]?.trim()))
+function hasAllMessages(
+  plan: BranchWorkspaceBatchCommitPlan,
+  drafts: Record<string, string>,
+  selectedRepositories: string[],
+): boolean {
+  return (
+    selectedRepositories.length > 0 &&
+    selectedRepositories.every((repositoryName) => Boolean(drafts[repositoryName]?.trim()))
+  )
 }

@@ -381,6 +381,29 @@ describe('InlineCommitForm', () => {
 })
 
 describe('MergeInDialog', () => {
+  test('filters merge source branches from the select search input', async () => {
+    render(
+      <MergeInDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main'), repoBranch('release/v2')]}
+        onClose={vi.fn()}
+        onMerge={vi.fn(async () => ({ ok: true, message: 'merged' }))}
+      />,
+    )
+
+    openSelect('#merge-select')
+    const search = document.body.querySelector<HTMLInputElement>('[aria-label="branches.search-label"]')
+    expect(search).not.toBeNull()
+    if (!search) return
+    changeInput(search, 'release')
+
+    expect(document.body.querySelector('[data-merge-source-key="local:release/v2"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-merge-source-key="local:main"]')).toBeNull()
+  })
+
   test('does not show AI buttons for ordinary merge errors', async () => {
     render(
       <MergeInDialog
@@ -647,6 +670,47 @@ describe('MergeInDialog', () => {
 })
 
 describe('MergeOutDialog', () => {
+  test('filters merge destination branches from the select search input', async () => {
+    mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
+      ok: true,
+      plan: {
+        token: 'sha256:plan',
+        repoId: '/repo',
+        sourceBranch: 'feature/current',
+        sourceWorktreePath: '/repo-feature',
+        sourceHead: 'source-head',
+        ready: true,
+        destinations: ['main', 'release/v2'].map((branch) => ({
+          destination: { kind: 'local' as const, branch },
+          head: `${branch}-head`,
+          ready: true,
+          requiresTemporaryWorktree: true,
+          pullMergePushReady: true,
+        })),
+      },
+    })
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={vi.fn()}
+      />,
+    )
+    await flush()
+
+    openSelect('#merge-out-select')
+    const search = document.body.querySelector<HTMLInputElement>('[aria-label="branches.search-label"]')
+    expect(search).not.toBeNull()
+    if (!search) return
+    changeInput(search, 'release')
+
+    expect(document.body.querySelector('[data-merge-destination-key="local:release/v2"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-merge-destination-key="local:main"]')).toBeNull()
+  })
+
   test('loads server-planned destinations and keeps the source read-only', async () => {
     mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
       ok: true,
@@ -814,9 +878,7 @@ describe('MergeOutDialog', () => {
     openSelect('#merge-out-select')
 
     expect(document.body.querySelector('[data-merge-destination-key="local:origin/main"]')).not.toBeNull()
-    const remoteOption = document.body.querySelector<HTMLElement>(
-      '[data-merge-destination-key="remote:origin/main"]',
-    )
+    const remoteOption = document.body.querySelector<HTMLElement>('[data-merge-destination-key="remote:origin/main"]')
     expect(remoteOption?.textContent).toContain('tab.remote-branches')
     act(() => {
       remoteOption!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -1140,6 +1202,14 @@ function input(selector: string): HTMLInputElement {
   const element = document.body.querySelector(selector)
   if (!(element instanceof HTMLInputElement)) throw new Error(`Missing input: ${selector}`)
   return element
+}
+
+function changeInput(element: HTMLInputElement, value: string) {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(element, value)
+    element.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 }
 
 function button(selector: string): HTMLButtonElement {

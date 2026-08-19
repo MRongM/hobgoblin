@@ -1,16 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  ArrowDown,
-  ArrowUp,
-  Circle,
-  CircleCheck,
-  CircleX,
-  GitMerge,
-  LoaderCircle,
-  RotateCcw,
-  SendHorizontal,
-  Sparkles,
-} from 'lucide-react'
+import { ArrowDown, ArrowUp, GitMerge, LoaderCircle, RotateCcw, SendHorizontal, Sparkles } from 'lucide-react'
 import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
@@ -50,6 +39,8 @@ import {
   projectBranchWorkspaceBatchMergeInProgress,
   projectBranchWorkspaceBatchMergeOutProgress,
 } from '#/web/components/repo-workspace/branch-workspace-batch-merge-progress.ts'
+import { projectBranchWorkspaceBatchProgress } from '#/web/components/repo-workspace/branch-workspace-batch-progress.ts'
+import { BranchWorkspaceBatchProgress } from '#/web/components/repo-workspace/BranchWorkspaceBatchProgress.tsx'
 import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
 import type { BranchWorkspaceBatchErrorAiFailure } from '#/web/ai-terminal-handoff.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -120,6 +111,7 @@ export function BranchWorkspaceGitActionPanel({
   const [providers, setProviders] = useState<CommitMessageProviderAvailability>({ codex: false, claude: false })
   const [generatingProvider, setGeneratingProvider] = useState<CommitMessageProvider | null>(null)
   const [autoCommitAndPush, setAutoCommitAndPush] = useState(false)
+  const [selectedCommitRepositories, setSelectedCommitRepositories] = useState<string[]>([])
   const [selectedMergeRepositories, setSelectedMergeRepositories] = useState<string[]>([])
   const [selectedSyncRepositories, setSelectedSyncRepositories] = useState<string[]>([])
   const [selectedUpstreamRepositories, setSelectedUpstreamRepositories] = useState<string[]>([])
@@ -127,6 +119,7 @@ export function BranchWorkspaceGitActionPanel({
   const [mergeDestinations, setMergeDestinations] = useState<Record<string, string>>({})
   const [upstreams, setUpstreams] = useState<Record<string, string>>({})
   const [upstreamQueries, setUpstreamQueries] = useState<Record<string, string>>({})
+  const [upstreamActions, setUpstreamActions] = useState<Record<string, 'set' | 'unset'>>({})
   const [startedMergeMode, setStartedMergeMode] = useState<BranchWorkspaceMergeMode | null>(null)
   const [startedUpstreamUpdate, setStartedUpstreamUpdate] = useState(false)
   const generationController = useRef<AbortController | null>(null)
@@ -138,6 +131,11 @@ export function BranchWorkspaceGitActionPanel({
     setGenerationErrors({})
     setGeneratingProvider(null)
     setAutoCommitAndPush(false)
+    setSelectedCommitRepositories(
+      plan?.kind === 'batch-commit'
+        ? plan.members.filter((member) => member.dirty).map((member) => member.repositoryName)
+        : [],
+    )
     setSelectedMergeRepositories(
       plan?.kind === 'batch-merge-in'
         ? plan.members
@@ -165,6 +163,7 @@ export function BranchWorkspaceGitActionPanel({
     setMergeDestinations({})
     setUpstreams({})
     setUpstreamQueries({})
+    setUpstreamActions({})
     setStartedMergeMode(null)
     setStartedUpstreamUpdate(false)
   }, [open, plan?.token])
@@ -286,185 +285,235 @@ export function BranchWorkspaceGitActionPanel({
   const upstreamPlan = plan?.kind === 'batch-set-upstream' ? plan : null
   const selectedUpstreamMembers =
     upstreamPlan?.members.filter((member) => selectedUpstreamRepositories.includes(member.repositoryName)) ?? []
-  const selectedUpstreams: BranchWorkspaceBatchSetUpstreamInput[] = selectedUpstreamMembers.flatMap((member) => {
+  const selectedUpstreams = selectedUpstreamMembers.flatMap<BranchWorkspaceBatchSetUpstreamInput>((member) => {
+    if (upstreamActions[member.repositoryName] === 'unset') {
+      return [{ repositoryName: member.repositoryName, action: 'unset' }]
+    }
     const remoteRef = upstreams[member.repositoryName]
     return member.remoteBranches.some((candidate) => candidate.remoteRef === remoteRef)
-      ? [{ repositoryName: member.repositoryName, remoteRef }]
+      ? [{ repositoryName: member.repositoryName, action: 'set', remoteRef }]
       : []
   })
   const upstreamSelectionReady =
     selectedUpstreamMembers.length > 0 && selectedUpstreams.length === selectedUpstreamMembers.length
 
+  const nonMergeProgress = plan
+    ? plan.kind === 'batch-commit'
+      ? projectBranchWorkspaceBatchProgress({
+          members: plan.members,
+          selectedRepositoryNames: selectedCommitRepositories,
+          stepsFor: () => ['commit'],
+          activeOperation,
+          result,
+        })
+      : plan.kind === 'batch-discard'
+        ? projectBranchWorkspaceBatchProgress({
+            members: plan.members,
+            selectedRepositoryNames: plan.members.filter((m) => m.paths.length > 0).map((m) => m.repositoryName),
+            stepsFor: () => ['discard'],
+            activeOperation,
+            result,
+          })
+        : plan.kind === 'batch-set-upstream'
+          ? projectBranchWorkspaceBatchProgress({
+              members: plan.members,
+              selectedRepositoryNames: selectedUpstreamRepositories,
+              stepsFor: () => ['upstream'],
+              activeOperation,
+              result,
+            })
+          : plan.kind === 'pull' || plan.kind === 'push'
+            ? projectBranchWorkspaceBatchProgress({
+                members: plan.members,
+                selectedRepositoryNames: selectedSyncRepositories,
+                stepsFor: () => [plan.kind === 'pull' ? 'pull' : 'push'],
+                activeOperation,
+                result,
+              })
+            : null
+    : null
+
   return (
-    <div
-      data-testid="branch-workspace-git-action-panel"
-      className="mt-1 grid gap-3 border-t border-app-region-border bg-app-region px-4 py-3"
-      onClick={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-    >
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold leading-none tracking-tight">{t(titleKey)}</h3>
-        <p className="text-xs text-muted-foreground">{t(descriptionKey)}</p>
-      </div>
+    <Dialog open={open} onOpenChange={(next) => (!next ? close() : onOpenChange(next))}>
+      <DialogContent
+        data-testid="branch-workspace-git-action-panel"
+        className="max-h-[85vh] w-[calc(100vw-1rem)] max-w-[42.667rem] overflow-y-auto sm:w-[66.667vw] sm:max-w-[42.667rem]"
+      >
+        <DialogHeader>
+          <DialogTitle>{t(titleKey)}</DialogTitle>
+          <DialogDescription>{t(descriptionKey)}</DialogDescription>
+        </DialogHeader>
 
-      {!plan ? (
-        <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-muted-foreground">
-          <LoaderCircle className={cn('size-4', pending && 'animate-spin')} aria-hidden="true" />
-          {t('workspace.branch-workspace.git-action.planning')}
-        </div>
-      ) : plan.kind === 'batch-commit' ? (
-        <BatchCommitContent
-          plan={plan}
-          result={result}
-          providers={providers}
-          drafts={drafts}
-          generation={generation}
-          generationErrors={generationErrors}
-          generatingProvider={generatingProvider}
-          autoCommitAndPush={autoCommitAndPush}
-          disabled={pending}
-          onAutoCommitAndPushChange={setAutoCommitAndPush}
-          onDraftChange={(repositoryName, message) =>
-            setDrafts((current) => ({ ...current, [repositoryName]: message }))
-          }
-          onGenerateAll={(provider) => void generateAllMessages(plan, provider)}
-          onGenerateOne={(repositoryName, provider) =>
-            void generateOne(
-              plan,
-              repositoryName,
-              provider,
-              setGeneratingProvider,
-              generationController,
-              setDrafts,
-              setGeneration,
-              setGenerationErrors,
-            )
-          }
-        />
-      ) : plan.kind === 'batch-discard' ? (
-        <BatchDiscardContent plan={plan} result={result} activeOperation={activeOperation} />
-      ) : plan.kind === 'batch-set-upstream' ? (
-        <BatchSetUpstreamContent
-          plan={plan}
-          result={result}
-          activeOperation={activeOperation}
-          pending={pending}
-          selectedRepositories={selectedUpstreamRepositories}
-          upstreams={upstreams}
-          queries={upstreamQueries}
-          started={startedUpstreamUpdate}
-          onSelectedRepositoriesChange={setSelectedUpstreamRepositories}
-          onUpstreamChange={(repositoryName, remoteRef) =>
-            setUpstreams((current) => ({ ...current, [repositoryName]: remoteRef }))
-          }
-          onQueryChange={(repositoryName, query) =>
-            setUpstreamQueries((current) => ({ ...current, [repositoryName]: query }))
-          }
-        />
-      ) : plan.kind === 'pull' || plan.kind === 'push' ? (
-        <SyncContent
-          plan={plan}
-          result={result}
-          activeOperation={activeOperation}
-          selectedRepositories={selectedSyncRepositories}
-          disabled={pending}
-          onSelectedRepositoriesChange={setSelectedSyncRepositories}
-        />
-      ) : null}
+        {!plan ? (
+          <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-muted-foreground">
+            <LoaderCircle className={cn('size-4', pending && 'animate-spin')} aria-hidden="true" />
+            {t('workspace.branch-workspace.git-action.planning')}
+          </div>
+        ) : plan.kind === 'batch-commit' ? (
+          <BatchCommitContent
+            plan={plan}
+            result={result}
+            providers={providers}
+            drafts={drafts}
+            generation={generation}
+            generationErrors={generationErrors}
+            generatingProvider={generatingProvider}
+            autoCommitAndPush={autoCommitAndPush}
+            disabled={pending}
+            selectedRepositories={selectedCommitRepositories}
+            onSelectedRepositoriesChange={setSelectedCommitRepositories}
+            onAutoCommitAndPushChange={setAutoCommitAndPush}
+            onDraftChange={(repositoryName, message) =>
+              setDrafts((current) => ({ ...current, [repositoryName]: message }))
+            }
+            onGenerateAll={(provider) => void generateAllMessages(plan, provider)}
+            onGenerateOne={(repositoryName, provider) =>
+              void generateOne(
+                plan,
+                repositoryName,
+                provider,
+                setGeneratingProvider,
+                generationController,
+                setDrafts,
+                setGeneration,
+                setGenerationErrors,
+              )
+            }
+          />
+        ) : plan.kind === 'batch-discard' ? (
+          <BatchDiscardContent plan={plan} result={result} activeOperation={activeOperation} />
+        ) : plan.kind === 'batch-set-upstream' ? (
+          <BatchSetUpstreamContent
+            plan={plan}
+            result={result}
+            activeOperation={activeOperation}
+            pending={pending}
+            selectedRepositories={selectedUpstreamRepositories}
+            upstreams={upstreams}
+            actions={upstreamActions}
+            queries={upstreamQueries}
+            started={startedUpstreamUpdate}
+            onSelectedRepositoriesChange={setSelectedUpstreamRepositories}
+            onUpstreamChange={(repositoryName, remoteRef) =>
+              setUpstreams((current) => ({ ...current, [repositoryName]: remoteRef }))
+            }
+            onActionChange={(repositoryName, action) =>
+              setUpstreamActions((current) => ({ ...current, [repositoryName]: action }))
+            }
+            onQueryChange={(repositoryName, query) =>
+              setUpstreamQueries((current) => ({ ...current, [repositoryName]: query }))
+            }
+          />
+        ) : plan.kind === 'pull' || plan.kind === 'push' ? (
+          <SyncContent
+            plan={plan}
+            result={result}
+            activeOperation={activeOperation}
+            selectedRepositories={selectedSyncRepositories}
+            disabled={pending}
+            onSelectedRepositoriesChange={setSelectedSyncRepositories}
+          />
+        ) : null}
 
-      {error ? <DialogError>{t(error)}</DialogError> : null}
-      <BranchWorkspaceBatchErrorAiActions
-        plan={plan}
-        result={result}
-        onHandoff={onBatchErrorAiHandoff}
-        onHandoffComplete={close}
-      />
-      {!(plan?.kind === 'batch-commit' && autoCommitAndPush) ? (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" onClick={close}>
-            {t('dialog.cancel')}
-          </Button>
-          {plan?.kind === 'batch-commit' ? (
-            <Button
-              type="button"
-              data-action="batch-commit"
-              disabled={pending || generatingProvider !== null || !hasAllMessages(plan, drafts)}
-              onClick={() =>
-                void runAndClose(() =>
-                  onBatchCommit(
-                    plan.members
-                      .filter((member) => member.dirty)
-                      .map((member) => ({
-                        repositoryName: member.repositoryName,
-                        message: drafts[member.repositoryName]!.trim(),
+        {nonMergeProgress ? <BranchWorkspaceBatchProgress progress={nonMergeProgress} /> : null}
+
+        {error ? <DialogError>{t(error)}</DialogError> : null}
+        <BranchWorkspaceBatchErrorAiActions
+          plan={plan}
+          result={result}
+          onHandoff={onBatchErrorAiHandoff}
+          onHandoffComplete={close}
+        />
+        {!(plan?.kind === 'batch-commit' && autoCommitAndPush) ? (
+          <DialogFooter className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={close}>
+              {t('dialog.cancel')}
+            </Button>
+            {plan?.kind === 'batch-commit' ? (
+              <Button
+                type="button"
+                data-action="batch-commit"
+                disabled={
+                  pending ||
+                  generatingProvider !== null ||
+                  selectedCommitRepositories.length === 0 ||
+                  !hasAllMessages(plan, drafts, selectedCommitRepositories)
+                }
+                onClick={() =>
+                  void runAndClose(() =>
+                    onBatchCommit(
+                      selectedCommitRepositories.map((repositoryName) => ({
+                        repositoryName,
+                        message: drafts[repositoryName]!.trim(),
                       })),
-                  ),
-                )
-              }
-            >
-              <SendHorizontal className="size-4" aria-hidden="true" />
-              {t(
-                result && !result.ok
-                  ? 'workspace.branch-workspace.retry'
-                  : 'workspace.branch-workspace.git-action.batch-commit',
-              )}
-            </Button>
-          ) : null}
-          {plan?.kind === 'batch-discard' ? (
-            <Button
-              type="button"
-              variant="destructive"
-              data-action="batch-discard"
-              disabled={pending || !plan.members.some((member) => member.paths.length > 0)}
-              onClick={() => void runAndClose(onBatchDiscard)}
-            >
-              <RotateCcw className="size-4" aria-hidden="true" />
-              {t(
-                result && !result.ok
-                  ? 'workspace.branch-workspace.retry'
-                  : 'workspace.branch-workspace.git-action.batch-discard',
-              )}
-            </Button>
-          ) : null}
-          {plan?.kind === 'batch-set-upstream' ? (
-            <Button
-              type="button"
-              data-action="batch-set-upstream"
-              disabled={pending || !upstreamSelectionReady}
-              onClick={() => {
-                setStartedUpstreamUpdate(true)
-                void runAndClose(() => onBatchSetUpstream(selectedUpstreams))
-              }}
-            >
-              {t(
-                result && !result.ok
-                  ? 'workspace.branch-workspace.retry'
-                  : 'workspace.branch-workspace.git-action.batch-set-upstream',
-              )}
-            </Button>
-          ) : null}
-          {plan?.kind === 'pull' || plan?.kind === 'push' ? (
-            <Button
-              type="button"
-              data-action={plan.kind}
-              disabled={pending || selectedSyncRepositories.length === 0}
-              onClick={() => void runAndClose(() => onSync(plan.kind, selectedSyncRepositories))}
-            >
-              {plan.kind === 'pull' ? (
-                <ArrowDown className="size-4" aria-hidden="true" />
-              ) : (
-                <ArrowUp className="size-4" aria-hidden="true" />
-              )}
-              {t(
-                result && !result.ok
-                  ? 'workspace.branch-workspace.retry'
-                  : `workspace.branch-workspace.git-action.${plan.kind}`,
-              )}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
+                    ),
+                  )
+                }
+              >
+                <SendHorizontal className="size-4" aria-hidden="true" />
+                {t(
+                  result && !result.ok
+                    ? 'workspace.branch-workspace.retry'
+                    : 'workspace.branch-workspace.git-action.batch-commit',
+                )}
+              </Button>
+            ) : null}
+            {plan?.kind === 'batch-discard' ? (
+              <Button
+                type="button"
+                variant="destructive"
+                data-action="batch-discard"
+                disabled={pending || !plan.members.some((member) => member.paths.length > 0)}
+                onClick={() => void runAndClose(onBatchDiscard)}
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t(
+                  result && !result.ok
+                    ? 'workspace.branch-workspace.retry'
+                    : 'workspace.branch-workspace.git-action.batch-discard',
+                )}
+              </Button>
+            ) : null}
+            {plan?.kind === 'batch-set-upstream' ? (
+              <Button
+                type="button"
+                data-action="batch-set-upstream"
+                disabled={pending || !upstreamSelectionReady}
+                onClick={() => {
+                  setStartedUpstreamUpdate(true)
+                  void runAndClose(() => onBatchSetUpstream(selectedUpstreams))
+                }}
+              >
+                {t(
+                  result && !result.ok
+                    ? 'workspace.branch-workspace.retry'
+                    : 'workspace.branch-workspace.git-action.batch-set-upstream',
+                )}
+              </Button>
+            ) : null}
+            {plan?.kind === 'pull' || plan?.kind === 'push' ? (
+              <Button
+                type="button"
+                data-action={plan.kind}
+                disabled={pending || selectedSyncRepositories.length === 0}
+                onClick={() => void runAndClose(() => onSync(plan.kind, selectedSyncRepositories))}
+              >
+                {plan.kind === 'pull' ? (
+                  <ArrowDown className="size-4" aria-hidden="true" />
+                ) : (
+                  <ArrowUp className="size-4" aria-hidden="true" />
+                )}
+                {t(
+                  result && !result.ok
+                    ? 'workspace.branch-workspace.retry'
+                    : `workspace.branch-workspace.git-action.${plan.kind}`,
+                )}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -478,6 +527,8 @@ function BatchCommitContent({
   generatingProvider,
   autoCommitAndPush,
   disabled,
+  selectedRepositories,
+  onSelectedRepositoriesChange,
   onAutoCommitAndPushChange,
   onDraftChange,
   onGenerateAll,
@@ -492,14 +543,34 @@ function BatchCommitContent({
   generatingProvider: CommitMessageProvider | null
   autoCommitAndPush: boolean
   disabled: boolean
+  selectedRepositories: string[]
+  onSelectedRepositoriesChange: (repositoryNames: string[]) => void
   onAutoCommitAndPushChange: (checked: boolean) => void
   onDraftChange: (repositoryName: string, message: string) => void
   onGenerateAll: (provider: CommitMessageProvider) => void
   onGenerateOne: (repositoryName: string, provider: CommitMessageProvider) => void
 }) {
   const t = useT()
+  const selectableRepositories = plan.members.filter((member) => member.dirty).map((member) => member.repositoryName)
+  const selected = new Set(selectedRepositories)
+
+  const toggleRepository = (repositoryName: string, checked: boolean) => {
+    if (disabled) return
+    onSelectedRepositoriesChange(
+      checked
+        ? [...new Set([...selectedRepositories, repositoryName])]
+        : selectedRepositories.filter((name) => name !== repositoryName),
+    )
+  }
+
   return (
     <div className="grid gap-3">
+      <BatchMergeSelectionSummary
+        selectableRepositories={selectableRepositories}
+        selectedRepositories={selectedRepositories}
+        disabled={disabled}
+        onSelectedRepositoriesChange={onSelectedRepositoriesChange}
+      />
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-separator bg-muted/25 px-3 py-2">
         <span className="mr-auto text-[11px] text-muted-foreground">
           {t('workspace.branch-workspace.git-action.generate-description')}
@@ -544,12 +615,22 @@ function BatchCommitContent({
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           const state = generation[member.repositoryName] ?? 'idle'
           const locked = memberResult?.phase === 'succeeded'
+          const isSelected = selected.has(member.repositoryName)
           return (
             <div
               key={member.repositoryName}
               className="grid gap-2 border-b border-separator/60 px-3 py-3 last:border-b-0"
             >
               <div className="flex min-w-0 items-center gap-2 text-xs">
+                <Checkbox
+                  data-commit-repository={member.repositoryName}
+                  checked={isSelected}
+                  disabled={disabled || !member.dirty}
+                  aria-label={t('workspace.branch-workspace.git-action.select-member', {
+                    repository: member.repositoryName,
+                  })}
+                  onCheckedChange={(checked) => toggleRepository(member.repositoryName, checked === true)}
+                />
                 <span className="font-mono text-[10px] text-muted-foreground">
                   {String(index + 1).padStart(2, '0')}
                 </span>
@@ -561,10 +642,14 @@ function BatchCommitContent({
                     : t('workspace.branch-workspace.git-action.clean-skipped')}
                 </span>
                 <span className="ml-auto text-[10px] text-muted-foreground">
-                  {memberResult ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`) : null}
+                  {memberResult
+                    ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                    : !isSelected && member.dirty
+                      ? t('workspace.branch-workspace.git-action.not-selected')
+                      : null}
                 </span>
               </div>
-              {member.dirty ? (
+              {member.dirty && isSelected ? (
                 <>
                   {!autoCommitAndPush ? (
                     <textarea
@@ -589,6 +674,21 @@ function BatchCommitContent({
                     </span>
                     {!autoCommitAndPush ? (
                       <div className="ml-auto flex gap-1">
+                        {state === 'failed' && generationErrors[member.repositoryName] ? (
+                          <Button
+                            key="retry"
+                            type="button"
+                            size="sm"
+                            className="h-5 px-1.5"
+                            variant="ghost"
+                            data-action="retry-generate"
+                            disabled={disabled || locked || generatingProvider !== null}
+                            onClick={() => onGenerateOne(member.repositoryName, generatingProvider ?? 'codex')}
+                          >
+                            <RotateCcw className="size-3" aria-hidden="true" />
+                            {t('workspace.branch-workspace.retry')}
+                          </Button>
+                        ) : null}
                         {(['codex', 'claude'] as const).map((provider) => (
                           <Button
                             key={provider}
@@ -746,15 +846,8 @@ function BranchWorkspaceBatchMergeInDialog({
                 data-testid="branch-workspace-batch-merge-progress"
                 data-completed={progress.completedCount}
                 data-total={progress.totalCount}
-                className="flex items-center justify-between rounded-md border border-separator bg-muted/25 px-3 py-2 text-xs"
               >
-                <span className="font-medium">{t('workspace.branch-workspace.git-action.progress')}</span>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {t('workspace.branch-workspace.progress.summary', {
-                    completed: progress.completedCount,
-                    total: progress.totalCount,
-                  })}
-                </span>
+                <BranchWorkspaceBatchProgress progress={progress} />
               </div>
             ) : null}
 
@@ -768,9 +861,6 @@ function BranchWorkspaceBatchMergeInDialog({
             <div className="overflow-hidden rounded-md border border-separator">
               {plan.members.map((member, index) => {
                 const selected = selectedRepositories.includes(member.repositoryName)
-                const memberProgress = progress?.members.find(
-                  (candidate) => candidate.repositoryName === member.repositoryName,
-                )
                 const source = member.sourceBranches.find(
                   (candidate) => repositoryMergeBranchSelectionKey(candidate.source) === sources[member.repositoryName],
                 )
@@ -863,28 +953,6 @@ function BranchWorkspaceBatchMergeInDialog({
                                     : t('workspace.branch-workspace.git-action.ready')}
                       </span>
                     </div>
-                    {memberProgress?.selected ? (
-                      <div className="ml-12 flex flex-wrap items-center gap-1.5">
-                        {memberProgress.steps.map((step, stepIndex) => (
-                          <div key={step.step} className="flex items-center gap-1.5">
-                            {stepIndex > 0 ? <span className="text-muted-foreground/50">→</span> : null}
-                            <span
-                              data-merge-step={`${member.repositoryName}:${step.step}`}
-                              data-status={step.status}
-                              className={cn(
-                                'inline-flex items-center gap-1 rounded-full border border-separator px-2 py-0.5 text-[10px] text-muted-foreground',
-                                step.status === 'active' && 'border-primary/40 bg-primary/10 text-foreground',
-                                step.status === 'complete' && 'border-success-border bg-success-surface text-success',
-                                step.status === 'failed' && 'border-danger-border bg-danger-surface text-danger',
-                              )}
-                            >
-                              <MergeStepIcon status={step.status} />
-                              {t(`workspace.branch-workspace.git-action.step.${step.step}`)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
                   </div>
                 )
               })}
@@ -1049,15 +1117,8 @@ function BranchWorkspaceBatchMergeOutDialog({
                 data-testid="branch-workspace-batch-merge-progress"
                 data-completed={progress.completedCount}
                 data-total={progress.totalCount}
-                className="flex items-center justify-between rounded-md border border-separator bg-muted/25 px-3 py-2 text-xs"
               >
-                <span className="font-medium">{t('workspace.branch-workspace.git-action.progress')}</span>
-                <span className="font-mono text-[11px] text-muted-foreground">
-                  {t('workspace.branch-workspace.progress.summary', {
-                    completed: progress.completedCount,
-                    total: progress.totalCount,
-                  })}
-                </span>
+                <BranchWorkspaceBatchProgress progress={progress} />
               </div>
             ) : null}
 
@@ -1071,9 +1132,6 @@ function BranchWorkspaceBatchMergeOutDialog({
             <div className="overflow-hidden rounded-md border border-separator">
               {plan.members.map((member, index) => {
                 const selected = selectedRepositories.includes(member.repositoryName)
-                const memberProgress = progress?.members.find(
-                  (candidate) => candidate.repositoryName === member.repositoryName,
-                )
                 const destination = member.destinationBranches.find(
                   (candidate) =>
                     repositoryMergeBranchSelectionKey(candidate.destination) === destinations[member.repositoryName],
@@ -1165,28 +1223,6 @@ function BranchWorkspaceBatchMergeOutDialog({
                                   : t('workspace.branch-workspace.git-action.ready')}
                       </span>
                     </div>
-                    {memberProgress?.selected ? (
-                      <div className="ml-12 flex flex-wrap items-center gap-1.5">
-                        {memberProgress.steps.map((step, stepIndex) => (
-                          <div key={step.step} className="flex items-center gap-1.5">
-                            {stepIndex > 0 ? <span className="text-muted-foreground/50">→</span> : null}
-                            <span
-                              data-merge-step={`${member.repositoryName}:${step.step}`}
-                              data-status={step.status}
-                              className={cn(
-                                'inline-flex items-center gap-1 rounded-full border border-separator px-2 py-0.5 text-[10px] text-muted-foreground',
-                                step.status === 'active' && 'border-primary/40 bg-primary/10 text-foreground',
-                                step.status === 'complete' && 'border-success-border bg-success-surface text-success',
-                                step.status === 'failed' && 'border-danger-border bg-danger-surface text-danger',
-                              )}
-                            >
-                              <MergeStepIcon status={step.status} />
-                              {t(`workspace.branch-workspace.git-action.step.${step.step}`)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
                   </div>
                 )
               })}
@@ -1358,10 +1394,12 @@ function BatchSetUpstreamContent({
   pending,
   selectedRepositories,
   upstreams,
+  actions,
   queries,
   started,
   onSelectedRepositoriesChange,
   onUpstreamChange,
+  onActionChange,
   onQueryChange,
 }: {
   plan: BranchWorkspaceBatchSetUpstreamPlan
@@ -1370,16 +1408,18 @@ function BatchSetUpstreamContent({
   pending: boolean
   selectedRepositories: string[]
   upstreams: Record<string, string>
+  actions: Record<string, 'set' | 'unset'>
   queries: Record<string, string>
   started: boolean
   onSelectedRepositoriesChange: (repositoryNames: string[]) => void
   onUpstreamChange: (repositoryName: string, remoteRef: string) => void
+  onActionChange: (repositoryName: string, action: 'set' | 'unset') => void
   onQueryChange: (repositoryName: string, query: string) => void
 }) {
   const t = useT()
   const locked = pending || started
   const selectableRepositories = plan.members
-    .filter((member) => member.ready && member.remoteBranches.length > 0)
+    .filter((member) => member.ready && (member.remoteBranches.length > 0 || member.currentUpstream !== null))
     .map((member) => member.repositoryName)
   const selected = new Set(selectedRepositories)
   const toggleRepository = (repositoryName: string, checked: boolean) => {
@@ -1403,19 +1443,20 @@ function BatchSetUpstreamContent({
         {plan.members.map((member, index) => {
           const memberSelected = selected.has(member.repositoryName)
           const selectedRemote = upstreams[member.repositoryName]
+          const upstreamAction = actions[member.repositoryName] ?? 'set'
           const selectedCandidate = member.remoteBranches.find((candidate) => candidate.remoteRef === selectedRemote)
           const visibleRemoteBranches = member.remoteBranches.filter((candidate) =>
             remoteBranchRefMatchesQuery(candidate.remoteRef, queries[member.repositoryName] ?? ''),
           )
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           const active = activeOperation?.repositoryName === member.repositoryName
-          const unavailable = !member.ready || member.remoteBranches.length === 0
+          const unavailable = !member.ready || (member.remoteBranches.length === 0 && member.currentUpstream === null)
           return (
             <div
               key={member.repositoryName}
               className="grid gap-2 border-b border-separator/60 px-3 py-3 text-xs last:border-b-0"
             >
-              <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(12rem,2fr)] items-center gap-2">
+              <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(12rem,2fr)_2rem] items-center gap-2">
                 <Checkbox
                   data-upstream-repository={member.repositoryName}
                   checked={memberSelected}
@@ -1431,7 +1472,7 @@ function BatchSetUpstreamContent({
                 <span className="truncate font-medium">{member.repositoryName}</span>
                 <Select
                   value={selectedRemote ?? ''}
-                  disabled={locked || !memberSelected || unavailable}
+                  disabled={locked || !memberSelected || unavailable || upstreamAction === 'unset'}
                   onValueChange={(remoteRef) => onUpstreamChange(member.repositoryName, remoteRef)}
                 >
                   <SelectTrigger
@@ -1471,31 +1512,44 @@ function BatchSetUpstreamContent({
                     ))}
                   </SelectContent>
                 </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  data-testid={`branch-workspace-batch-unset-upstream-${member.repositoryName}`}
+                  aria-label={t('workspace.branch-workspace.git-action.remove-upstream')}
+                  title={t('workspace.branch-workspace.git-action.remove-upstream')}
+                  disabled={locked || !memberSelected || member.currentUpstream === null}
+                  onClick={() => onActionChange(member.repositoryName, upstreamAction === 'unset' ? 'set' : 'unset')}
+                >
+                  <span aria-hidden="true">×</span>
+                </Button>
               </div>
               <div className="ml-12 flex flex-wrap items-center gap-x-1.5 text-[10px] text-muted-foreground">
                 <span>{member.targetBranch}</span>
                 <span className="text-muted-foreground/60">·</span>
                 <span data-upstream-current={member.repositoryName} className="break-all font-mono">
-                  {t('workspace.branch-workspace.git-action.current-upstream')}: {member.currentUpstream ?? t('branches.no-upstream')}
+                  {t('workspace.branch-workspace.git-action.current-upstream')}:{' '}
+                  {member.currentUpstream ?? t('branches.no-upstream')}
                   {member.trackingGone ? ` · ${t('action.branch-upstream-gone')}` : ''}
                 </span>
                 <span className="text-muted-foreground/60">·</span>
                 <span
-                  className={cn(
-                    !member.ready || (memberSelected && !selectedCandidate) ? 'text-warning' : undefined,
-                  )}
+                  className={cn(!member.ready || (memberSelected && !selectedCandidate) ? 'text-warning' : undefined)}
                 >
-                  {!member.ready || member.remoteBranches.length === 0
-                    ? t(member.message ?? 'workspace.branch-workspace.git-action.remote-branch-required')
-                    : !memberSelected
-                      ? t('workspace.branch-workspace.git-action.not-selected')
-                      : !selectedCandidate
-                        ? t('workspace.branch-workspace.git-action.remote-branch-required')
-                        : active && activeOperation?.step
-                          ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
-                          : memberResult
-                            ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
-                            : t('workspace.branch-workspace.git-action.ready')}
+                  {upstreamAction === 'unset' && memberSelected
+                    ? t('workspace.branch-workspace.git-action.remove-upstream-selected')
+                    : !member.ready || member.remoteBranches.length === 0
+                      ? t(member.message ?? 'workspace.branch-workspace.git-action.remote-branch-required')
+                      : !memberSelected
+                        ? t('workspace.branch-workspace.git-action.not-selected')
+                        : !selectedCandidate
+                          ? t('workspace.branch-workspace.git-action.remote-branch-required')
+                          : active && activeOperation?.step
+                            ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                            : memberResult
+                              ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                              : t('workspace.branch-workspace.git-action.ready')}
                 </span>
               </div>
             </div>
@@ -1504,13 +1558,6 @@ function BatchSetUpstreamContent({
       </div>
     </div>
   )
-}
-
-function MergeStepIcon({ status }: { status: 'pending' | 'active' | 'complete' | 'failed' }) {
-  if (status === 'active') return <LoaderCircle className="size-3 animate-spin" aria-hidden="true" />
-  if (status === 'complete') return <CircleCheck className="size-3" aria-hidden="true" />
-  if (status === 'failed') return <CircleX className="size-3" aria-hidden="true" />
-  return <Circle className="size-3" aria-hidden="true" />
 }
 
 function mergeModeLabel(mode: BranchWorkspaceMergeMode, direction: 'in' | 'out') {
@@ -1618,20 +1665,25 @@ async function generateAll(
   controllerRef.current = controller
   setGeneratingProvider(provider)
   const dirtyMembers = plan.members.filter((member) => member.dirty)
-  const messages: BranchWorkspaceCommitMessageInput[] = []
-  for (const member of dirtyMembers) {
-    if (controller.signal.aborted) break
-    const message = await generateMember(
-      member,
-      provider,
-      controller.signal,
-      setDrafts,
-      setGeneration,
-      setErrors,
-      replaceExisting,
-    )
-    if (message) messages.push({ repositoryName: member.repositoryName, message })
-  }
+
+  const results = await Promise.all(
+    dirtyMembers.map(async (member) => {
+      if (controller.signal.aborted) return null
+      const message = await generateMember(
+        member,
+        provider,
+        controller.signal,
+        setDrafts,
+        setGeneration,
+        setErrors,
+        replaceExisting,
+      )
+      return message ? { repositoryName: member.repositoryName, message } : null
+    }),
+  )
+
+  const messages = results.filter((result): result is BranchWorkspaceCommitMessageInput => result !== null)
+
   if (controllerRef.current === controller) {
     controllerRef.current = null
     setGeneratingProvider(null)
@@ -1708,7 +1760,13 @@ async function generateMember(
   }
 }
 
-function hasAllMessages(plan: BranchWorkspaceBatchCommitPlan, drafts: Record<string, string>): boolean {
-  const dirtyMembers = plan.members.filter((member) => member.dirty)
-  return dirtyMembers.length > 0 && dirtyMembers.every((member) => Boolean(drafts[member.repositoryName]?.trim()))
+function hasAllMessages(
+  plan: BranchWorkspaceBatchCommitPlan,
+  drafts: Record<string, string>,
+  selectedRepositories: string[],
+): boolean {
+  return (
+    selectedRepositories.length > 0 &&
+    selectedRepositories.every((repositoryName) => Boolean(drafts[repositoryName]?.trim()))
+  )
 }
