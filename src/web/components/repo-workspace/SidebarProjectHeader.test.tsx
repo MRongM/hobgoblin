@@ -20,6 +20,9 @@ const navigationState = vi.hoisted(() => ({
 }))
 
 const responsiveState = vi.hoisted(() => ({ compact: false }))
+const recentRepoState = vi.hoisted(() => ({
+  recentRepos: [{ kind: 'local' as const, id: '/tmp/recent-repo' }],
+}))
 
 const repoState = {
   activeId: '/repo-a/api',
@@ -54,6 +57,10 @@ vi.mock('#/web/shell-overlay-actions.tsx', () => ({
 
 vi.mock('#/web/runtime-settings-chrome.ts', () => ({
   useRuntimeChromeSettings: () => ({ topbarHeightPx: 36 }),
+}))
+
+vi.mock('#/web/settings-read-projection.ts', () => ({
+  useRuntimeRecentRepos: () => recentRepoState.recentRepos,
 }))
 
 vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
@@ -110,6 +117,9 @@ beforeEach(() => {
   repoState.projectListExpanded = false
   responsiveState.compact = false
   navigationState.showRepoDetailTab.mockReset()
+  navigationState.activateRepo.mockReset()
+  repoState.ensureWorkspaceOpen.mockReset()
+  repoState.ensureWorkspaceOpen.mockResolvedValue({ ok: true, id: '/tmp/recent-repo' })
   repoState.toggleProjectListExpanded.mockReset()
   repoState.toggleProjectListExpanded.mockImplementation(() => {
     repoState.projectListExpanded = !repoState.projectListExpanded
@@ -303,6 +313,40 @@ describe('SidebarProjectHeader', () => {
     })
 
     expect(container!.querySelector('button[aria-label="topbar.open"]')).not.toBeNull()
+  })
+
+  test('shows recent repositories in the desktop add-repository menu', async () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" />)
+    })
+
+    const trigger = container!.querySelector<HTMLButtonElement>('button[aria-label="topbar.open"]')
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain('menu.file.open-recent')
+
+    const recentTrigger = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('menu.file.open-recent'),
+    )
+    await act(async () => {
+      recentTrigger?.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }))
+      recentTrigger?.click()
+      await Promise.resolve()
+    })
+    const recentRepo = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('/tmp/recent-repo'),
+    )
+    await act(async () => {
+      recentRepo?.click()
+      await Promise.resolve()
+    })
+
+    expect(repoState.ensureWorkspaceOpen).toHaveBeenCalledWith({ kind: 'local', id: '/tmp/recent-repo' })
+    expect(navigationState.activateRepo).toHaveBeenCalledWith('/tmp/recent-repo')
   })
 
   test('does not expose desktop terminal maximize without an owner callback', () => {

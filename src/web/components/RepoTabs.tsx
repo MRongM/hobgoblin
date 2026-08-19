@@ -19,6 +19,7 @@ import { repoTabStoreActionsEqual, repoTabStoreActionsFromStore } from '#/web/st
 import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
+import { useRecentReposMenuActions } from '#/web/hooks/useRecentReposMenuActions.ts'
 
 interface RepoTabsProps {
   currentRepoId: string | null
@@ -58,6 +59,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
     repoTabSummariesEqual,
   )
   const navigation = useMainWindowNavigation()
+  const recentRepoMenu = useRecentReposMenuActions()
   const currentProjectId = useReposStore((state) => activeProjectId(state) ?? currentRepoId)
   const { ensureWorkspaceOpen, reorderRepos } = useStoreWithEqualityFn(
     useReposStore,
@@ -90,6 +92,9 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
         openRemoteShortcut: null,
         clone: t('repo-tabs.clone'),
         cloneShortcut: null,
+        openRecent: t('menu.file.open-recent'),
+        noRecent: t('menu.file.no-recent'),
+        clearRecent: t('menu.file.clear-recent'),
         clearCache: t('error.clear-cache'),
         clearCacheConfirmTitle: t('repo-tabs.clear-cache-confirm-title'),
         clearCacheConfirmMessage: t('repo-tabs.clear-cache-confirm-message'),
@@ -102,6 +107,9 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
       onOpenLocal={handleOpenLocal}
       onOpenRemote={onOpenRemote}
       onClone={onClone}
+      recentRepos={recentRepoMenu.recentRepos}
+      onOpenRecent={recentRepoMenu.openRecentRepo}
+      onClearRecent={recentRepoMenu.clearRecentRepos}
     />
   )
 }

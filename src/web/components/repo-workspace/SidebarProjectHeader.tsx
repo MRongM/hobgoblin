@@ -42,6 +42,8 @@ import {
 import { cn } from '#/web/lib/cn.ts'
 import { activeProjectId as selectActiveProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
+import { RecentReposMenuSub } from '#/web/components/repo-tabs/RecentReposMenuSub.tsx'
+import { useRecentReposMenuActions } from '#/web/hooks/useRecentReposMenuActions.ts'
 
 interface Props {
   repoId: string
@@ -74,6 +76,7 @@ export function SidebarProjectHeader({
   const activeProjectId = useReposStore(selectActiveProjectId) ?? repoId
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
+  const recentRepoMenu = useRecentReposMenuActions()
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
   const activeProjectKind = activeProject?.isGitRepo === false ? 'plain' : 'git'
@@ -178,6 +181,16 @@ export function SidebarProjectHeader({
                 <Download />
                 {t('repo-tabs.clone')}
               </DropdownMenuItem>
+              <RecentReposMenuSub
+                recentRepos={recentRepoMenu.recentRepos}
+                labels={{
+                  openRecent: t('menu.file.open-recent'),
+                  noRecent: t('menu.file.no-recent'),
+                  clearRecent: t('menu.file.clear-recent'),
+                }}
+                onOpenRecent={recentRepoMenu.openRecentRepo}
+                onClearRecent={recentRepoMenu.clearRecentRepos}
+              />
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setConfirmClearCacheOpen(true)}>
                 <Trash2 />
