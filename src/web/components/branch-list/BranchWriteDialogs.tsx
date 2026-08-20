@@ -391,10 +391,13 @@ export function MergeInDialog({
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
             {t('dialog.cancel')}
           </Button>
+          <Button type="submit" variant="outline" size="sm" disabled={!selectedSource || isPending}>
+            {pending === 'merge' && <Loader2 className="animate-spin" />}
+            {t(remoteSelected ? 'action.merge-in-remote-confirm' : 'action.merge-in-confirm')}
+          </Button>
           {onPull && onPush && (
             <Button
               type="button"
-              variant="outline"
               size="sm"
               disabled={!selectedSource || isPending}
               onClick={() => void handleConfirm('pullMergePush')}
@@ -403,10 +406,6 @@ export function MergeInDialog({
               {t(remoteSelected ? 'action.merge-in-remote-and-push-confirm' : 'action.merge-in-and-push-confirm')}
             </Button>
           )}
-          <Button type="submit" size="sm" disabled={!selectedSource || isPending}>
-            {pending === 'merge' && <Loader2 className="animate-spin" />}
-            {t(remoteSelected ? 'action.merge-in-remote-confirm' : 'action.merge-in-confirm')}
-          </Button>
         </DialogFooter>
       </form>
     </FormDialog>

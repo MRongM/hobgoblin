@@ -384,6 +384,35 @@ describe('InlineCommitForm', () => {
 })
 
 describe('MergeInDialog', () => {
+  test('presents pull-merge-push as the primary and rightmost action', async () => {
+    render(
+      <MergeInDialog
+        open
+        repoId="/repo"
+        worktreePath="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onPull={vi.fn(async () => ({ ok: true, message: 'pulled' }))}
+        onMerge={vi.fn(async () => ({ ok: true, message: 'merged' }))}
+        onPush={vi.fn(async () => undefined)}
+      />,
+    )
+    await flush()
+    await flush()
+
+    const footer = document.body.querySelector('[data-slot="merge-dialog-form"] [data-slot="dialog-footer"]')
+    const buttons = [...(footer?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'dialog.cancel',
+      'action.merge-in-confirm',
+      'action.merge-in-and-push-confirm',
+    ])
+    expect(buttonByText('action.merge-in-confirm').dataset.variant).toBe('outline')
+    expect(buttonByText('action.merge-in-and-push-confirm').dataset.variant).toBe('default')
+  })
+
   test('filters merge source branches from the select search input', async () => {
     render(
       <MergeInDialog
