@@ -187,6 +187,8 @@ function syncPlan(kind: 'pull' | 'push', ready = true, repositoryNames = ['api',
       targetBranch: 'feature/a',
       targetWorktreePath: `${ROOT}/goblin-feature-a/${repositoryName}`,
       targetHead: `target-head-${index}`,
+      upstream: kind === 'pull' ? `origin/feature/${repositoryName}` : null,
+      trackingGone: false,
       ready,
       ...(!ready
         ? {

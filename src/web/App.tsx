@@ -62,6 +62,7 @@ import { useRendererEffectIntentRouter } from '#/web/hooks/useRendererEffectInte
 import { useSessionPersistence } from '#/web/hooks/useSessionPersistence.ts'
 import { useSettingsWriteErrorToast } from '#/web/hooks/useSettingsWriteErrorToast.ts'
 import { useRepoStoreInvalidationRefresh } from '#/web/hooks/useRepoStoreInvalidationRefresh.ts'
+import { RepoToastListener } from '#/web/hooks/useRepoToasts.tsx'
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { useBranchWorkspaceInvalidationSync } from '#/web/branch-workspace-queries.ts'
 import { useWorkspaceConfigurationInvalidationSync } from '#/web/workspace-configuration-invalidation.ts'
@@ -347,6 +348,7 @@ function MainWindowOverlays({
       {/* shadcn/ui Toaster wrapper — owns its own theme + style hooks.
        * App-level only sets position + closeButton; the rest of the
        * visual contract is in components/ui/sonner.tsx. */}
+      <RepoToastListener />
       <Toaster position="bottom-right" closeButton />
     </>
   )

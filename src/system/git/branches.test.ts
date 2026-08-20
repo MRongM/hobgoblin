@@ -4,6 +4,14 @@ import type { BranchSnapshotInfo } from '#/shared/git-types.ts'
 
 const { createBranch, createTrackingBranch, deleteRemoteServerBranch } = branchOperations
 
+async function checkoutTrackingBranch(cwd: string, localBranch: string, remoteRef: string, signal?: AbortSignal) {
+  const checkout = (branchOperations as Record<string, unknown>).checkoutTrackingBranch
+  expect(checkout).toBeTypeOf('function')
+  return await (
+    checkout as (cwd: string, localBranch: string, remoteRef: string, signal?: AbortSignal) => Promise<unknown>
+  )(cwd, localBranch, remoteRef, signal)
+}
+
 async function setBranchUpstream(
   cwd: string,
   branch: string,
@@ -156,6 +164,44 @@ describe('branch creation helpers', () => {
       ['config', '--local', 'branch.feature/new.hobgoblin-created-from', 'origin/feature/new'],
       { signal },
     )
+  })
+
+  test('creates and checks out a local tracking branch atomically', async () => {
+    const signal = new AbortController().signal
+
+    await expect(
+      checkoutTrackingBranch('/repo-worktree', 'feature/new', 'origin/feature/new', signal),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo-worktree',
+      { signal },
+      'switch',
+      '--track',
+      '-c',
+      'feature/new',
+      '--',
+      'origin/feature/new',
+    )
+    expect(gitMock).toHaveBeenCalledWith(
+      '/repo-worktree',
+      ['config', '--local', 'branch.feature/new.hobgoblin-created-from', 'origin/feature/new'],
+      { signal },
+    )
+  })
+
+  test('rejects invalid tracking checkout inputs before running git', async () => {
+    await expect(checkoutTrackingBranch('/repo-worktree', '-bad', 'origin/feature/new')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    await expect(checkoutTrackingBranch('/repo-worktree', 'feature/new', 'origin/HEAD')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
+    expect(gitResultWithOptionsMock).not.toHaveBeenCalled()
+    expect(gitMock).not.toHaveBeenCalled()
   })
 
   test('sets an existing local branch upstream to a remote ref', async () => {

@@ -62,6 +62,7 @@ import {
   type CreateWorktreeMode,
 } from '#/shared/worktree-create.ts'
 import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
@@ -874,7 +875,7 @@ export async function moveRepositoryFileTreeEntries(
 export async function checkoutWorktreeBranch(
   repoId: string,
   worktreePath: string,
-  branch: string,
+  target: WorktreeBranchSwitchTarget,
   signal?: AbortSignal,
   sourceToken?: string,
 ): Promise<ExecResult> {
@@ -884,7 +885,7 @@ export async function checkoutWorktreeBranch(
   return await runWithRepoBackend(repoId, async (backend) => {
     return await publishSnapshotInvalidationAfterMutation(
       repoId,
-      await backend.checkoutWorktree(worktreePath, branch, signal),
+      await backend.checkoutWorktree(worktreePath, target, signal),
       sourceToken,
     )
   })

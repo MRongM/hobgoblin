@@ -40,6 +40,8 @@ vi.mock('sonner', () => ({
 }))
 
 const REPO_ID = '/tmp/repo-toasts-test'
+const WORKSPACE_ID = '/workspace'
+const MEMBER_REPO_ID = '/workspace/api'
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -63,6 +65,48 @@ afterEach(() => {
 })
 
 describe('useRepoToasts', () => {
+  test('shows and clears member repository events while the parent workspace is active', () => {
+    const workspace = emptyRepo(WORKSPACE_ID, 'workspace')
+    workspace.isGitRepo = false
+    const member = emptyRepo(MEMBER_REPO_ID, 'api')
+    member.workspaceRootId = WORKSPACE_ID
+    useReposStore.setState({
+      repos: { [WORKSPACE_ID]: workspace, [MEMBER_REPO_ID]: member },
+      order: [WORKSPACE_ID],
+      activeId: WORKSPACE_ID,
+      activeProjectId: WORKSPACE_ID,
+      workspaceProjects: {
+        [WORKSPACE_ID]: {
+          rootId: WORKSPACE_ID,
+          repositoryIds: [MEMBER_REPO_ID],
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      workspaceActiveContextByRoot: {
+        [WORKSPACE_ID]: { kind: 'branch-workspace', branchWorkspaceId: 'branch-workspace-1' },
+      },
+    })
+    useReposStore.getState().setLastResult(
+      MEMBER_REPO_ID,
+      { ok: true, message: 'member updated' },
+      member.instanceToken,
+    )
+    const eventId = useReposStore.getState().repos[MEMBER_REPO_ID]!.events[0]!.id
+
+    render(<Harness />)
+
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      'action.result-ok',
+      expect.objectContaining({ id: `${MEMBER_REPO_ID}:result:ok:${eventId}` }),
+    )
+    expect(useReposStore.getState().repos[MEMBER_REPO_ID]!.events).toEqual([])
+  })
+
   test('renders worktree bootstrap summary details in success toast', () => {
     const repo = emptyRepo(REPO_ID, 'repo-toasts-test')
     useReposStore.setState({ repos: { [REPO_ID]: repo }, order: [REPO_ID], activeId: REPO_ID })
@@ -83,7 +127,7 @@ describe('useRepoToasts', () => {
       { action: { kind: 'createWorktree', branch: 'feature/a', worktreePath: '/tmp/repo-feature' } },
     )
 
-    render(<Harness repoId={REPO_ID} />)
+    render(<Harness />)
 
     expect(toastMocks.success).toHaveBeenCalledTimes(1)
     const [, options] = toastMocks.success.mock.calls[0]!
@@ -94,8 +138,8 @@ describe('useRepoToasts', () => {
   })
 })
 
-function Harness({ repoId }: { repoId: string }) {
-  useRepoToasts(repoId)
+function Harness() {
+  useRepoToasts()
   return null
 }
 

@@ -320,9 +320,9 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
   })
 
   test.each([
-    ['pull', { targetTracking: 'origin/feature/a' }],
-    ['push', { remotes: ['origin'] }],
-  ] as const)('builds an ordered ready %s plan for target branches', async (kind, snapshotOptions) => {
+    ['pull', { targetTracking: 'origin/feature/a' }, 'origin/feature/a'],
+    ['push', { remotes: ['origin'] }, null],
+  ] as const)('builds an ordered ready %s plan for target branches', async (kind, snapshotOptions, upstream) => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,
       { kind, branchWorkspaceId: WORKSPACE_ID },
@@ -344,6 +344,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetBranch: 'feature/a',
             targetWorktreePath: '/workspace/goblin-feature-a/api',
             targetHead: 'target-head',
+            upstream,
+            trackingGone: false,
             ready: true,
           },
           {
@@ -351,6 +353,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetBranch: 'feature/a',
             targetWorktreePath: '/workspace/goblin-feature-a/web',
             targetHead: 'target-head',
+            upstream,
+            trackingGone: false,
             ready: true,
           },
         ],
@@ -382,8 +386,20 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         kind,
         ready: false,
         members: [
-          { repositoryName: 'api', ready: false, message },
-          { repositoryName: 'web', ready: false, message },
+          {
+            repositoryName: 'api',
+            upstream: kind === 'pull' ? 'origin/feature/a' : null,
+            trackingGone: kind === 'pull',
+            ready: false,
+            message,
+          },
+          {
+            repositoryName: 'web',
+            upstream: kind === 'pull' ? 'origin/feature/a' : null,
+            trackingGone: kind === 'pull',
+            ready: false,
+            message,
+          },
         ],
       },
     })

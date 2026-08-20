@@ -24,6 +24,7 @@ import { Button } from '#/web/components/ui/button.tsx'
 import { MergeConflictAiActions } from '#/web/components/MergeConflictAiActions.tsx'
 import { Checkbox } from '#/web/components/ui/checkbox.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
+import { BranchUpstreamDisplay } from '#/web/components/branch-list/BranchUpstreamDisplay.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import {
   Dialog,
@@ -1644,7 +1645,12 @@ function SyncContent({
               />
               <span className="font-mono text-[10px] text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
               <span className="truncate font-medium">{member.repositoryName}</span>
-              <span className="truncate font-mono text-[10px] text-muted-foreground">{member.targetBranch}</span>
+              <div className="grid min-w-0 gap-1">
+                <span className="truncate font-mono text-[10px] text-muted-foreground">{member.targetBranch}</span>
+                <div data-sync-upstream={member.repositoryName}>
+                  <BranchUpstreamDisplay upstream={member.upstream} trackingGone={member.trackingGone} />
+                </div>
+              </div>
               <span className={cn('text-[10px] text-muted-foreground', !member.ready && 'text-warning')}>
                 {activeStep
                   ? t(`workspace.branch-workspace.git-action.step.${activeStep}`)

@@ -131,6 +131,31 @@ describe('repo-client', () => {
     )
   })
 
+  test('serializes a discriminated worktree branch switch target', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, message: 'switched' }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const target = {
+      kind: 'remoteBranch' as const,
+      remoteRef: 'origin/feature/remote',
+      localBranch: 'feature/remote',
+    }
+    const { checkoutBranchInWorktree } = await import('#/web/repo-client.ts')
+
+    await checkoutBranchInWorktree('/repo', '/repo-worktree', target)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/checkout-in-worktree',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ repoId: '/repo', worktreePath: '/repo-worktree', target }),
+      }),
+    )
+  })
+
   test('requests invalid worktree cleanup with the selected path and source token', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

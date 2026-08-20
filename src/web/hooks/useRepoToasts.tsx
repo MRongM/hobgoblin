@@ -3,14 +3,12 @@ import { toast } from 'sonner'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import type { RepoEvent } from '#/web/stores/repos/types.ts'
 import { repoEventActionSuccessLabel } from '#/web/stores/repos/action-labels.ts'
 import {
   hasWorktreeBootstrapSummaryDetails,
   type WorktreeBootstrapPathSummary,
   type WorktreeBootstrapSummary,
 } from '#/shared/worktree-bootstrap-summary.ts'
-const EMPTY_EVENTS: RepoEvent[] = []
 
 type Translator = ReturnType<typeof useT>
 type WorktreeBootstrapSummaryPathKind = 'copy' | 'symlink' | 'hardlink' | 'skippedMissing'
@@ -40,9 +38,14 @@ const WORKTREE_BOOTSTRAP_PATH_SUMMARY_KEYS: Record<
 const WORKTREE_BOOTSTRAP_MORE_SUFFIX_KEY = 'worktree-bootstrap.summary.more-suffix'
 const WORKTREE_BOOTSTRAP_SETUP_KEY = 'worktree-bootstrap.summary.setup'
 
-export function useRepoToasts(repoId: string) {
+export function RepoToastListener() {
+  useRepoToasts()
+  return null
+}
+
+export function useRepoToasts() {
   const t = useT()
-  const events = useReposStore((s) => s.repos[repoId]?.events ?? EMPTY_EVENTS)
+  const repos = useReposStore((s) => s.repos)
 
   // `t` is read through a ref so a language flip doesn't re-fire these
   // effects (which would already be no-ops after the store clear, but
@@ -54,50 +57,53 @@ export function useRepoToasts(repoId: string) {
   tRef.current = t
 
   useEffect(() => {
-    if (!events.length) return
-    for (const event of events) {
-      if (event.kind === 'result') {
-        const result = event.result
-        const hasMessage = !!result.message
-        const actionLabel = repoEventActionSuccessLabel(event.action)
-        const bootstrapDescription =
-          result.ok && result.worktreeBootstrap
-            ? worktreeBootstrapToastDescription(result.worktreeBootstrap, tRef.current)
-            : undefined
-        const fallbackDescription =
-          (hasMessage && !actionLabel) || !result.ok ? (
-            <ToastDescription>{tRef.current(result.message || 'error.unknown')}</ToastDescription>
-          ) : undefined
-        const description = bootstrapDescription ?? fallbackDescription
-        if (result.ok) {
-          toast.success(
-            actionLabel
-              ? tRef.current(actionLabel.labelKey, actionLabel.labelParams)
-              : tRef.current('action.result-ok'),
-            {
-              id: `${repoId}:result:ok:${event.id}`,
+    for (const [repoId, repo] of Object.entries(repos)) {
+      const events = repo.events
+      if (!events.length) continue
+      for (const event of events) {
+        if (event.kind === 'result') {
+          const result = event.result
+          const hasMessage = !!result.message
+          const actionLabel = repoEventActionSuccessLabel(event.action)
+          const bootstrapDescription =
+            result.ok && result.worktreeBootstrap
+              ? worktreeBootstrapToastDescription(result.worktreeBootstrap, tRef.current)
+              : undefined
+          const fallbackDescription =
+            (hasMessage && !actionLabel) || !result.ok ? (
+              <ToastDescription>{tRef.current(result.message || 'error.unknown')}</ToastDescription>
+            ) : undefined
+          const description = bootstrapDescription ?? fallbackDescription
+          if (result.ok) {
+            toast.success(
+              actionLabel
+                ? tRef.current(actionLabel.labelKey, actionLabel.labelParams)
+                : tRef.current('action.result-ok'),
+              {
+                id: `${repoId}:result:ok:${event.id}`,
+                description,
+              },
+            )
+          } else {
+            toast.error(tRef.current('action.result-error'), {
+              id: `${repoId}:result:err:${event.id}`,
               description,
-            },
-          )
+              duration: 10_000,
+            })
+          }
         } else {
-          toast.error(tRef.current('action.result-error'), {
-            id: `${repoId}:result:err:${event.id}`,
-            description,
+          toast.error(<ToastDescription>{tRef.current(event.message)}</ToastDescription>, {
+            id: `${repoId}:error:${event.id}`,
             duration: 10_000,
           })
         }
-      } else {
-        toast.error(<ToastDescription>{tRef.current(event.message)}</ToastDescription>, {
-          id: `${repoId}:error:${event.id}`,
-          duration: 10_000,
-        })
       }
+      useReposStore.getState().clearEvents(
+        repoId,
+        events.map((event) => event.id),
+      )
     }
-    useReposStore.getState().clearEvents(
-      repoId,
-      events.map((event) => event.id),
-    )
-  }, [events, repoId])
+  }, [repos])
 }
 
 function ToastDescription({ children }: { children: React.ReactNode }) {

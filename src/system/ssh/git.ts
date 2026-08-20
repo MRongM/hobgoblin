@@ -679,6 +679,35 @@ export async function checkoutRemoteBranch(
   return remoteExecResult(result)
 }
 
+export async function checkoutRemoteTrackingBranch(
+  target: RemoteRepoTarget,
+  input: {
+    worktreePath: string
+    localBranch: string
+    remoteRef: string
+    signal?: AbortSignal
+    run?: RemoteGitRunner
+  },
+): Promise<ExecResult> {
+  if (!isValidRemotePath(input.worktreePath)) return { ok: false, message: 'error.invalid-path' }
+  if (!isSafeBranchName(input.localBranch) || !isRemoteTrackingRef(input.remoteRef)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const run: RemoteGitRunner =
+    input.run ?? ((command, remoteTarget, options) => runRemoteCommand(remoteTarget, command, options))
+  const result = await run(
+    {
+      type: 'gitCheckoutTracking',
+      path: input.worktreePath,
+      localBranch: input.localBranch,
+      remoteRef: input.remoteRef,
+    },
+    target,
+    { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+  )
+  return remoteExecResult(result)
+}
+
 export async function pullRemoteBranch(
   target: RemoteRepoTarget,
   branch: string,

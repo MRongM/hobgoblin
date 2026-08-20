@@ -7,7 +7,6 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { BranchDetail } from '#/web/components/BranchDetail.tsx'
 import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
-import { useRepoToasts } from '#/web/hooks/useRepoToasts.tsx'
 import { getRepoWorkspacePresentation, type CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
 import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
@@ -62,7 +61,6 @@ export function RepoView({ repoId }: Props) {
   const setDetailFocusMode = useReposStore((s) => s.setDetailFocusMode)
   const repo = useReposStore((s) => s.repos[repoId])
   const multiRepositoryWorkspace = useReposStore((s) => !!s.workspaceProjects[repoId])
-  useRepoToasts(repoId)
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>('detail')
   const [fileAreaOpenRequest, setFileAreaOpenRequest] = useState(0)

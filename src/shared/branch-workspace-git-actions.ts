@@ -94,6 +94,8 @@ export interface BranchWorkspaceSyncMemberPlan {
   targetBranch: string
   targetWorktreePath: string
   targetHead: string
+  upstream: string | null
+  trackingGone: boolean
   ready: boolean
   message?: string
   fingerprint: string

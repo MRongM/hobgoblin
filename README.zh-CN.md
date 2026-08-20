@@ -79,6 +79,8 @@ Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是�
 - **Android：** 下载 `android.apk` 文件。该 APK 未签名，安装前必须先完成签名。
 - **Linux Server Mode：** 下载面向部署的源码包 `Hobgoblin-<version>-linux-source.tar.gz`。
 
+本地仓库操作要求 `PATH` 中存在 Git 2.31.0 或更高版本。通过 SSH 操作远程仓库时，远程主机也必须安装 Git 2.31.0 或更高版本。
+
 当前构建未签名。
 
 在 macOS 上，Gatekeeper 可能会阻止下载后的应用。如果出现这种情况，可以右键应用，选择 **打开**，然后确认。安装后也可以移除隔离标记：

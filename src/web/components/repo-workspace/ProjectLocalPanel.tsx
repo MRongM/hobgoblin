@@ -4,6 +4,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { GitBranch, Loader2, Search, Tag, Trash2, X, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { BranchUpstreamDisplay } from '#/web/components/branch-list/BranchUpstreamDisplay.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
@@ -16,10 +17,7 @@ import {
 } from '#/web/repo-client.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
-import {
-  getBranchPushTarget,
-  type BranchPushTarget,
-} from '#/web/stores/repos/branch-action-write-paths.ts'
+import { getBranchPushTarget, type BranchPushTarget } from '#/web/stores/repos/branch-action-write-paths.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 
@@ -218,7 +216,13 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
                   size="icon-sm"
                   disabled={isPending}
                   aria-label={t('local.branch-push')}
-                  title={t('local.branch-push')}
+                  title={[
+                    t('local.branch-push'),
+                    branch.tracking ?? t('branches.no-upstream'),
+                    branch.trackingGone ? t('action.branch-upstream-gone') : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                   onClick={() => handlePush(branch)}
                   className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
                 >
@@ -265,7 +269,9 @@ function LocalBranchesPane({ repoId, query }: { repoId: string; query: string })
                 values={{ branch: pushTarget.display }}
                 components={{ branch: <b className="text-foreground" /> }}
               />
-              <span className="block break-all font-mono text-foreground">{pushTarget.display}</span>
+              <div data-push-upstream>
+                <BranchUpstreamDisplay upstream={pushTarget.upstream} trackingGone={pushTarget.trackingGone} />
+              </div>
             </div>
           ) : (
             ''

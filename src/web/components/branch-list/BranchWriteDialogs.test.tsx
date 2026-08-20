@@ -5,11 +5,13 @@ import type { ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
+  CheckoutToDialog,
   CreateBranchDialog,
   MergeInDialog,
   MergeOutDialog,
   PullRemoteBranchDialog,
 } from '#/web/components/branch-list/BranchWriteDialogs.tsx'
+import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 import { InlineCommitForm } from '#/web/components/branch-list/InlineCommitForm.tsx'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { RepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
@@ -672,6 +674,31 @@ describe('MergeInDialog', () => {
 })
 
 describe('MergeOutDialog', () => {
+  test('presents pull-merge-push as the primary and rightmost action', async () => {
+    render(
+      <MergeOutDialog
+        open
+        repoId="/repo"
+        sourceBranch="feature/current"
+        sourceWorktreePath="/repo-feature"
+        onClose={vi.fn()}
+        onMergeOut={vi.fn()}
+      />,
+    )
+    await flush()
+
+    const footer = document.body.querySelector('[data-slot="merge-out-dialog-form"] [data-slot="dialog-footer"]')
+    const buttons = [...(footer?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+
+    expect(buttons.map((button) => button.textContent)).toEqual([
+      'dialog.cancel',
+      'action.merge-out-confirm',
+      'action.merge-out-pull-merge-push-confirm',
+    ])
+    expect(buttonByText('action.merge-out-confirm').dataset.variant).toBe('outline')
+    expect(buttonByText('action.merge-out-pull-merge-push-confirm').dataset.variant).toBe('default')
+  })
+
   test('filters merge destination branches from the select search input', async () => {
     mocks.getRepositoryBranchMergeOutPlan.mockResolvedValueOnce({
       ok: true,
@@ -1138,6 +1165,117 @@ describe('PullRemoteBranchDialog', () => {
   })
 })
 
+describe('CheckoutToDialog', () => {
+  test('loads a remote ref and submits its derived local tracking branch', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/feature/remote'])
+    const onCheckout = vi.fn(async (_target: WorktreeBranchSwitchTarget) => {})
+
+    render(
+      <CheckoutToDialog
+        open
+        repoId="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onCheckout={onCheckout}
+      />,
+    )
+    await flush()
+
+    selectCheckoutCandidate('remote:origin/feature/remote')
+
+    expect(input('#checkout-to-local-branch').value).toBe('feature/remote')
+    clickButtonByText('action.checkout-to-confirm')
+    await flush()
+
+    expect(onCheckout).toHaveBeenCalledWith({
+      kind: 'remoteBranch',
+      remoteRef: 'origin/feature/remote',
+      localBranch: 'feature/remote',
+    })
+  })
+
+  test('requires a unique editable local branch name for a remote ref', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main'])
+    const onCheckout = vi.fn(async (_target: WorktreeBranchSwitchTarget) => {})
+
+    render(
+      <CheckoutToDialog
+        open
+        repoId="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onCheckout={onCheckout}
+      />,
+    )
+    await flush()
+
+    selectCheckoutCandidate('remote:origin/main')
+
+    expect(document.body.textContent).toContain('action.create-worktree-branch-exists')
+    expect(buttonByText('action.checkout-to-confirm').disabled).toBe(true)
+
+    setInputValue('#checkout-to-local-branch', 'feature/from-origin')
+    clickButtonByText('action.checkout-to-confirm')
+    await flush()
+
+    expect(onCheckout).toHaveBeenCalledWith({
+      kind: 'remoteBranch',
+      remoteRef: 'origin/main',
+      localBranch: 'feature/from-origin',
+    })
+  })
+
+  test('keeps local switching available when remote refs fail to load', async () => {
+    mocks.getRepositoryRemoteBranches.mockRejectedValueOnce(new Error('offline'))
+    const onCheckout = vi.fn(async (_target: WorktreeBranchSwitchTarget) => {})
+
+    render(
+      <CheckoutToDialog
+        open
+        repoId="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main')]}
+        onClose={vi.fn()}
+        onCheckout={onCheckout}
+      />,
+    )
+    await flush()
+
+    expect(document.body.textContent).toContain('action.checkout-to-remote-load-failed')
+    selectCheckoutCandidate('local:main')
+    clickButtonByText('action.checkout-to-confirm')
+    await flush()
+
+    expect(onCheckout).toHaveBeenCalledWith({ kind: 'localBranch', branch: 'main' })
+  })
+
+  test('filters local and remote candidates from one search input', async () => {
+    mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/feature/remote'])
+
+    render(
+      <CheckoutToDialog
+        open
+        repoId="/repo"
+        branch={repoBranch('feature/current')}
+        allBranches={[repoBranch('feature/current'), repoBranch('main'), repoBranch('release/local')]}
+        onClose={vi.fn()}
+        onCheckout={vi.fn()}
+      />,
+    )
+    await flush()
+
+    openSelect('#checkout-to-select')
+    setInputValue('#checkout-to-branch-search', 'remote')
+    await flush()
+
+    expect(document.body.querySelector('[data-checkout-target-key="remote:origin/feature/remote"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-checkout-target-key="local:main"]')).toBeNull()
+    expect(document.body.querySelector('[data-checkout-target-key="local:release/local"]')).toBeNull()
+  })
+})
+
 function InlineCommitFormHarness({
   availableProviders = [],
   initialMessage = '',
@@ -1316,6 +1454,15 @@ function selectFirstMergeOutCandidate() {
   openSelect('#merge-out-select')
   const item = document.body.querySelector<HTMLElement>('[role="option"]:not([aria-disabled="true"])')
   if (!item) throw new Error('Missing merge-out candidate option')
+  act(() => {
+    item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+}
+
+function selectCheckoutCandidate(key: string) {
+  openSelect('#checkout-to-select')
+  const item = document.body.querySelector<HTMLElement>(`[data-checkout-target-key="${key}"]`)
+  if (!item) throw new Error(`Missing checkout candidate: ${key}`)
   act(() => {
     item.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   })

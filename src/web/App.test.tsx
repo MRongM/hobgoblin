@@ -60,6 +60,9 @@ vi.mock('#/web/hooks/useRendererEffectIntentRouter.ts', () => ({ useRendererEffe
 vi.mock('#/web/hooks/useSessionPersistence.ts', () => ({ useSessionPersistence: vi.fn() }))
 vi.mock('#/web/hooks/useSettingsWriteErrorToast.ts', () => ({ useSettingsWriteErrorToast: vi.fn() }))
 vi.mock('#/web/hooks/useRepoStoreInvalidationRefresh.ts', () => ({ useRepoStoreInvalidationRefresh: vi.fn() }))
+vi.mock('#/web/hooks/useRepoToasts.tsx', () => ({
+  RepoToastListener: () => <div data-testid="repo-toast-listener" />,
+}))
 vi.mock('#/web/settings-queries.ts', () => ({
   useSettingsQueryInvalidationSync: vi.fn(),
   useSettingsSnapshotQuery: () => ({ data: { repoSettings: [] } }),
@@ -209,6 +212,13 @@ afterEach(() => {
 })
 
 describe('App shell topbar visibility', () => {
+  test('keeps the repository toast listener mounted without a visible repository', async () => {
+    await renderApp({ runtime: 'web', workspaceMode: 'split', visibleRepoId: null })
+
+    expect(container?.querySelector('[data-testid="repo-toast-listener"]')).not.toBeNull()
+    expect(container?.querySelector('[data-testid="repo-view"]')).toBeNull()
+  })
+
   test('renders no global topbar on desktop while a repo is open', async () => {
     await renderApp({ runtime: 'web', workspaceMode: 'split' })
 

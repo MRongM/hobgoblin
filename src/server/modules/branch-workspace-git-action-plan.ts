@@ -439,6 +439,8 @@ async function buildSyncPlan(
       targetBranch: member.targetBranch,
       targetWorktreePath: member.worktreePath,
       targetHead: facts.head,
+      upstream: branch.tracking ?? null,
+      trackingGone: branch.trackingGone === true,
       ready,
       ...(message ? { message } : {}),
       fingerprint: repositoryPlanFingerprint({

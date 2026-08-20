@@ -177,7 +177,7 @@ A best-effort external attention delivery caused by an eligible unread terminal 
 _Avoid_: Unread state, queued notification, terminal bell event
 
 **In-app notification**:
-A transient message shown by Hobgoblin's shared notification surface in the current renderer, with success, info, warning, or error emphasis. It is distinct from system and Telegram notification delivery and is neither persisted nor synchronized across windows.
+A transient message shown immediately by Hobgoblin's shared notification surface in the current renderer, with success, info, warning, or error emphasis, independently of the selected navigation context. It is distinct from system and Telegram notification delivery and is neither queued for later navigation, persisted, nor synchronized across windows.
 _Avoid_: App global notification, system notification, desktop notification, Telegram notification
 
 **Shared proxy URL**:
@@ -315,6 +315,10 @@ _Avoid_: Worktree creation failure, dependency validation error, dependency repl
 **Selected branch context**:
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
 _Avoid_: Active branch, current branch
+
+**Worktree branch switch**:
+An explicit action that changes the local branch checked out in one branch action target worktree. Selecting an existing local branch switches directly to it; selecting a remote-tracking branch ref creates and switches to a uniquely named local tracking branch, defaulting that local name from the remote ref while allowing the user to change it. It never overwrites an existing local branch and is distinct from changing the selected branch context.
+_Avoid_: Branch navigation, detached checkout, implicit local-branch overwrite
 
 **Branch creation source**:
 The exact local or remote branch ref selected when Hobgoblin creates a local branch. It is immutable creation provenance recorded beside that local branch, may be unknown for branches created outside Hobgoblin or before provenance recording existed, and is distinct from current commit ancestry, upstream tracking, the repository default branch, and a branch workspace creation base.

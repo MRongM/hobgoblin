@@ -96,6 +96,7 @@ export type RemoteCommandKind =
   | { type: 'gitStatusAll'; path: string }
   | { type: 'gitDiffNoIndex'; path: string; filePath: string }
   | { type: 'gitCheckout'; path: string; branch: string }
+  | { type: 'gitCheckoutTracking'; path: string; localBranch: string; remoteRef: string }
   | { type: 'gitPullCurrent'; path: string }
   | { type: 'gitCommitAll'; path: string; message: string }
   | { type: 'gitMerge'; path: string; branch: string }
@@ -519,6 +520,13 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} diff-tree --no-commit-id --numstat -r -M -C --root -z ${shellQuote(command.commit)}`
     case 'gitCheckout':
       return `git -C ${shellQuote(command.path)} switch -- ${shellQuote(command.branch)}`
+    case 'gitCheckoutTracking':
+      return remoteBranchCreationScript(
+        `git -C ${shellQuote(command.path)} switch --track -c ${shellQuote(command.localBranch)} -- ${shellQuote(command.remoteRef)}`,
+        command.path,
+        command.localBranch,
+        command.remoteRef,
+      )
     case 'gitFetchAll':
       return `git -C ${shellQuote(command.path)} fetch --all --prune`
     case 'gitFetchRemote':

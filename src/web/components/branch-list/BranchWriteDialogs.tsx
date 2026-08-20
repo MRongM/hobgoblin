@@ -38,38 +38,81 @@ import {
   remoteRefMatchesQuery,
   remoteTrackingBranchChoices,
 } from '#/web/components/branch-list/branch-create-model.ts'
+import { deriveLocalBranchFromRemoteRef } from '#/shared/worktree-create.ts'
+import { worktreeBranchSwitchTargetKey, type WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 
 // ── Checkout-to dialog ────────────────────────────────────────────────────────
 
 interface CheckoutToDialogProps {
   open: boolean
+  repoId: string
   branch: RepoBranchState
   allBranches: RepoBranchState[]
   onClose: () => void
-  onCheckout: (targetBranch: string) => Promise<void>
+  onCheckout: (target: WorktreeBranchSwitchTarget) => Promise<void>
 }
 
-export function CheckoutToDialog({ open, branch, allBranches, onClose, onCheckout }: CheckoutToDialogProps) {
+export function CheckoutToDialog({ open, repoId, branch, allBranches, onClose, onCheckout }: CheckoutToDialogProps) {
   const t = useT()
   const [selected, setSelected] = useState('')
+  const [remoteRefs, setRemoteRefs] = useState<string[]>([])
+  const [branchQuery, setBranchQuery] = useState('')
+  const [localBranch, setLocalBranch] = useState('')
+  const [remoteState, setRemoteState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const { isPending, run } = useAsyncPending<'checkout'>()
 
-  const candidates = allBranches.filter((b) => b.name !== branch.name)
+  const candidates: WorktreeBranchSwitchTarget[] = [
+    ...allBranches
+      .filter((candidate) => candidate.name !== branch.name)
+      .map((candidate) => ({ kind: 'localBranch' as const, branch: candidate.name })),
+    ...remoteRefs.flatMap((remoteRef) => {
+      const defaultLocalBranch = deriveLocalBranchFromRemoteRef(remoteRef)
+      return defaultLocalBranch ? [{ kind: 'remoteBranch' as const, remoteRef, localBranch: defaultLocalBranch }] : []
+    }),
+  ]
+  const selectedTarget = candidates.find((candidate) => worktreeBranchSwitchTargetKey(candidate) === selected)
+  const validationKey =
+    selectedTarget?.kind === 'remoteBranch' ? branchNameValidationKey(localBranch, allBranches) : null
+  const effectiveTarget =
+    selectedTarget?.kind === 'remoteBranch' ? { ...selectedTarget, localBranch: localBranch.trim() } : selectedTarget
 
   useEffect(() => {
     if (!open) {
       setSelected('')
+      setRemoteRefs([])
+      setBranchQuery('')
+      setLocalBranch('')
+      setRemoteState('idle')
       setError(null)
+      return
     }
-  }, [open])
+
+    const controller = new AbortController()
+    setSelected('')
+    setRemoteRefs([])
+    setBranchQuery('')
+    setLocalBranch('')
+    setRemoteState('loading')
+    setError(null)
+    void getRepositoryRemoteBranches(repoId, controller.signal)
+      .then((refs) => {
+        if (controller.signal.aborted) return
+        setRemoteRefs(refs)
+        setRemoteState('loaded')
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setRemoteState('error')
+      })
+    return () => controller.abort()
+  }, [open, repoId])
 
   async function handleConfirm() {
-    if (!selected) return
+    if (!effectiveTarget || validationKey) return
     setError(null)
     await run('checkout', async () => {
       try {
-        await onCheckout(selected)
+        await onCheckout(effectiveTarget)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
@@ -93,25 +136,79 @@ export function CheckoutToDialog({ open, branch, allBranches, onClose, onCheckou
       >
         <Field>
           <FieldLabel htmlFor="checkout-to-select">{t('action.checkout-to-label')}</FieldLabel>
-          <Select value={selected} onValueChange={setSelected}>
+          <Select
+            value={selected}
+            onValueChange={(next) => {
+              const nextTarget = candidates.find((candidate) => worktreeBranchSwitchTargetKey(candidate) === next)
+              setSelected(next)
+              setLocalBranch(nextTarget?.kind === 'remoteBranch' ? nextTarget.localBranch : '')
+            }}
+          >
             <SelectTrigger id="checkout-to-select" className="w-full">
               <SelectValue placeholder={t('action.checkout-to-placeholder')} />
             </SelectTrigger>
-            <SelectContent>
-              {candidates.map((b) => (
-                <SelectItem key={b.name} value={b.name} textValue={b.name}>
-                  {b.name}
-                </SelectItem>
-              ))}
+            <SelectContent
+              matchTriggerWidth
+              header={
+                <RemoteBranchSearchInput
+                  id="checkout-to-branch-search"
+                  value={branchQuery}
+                  onChange={setBranchQuery}
+                  placeholder={t('branches.search-placeholder')}
+                  ariaLabel={t('branches.search-label')}
+                />
+              }
+            >
+              {candidates
+                .filter((candidate) =>
+                  remoteRefMatchesQuery(
+                    candidate.kind === 'localBranch' ? candidate.branch : candidate.remoteRef,
+                    branchQuery,
+                  ),
+                )
+                .map((candidate) => {
+                  const key = worktreeBranchSwitchTargetKey(candidate)
+                  const name = candidate.kind === 'localBranch' ? candidate.branch : candidate.remoteRef
+                  const text = candidate.kind === 'remoteBranch' ? `${name} (${t('tab.remote-branches')})` : name
+                  return (
+                    <SelectItem key={key} value={key} textValue={text} data-checkout-target-key={key}>
+                      <span className="truncate">{text}</span>
+                    </SelectItem>
+                  )
+                })}
             </SelectContent>
           </Select>
+          <FieldDescription reserveHeight aria-live="polite">
+            {remoteState === 'loading'
+              ? t('action.checkout-to-remote-loading')
+              : remoteState === 'error'
+                ? t('action.checkout-to-remote-load-failed')
+                : remoteState === 'loaded' && remoteRefs.length === 0
+                  ? t('action.checkout-to-remote-empty')
+                  : ''}
+          </FieldDescription>
         </Field>
+        {selectedTarget?.kind === 'remoteBranch' && (
+          <Field data-invalid={validationKey ? true : undefined}>
+            <FieldLabel htmlFor="checkout-to-local-branch">{t('action.create-worktree-local-branch-label')}</FieldLabel>
+            <Input
+              id="checkout-to-local-branch"
+              value={localBranch}
+              onChange={(event) => setLocalBranch(event.target.value)}
+              placeholder={selectedTarget.localBranch}
+              aria-invalid={!!validationKey}
+            />
+            <FieldError reserveHeight aria-live="polite" aria-atomic="true">
+              {validationKey ? t(validationKey) : ''}
+            </FieldError>
+          </Field>
+        )}
         {error && <DialogError>{error}</DialogError>}
         <DialogFooter>
           <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClose}>
             {t('dialog.cancel')}
           </Button>
-          <Button type="submit" size="sm" disabled={!selected || isPending}>
+          <Button type="submit" size="sm" disabled={!effectiveTarget || !!validationKey || isPending}>
             {isPending && <Loader2 className="animate-spin" />}
             {t('action.checkout-to-confirm')}
           </Button>
@@ -516,22 +613,22 @@ export function MergeOutDialog({
             {t('dialog.cancel')}
           </Button>
           <Button
-            type="button"
+            type="submit"
             variant="outline"
+            size="sm"
+            disabled={!destination?.ready || destination.destination.kind === 'remote' || isPending}
+          >
+            {pending === 'merge' && <Loader2 className="animate-spin" />}
+            {t('action.merge-out-confirm')}
+          </Button>
+          <Button
+            type="button"
             size="sm"
             disabled={!destination?.ready || !destination.pullMergePushReady || isPending}
             onClick={() => void handleConfirm('pullMergePush')}
           >
             {pending === 'pullMergePush' && <Loader2 className="animate-spin" />}
             {t('action.merge-out-pull-merge-push-confirm')}
-          </Button>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!destination?.ready || destination.destination.kind === 'remote' || isPending}
-          >
-            {pending === 'merge' && <Loader2 className="animate-spin" />}
-            {t('action.merge-out-confirm')}
           </Button>
         </DialogFooter>
       </form>

@@ -37,6 +37,7 @@ import {
   type RepositoryMergeBranchSelection,
 } from '#/shared/repository-merge-branch.ts'
 import { useTrackRemoteBranchAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 
 interface BranchWriteActions {
   mainItems: BranchActionItem[]
@@ -83,9 +84,10 @@ export function useBranchWriteActions(
     if (!result.ok) throw new Error(result.message)
   }
 
-  async function handleCheckoutTo(targetBranch: string) {
+  async function handleCheckoutTo(target: WorktreeBranchSwitchTarget) {
     if (!worktreePath) return
-    const result = await checkoutBranchInWorktree(repo.id, worktreePath, targetBranch)
+    const targetBranch = target.kind === 'localBranch' ? target.branch : target.localBranch
+    const result = await checkoutBranchInWorktree(repo.id, worktreePath, target)
     setLastResult(repo.id, result, repo.instanceToken, {
       action: { kind: 'checkout', branch: targetBranch, worktreePath },
     })
@@ -241,6 +243,7 @@ export function useBranchWriteActions(
       {trackRemoteBranch.dialog}
       <CheckoutToDialog
         open={checkoutToDialog.open}
+        repoId={repo.id}
         branch={branch}
         allBranches={allBranches}
         onClose={checkoutToDialog.close}

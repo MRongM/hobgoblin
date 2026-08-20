@@ -70,6 +70,8 @@ function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitAction
       targetBranch: 'feature/a',
       targetWorktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
       targetHead: `target-head-${index}`,
+      upstream: repositoryName === 'api' ? 'origin/feature/a' : 'upstream/feature/web',
+      trackingGone: false,
       ready,
       ...(!ready
         ? {
@@ -1297,6 +1299,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(panel?.textContent).toContain('api')
     expect(panel?.textContent).toContain('web')
     expect(panel?.textContent).toContain('feature/a')
+    expect(document.querySelector('[data-sync-upstream="api"]')?.textContent).toContain('origin/feature/a')
+    expect(document.querySelector('[data-sync-upstream="web"]')?.textContent).toContain('upstream/feature/web')
     expect(action?.querySelector(icon)).not.toBeNull()
 
     await act(async () => {
@@ -1305,6 +1309,18 @@ describe('BranchWorkspaceGitActionPanel', () => {
     })
     expect(onSync).toHaveBeenCalledWith(kind, ['api', 'web'])
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('shows missing and gone upstream states in batch sync rows', () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    plan.members[0]!.upstream = null
+    plan.members[1]!.trackingGone = true
+
+    render({ kind: 'push', plan })
+
+    expect(document.querySelector('[data-sync-upstream="api"]')?.textContent).toContain('branches.no-upstream')
+    expect(document.querySelector('[data-sync-upstream="web"]')?.textContent).toContain('action.branch-upstream-gone')
   })
 
   test('keeps an unready sync action disabled and shows the member readiness reason', () => {

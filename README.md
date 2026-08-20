@@ -79,6 +79,8 @@ Choose the artifact for your platform:
 - **Android:** download the `android.apk` file. The APK is unsigned and must be signed before installation.
 - **Linux Server Mode:** download `Hobgoblin-<version>-linux-source.tar.gz` for the deployment-focused source archive.
 
+Git 2.31.0 or later must be available in `PATH` for local repository operations. When working with repositories over SSH, Git 2.31.0 or later must also be installed on the remote host.
+
 The current builds are unsigned.
 
 On macOS, Gatekeeper may block the app after download. If that happens, right-click the app, choose **Open**, and confirm. You can also remove the quarantine flag after installing:
