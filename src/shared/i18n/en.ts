@@ -380,6 +380,7 @@ export const en = {
   'workspace.branch-workspace.cancel': 'Cancel operation',
   'workspace.branch-workspace.inspect': 'Inspect branch workspace',
   'workspace.branch-workspace.retry': 'Retry operation',
+  'workspace.branch-workspace.return-to-selection': 'Back to selection',
   'workspace.branch-workspace.repair': 'Repair branch workspace',
   'workspace.branch-workspace.continue-delete': 'Continue deletion',
   'workspace.branch-workspace.continue-reduce': 'Continue member removal',

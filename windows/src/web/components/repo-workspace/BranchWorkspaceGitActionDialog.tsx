@@ -119,7 +119,6 @@ export function BranchWorkspaceGitActionPanel({
   const [mergeDestinations, setMergeDestinations] = useState<Record<string, string>>({})
   const [upstreams, setUpstreams] = useState<Record<string, string>>({})
   const [upstreamQueries, setUpstreamQueries] = useState<Record<string, string>>({})
-  const [upstreamActions, setUpstreamActions] = useState<Record<string, 'set' | 'unset'>>({})
   const [startedMergeMode, setStartedMergeMode] = useState<BranchWorkspaceMergeMode | null>(null)
   const [startedUpstreamUpdate, setStartedUpstreamUpdate] = useState(false)
   const generationController = useRef<AbortController | null>(null)
@@ -163,7 +162,6 @@ export function BranchWorkspaceGitActionPanel({
     setMergeDestinations({})
     setUpstreams({})
     setUpstreamQueries({})
-    setUpstreamActions({})
     setStartedMergeMode(null)
     setStartedUpstreamUpdate(false)
   }, [open, plan?.token])
@@ -285,13 +283,10 @@ export function BranchWorkspaceGitActionPanel({
   const upstreamPlan = plan?.kind === 'batch-set-upstream' ? plan : null
   const selectedUpstreamMembers =
     upstreamPlan?.members.filter((member) => selectedUpstreamRepositories.includes(member.repositoryName)) ?? []
-  const selectedUpstreams = selectedUpstreamMembers.flatMap<BranchWorkspaceBatchSetUpstreamInput>((member) => {
-    if (upstreamActions[member.repositoryName] === 'unset') {
-      return [{ repositoryName: member.repositoryName, action: 'unset' }]
-    }
+  const selectedUpstreams: BranchWorkspaceBatchSetUpstreamInput[] = selectedUpstreamMembers.flatMap((member) => {
     const remoteRef = upstreams[member.repositoryName]
     return member.remoteBranches.some((candidate) => candidate.remoteRef === remoteRef)
-      ? [{ repositoryName: member.repositoryName, action: 'set', remoteRef }]
+      ? [{ repositoryName: member.repositoryName, remoteRef }]
       : []
   })
   const upstreamSelectionReady =
@@ -390,15 +385,11 @@ export function BranchWorkspaceGitActionPanel({
             pending={pending}
             selectedRepositories={selectedUpstreamRepositories}
             upstreams={upstreams}
-            actions={upstreamActions}
             queries={upstreamQueries}
             started={startedUpstreamUpdate}
             onSelectedRepositoriesChange={setSelectedUpstreamRepositories}
             onUpstreamChange={(repositoryName, remoteRef) =>
               setUpstreams((current) => ({ ...current, [repositoryName]: remoteRef }))
-            }
-            onActionChange={(repositoryName, action) =>
-              setUpstreamActions((current) => ({ ...current, [repositoryName]: action }))
             }
             onQueryChange={(repositoryName, query) =>
               setUpstreamQueries((current) => ({ ...current, [repositoryName]: query }))
@@ -1234,6 +1225,7 @@ function BranchWorkspaceBatchMergeOutDialog({
         <BranchWorkspaceBatchErrorAiActions
           plan={plan}
           result={result}
+          mergeOutTargets={selectedTargets}
           onHandoff={onBatchErrorAiHandoff}
           onHandoffComplete={onClose}
         />
@@ -1282,11 +1274,13 @@ function BranchWorkspaceBatchMergeOutDialog({
 function BranchWorkspaceBatchErrorAiActions({
   plan,
   result,
+  mergeOutTargets,
   onHandoff,
   onHandoffComplete,
 }: {
   plan: BranchWorkspaceGitActionPlan | null
   result: BranchWorkspaceGitActionResult | null
+  mergeOutTargets?: readonly BranchWorkspaceBatchMergeOutTargetInput[]
   onHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
   onHandoffComplete: () => void
 }) {
@@ -1298,9 +1292,11 @@ function BranchWorkspaceBatchErrorAiActions({
       member.worktreePath ??
       plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)?.targetWorktreePath
     if (!worktreePath) return []
+    const mergeOutTarget = mergeOutTargets?.find((target) => target.repositoryName === member.repositoryName)
     return [
       {
         repositoryName: member.repositoryName,
+        ...(mergeOutTarget ? { destinationBranch: repositoryMergeBranchDisplayName(mergeOutTarget.destination) } : {}),
         step: member.step,
         message: member.message,
         worktreePath,
@@ -1394,12 +1390,10 @@ function BatchSetUpstreamContent({
   pending,
   selectedRepositories,
   upstreams,
-  actions,
   queries,
   started,
   onSelectedRepositoriesChange,
   onUpstreamChange,
-  onActionChange,
   onQueryChange,
 }: {
   plan: BranchWorkspaceBatchSetUpstreamPlan
@@ -1408,18 +1402,16 @@ function BatchSetUpstreamContent({
   pending: boolean
   selectedRepositories: string[]
   upstreams: Record<string, string>
-  actions: Record<string, 'set' | 'unset'>
   queries: Record<string, string>
   started: boolean
   onSelectedRepositoriesChange: (repositoryNames: string[]) => void
   onUpstreamChange: (repositoryName: string, remoteRef: string) => void
-  onActionChange: (repositoryName: string, action: 'set' | 'unset') => void
   onQueryChange: (repositoryName: string, query: string) => void
 }) {
   const t = useT()
   const locked = pending || started
   const selectableRepositories = plan.members
-    .filter((member) => member.ready && (member.remoteBranches.length > 0 || member.currentUpstream !== null))
+    .filter((member) => member.ready && member.remoteBranches.length > 0)
     .map((member) => member.repositoryName)
   const selected = new Set(selectedRepositories)
   const toggleRepository = (repositoryName: string, checked: boolean) => {
@@ -1443,20 +1435,19 @@ function BatchSetUpstreamContent({
         {plan.members.map((member, index) => {
           const memberSelected = selected.has(member.repositoryName)
           const selectedRemote = upstreams[member.repositoryName]
-          const upstreamAction = actions[member.repositoryName] ?? 'set'
           const selectedCandidate = member.remoteBranches.find((candidate) => candidate.remoteRef === selectedRemote)
           const visibleRemoteBranches = member.remoteBranches.filter((candidate) =>
             remoteBranchRefMatchesQuery(candidate.remoteRef, queries[member.repositoryName] ?? ''),
           )
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           const active = activeOperation?.repositoryName === member.repositoryName
-          const unavailable = !member.ready || (member.remoteBranches.length === 0 && member.currentUpstream === null)
+          const unavailable = !member.ready || member.remoteBranches.length === 0
           return (
             <div
               key={member.repositoryName}
               className="grid gap-2 border-b border-separator/60 px-3 py-3 text-xs last:border-b-0"
             >
-              <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(12rem,2fr)_2rem] items-center gap-2">
+              <div className="grid grid-cols-[1rem_2rem_minmax(0,0.8fr)_minmax(12rem,2fr)] items-center gap-2">
                 <Checkbox
                   data-upstream-repository={member.repositoryName}
                   checked={memberSelected}
@@ -1472,7 +1463,7 @@ function BatchSetUpstreamContent({
                 <span className="truncate font-medium">{member.repositoryName}</span>
                 <Select
                   value={selectedRemote ?? ''}
-                  disabled={locked || !memberSelected || unavailable || upstreamAction === 'unset'}
+                  disabled={locked || !memberSelected || unavailable}
                   onValueChange={(remoteRef) => onUpstreamChange(member.repositoryName, remoteRef)}
                 >
                   <SelectTrigger
@@ -1512,18 +1503,6 @@ function BatchSetUpstreamContent({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  data-testid={`branch-workspace-batch-unset-upstream-${member.repositoryName}`}
-                  aria-label={t('workspace.branch-workspace.git-action.remove-upstream')}
-                  title={t('workspace.branch-workspace.git-action.remove-upstream')}
-                  disabled={locked || !memberSelected || member.currentUpstream === null}
-                  onClick={() => onActionChange(member.repositoryName, upstreamAction === 'unset' ? 'set' : 'unset')}
-                >
-                  <span aria-hidden="true">×</span>
-                </Button>
               </div>
               <div className="ml-12 flex flex-wrap items-center gap-x-1.5 text-[10px] text-muted-foreground">
                 <span>{member.targetBranch}</span>
@@ -1537,19 +1516,17 @@ function BatchSetUpstreamContent({
                 <span
                   className={cn(!member.ready || (memberSelected && !selectedCandidate) ? 'text-warning' : undefined)}
                 >
-                  {upstreamAction === 'unset' && memberSelected
-                    ? t('workspace.branch-workspace.git-action.remove-upstream-selected')
-                    : !member.ready || member.remoteBranches.length === 0
-                      ? t(member.message ?? 'workspace.branch-workspace.git-action.remote-branch-required')
-                      : !memberSelected
-                        ? t('workspace.branch-workspace.git-action.not-selected')
-                        : !selectedCandidate
-                          ? t('workspace.branch-workspace.git-action.remote-branch-required')
-                          : active && activeOperation?.step
-                            ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
-                            : memberResult
-                              ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
-                              : t('workspace.branch-workspace.git-action.ready')}
+                  {!member.ready || member.remoteBranches.length === 0
+                    ? t(member.message ?? 'workspace.branch-workspace.git-action.remote-branch-required')
+                    : !memberSelected
+                      ? t('workspace.branch-workspace.git-action.not-selected')
+                      : !selectedCandidate
+                        ? t('workspace.branch-workspace.git-action.remote-branch-required')
+                        : active && activeOperation?.step
+                          ? t(`workspace.branch-workspace.git-action.step.${activeOperation.step}`)
+                          : memberResult
+                            ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                            : t('workspace.branch-workspace.git-action.ready')}
                 </span>
               </div>
             </div>

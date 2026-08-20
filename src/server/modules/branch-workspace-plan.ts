@@ -82,7 +82,21 @@ export async function buildBranchWorkspacePlan(
   }
 
   const existing = manifests.find((manifest) => manifest.branch === createRequest.branch)
-  if (existing?.operation) return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
+  const existingOperation = existing?.operation?.kind
+  const interruptedOperation =
+    existingOperation === 'create' || existingOperation === 'extend' ? existingOperation : null
+  if (existingOperation && !interruptedOperation) {
+    return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
+  }
+  const planningBaseline =
+    existing && interruptedOperation
+      ? {
+          ...existing,
+          repositories: existing.repositories.filter((member) => member.progress === 'complete'),
+          auxiliaryEntries: existing.auxiliaryEntries.filter((entry) => entry.progress === 'complete'),
+          operation: undefined,
+        }
+      : existing
   const location = await resolveBranchWorkspaceLocation(
     normalizedRootId,
     createRequest.branch,
@@ -93,8 +107,10 @@ export async function buildBranchWorkspacePlan(
   )
   if (!location.ok) return location
 
-  const fixedRepositories = new Map(existing?.repositories.map((member) => [member.repositoryName, member]) ?? [])
-  const fixedAuxiliaryEntries = new Map(existing?.auxiliaryEntries.map((entry) => [entry.name, entry]) ?? [])
+  const fixedRepositories = new Map(
+    planningBaseline?.repositories.map((member) => [member.repositoryName, member]) ?? [],
+  )
+  const fixedAuxiliaryEntries = new Map(planningBaseline?.auxiliaryEntries.map((entry) => [entry.name, entry]) ?? [])
   for (const selection of createRequest.repositories) {
     const fixed = fixedRepositories.get(selection.repositoryName)
     if (
@@ -171,7 +187,7 @@ export async function buildBranchWorkspacePlan(
     directoryName: location.directoryName,
     path: location.path,
     repositories: [
-      ...(existing?.repositories.map((member) => ({ ...member })) ?? []),
+      ...(planningBaseline?.repositories.map((member) => ({ ...member })) ?? []),
       ...repositories.map((member) => ({
         repositoryName: member.repositoryName,
         targetBranch: member.targetBranch,
@@ -183,7 +199,7 @@ export async function buildBranchWorkspacePlan(
       })),
     ],
     auxiliaryEntries: [
-      ...(existing?.auxiliaryEntries.map((entry) => ({ ...entry })) ?? []),
+      ...(planningBaseline?.auxiliaryEntries.map((entry) => ({ ...entry })) ?? []),
       ...auxiliaryEntries.map((entry) => ({
         name: entry.name,
         mode: entry.mode,
@@ -200,7 +216,7 @@ export async function buildBranchWorkspacePlan(
   }
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: normalizedRootId,
-    operation: existing ? 'extend' : 'create',
+    operation: interruptedOperation ?? (existing ? 'extend' : 'create'),
     branchWorkspaceId,
     branch: createRequest.branch,
     directoryName: location.directoryName,
@@ -209,7 +225,7 @@ export async function buildBranchWorkspacePlan(
     repositories,
     auxiliaryEntries,
     requiredApprovals,
-    steps: buildSteps(!existing, location.directoryName, repositories, auxiliaryEntries),
+    steps: buildSteps(location.createDirectory, location.directoryName, repositories, auxiliaryEntries),
     terminalSessionIds: [],
   }
   return { ok: true, plan: { token: planToken(planWithoutToken), ...planWithoutToken } }
@@ -927,12 +943,17 @@ async function resolveBranchWorkspaceLocation(
   manifests: BranchWorkspaceManifest[],
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
-): Promise<{ ok: true; directoryName: string; path: string } | { ok: false; message: string }> {
+): Promise<
+  { ok: true; directoryName: string; path: string; createDirectory: boolean } | { ok: false; message: string }
+> {
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
   if (existing) {
     const observed = await inspect(rootId, existing.path, signal).catch(() => null)
-    return observed?.exists && observed.kind === 'directory'
-      ? { ok: true, directoryName: existing.directoryName, path: existing.path }
+    if (observed?.exists && observed.kind === 'directory') {
+      return { ok: true, directoryName: existing.directoryName, path: existing.path, createDirectory: false }
+    }
+    return observed && !observed.exists && existing.operation?.kind === 'create'
+      ? { ok: true, directoryName: existing.directoryName, path: existing.path, createDirectory: true }
       : { ok: false, message: 'workspace.branch-workspace.needs-repair' }
   }
 
@@ -942,7 +963,7 @@ async function resolveBranchWorkspaceLocation(
     const candidatePath = branchWorkspacePath(rootId, directoryName)
     const observed = await inspect(rootId, candidatePath, signal).catch(() => null)
     if (!observed) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
-    if (!observed.exists) return { ok: true, directoryName, path: candidatePath }
+    if (!observed.exists) return { ok: true, directoryName, path: candidatePath, createDirectory: true }
     occupied.add(directoryName)
   }
 }

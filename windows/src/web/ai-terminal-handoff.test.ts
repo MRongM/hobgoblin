@@ -78,6 +78,37 @@ describe('AI terminal handoff', () => {
     expect(command).not.toMatch(/[\r\n]/)
   })
 
+  test('includes failed repositories and destination branches for batch merge-out', () => {
+    const command = buildBranchWorkspaceBatchErrorAiCommand('codex', 'batch-merge-out', [
+      {
+        repositoryName: 'api',
+        destinationBranch: 'release/v2',
+        step: 'merge',
+        message: 'conflict details',
+        worktreePath: '/workspace/api',
+      },
+      {
+        repositoryName: 'web',
+        destinationBranch: 'origin/staging',
+        step: 'push',
+        message: 'remote rejected',
+        worktreePath: '/workspace/web',
+      },
+    ])
+
+    expect(command).toContain('api')
+    expect(command).toContain('release/v2')
+    expect(command).toContain('web')
+    expect(command).toContain('origin/staging')
+    expect(command).toContain('For every listed repository and destination branch pair')
+    expect(command).toContain('minimum working-tree edits needed for the batch merge-out retry to succeed')
+    expect(command).not.toContain('conflict details')
+    expect(command).not.toContain('remote rejected')
+    expect(command).not.toContain('/workspace/api')
+    expect(command).not.toContain('/workspace/web')
+    expect(command).not.toMatch(/[\r\n]/)
+  })
+
   test('activates a branch workspace and preserves its full terminal identity', async () => {
     await expect(
       prefillAiTerminalTargetCommand({

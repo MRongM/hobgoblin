@@ -81,6 +81,18 @@ describe('BranchWorkspaceDialog', () => {
     expect(inputValue('workspace.branch-workspace.branch')).toBe('topic')
   })
 
+  test('aligns the branch prefix picker with the branch input height', () => {
+    renderDialog({})
+
+    const prefix = document.querySelector<HTMLButtonElement>(
+      '[aria-label="workspace.branch-workspace.branch-prefix.pick"]',
+    )
+    const branch = document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.branch"]')
+
+    expect(prefix?.className).toContain('h-[calc(var(--goblin-control-height-sm,2rem)+0.25rem)]')
+    expect(branch?.className).toContain('h-[calc(var(--goblin-control-height-sm,2rem)+0.25rem)]')
+  })
+
   test('shows live create progress and the completed step count after confirmation', () => {
     const workspace = existingWorkspace()
     const liveWorkspace: BranchWorkspaceSnapshot = {
@@ -294,6 +306,66 @@ describe('BranchWorkspaceDialog', () => {
 
     expect(stepProgress('directory')).toBe('active')
   })
+
+  test('returns a failed creation to the preserved selection form', async () => {
+    const onReturnToSelection = vi.fn()
+    renderDialog({})
+    setInput('workspace.branch-workspace.branch', 'feature/reselect')
+    click('workspace.branch-workspace.repository-named')
+
+    renderDialog({
+      plan: approvalPlan(),
+      result: { ok: false, message: 'workspace.branch-workspace.execute-failed' },
+      error: 'workspace.branch-workspace.execute-failed',
+      onReturnToSelection,
+    })
+    await clickAction('return-to-selection')
+
+    expect(onReturnToSelection).toHaveBeenCalledTimes(1)
+
+    renderDialog({ onReturnToSelection })
+    expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/reselect')
+    expect(checked('workspace.branch-workspace.repository-named')).toBe(true)
+  })
+
+  test('uses only completed members as the fixed baseline after partial creation', () => {
+    const workspace = workspaceWithTwoMembers()
+    workspace.state = { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
+    workspace.repositories[1] = { ...workspace.repositories[1]!, progress: 'failed', ready: false }
+
+    renderDialog({ workspace })
+
+    expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/auth')
+    const members = document.querySelectorAll<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.repository-named"]',
+    )
+    expect(members).toHaveLength(2)
+    expect(members[0]?.checked).toBe(true)
+    expect(members[0]?.disabled).toBe(true)
+    expect(members[1]?.checked).toBe(false)
+    expect(members[1]?.disabled).toBe(false)
+    expect(document.body.textContent).toContain('workspace.branch-workspace.member-fixed')
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(true)
+
+    act(() => members[1]?.click())
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+  })
+
+  test.each(['reduce', 'repair', 'remove'] as const)(
+    'does not offer selection return for a failed %s operation',
+    (mode) => {
+      renderDialog({
+        mode,
+        workspace: existingWorkspace(),
+        plan: mode === 'remove' ? removalPlan() : approvalPlan(),
+        result: { ok: false, message: 'workspace.branch-workspace.execute-failed' },
+        error: 'workspace.branch-workspace.execute-failed',
+      })
+
+      expect(document.querySelector('[data-action="return-to-selection"]')).toBeNull()
+      expect(document.querySelector('[data-action="retry"]')).not.toBeNull()
+    },
+  )
 
   test('shows a folder affordance for a directory auxiliary candidate without rendering its raw kind', () => {
     renderDialog({})
@@ -1493,6 +1565,7 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
         onPreview={async () => true}
         onConfirm={async () => null}
         onRetry={async () => null}
+        onReturnToSelection={() => {}}
         onCancel={async () => {}}
         {...overrides}
       />,

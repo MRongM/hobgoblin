@@ -1237,6 +1237,7 @@ function BranchWorkspaceBatchMergeOutDialog({
         <BranchWorkspaceBatchErrorAiActions
           plan={plan}
           result={result}
+          mergeOutTargets={selectedTargets}
           onHandoff={onBatchErrorAiHandoff}
           onHandoffComplete={onClose}
         />
@@ -1285,11 +1286,13 @@ function BranchWorkspaceBatchMergeOutDialog({
 function BranchWorkspaceBatchErrorAiActions({
   plan,
   result,
+  mergeOutTargets,
   onHandoff,
   onHandoffComplete,
 }: {
   plan: BranchWorkspaceGitActionPlan | null
   result: BranchWorkspaceGitActionResult | null
+  mergeOutTargets?: readonly BranchWorkspaceBatchMergeOutTargetInput[]
   onHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
   onHandoffComplete: () => void
 }) {
@@ -1301,9 +1304,11 @@ function BranchWorkspaceBatchErrorAiActions({
       member.worktreePath ??
       plan.members.find((candidate) => candidate.repositoryName === member.repositoryName)?.targetWorktreePath
     if (!worktreePath) return []
+    const mergeOutTarget = mergeOutTargets?.find((target) => target.repositoryName === member.repositoryName)
     return [
       {
         repositoryName: member.repositoryName,
+        ...(mergeOutTarget ? { destinationBranch: repositoryMergeBranchDisplayName(mergeOutTarget.destination) } : {}),
         step: member.step,
         message: member.message,
         worktreePath,

@@ -1086,6 +1086,47 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
   })
 
+  test('hands a failed merge-out repository and its selected destination branch to AI', async () => {
+    const plan = mergeOutPlan()
+    const failure: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-out',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'merge failed',
+      members: [{ repositoryName: 'api', phase: 'failed', step: 'merge', message: 'merge failed' }],
+    }
+    const onBatchMergeOut = vi.fn(async () => failure)
+    const onBatchErrorAiHandoff = vi.fn(async () => true)
+    render({ kind: 'batch-merge-out', plan, onBatchMergeOut, onBatchErrorAiHandoff })
+
+    await act(async () => mergeCheckbox('web')?.click())
+    await selectMergeDestination('api', 'release/v2')
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
+      await Promise.resolve()
+    })
+    render({ kind: 'batch-merge-out', plan, result: failure, onBatchMergeOut, onBatchErrorAiHandoff })
+    await flush()
+
+    const codex = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'action.merge-conflict-ai-codex',
+    )
+    await act(async () => codex?.click())
+    await flush()
+
+    expect(onBatchErrorAiHandoff).toHaveBeenCalledWith({
+      provider: 'codex',
+      kind: 'batch-merge-out',
+      failures: [
+        expect.objectContaining({
+          repositoryName: 'api',
+          destinationBranch: 'release/v2',
+        }),
+      ],
+    })
+  })
+
   test('hands all merge-in failures to AI and closes after a successful handoff', async () => {
     const plan = mergeInPlan()
     const conflictWorktree = {

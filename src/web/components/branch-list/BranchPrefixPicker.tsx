@@ -36,7 +36,7 @@ export function BranchPrefixPicker({ value, disabled = false, onChange }: Props)
           disabled={disabled}
           aria-label={t('workspace.branch-workspace.branch-prefix.pick')}
           title={t('workspace.branch-workspace.branch-prefix.pick')}
-          className="font-mono"
+          className="h-[calc(var(--goblin-control-height-sm,2rem)+0.25rem)] font-mono"
           data-branch-prefix-active={active ?? 'none'}
         >
           <span className="truncate">{active ?? noneLabel}</span>

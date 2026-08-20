@@ -36,6 +36,7 @@ export function BranchWorkspaceFileArea({
   onRevealPath,
   revealRequest,
   toolbarLeading,
+  showToolbar = true,
 }: {
   workspace: BranchWorkspaceSnapshot
   context: BranchWorkspaceFolderContext
@@ -44,6 +45,7 @@ export function BranchWorkspaceFileArea({
   onRevealPath?: (relativePath: string) => void
   revealRequest?: { id: number; relativePath: string } | null
   toolbarLeading?: ReactNode
+  showToolbar?: boolean
 }) {
   const t = useT()
   const remoteTarget = useReposStore((state) => state.repos[context.rootId]?.remote.target)
@@ -55,12 +57,15 @@ export function BranchWorkspaceFileArea({
   )
   const totalChangeCount = branchWorkspaceFileAreaTotalChangeCount(fileAreaMembers)
   const root = remoteTarget ? remoteRepoSessionEntry(remoteTarget) : localRepoSessionEntry(context.rootId)
-  const detach = useDetachFileArea({
-    kind: 'branch-workspace',
-    root,
-    branchWorkspaceId: workspace.id,
-    tab: activeTab,
-  })
+  const detach = useDetachFileArea(
+    {
+      kind: 'branch-workspace',
+      root,
+      branchWorkspaceId: workspace.id,
+      tab: activeTab,
+    },
+    { enabled: showToolbar },
+  )
   const [overflowExpanded, setOverflowExpanded] = useState(false)
   const firstRepositoryName = workspace.repositories[0]?.repositoryName ?? null
   const [aggregateSelection, setAggregateSelection] = useState<{
@@ -113,34 +118,36 @@ export function BranchWorkspaceFileArea({
       data-branch-workspace-file-area={workspace.id}
       className="project-file-area-tone flex min-h-0 flex-1 flex-col overflow-hidden bg-pane"
     >
-      <Toolbar
-        data-testid="branch-workspace-file-area-toolbar"
-        className={cn('gap-0.5 border-y-0 px-2', detach.dragging && 'opacity-70 ring-1 ring-ring')}
-        variant="detail"
-        tabIndex={detach.enabled ? 0 : undefined}
-        {...detach.bindings}
-      >
-        {toolbarLeading}
-        <div role="tablist" aria-label={t('file-tree.title')} className="flex min-w-0 items-center gap-0.5">
-          {primaryTabs.map(renderTab)}
-          {(overflowExpanded ? overflowTabs : overflowTabs.filter((tab) => tab.id === activeTab)).map(renderTab)}
-          <Button
-            type="button"
-            variant="ghost"
-            data-testid="branch-workspace-tabs-overflow-toggle"
-            aria-expanded={overflowExpanded}
-            aria-label={t(overflowExpanded ? 'file-tree.tabs.collapse' : 'file-tree.tabs.expand')}
-            onClick={() => setOverflowExpanded((expanded) => !expanded)}
-            className="h-7 border border-separator px-2 text-muted-foreground hover:bg-tab-hover hover:text-foreground"
-          >
-            {overflowExpanded ? (
-              <ChevronsLeft className="size-3.5 shrink-0" aria-hidden="true" />
-            ) : (
-              <ChevronsRight className="size-3.5 shrink-0" aria-hidden="true" />
-            )}
-          </Button>
-        </div>
-      </Toolbar>
+      {showToolbar ? (
+        <Toolbar
+          data-testid="branch-workspace-file-area-toolbar"
+          className={cn('gap-0.5 border-y-0 px-2', detach.dragging && 'opacity-70 ring-1 ring-ring')}
+          variant="detail"
+          tabIndex={detach.enabled ? 0 : undefined}
+          {...detach.bindings}
+        >
+          {toolbarLeading}
+          <div role="tablist" aria-label={t('file-tree.title')} className="flex min-w-0 items-center gap-0.5">
+            {primaryTabs.map(renderTab)}
+            {(overflowExpanded ? overflowTabs : overflowTabs.filter((tab) => tab.id === activeTab)).map(renderTab)}
+            <Button
+              type="button"
+              variant="ghost"
+              data-testid="branch-workspace-tabs-overflow-toggle"
+              aria-expanded={overflowExpanded}
+              aria-label={t(overflowExpanded ? 'file-tree.tabs.collapse' : 'file-tree.tabs.expand')}
+              onClick={() => setOverflowExpanded((expanded) => !expanded)}
+              className="h-7 border border-separator px-2 text-muted-foreground hover:bg-tab-hover hover:text-foreground"
+            >
+              {overflowExpanded ? (
+                <ChevronsLeft className="size-3.5 shrink-0" aria-hidden="true" />
+              ) : (
+                <ChevronsRight className="size-3.5 shrink-0" aria-hidden="true" />
+              )}
+            </Button>
+          </div>
+        </Toolbar>
+      ) : null}
       {activeTab === 'files' ? (
         <BranchWorkspaceFileTree context={context} revealRequest={revealRequest} />
       ) : (

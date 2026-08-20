@@ -119,6 +119,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
   reorder: vi.fn(async () => true),
   cancel: vi.fn(async () => {}),
   requestPlan: vi.fn(async () => true),
+  returnToSelection: vi.fn(),
   plan: null as BranchWorkspacePlan | null,
   pending: false,
   refresh: vi.fn(),
@@ -133,6 +134,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
+    onReturnToSelection: () => Promise<void> | void
   },
 }))
 
@@ -270,6 +272,7 @@ vi.mock('#/web/hooks/useBranchWorkspaceActions.ts', () => ({
     retry: vi.fn(async () => null),
     cancel: branchWorkspaceState.cancel,
     reorder: branchWorkspaceState.reorder,
+    returnToSelection: branchWorkspaceState.returnToSelection,
     reset: vi.fn(),
   }),
 }))
@@ -324,6 +327,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     workspace,
     progressWorkspace,
     fixedReduceRepositoryName,
+    onReturnToSelection,
     onRefreshAuxiliaryCandidates,
   }: {
     open: boolean
@@ -335,6 +339,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
+    onReturnToSelection: () => Promise<void> | void
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
   }) => {
     branchWorkspaceState.dialogProps = {
@@ -344,6 +349,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
       workspace,
       progressWorkspace,
       fixedReduceRepositoryName,
+      onReturnToSelection,
     }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
@@ -448,6 +454,7 @@ beforeEach(() => {
   branchWorkspaceState.cancel.mockResolvedValue(undefined)
   branchWorkspaceState.requestPlan.mockReset()
   branchWorkspaceState.requestPlan.mockResolvedValue(true)
+  branchWorkspaceState.returnToSelection.mockReset()
   branchWorkspaceState.plan = null
   branchWorkspaceState.pending = false
   branchWorkspaceState.dialogProps = null
@@ -1610,6 +1617,41 @@ describe('WorkspaceRepositoryRail', () => {
     branchWorkspaceState.items = originalItems
   })
 
+  test('refreshes and promotes the latest partial snapshot before returning a failed creation to selection', async () => {
+    const originalItems = branchWorkspaceState.items
+    const partialWorkspace: BranchWorkspaceSnapshot = {
+      ...originalItems[0]!,
+      state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
+      repositories: originalItems[0]!.repositories.map((member, index) =>
+        index === 0 ? member : { ...member, progress: 'failed' as const, ready: false },
+      ),
+    }
+    branchWorkspaceState.items = [partialWorkspace, ...originalItems.slice(1)]
+    branchWorkspaceState.refresh.mockResolvedValue({
+      ok: true,
+      rootId: ROOT,
+      items: branchWorkspaceState.items,
+      auxiliaryCandidates: [],
+    })
+    branchWorkspaceState.plan = creationPlan(partialWorkspace)
+    renderRail({ currentRepoId: ROOT })
+
+    act(() => container?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.create"]')?.click())
+    expect(branchWorkspaceState.dialogProps?.workspace).toBeNull()
+    expect(branchWorkspaceState.dialogProps?.progressWorkspace).toBe(partialWorkspace)
+
+    const onReturnToSelection = branchWorkspaceState.dialogProps?.onReturnToSelection
+    expect(onReturnToSelection).toBeTypeOf('function')
+    if (!onReturnToSelection) return
+    await act(async () => await onReturnToSelection())
+
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(branchWorkspaceState.returnToSelection).toHaveBeenCalledTimes(1)
+    expect(branchWorkspaceState.dialogProps?.workspace).toBe(partialWorkspace)
+
+    branchWorkspaceState.items = originalItems
+  })
+
   test('falls back to the branch workspace root when the selected member is removed', () => {
     const originalItems = branchWorkspaceState.items
     const current = originalItems[0]!
@@ -1921,6 +1963,14 @@ function removalPlan(workspace: BranchWorkspaceSnapshot): BranchWorkspacePlan {
     steps: [],
     terminalSessionIds: [],
     removalOptions: { alsoDeleteBranch: false, alsoDeleteUpstream: false },
+  }
+}
+
+function creationPlan(workspace: BranchWorkspaceSnapshot): BranchWorkspacePlan {
+  return {
+    ...removalPlan(workspace),
+    operation: 'create',
+    steps: [{ id: 'directory', kind: 'create-directory', label: workspace.directoryName }],
   }
 }
 

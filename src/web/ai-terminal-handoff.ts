@@ -25,6 +25,7 @@ export interface AiTerminalTargetHandoffInput {
 
 export interface BranchWorkspaceBatchErrorAiFailure {
   repositoryName: string
+  destinationBranch?: string
   step: BranchWorkspaceGitActionStep
   message: string
   worktreePath: string
@@ -46,18 +47,31 @@ export function buildMergeConflictAiCommand(provider: CommitMessageProvider): st
 export function buildBranchWorkspaceBatchErrorAiCommand(
   provider: CommitMessageProvider,
   kind: BranchWorkspaceGitActionKind,
-  _failures: BranchWorkspaceBatchErrorAiFailure[],
+  failures: BranchWorkspaceBatchErrorAiFailure[],
 ): string {
+  const failedMergeOutTargets = failures.flatMap((failure) =>
+    failure.destinationBranch
+      ? [{ repository: failure.repositoryName, destinationBranch: failure.destinationBranch }]
+      : [],
+  )
   const base =
     `Investigate and resolve the failed members from branch workspace Git action ${kind}. ` +
     'The terminal working directory is the branch workspace root. '
+  const failureContext =
+    kind === 'batch-merge-out' && failedMergeOutTargets.length > 0
+      ? `Failed merge-out targets: ${JSON.stringify(failedMergeOutTargets)}. `
+      : ''
+  const resolutionInstruction =
+    kind === 'batch-merge-out' && failedMergeOutTargets.length > 0
+      ? 'For every listed repository and destination branch pair, locate and inspect the relevant repository and destination-branch Git state, resolve any conflicts, and make only the minimum working-tree edits needed for the batch merge-out retry to succeed. '
+      : ''
   const directional =
     kind === 'batch-merge-out'
       ? 'Merge-out conflicts may have occurred in an application temporary worktree prefixed with .hobgoblin-batch-merge- that has already been removed; inspect current Git state (git status, git log, git reflog, existing worktrees under the workspace root) before assuming any conflict path still exists. If the target branch has its own live worktree, inspect that worktree directly. '
       : 'Merge-in conflicts remain in each failed member worktree under the workspace root; inspect the conflicted files there. '
   const guard =
     'Do not run git add, git commit, git push, git merge --continue, git reset, or other destructive Git commands.'
-  return buildAiHandoffCommand(provider, base + directional + guard)
+  return buildAiHandoffCommand(provider, base + failureContext + resolutionInstruction + directional + guard)
 }
 
 export async function prefillAiTerminalCommand(input: AiTerminalHandoffInput): Promise<boolean> {

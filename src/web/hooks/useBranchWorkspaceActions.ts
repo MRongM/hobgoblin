@@ -72,18 +72,14 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       setResult(response)
       if (!response.ok) setError(response.message)
       if (response.ok && response.warnings?.length) {
-        toast.warning(
-          t('workspace.branch-workspace.dependency-warning', { count: response.warnings.length }),
-          {
-            description: response.warnings
-              .map((warning) => {
-                const name =
-                  warning.kind === 'repository-dependency-failed' ? warning.repositoryName : warning.entryName
-                return `${name}: ${t(warning.message)}`
-              })
-              .join('\n'),
-          },
-        )
+        toast.warning(t('workspace.branch-workspace.dependency-warning', { count: response.warnings.length }), {
+          description: response.warnings
+            .map((warning) => {
+              const name = warning.kind === 'repository-dependency-failed' ? warning.repositoryName : warning.entryName
+              return `${name}: ${t(warning.message)}`
+            })
+            .join('\n'),
+        })
       }
       if (response.ok && response.snapshot) {
         const snapshot = response.snapshot
@@ -131,6 +127,12 @@ export function useBranchWorkspaceActions(rootId: string | null) {
     [invalidate, rootId],
   )
 
+  const returnToSelection = useCallback(() => {
+    setPlan(null)
+    setResult(null)
+    setError(null)
+  }, [])
+
   const reset = useCallback(() => {
     setPlan(null)
     setRequest(null)
@@ -139,5 +141,18 @@ export function useBranchWorkspaceActions(rootId: string | null) {
     setError(null)
   }, [])
 
-  return { plan, request, result, pending, error, requestPlan, confirm, retry: confirm, cancel, reorder, reset }
+  return {
+    plan,
+    request,
+    result,
+    pending,
+    error,
+    requestPlan,
+    confirm,
+    retry: confirm,
+    cancel,
+    reorder,
+    returnToSelection,
+    reset,
+  }
 }

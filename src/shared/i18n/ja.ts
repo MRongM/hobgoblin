@@ -379,6 +379,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.cancel': '操作をキャンセル',
   'workspace.branch-workspace.inspect': '内容を確認',
   'workspace.branch-workspace.retry': '操作を再試行',
+  'workspace.branch-workspace.return-to-selection': '選択に戻る',
   'workspace.branch-workspace.repair': 'ブランチワークスペースを修復',
   'workspace.branch-workspace.continue-delete': '削除を続行',
   'workspace.branch-workspace.continue-reduce': 'メンバーの削除を続行',

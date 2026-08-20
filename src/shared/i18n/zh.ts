@@ -348,6 +348,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.cancel': '取消操作',
   'workspace.branch-workspace.inspect': '检查子工作区',
   'workspace.branch-workspace.retry': '重试操作',
+  'workspace.branch-workspace.return-to-selection': '返回上一步',
   'workspace.branch-workspace.repair': '修复子工作区',
   'workspace.branch-workspace.continue-delete': '继续删除',
   'workspace.branch-workspace.continue-reduce': '继续移除成员',

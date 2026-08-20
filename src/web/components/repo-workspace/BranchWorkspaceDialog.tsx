@@ -79,6 +79,7 @@ interface BranchWorkspaceDialogProps {
   onPreview: (request: BranchWorkspacePlanRequest) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onRetry: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
+  onReturnToSelection: () => Promise<void> | void
   onCancel: () => Promise<unknown>
 }
 
@@ -106,6 +107,7 @@ export function BranchWorkspaceDialog({
   onPreview,
   onConfirm,
   onRetry,
+  onReturnToSelection,
   onCancel,
 }: BranchWorkspaceDialogProps) {
   const t = useT()
@@ -131,11 +133,21 @@ export function BranchWorkspaceDialog({
   const [approvals, setApprovals] = useState<BranchWorkspaceApproval[]>([])
 
   const fixedRepositories = useMemo(
-    () => new Map(workspace?.repositories.map((member) => [member.repositoryName, member]) ?? []),
+    () =>
+      new Map(
+        workspace?.repositories
+          .filter((member) => member.progress === 'complete')
+          .map((member) => [member.repositoryName, member]) ?? [],
+      ),
     [workspace],
   )
   const fixedAuxiliary = useMemo(
-    () => new Map(workspace?.auxiliaryEntries.map((entry) => [entry.name, entry]) ?? []),
+    () =>
+      new Map(
+        workspace?.auxiliaryEntries
+          .filter((entry) => entry.progress === 'complete')
+          .map((entry) => [entry.name, entry]) ?? [],
+      ),
     [workspace],
   )
   const initialDialogState = useRef({ workspace, repositories, fixedRepositories })
@@ -144,7 +156,7 @@ export function BranchWorkspaceDialog({
   useEffect(() => {
     if (!open) return
     const initial = initialDialogState.current
-    const initialBranch = mode === 'create' ? defaultBranchWorkspaceName() : (initial.workspace?.branch ?? '')
+    const initialBranch = initial.workspace?.branch ?? (mode === 'create' ? defaultBranchWorkspaceName() : '')
     const initialBases = Object.fromEntries(
       initial.repositories.map((repository) => [
         repository.name,
@@ -379,7 +391,10 @@ export function BranchWorkspaceDialog({
       const hasNewRepository = value.repositories.some(
         (repository) => !fixedRepositories.has(repository.repositoryName),
       )
-      return value.branch && value.repositories.length > 0 && (mode === 'create' || hasNewRepository) ? value : null
+      const hasNewAuxiliaryEntry = value.auxiliaryEntries.some((entry) => !fixedAuxiliary.has(entry.name))
+      return value.branch && value.repositories.length > 0 && (!workspace || hasNewRepository || hasNewAuxiliaryEntry)
+        ? value
+        : null
     }
     if (!workspace) return null
     if (mode === 'repair') return { operation: 'repair', branchWorkspaceId: workspace.id }
@@ -1090,6 +1105,17 @@ export function BranchWorkspaceDialog({
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
               ) : null}
               {t(`workspace.branch-workspace.dialog.${mode}.confirm`)}
+            </Button>
+          ) : null}
+          {result && !result.ok && (mode === 'create' || mode === 'extend') ? (
+            <Button
+              type="button"
+              data-action="return-to-selection"
+              variant="outline"
+              disabled={pending}
+              onClick={onReturnToSelection}
+            >
+              {t('workspace.branch-workspace.return-to-selection')}
             </Button>
           ) : null}
           {result && !result.ok ? (

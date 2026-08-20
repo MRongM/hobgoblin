@@ -368,6 +368,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.cancel': '작업 취소',
   'workspace.branch-workspace.inspect': '브랜치 워크스페이스 검사',
   'workspace.branch-workspace.retry': '작업 다시 시도',
+  'workspace.branch-workspace.return-to-selection': '선택으로 돌아가기',
   'workspace.branch-workspace.repair': '브랜치 워크스페이스 복구',
   'workspace.branch-workspace.continue-delete': '삭제 계속',
   'workspace.branch-workspace.continue-reduce': '구성원 제거 계속',

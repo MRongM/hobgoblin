@@ -143,6 +143,17 @@ export function WorkspaceRepositoryRail({
   const dialogProgressWorkspace = branchActions.plan
     ? (branchItems.find((item) => item.id === branchActions.plan?.branchWorkspaceId) ?? null)
     : null
+  const returnBranchDialogToSelection = async () => {
+    const branchWorkspaceId = branchActions.plan?.branchWorkspaceId
+    const refreshed = await branchQuery.refresh().catch(() => null)
+    const refreshedWorkspace =
+      branchWorkspaceId && refreshed?.ok
+        ? (refreshed.items.find((item) => item.id === branchWorkspaceId) ?? null)
+        : null
+    const latestWorkspace = refreshedWorkspace ?? dialogProgressWorkspace
+    if (latestWorkspace) setDialogWorkspace(latestWorkspace)
+    branchActions.returnToSelection()
+  }
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
@@ -770,6 +781,7 @@ export function WorkspaceRepositoryRail({
         onPreview={branchActions.requestPlan}
         onConfirm={branchActions.confirm}
         onRetry={branchActions.retry}
+        onReturnToSelection={returnBranchDialogToSelection}
         onCancel={branchActions.cancel}
       />
       <BranchWorkspaceDependencyDialog

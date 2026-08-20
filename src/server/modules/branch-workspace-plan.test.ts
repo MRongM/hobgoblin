@@ -560,6 +560,170 @@ describe('branch workspace create planner', () => {
     ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.member-fixed' })
   })
 
+  test('replans an interrupted creation with completed members fixed and failed members replaceable', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'create' }
+    current.repositories.push({
+      repositoryName: 'web',
+      targetBranch: BRANCH,
+      creationBase: { kind: 'localBranch', branch: 'develop' },
+      syncBeforeCreate: false,
+      branchOrigin: 'created',
+      worktreePath: path.join(current.path, 'web'),
+      progress: 'failed',
+    })
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
+      [path.join(ROOT, 'web')]: snapshot(branch('release')),
+    })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
+        : missing(candidatePath),
+    )
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'localBranch', branch: 'release' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        operation: 'create',
+        repositories: [{ repositoryName: 'web', creationBase: { kind: 'localBranch', branch: 'release' } }],
+        manifest: {
+          repositories: [
+            { repositoryName: 'api', progress: 'complete' },
+            {
+              repositoryName: 'web',
+              creationBase: { kind: 'localBranch', branch: 'release' },
+              progress: 'pending',
+            },
+          ],
+        },
+      },
+    })
+  })
+
+  test('retries the directory step when an interrupted initial creation has no directory', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'create' }
+    current.repositories[0] = { ...current.repositories[0]!, progress: 'failed' }
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        operation: 'create',
+        steps: [
+          { id: 'directory', kind: 'create-directory' },
+          { id: 'repository:api', kind: 'create-worktree', repositoryName: 'api' },
+        ],
+      },
+    })
+  })
+
+  test('replans an interrupted extension without changing its operation kind', async () => {
+    const current = existingManifest()
+    current.operation = { kind: 'extend' }
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch('main'), branch(BRANCH, current.repositories[0]!.worktreePath)),
+      [path.join(ROOT, 'web')]: snapshot(branch('develop')),
+    })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
+        : missing(candidatePath),
+    )
+
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: BRANCH,
+        repositories: [
+          {
+            repositoryName: 'web',
+            creationBase: { kind: 'localBranch', branch: 'develop' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+
+    expect(result).toMatchObject({ ok: true, plan: { operation: 'extend' } })
+  })
+
+  test.each(['reduce', 'repair', 'remove'] as const)(
+    'keeps an interrupted %s operation unavailable to creation replanning',
+    async (kind) => {
+      const current = existingManifest()
+      current.operation = { kind }
+      const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main')) })
+      deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+
+      await expect(
+        buildBranchWorkspacePlan(
+          ROOT,
+          {
+            operation: 'create',
+            branch: BRANCH,
+            repositories: [
+              {
+                repositoryName: 'api',
+                creationBase: { kind: 'localBranch', branch: 'main' },
+                syncBeforeCreate: false,
+              },
+            ],
+            auxiliaryEntries: [],
+          },
+          deps,
+        ),
+      ).resolves.toEqual({ ok: false, message: 'workspace.branch-workspace.operation-incomplete' })
+    },
+  )
+
   test('requires only outside-root approval when no repository dependencies are selected', async () => {
     const sourceWorktreePath = path.join(ROOT, 'api-main')
     const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main', sourceWorktreePath)) })
