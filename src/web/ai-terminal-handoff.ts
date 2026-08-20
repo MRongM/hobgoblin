@@ -38,14 +38,15 @@ export function buildAiHandoffCommand(provider: CommitMessageProvider, prompt: s
   return provider === 'codex' ? `codex exec --skip-git-repo-check ${encodedPrompt}` : `claude --print ${encodedPrompt}`
 }
 
-export function buildMergeConflictAiCommand(provider: CommitMessageProvider): string {
-  const prompt =
-    'Resolve the current Git merge conflicts in this working tree. Inspect conflicted files, make minimal edits, and do not run git add, git commit, or git merge --continue.'
-  return buildAiHandoffCommand(provider, prompt)
+export function buildMergeConflictAiPrompt(): string {
+  return 'Resolve the current Git merge conflicts in this working tree. Inspect conflicted files, make minimal edits, and do not run git add, git commit, or git merge --continue.'
 }
 
-export function buildBranchWorkspaceBatchErrorAiCommand(
-  provider: CommitMessageProvider,
+export function buildMergeConflictAiCommand(provider: CommitMessageProvider): string {
+  return buildAiHandoffCommand(provider, buildMergeConflictAiPrompt())
+}
+
+export function buildBranchWorkspaceBatchErrorAiPrompt(
   kind: BranchWorkspaceGitActionKind,
   failures: BranchWorkspaceBatchErrorAiFailure[],
 ): string {
@@ -71,7 +72,15 @@ export function buildBranchWorkspaceBatchErrorAiCommand(
       : 'Merge-in conflicts remain in each failed member worktree under the workspace root; inspect the conflicted files there. '
   const guard =
     'Do not run git add, git commit, git push, git merge --continue, git reset, or other destructive Git commands.'
-  return buildAiHandoffCommand(provider, base + failureContext + resolutionInstruction + directional + guard)
+  return base + failureContext + resolutionInstruction + directional + guard
+}
+
+export function buildBranchWorkspaceBatchErrorAiCommand(
+  provider: CommitMessageProvider,
+  kind: BranchWorkspaceGitActionKind,
+  failures: BranchWorkspaceBatchErrorAiFailure[],
+): string {
+  return buildAiHandoffCommand(provider, buildBranchWorkspaceBatchErrorAiPrompt(kind, failures))
 }
 
 export async function prefillAiTerminalCommand(input: AiTerminalHandoffInput): Promise<boolean> {

@@ -31,6 +31,7 @@ import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { RepositoryBranchMergeOutExecuteInput } from '#/shared/repository-branch-merge.ts'
+import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import {
   repositoryMergeBranchDisplayName,
   type RepositoryMergeBranchSelection,
@@ -66,7 +67,8 @@ export function useBranchWriteActions(
   const inlineCommitDraftActions = useInlineCommitDraftActions()
   const availableCommitMessageProviders = useInlineCommitMessageProviders()
   const sourceStatus = worktreePath ? repo.data.status.find((status) => status.path === worktreePath) : undefined
-  const mergeOutSourceReady = Boolean(sourceStatus && sourceStatus.entries.length === 0)
+  const mergeOutSourceConflicted = Boolean(sourceStatus && hasUnmergedStatusEntries(sourceStatus.entries))
+  const mergeOutSourceReady = Boolean(sourceStatus && !mergeOutSourceConflicted)
 
   const checkoutToDialog = useRetainedDialogState<string>()
   const mergeInDialog = useRetainedDialogState<string>()
@@ -189,7 +191,7 @@ export function useBranchWriteActions(
       label: t('action.merge-out'),
       title: mergeOutSourceReady
         ? t('action.merge-out-title', { branch: branch.name })
-        : t('action.merge-out-source-dirty'),
+        : t(sourceStatus ? 'action.merge-out-source-conflicted' : 'action.merge-out-source-unavailable'),
       disabled: !hasWorktree || !mergeOutSourceReady || branchActionBusy,
       visible: true,
       icon: createElement(GitMerge),

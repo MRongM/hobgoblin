@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { CommitMessageProvider } from '#/shared/commit-message-ai.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
-import { buildMergeConflictAiCommand, prefillAiTerminalCommand } from '#/web/ai-terminal-handoff.ts'
+import {
+  buildMergeConflictAiCommand,
+  buildMergeConflictAiPrompt,
+  prefillAiTerminalCommand,
+} from '#/web/ai-terminal-handoff.ts'
 import { MergeConflictAiActions } from '#/web/components/MergeConflictAiActions.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { DialogFooter } from '#/web/components/ui/dialog.tsx'
@@ -582,7 +586,9 @@ function WorktreeMergeConflictAiActions({
     [branch, navigation, repoId, setDetailCollapsed, worktreePath],
   )
 
-  return <MergeConflictAiActions onHandoff={onHandoff} onHandoffComplete={onClose} />
+  return (
+    <MergeConflictAiActions prompt={buildMergeConflictAiPrompt()} onHandoff={onHandoff} onHandoffComplete={onClose} />
+  )
 }
 
 // ── Create branch dialog ─────────────────────────────────────────────────────

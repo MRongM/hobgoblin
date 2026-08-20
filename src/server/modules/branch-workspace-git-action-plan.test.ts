@@ -687,6 +687,107 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     })
   })
 
+  test('keeps a batch merge-out member ready when its source has only ordinary uncommitted changes', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          const sourceEntries =
+            repositoryName === 'api'
+              ? [
+                  { x: 'M', y: ' ', path: 'src/staged.ts' },
+                  { x: ' ', y: 'M', path: 'src/unstaged.ts' },
+                  { x: '?', y: '?', path: 'scratch/untracked.txt' },
+                ]
+              : []
+          return [
+            status(`/workspace/${repositoryName}`),
+            status(`/workspace/goblin-feature-a/${repositoryName}`, sourceEntries),
+          ]
+        }),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-merge-out',
+        members: [
+          { repositoryName: 'api', ready: true },
+          { repositoryName: 'web', ready: true },
+        ],
+      },
+    })
+    expect(result.ok && result.plan.members[0]).not.toHaveProperty('message')
+  })
+
+  test('keeps a conflicted batch merge-out source visible but unavailable', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          return [
+            status(`/workspace/${repositoryName}`),
+            status(
+              `/workspace/goblin-feature-a/${repositoryName}`,
+              repositoryName === 'api' ? [{ x: 'U', y: 'U', path: 'src/conflicted.ts' }] : [],
+            ),
+          ]
+        }),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-merge-out',
+        members: [
+          {
+            repositoryName: 'api',
+            ready: false,
+            message: 'workspace.branch-workspace.git-action.source-worktree-conflicted',
+          },
+          { repositoryName: 'web', ready: true },
+        ],
+      },
+    })
+  })
+
+  test('ignores ordinary source status changes in batch merge-out tokens but tracks conflicts and HEAD', async () => {
+    const build = async (entries: WorktreeStatus['entries'], apiTargetHead = 'target-head') =>
+      await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) =>
+            snapshot(repoId.endsWith('/api') ? 'api' : 'web', {
+              targetHead: repoId.endsWith('/api') ? apiTargetHead : 'target-head',
+            }),
+          ),
+          getStatus: vi.fn(async (repoId: string) => {
+            const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+            return [
+              status(`/workspace/${repositoryName}`),
+              status(`/workspace/goblin-feature-a/${repositoryName}`, repositoryName === 'api' ? entries : []),
+            ]
+          }),
+        }),
+      )
+
+    const staged = await build([{ x: 'M', y: ' ', path: 'src/a.ts' }])
+    const untracked = await build([{ x: '?', y: '?', path: 'scratch/b.txt' }])
+    const conflicted = await build([{ x: 'U', y: 'U', path: 'src/a.ts' }])
+    const changedHead = await build([{ x: 'M', y: ' ', path: 'src/a.ts' }], 'changed-source-head')
+
+    expect(staged.ok && untracked.ok && staged.plan.token).toBe(untracked.ok && untracked.plan.token)
+    expect(staged.ok && conflicted.ok && staged.plan.token).not.toBe(conflicted.ok && conflicted.plan.token)
+    expect(staged.ok && changedHead.ok && staged.plan.token).not.toBe(changedHead.ok && changedHead.plan.token)
+  })
+
   test('excludes the member target and marks a dirty destination worktree unavailable', async () => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,

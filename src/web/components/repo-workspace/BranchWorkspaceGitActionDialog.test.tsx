@@ -154,7 +154,11 @@ function mergeOutPlan(): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-me
             : destination,
         ),
       }),
-      mergeOutMember('docs', { ready: false, message: 'destination unavailable', destinationBranches: [] }),
+      mergeOutMember('docs', {
+        ready: false,
+        message: 'workspace.branch-workspace.git-action.source-worktree-conflicted',
+        destinationBranches: [],
+      }),
     ],
   }
 }
@@ -699,6 +703,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(summary?.textContent).toContain('web hook rejected')
     expect(summary?.textContent).toContain('workspace.branch-workspace.git-action.failure-step.commit')
     expect(document.body.textContent).toContain('workspace.branch-workspace.git-action.member-failure-ai-handoff')
+    expect(document.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).toBeNull()
 
     await act(async () => buttonWithExactText('action.merge-conflict-ai-codex')?.click())
     await flush()
@@ -895,6 +900,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(mergeCheckbox('web')?.dataset.state).toBe('checked')
     expect(mergeCheckbox('docs')?.dataset.state).toBe('unchecked')
     expect(mergeCheckbox('docs')?.disabled).toBe(true)
+    expect(document.body.textContent).toContain('workspace.branch-workspace.git-action.source-worktree-conflicted')
   })
 
   test.each([
@@ -1112,6 +1118,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     const codex = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
       (button) => button.textContent === 'action.merge-conflict-ai-codex',
     )
+    expect(document.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).not.toBeNull()
     await act(async () => codex?.click())
     await flush()
 
@@ -1178,6 +1185,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     )
     expect(actions).not.toBeNull()
     expect(codex).not.toBeUndefined()
+    expect(document.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).not.toBeNull()
 
     await act(async () => codex?.click())
     await flush()

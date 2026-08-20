@@ -2326,15 +2326,15 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
   test('continues later merge-out members when one destination changes after pull', async () => {
     const plan = mergeOutPlan()
     if (plan.kind !== 'batch-merge-out') throw new Error('expected merge plan')
-    const sourceDirtyPlan = structuredClone(plan)
-    sourceDirtyPlan.members[0]!.ready = false
-    sourceDirtyPlan.members[0]!.message = 'workspace.branch-workspace.git-action.target-worktree-dirty'
+    const sourceConflictedPlan = structuredClone(plan)
+    sourceConflictedPlan.members[0]!.ready = false
+    sourceConflictedPlan.members[0]!.message = 'workspace.branch-workspace.git-action.source-worktree-conflicted'
     const destinationDirtyPlan = structuredClone(plan)
     destinationDirtyPlan.members[0]!.destinationBranches[0]!.ready = false
     destinationDirtyPlan.members[0]!.destinationBranches[0]!.message =
       'workspace.branch-workspace.git-action.destination-worktree-dirty'
 
-    for (const changedPlan of [sourceDirtyPlan, destinationDirtyPlan]) {
+    for (const changedPlan of [sourceConflictedPlan, destinationDirtyPlan]) {
       const merge = vi.fn(async () => ({ ok: true as const, message: 'merged' }))
       const push = vi.fn(async () => ({ ok: true as const, message: 'pushed' }))
       const service = createBranchWorkspaceGitActionWriteService({

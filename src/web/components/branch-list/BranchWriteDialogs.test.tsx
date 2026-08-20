@@ -45,6 +45,7 @@ const mergeAiMocks = vi.hoisted(() => ({
 }))
 
 const aiTerminalHandoffMocks = vi.hoisted(() => ({
+  buildMergeConflictAiPrompt: vi.fn(() => 'worktree conflict prompt'),
   buildMergeConflictAiCommand: vi.fn((provider: string) => `${provider} conflict command`),
   prefillAiTerminalCommand: vi.fn(async () => true),
 }))
@@ -445,6 +446,7 @@ describe('MergeInDialog', () => {
     expect(document.body.textContent).toContain('CONFLICT (content)')
     expect(buttonByText('Codex')).not.toBeNull()
     expect(buttonByText('Claude')).not.toBeNull()
+    expect(document.body.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).not.toBeNull()
   })
 
   test('adapts a worktree conflict to the shared provider handoff callback', async () => {
@@ -947,6 +949,7 @@ describe('MergeOutDialog', () => {
     await flush()
 
     expect(buttonByText('Codex')).not.toBeNull()
+    expect(document.body.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).not.toBeNull()
     const input = mergeAiMocks.input as {
       onHandoff: (provider: 'codex' | 'claude') => Promise<boolean>
     }

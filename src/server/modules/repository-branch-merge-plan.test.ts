@@ -25,7 +25,13 @@ function branch(
     lastCommitDate: '',
     lastCommitAuthor: '',
     ...(worktreePath
-      ? { worktree: { path: worktreePath, head: `${name}-worktree-head`, ...(worktreeLocked ? { isLocked: true } : {}) } }
+      ? {
+          worktree: {
+            path: worktreePath,
+            head: `${name}-worktree-head`,
+            ...(worktreeLocked ? { isLocked: true } : {}),
+          },
+        }
       : {}),
     ...rest,
   }
@@ -39,11 +45,13 @@ function snapshot(branches: BranchSnapshotInfo[]): RepoSnapshot {
   return { branches, current: 'feature/source' }
 }
 
-function dependencies(options: {
-  branches?: BranchSnapshotInfo[]
-  statuses?: WorktreeStatus[]
-  remoteBranches?: RemoteTrackingBranchInfo[]
-} = {}) {
+function dependencies(
+  options: {
+    branches?: BranchSnapshotInfo[]
+    statuses?: WorktreeStatus[]
+    remoteBranches?: RemoteTrackingBranchInfo[]
+  } = {},
+) {
   return {
     getSnapshot: vi.fn(async () =>
       snapshot(
@@ -75,11 +83,7 @@ describe('repository branch merge-out plan', () => {
   })
 
   test.each([
-    [
-      [branch('main')],
-      [status(SOURCE_PATH)],
-      'error.merge-out-source-worktree-required',
-    ],
+    [[branch('main')], [status(SOURCE_PATH)], 'error.merge-out-source-worktree-required'],
     [
       [branch('feature/source', { worktreePath: '/workspace/other' }), branch('main')],
       [status(SOURCE_PATH)],
@@ -99,15 +103,36 @@ describe('repository branch merge-out plan', () => {
     ).resolves.toEqual({ ok: false, message })
   })
 
-  test('returns a non-ready plan for a dirty source', async () => {
+  test('keeps a source with ordinary uncommitted changes ready', async () => {
     const result = await buildRepositoryBranchMergeOutPlan(
       { repoId: REPO_ID, sourceBranch: 'feature/source', sourceWorktreePath: SOURCE_PATH },
-      dependencies({ statuses: [status(SOURCE_PATH, [{ x: 'M', y: ' ', path: 'src/a.ts' }])] }),
+      dependencies({
+        statuses: [
+          status(SOURCE_PATH, [
+            { x: 'M', y: ' ', path: 'src/staged.ts' },
+            { x: ' ', y: 'M', path: 'src/unstaged.ts' },
+            { x: '?', y: '?', path: 'src/untracked.ts' },
+          ]),
+        ],
+      }),
     )
 
     expect(result).toMatchObject({
       ok: true,
-      plan: { ready: false, message: 'error.merge-out-source-dirty' },
+      plan: { ready: true },
+    })
+    expect(result.ok && result.plan.message).toBeUndefined()
+  })
+
+  test('returns a non-ready plan for a source with unresolved conflicts', async () => {
+    const result = await buildRepositoryBranchMergeOutPlan(
+      { repoId: REPO_ID, sourceBranch: 'feature/source', sourceWorktreePath: SOURCE_PATH },
+      dependencies({ statuses: [status(SOURCE_PATH, [{ x: 'U', y: 'U', path: 'src/conflicted.ts' }])] }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: { ready: false, message: 'error.merge-out-source-conflicted' },
     })
   })
 
@@ -140,9 +165,21 @@ describe('repository branch merge-out plan', () => {
         requiresTemporaryWorktree: false,
         pullMergePushReady: true,
       }),
-      expect.objectContaining({ destination: { kind: 'local', branch: 'dirty' }, ready: false, blockReason: 'dirty-worktree' }),
-      expect.objectContaining({ destination: { kind: 'local', branch: 'unavailable' }, ready: false, blockReason: 'unavailable-worktree' }),
-      expect.objectContaining({ destination: { kind: 'local', branch: 'unchecked' }, ready: true, requiresTemporaryWorktree: true }),
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'dirty' },
+        ready: false,
+        blockReason: 'dirty-worktree',
+      }),
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'unavailable' },
+        ready: false,
+        blockReason: 'unavailable-worktree',
+      }),
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'unchecked' },
+        ready: true,
+        requiresTemporaryWorktree: true,
+      }),
     ])
   })
 
@@ -183,7 +220,11 @@ describe('repository branch merge-out plan', () => {
     })
 
     expect(destinations).toEqual([
-      expect.objectContaining({ destination: { kind: 'local', branch: 'main' }, ready: true, requiresTemporaryWorktree: true }),
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'main' },
+        ready: true,
+        requiresTemporaryWorktree: true,
+      }),
       expect.objectContaining({
         destination: { kind: 'local', branch: 'release' },
         ready: false,
@@ -219,12 +260,20 @@ describe('repository branch merge-out plan', () => {
   })
 
   test('fingerprints source truth and destination identities, not destination head or upstream', async () => {
-    const build = async (options: { sourceHead?: string; destinationHead?: string; destinationTracking?: string; name?: string }) =>
+    const build = async (options: {
+      sourceHead?: string
+      destinationHead?: string
+      destinationTracking?: string
+      name?: string
+    }) =>
       await buildRepositoryBranchMergeOutPlan(
         { repoId: REPO_ID, sourceBranch: 'feature/source', sourceWorktreePath: SOURCE_PATH },
         dependencies({
           branches: [
-            branch('feature/source', { worktreePath: SOURCE_PATH, worktree: { path: SOURCE_PATH, head: options.sourceHead ?? 'source-head' } }),
+            branch('feature/source', {
+              worktreePath: SOURCE_PATH,
+              worktree: { path: SOURCE_PATH, head: options.sourceHead ?? 'source-head' },
+            }),
             branch(options.name ?? 'main', {
               lastCommitHash: options.destinationHead ?? 'destination-head',
               tracking: options.destinationTracking,
@@ -241,10 +290,26 @@ describe('repository branch merge-out plan', () => {
     expect(original.ok && changedDestinationFacts.ok && original.plan.token).toBe(
       changedDestinationFacts.ok && changedDestinationFacts.plan.token,
     )
-    expect(original.ok && changedSource.ok && original.plan.token).not.toBe(changedSource.ok && changedSource.plan.token)
+    expect(original.ok && changedSource.ok && original.plan.token).not.toBe(
+      changedSource.ok && changedSource.plan.token,
+    )
     expect(original.ok && changedIdentity.ok && original.plan.token).not.toBe(
       changedIdentity.ok && changedIdentity.plan.token,
     )
+  })
+
+  test('ignores ordinary source edits in the fingerprint but tracks source conflict state', async () => {
+    const build = async (entries: StatusEntry[]) =>
+      await buildRepositoryBranchMergeOutPlan(
+        { repoId: REPO_ID, sourceBranch: 'feature/source', sourceWorktreePath: SOURCE_PATH },
+        dependencies({ statuses: [status(SOURCE_PATH, entries)] }),
+      )
+    const staged = await build([{ x: 'M', y: ' ', path: 'src/a.ts' }])
+    const unstaged = await build([{ x: ' ', y: 'M', path: 'src/b.ts' }])
+    const conflicted = await build([{ x: 'U', y: 'U', path: 'src/conflicted.ts' }])
+
+    expect(staged.ok && unstaged.ok && staged.plan.token).toBe(unstaged.ok && unstaged.plan.token)
+    expect(staged.ok && conflicted.ok && staged.plan.token).not.toBe(conflicted.ok && conflicted.plan.token)
   })
 
   test('fingerprints remote destination heads so refreshed remote facts invalidate stale plans', async () => {

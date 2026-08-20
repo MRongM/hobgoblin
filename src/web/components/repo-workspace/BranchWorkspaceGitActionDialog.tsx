@@ -45,7 +45,10 @@ import {
 } from '#/web/components/repo-workspace/branch-workspace-batch-progress.ts'
 import { BranchWorkspaceBatchProgress } from '#/web/components/repo-workspace/BranchWorkspaceBatchProgress.tsx'
 import { generateRepositoryCommitMessage, getCommitMessageProviders } from '#/web/repo-client.ts'
-import type { BranchWorkspaceBatchErrorAiFailure } from '#/web/ai-terminal-handoff.ts'
+import {
+  buildBranchWorkspaceBatchErrorAiPrompt,
+  type BranchWorkspaceBatchErrorAiFailure,
+} from '#/web/ai-terminal-handoff.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { remoteBranchRefMatchesQuery } from '#/shared/remote-branches.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -1318,6 +1321,10 @@ function BranchWorkspaceBatchErrorAiActions({
     ]
   })
   if (failures.length === 0) return null
+  const prompt =
+    result.kind === 'batch-merge-in' || result.kind === 'batch-merge-out'
+      ? buildBranchWorkspaceBatchErrorAiPrompt(result.kind, failures)
+      : undefined
 
   return (
     <div className="grid gap-2">
@@ -1349,6 +1356,7 @@ function BranchWorkspaceBatchErrorAiActions({
       </div>
       <MergeConflictAiActions
         title={t('workspace.branch-workspace.git-action.member-failure-ai-handoff')}
+        prompt={prompt}
         onHandoff={(provider) => onHandoff({ provider, kind: result.kind, failures })}
         onHandoffComplete={onHandoffComplete}
       />

@@ -361,6 +361,8 @@ export const ja: Record<DictKey, string> = {
     '現在ブランチのワークツリー状態を読み取れません。',
   'workspace.branch-workspace.git-action.target-worktree-dirty':
     'マージ前に現在ブランチの変更をコミットまたは整理してください。',
+  'workspace.branch-workspace.git-action.source-worktree-conflicted':
+    '取り込み元 worktree に未解決のマージ競合があります。',
   'workspace.branch-workspace.git-action.target-upstream-required':
     'この操作には選択した各対象ブランチの利用可能なアップストリームが必要です。',
   'workspace.branch-workspace.git-action.remote-required': '一括プッシュには各リポジトリのリモートが必要です。',
@@ -989,6 +991,9 @@ export const ja: Record<DictKey, string> = {
   'action.merge-out-title': '{branch} を別のブランチへマージ',
   'action.merge-out-source-label': '取り込み元ブランチ',
   'action.merge-out-source-dirty': '送り出す前に、取り込み元 worktree の変更をコミットまたは破棄してください。',
+  'action.merge-out-source-conflicted':
+    '送り出す前に、取り込み元 worktree の競合を解決するか現在のマージを中止してください。',
+  'action.merge-out-source-unavailable': '取り込み元 worktree の状態を取得できません。',
   'action.merge-out-destination-label': 'マージ先ブランチ',
   'action.merge-out-destination-placeholder': 'マージ先を選択',
   'action.merge-out-destination-dirty': 'マージ先 worktree に未コミットの変更があります',
@@ -1001,6 +1006,8 @@ export const ja: Record<DictKey, string> = {
   'action.merge-conflict-ai-title': 'AI ハンドオフ',
   'action.merge-conflict-ai-codex': 'Codex',
   'action.merge-conflict-ai-claude': 'Claude',
+  'action.merge-conflict-ai-copy-prompt': 'プロンプトをコピー',
+  'action.merge-conflict-ai-prompt-copied': 'プロンプトをコピーしました',
   'action.merge-conflict-ai-prefill-failed': 'ターミナル入力に挿入できませんでした。',
   'action.commit': 'コミット',
   'action.commit-title': '全変更をコミット',
@@ -1173,6 +1180,8 @@ export const ja: Record<DictKey, string> = {
   'error.merge-out-source-worktree-unavailable': '取り込み元 worktree の状態を取得できません。',
   'error.merge-out-source-unavailable': '取り込み元 worktree を利用できません。',
   'error.merge-out-source-dirty': '送り出す前に、取り込み元 worktree の変更をコミットまたは破棄してください。',
+  'error.merge-out-source-conflicted':
+    '送り出す前に、取り込み元 worktree の競合を解決するか現在のマージを中止してください。',
   'error.merge-out-source-changed': '取り込み元ブランチが変更されました。更新後の計画を確認して再試行してください。',
   'error.merge-out-destination-required': 'マージ先ブランチを選択してください。',
   'error.merge-out-destination-unavailable': '利用可能なマージ先ブランチがありません。',

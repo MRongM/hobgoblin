@@ -353,7 +353,7 @@ The dialog-local, explicit choice of either one local branch or one remote-track
 _Avoid_: Branch name, inferred upstream, implicit tracking branch
 
 **Branch merge-out source**:
-The clean branch action target worktree whose checked-out branch supplies committed history to a merge-out. Uncommitted worktree content is never treated as part of that source and makes the action ineligible until committed or stashed.
+The branch action target's checked-out branch ref whose committed history supplies a merge-out. Ordinary staged, unstaged, and untracked worktree content is excluded and does not block the action; unresolved merge conflicts make the source ineligible, and changing the committed branch head changes the source.
 _Avoid_: Working tree contents, selected branch context, inferred source branch
 
 **Branch merge-out conflict site**:
@@ -483,7 +483,7 @@ An application-coordinated action that integrates one explicitly selected local 
 _Avoid_: Batch merge-out, source worktree merge, atomic batch merge
 
 **Branch workspace batch merge-out**:
-An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local branch or remote-tracking branch ref per member. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Different repository-member pipelines run with bounded concurrency while each member's preparation, Git, and cleanup steps remain sequential; results retain manifest order, isolate and aggregate failures, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates each selected repository member's committed target-branch history into one explicitly selected local branch or remote-tracking branch ref per member. Ordinary staged, unstaged, and untracked content in a source member worktree is excluded and does not block that member, while unresolved source conflicts do. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Different repository-member pipelines run with bounded concurrency while each member's Git steps remain sequential; results retain manifest order, isolate and aggregate failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
 **Branch workspace batch upstream change**:

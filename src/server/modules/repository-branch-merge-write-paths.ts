@@ -162,13 +162,7 @@ export async function executeRepositoryBranchMergeOut(
       if (!mergeResult.ok) return await finish(mergeResult)
       const pushWorktreeHead = dependencies.pushWorktreeHead ?? pushRepositoryWorktreeHeadToRemoteBranch
       return await finish(
-        await pushWorktreeHead(
-          input.repoId,
-          temporaryPath,
-          input.destination.remoteRef,
-          signal,
-          sourceToken,
-        ),
+        await pushWorktreeHead(input.repoId, temporaryPath, input.destination.remoteRef, signal, sourceToken),
       )
     }
 
@@ -326,7 +320,7 @@ function sourceUnchanged(
     refreshed.plan.sourceBranch === original.sourceBranch &&
     refreshed.plan.sourceWorktreePath === original.sourceWorktreePath &&
     refreshed.plan.sourceHead === original.sourceHead &&
-    refreshed.plan.message !== 'error.merge-out-source-dirty' &&
+    refreshed.plan.message !== 'error.merge-out-source-conflicted' &&
     destination?.ready === true
   )
 }
@@ -342,7 +336,7 @@ function remoteRefreshFailure(
     refreshed.plan.sourceBranch !== original.sourceBranch ||
     refreshed.plan.sourceWorktreePath !== original.sourceWorktreePath ||
     refreshed.plan.sourceHead !== original.sourceHead ||
-    refreshed.plan.message === 'error.merge-out-source-dirty'
+    refreshed.plan.message === 'error.merge-out-source-conflicted'
   ) {
     return 'error.merge-out-source-changed'
   }
@@ -359,10 +353,7 @@ function remoteRefreshFailure(
     : 'error.merge-out-destination-changed'
 }
 
-function sameDestination(
-  left: RepositoryMergeBranchSelection,
-  right: RepositoryMergeBranchSelection,
-): boolean {
+function sameDestination(left: RepositoryMergeBranchSelection, right: RepositoryMergeBranchSelection): boolean {
   return repositoryMergeBranchSelectionKey(left) === repositoryMergeBranchSelectionKey(right)
 }
 

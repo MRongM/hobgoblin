@@ -362,6 +362,7 @@ export const en = {
     'Could not read the current branch worktree status.',
   'workspace.branch-workspace.git-action.target-worktree-dirty':
     'Commit or clean the current branch worktree before merging.',
+  'workspace.branch-workspace.git-action.source-worktree-conflicted': 'Source worktree has unresolved merge conflicts.',
   'workspace.branch-workspace.git-action.target-upstream-required':
     'This action requires a usable upstream for every selected target branch.',
   'workspace.branch-workspace.git-action.remote-required': 'Every repository needs a remote before batch push.',
@@ -986,6 +987,8 @@ export const en = {
   'action.merge-out-title': 'Merge {branch} into another branch',
   'action.merge-out-source-label': 'Source branch',
   'action.merge-out-source-dirty': 'Commit or discard source worktree changes before merging out.',
+  'action.merge-out-source-conflicted': 'Resolve or abort source worktree conflicts before merging out.',
+  'action.merge-out-source-unavailable': 'Source worktree status is unavailable.',
   'action.merge-out-destination-label': 'Destination branch',
   'action.merge-out-destination-placeholder': 'Pick a destination branch',
   'action.merge-out-destination-dirty': 'Destination worktree has changes',
@@ -999,6 +1002,8 @@ export const en = {
   'action.merge-conflict-ai-title': 'AI handoff',
   'action.merge-conflict-ai-codex': 'Codex',
   'action.merge-conflict-ai-claude': 'Claude',
+  'action.merge-conflict-ai-copy-prompt': 'Copy prompt',
+  'action.merge-conflict-ai-prompt-copied': 'Prompt copied',
   'action.merge-conflict-ai-prefill-failed': 'Could not fill the terminal input.',
   'action.commit': 'Commit',
   'action.commit-title': 'Commit all changes',
@@ -1169,6 +1174,7 @@ export const en = {
   'error.merge-out-source-worktree-unavailable': 'The source worktree status is unavailable.',
   'error.merge-out-source-unavailable': 'The source worktree is unavailable.',
   'error.merge-out-source-dirty': 'Commit or discard source worktree changes before merging out.',
+  'error.merge-out-source-conflicted': 'Resolve or abort source worktree conflicts before merging out.',
   'error.merge-out-source-changed': 'The source branch changed. Review the refreshed plan and try again.',
   'error.merge-out-destination-required': 'Select a destination branch.',
   'error.merge-out-destination-unavailable': 'No available destination branch was found.',
