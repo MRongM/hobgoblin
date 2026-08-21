@@ -1,7 +1,7 @@
 {
   "name": "hobgoblin-windows",
   "productName": "Hobgoblin",
-  "version": "2.2.6",
+  "version": "2.2.7",
   "description": "Hobgoblin for Windows",
   "private": true,
   "type": "module",
