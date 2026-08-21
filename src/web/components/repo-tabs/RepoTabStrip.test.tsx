@@ -55,6 +55,51 @@ function createStorage(): Storage {
 }
 
 describe('RepoTabStrip', () => {
+  test('opens a recent repository from the add-repository menu', async () => {
+    const onOpenRecent = vi.fn()
+    render(
+      <RepoTabStrip
+        repos={[]}
+        activeId={null}
+        labels={labels}
+        recentRepos={[{ kind: 'local', id: '/tmp/recent-repo' }]}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+        onOpenLocal={() => {}}
+        onOpenRemote={() => {}}
+        onClone={() => {}}
+        onOpenRecent={onOpenRecent}
+        onClearRecent={() => {}}
+      />,
+    )
+
+    const trigger = document.body.querySelector<HTMLButtonElement>('button[aria-label="Open"]')
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+      await Promise.resolve()
+    })
+
+    const recentTrigger = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('Open Recent'),
+    )
+    await act(async () => {
+      recentTrigger?.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }))
+      recentTrigger?.click()
+      await Promise.resolve()
+    })
+    const recentRepo = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find((item) =>
+      item.textContent?.includes('/tmp/recent-repo'),
+    )
+    await act(async () => {
+      recentRepo?.click()
+      await Promise.resolve()
+    })
+
+    expect(onOpenRecent).toHaveBeenCalledWith({ kind: 'local', id: '/tmp/recent-repo' })
+  })
+
   test('marks non-git local workspace tabs as plain repositories', () => {
     render(
       <RepoTabStrip
@@ -539,6 +584,9 @@ const labels = {
   openRemoteShortcut: '⌘⇧R',
   clone: 'Clone repository…',
   cloneShortcut: '⌘⇧O',
+  openRecent: 'Open Recent',
+  noRecent: 'No Recent Repositories',
+  clearRecent: 'Clear Menu',
   unavailable: 'Unavailable',
   clearCache: 'Clear cache',
   clearCacheConfirmTitle: 'Clear cache?',

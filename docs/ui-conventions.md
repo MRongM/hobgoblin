@@ -15,6 +15,7 @@ Use this doc for UI language and presentation rules.
 
 - Activating a top-level multi-repository workspace starts at its workspace overview rather than restoring a repository or branch-workspace member. A direct click on its project row or workspace-root row may instead reveal an aggregated root or branch-workspace terminal: prefer the workspace root's own terminal, then the previously selected branch workspace when it still has a viable root terminal, then the first viable branch workspace in sidebar order; never route this parent click to a repository-member worktree terminal. With no viable terminal target, the click keeps the ordinary overview behavior. Hiding the workspace repository list also returns to that overview and collapses the desktop file area; showing the list does not reopen files or restore the prior member context.
 - On desktop, double-clicking an ordinary worktree main item toggles the file area. Opening the file area selects the Files tab; double-clicking again closes it.
+- In existing context menus for Projects, workspace Repositories, ordinary worktrees, branch workspace roots, and member worktrees, keep **Open file area** as an idempotent action: select the exact row target first, then open Files. Keep the workspace Overview row's equivalent local context menu. Do not add the action to branches without worktrees, terminals, file-tree nodes, or toolbar More menus; keep it visible but disabled on unavailable targets.
 - Treat a branch workspace and its member worktrees as one parent scope. Selecting a member must keep the branch workspace active.
 - Single-clicking a navigable branch workspace member selects its terminal context and focuses its selected viable internal terminal when the member selection changes. Re-clicking the selected member does not refocus it, and a single click does not open the file area.
 - Double-clicking a navigable branch workspace member worktree toggles the desktop file area without changing member-summary expansion; compact presentation opens the files surface.
@@ -40,9 +41,9 @@ Use this doc for UI language and presentation rules.
 
 ## Detached file area windows
 
-- Keep the source file area and its active tab in place when its toolbar is dragged into a detached file area window; detaching creates a live copy of the complete file area rather than moving navigation state. Individual tabs are not draggable.
+- Keep the source file area and its active tab in place when its toolbar is dragged into a detached file area window; detaching creates a live copy of the active panel rather than moving navigation state. Individual tabs are not draggable.
 - Bind the detached window to the active tab, repository, and branch or worktree context captured when the toolbar drag starts. Main-window navigation must not silently retarget it.
-- Use the compact context topbar to identify the repository, branch or worktree, current file area panel, and live state. Render the complete native file area, including its tab bar, below that context topbar.
+- Use the compact context topbar to identify the repository, branch or worktree, current file area panel, and live state. Render only the captured native panel below that context topbar; do not reproduce the project-level file area tab bar.
 - Keep detached window bounds, internal panel navigation, and open/closed state local and ephemeral. Do not persist or restore them.
 - Offer the same drag-out and `Shift+Enter` interaction in Electron and Web. In Web, open a same-origin browser window and show an actionable failure toast when the browser blocks it.
 - Never place repository paths or branch names in a detached browser window URL; transfer them through a short-lived, consume-once same-origin handoff.

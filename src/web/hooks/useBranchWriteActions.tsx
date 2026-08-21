@@ -31,11 +31,13 @@ import type { BranchActionItem } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import type { RepositoryBranchMergeOutExecuteInput } from '#/shared/repository-branch-merge.ts'
+import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import {
   repositoryMergeBranchDisplayName,
   type RepositoryMergeBranchSelection,
 } from '#/shared/repository-merge-branch.ts'
 import { useTrackRemoteBranchAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 
 interface BranchWriteActions {
   mainItems: BranchActionItem[]
@@ -66,7 +68,8 @@ export function useBranchWriteActions(
   const inlineCommitDraftActions = useInlineCommitDraftActions()
   const availableCommitMessageProviders = useInlineCommitMessageProviders()
   const sourceStatus = worktreePath ? repo.data.status.find((status) => status.path === worktreePath) : undefined
-  const mergeOutSourceReady = Boolean(sourceStatus && sourceStatus.entries.length === 0)
+  const mergeOutSourceConflicted = Boolean(sourceStatus && hasUnmergedStatusEntries(sourceStatus.entries))
+  const mergeOutSourceReady = Boolean(sourceStatus && !mergeOutSourceConflicted)
 
   const checkoutToDialog = useRetainedDialogState<string>()
   const mergeInDialog = useRetainedDialogState<string>()
@@ -81,9 +84,10 @@ export function useBranchWriteActions(
     if (!result.ok) throw new Error(result.message)
   }
 
-  async function handleCheckoutTo(targetBranch: string) {
+  async function handleCheckoutTo(target: WorktreeBranchSwitchTarget) {
     if (!worktreePath) return
-    const result = await checkoutBranchInWorktree(repo.id, worktreePath, targetBranch)
+    const targetBranch = target.kind === 'localBranch' ? target.branch : target.localBranch
+    const result = await checkoutBranchInWorktree(repo.id, worktreePath, target)
     setLastResult(repo.id, result, repo.instanceToken, {
       action: { kind: 'checkout', branch: targetBranch, worktreePath },
     })
@@ -189,7 +193,7 @@ export function useBranchWriteActions(
       label: t('action.merge-out'),
       title: mergeOutSourceReady
         ? t('action.merge-out-title', { branch: branch.name })
-        : t('action.merge-out-source-dirty'),
+        : t(sourceStatus ? 'action.merge-out-source-conflicted' : 'action.merge-out-source-unavailable'),
       disabled: !hasWorktree || !mergeOutSourceReady || branchActionBusy,
       visible: true,
       icon: createElement(GitMerge),
@@ -239,6 +243,7 @@ export function useBranchWriteActions(
       {trackRemoteBranch.dialog}
       <CheckoutToDialog
         open={checkoutToDialog.open}
+        repoId={repo.id}
         branch={branch}
         allBranches={allBranches}
         onClose={checkoutToDialog.close}

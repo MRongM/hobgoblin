@@ -25,6 +25,7 @@ export interface WorkspaceItemOpenAction {
 }
 
 interface WorkspaceItemContextMenuProps {
+  fileArea?: WorkspaceItemOpenAction
   editor: WorkspaceItemOpenAction
   remote?: WorkspaceItemOpenAction
   externalTerminal: WorkspaceItemOpenAction
@@ -38,6 +39,7 @@ interface WorkspaceItemContextMenuProps {
 }
 
 export function WorkspaceItemContextMenu({
+  fileArea,
   editor,
   remote,
   externalTerminal,
@@ -57,6 +59,7 @@ export function WorkspaceItemContextMenu({
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent>
+          {fileArea ? <OpenActionItem action={fileArea}>{t('file-area.open')}</OpenActionItem> : null}
           <OpenActionItem action={editor}>{t('worktrees.open-in-editor-label')}</OpenActionItem>
           {remote ? <OpenActionItem action={remote}>{t('action.remote')}</OpenActionItem> : null}
           <OpenActionItem action={externalTerminal}>{t('terminal.external')}</OpenActionItem>

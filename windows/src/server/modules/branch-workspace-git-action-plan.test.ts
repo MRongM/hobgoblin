@@ -128,6 +128,21 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function snapshotForMemberTarget(
+  repositoryName: string,
+  targetBranch: string,
+  targetWorktreePath: string,
+): RepoSnapshot {
+  const result = snapshot(repositoryName)
+  const target = result.branches[0]!
+  result.branches[0] = {
+    ...target,
+    name: targetBranch,
+    worktree: { ...target.worktree!, path: targetWorktreePath, head: 'target-head' },
+  }
+  return result
+}
+
 describe('buildBranchWorkspaceGitActionPlan', () => {
   test('skips snapshot worktree status because member status is read separately', async () => {
     const deps = dependencies()
@@ -179,6 +194,30 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
       },
     })
   })
+
+  test.each(['batch-commit', 'batch-discard'] as const)(
+    'reads %s members concurrently while preserving manifest order',
+    async (kind) => {
+      let activeSnapshots = 0
+      let maxActiveSnapshots = 0
+      const result = await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind, branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) => {
+            activeSnapshots += 1
+            maxActiveSnapshots = Math.max(maxActiveSnapshots, activeSnapshots)
+            await new Promise((resolve) => setTimeout(resolve, 20))
+            activeSnapshots -= 1
+            return snapshot(repoId.endsWith('/api') ? 'api' : 'web')
+          }),
+        }),
+      )
+
+      expect(maxActiveSnapshots).toBe(2)
+      expect(result.ok && result.plan.members.map((member) => member.repositoryName)).toEqual(['api', 'web'])
+    },
+  )
 
   test('plans exact changed paths for every branch workspace member in manifest order', async () => {
     const deps = dependencies({
@@ -372,6 +411,207 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     )
   })
 
+  test('projects current upstream and same-repository remote candidates for each batch upstream member', async () => {
+    const getRemoteBranchInfo = vi.fn(async (repoId: string) => [
+      {
+        remoteRef: repoId.endsWith('/api') ? 'origin/release' : 'upstream/release',
+        head: 'a'.repeat(40),
+      },
+    ])
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', {
+            targetTracking: repoId.endsWith('/api') ? 'origin/feature/a' : undefined,
+          }),
+        ),
+        getRemoteBranchInfo,
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-set-upstream',
+        ready: true,
+        members: [
+          {
+            repositoryName: 'api',
+            currentUpstream: 'origin/feature/a',
+            remoteBranches: [{ remoteRef: 'origin/release' }],
+            ready: true,
+          },
+          {
+            repositoryName: 'web',
+            currentUpstream: null,
+            remoteBranches: [{ remoteRef: 'upstream/release' }],
+            ready: true,
+          },
+        ],
+      },
+    })
+    expect(getRemoteBranchInfo).toHaveBeenNthCalledWith(1, '/workspace/api', undefined)
+    expect(getRemoteBranchInfo).toHaveBeenNthCalledWith(2, '/workspace/web', undefined)
+  })
+
+  test('keeps batch upstream members with no remote candidates visible but unselectable', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({ getRemoteBranchInfo: vi.fn(async () => []) }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-set-upstream',
+        ready: false,
+        members: [
+          { ready: false, message: 'workspace.branch-workspace.git-action.remote-branch-required' },
+          { ready: false, message: 'workspace.branch-workspace.git-action.remote-branch-required' },
+        ],
+      },
+    })
+  })
+
+  test.each([
+    ['target branch', { targetBranch: 'release/v2' }],
+    ['member worktree path', { worktreePath: '/workspace/goblin-feature-a/api-next' }],
+  ])('rejects a batch upstream plan when selected member identity %s changes', async (_change, apiChange) => {
+    const originalManifest = manifest()
+    const currentManifest = manifest()
+    Object.assign(currentManifest.repositories[0]!, apiChange)
+    const planDependencies = (current: BranchWorkspaceManifest) =>
+      dependencies({
+        readManifests: vi.fn(async () => ({ kind: 'ready' as const, manifests: [current] })),
+        getSnapshot: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          const member = current.repositories.find((candidate) => candidate.repositoryName === repositoryName)!
+          return snapshotForMemberTarget(repositoryName, member.targetBranch, member.worktreePath)
+        }),
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          const member = current.repositories.find((candidate) => candidate.repositoryName === repositoryName)!
+          return [status(member.worktreePath)]
+        }),
+        getRemoteBranchInfo: vi.fn(async () => [{ remoteRef: 'origin/release', head: 'a'.repeat(40) }]),
+      })
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+      planDependencies(originalManifest),
+    )
+    expect(original.ok).toBe(true)
+    if (!original.ok) return
+
+    await expect(
+      validateBranchWorkspaceGitActionPlan(original.plan, new Set(), planDependencies(currentManifest)),
+    ).resolves.toMatchObject({ ok: false, repositoryName: 'api' })
+  })
+
+  test('keeps a recoverably unreadable batch upstream member visible while a sibling remains selectable', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) => (repoId.endsWith('/api') ? undefined : snapshot('web'))),
+        getRemoteBranchInfo: vi.fn(async (repoId: string) => [
+          { remoteRef: repoId.endsWith('/api') ? 'origin/release' : 'upstream/release', head: 'a'.repeat(40) },
+        ]),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-set-upstream',
+        ready: false,
+        members: [
+          {
+            repositoryName: 'api',
+            repoId: '/workspace/api',
+            targetBranch: 'feature/a',
+            targetWorktreePath: '/workspace/goblin-feature-a/api',
+            ready: false,
+            remoteBranches: [],
+            message: 'workspace.branch-workspace.repository-unavailable',
+            fingerprint: expect.stringMatching(/^sha256:/),
+          },
+          { repositoryName: 'web', ready: true, remoteBranches: [{ remoteRef: 'upstream/release' }] },
+        ],
+      },
+    })
+  })
+
+  test('keeps an aborted batch upstream member read fatal', async () => {
+    await expect(
+      buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getRemoteBranchInfo: vi.fn(async () => {
+            throw new DOMException('Aborted', 'AbortError')
+          }),
+        }),
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  test.each([
+    ['current upstream', { targetTracking: 'origin/next' }, { remoteRef: 'origin/release', head: 'a'.repeat(40) }],
+    [
+      'tracking gone state',
+      { targetTracking: 'origin/feature/a', targetTrackingGone: true },
+      { remoteRef: 'origin/release', head: 'a'.repeat(40) },
+    ],
+    [
+      'target head',
+      { targetTracking: 'origin/feature/a', targetHead: 'changed-head' },
+      { remoteRef: 'origin/release', head: 'a'.repeat(40) },
+    ],
+    [
+      'existing remote candidate head',
+      { targetTracking: 'origin/feature/a' },
+      { remoteRef: 'origin/release', head: 'b'.repeat(40) },
+    ],
+  ])(
+    'rejects a batch upstream plan when only the selected member %s changes',
+    async (_change, apiSnapshot, apiRemote) => {
+      const original = await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) =>
+            snapshot(repoId.endsWith('/api') ? 'api' : 'web', { targetTracking: 'origin/feature/a' }),
+          ),
+          getRemoteBranchInfo: vi.fn(async () => [{ remoteRef: 'origin/release', head: 'a'.repeat(40) }]),
+        }),
+      )
+      expect(original.ok).toBe(true)
+      if (!original.ok) return
+
+      await expect(
+        validateBranchWorkspaceGitActionPlan(
+          original.plan,
+          new Set(),
+          dependencies({
+            getSnapshot: vi.fn(async (repoId: string) =>
+              snapshot(
+                repoId.endsWith('/api') ? 'api' : 'web',
+                repoId.endsWith('/api') ? apiSnapshot : { targetTracking: 'origin/feature/a' },
+              ),
+            ),
+            getRemoteBranchInfo: vi.fn(async (repoId: string) => [
+              repoId.endsWith('/api') ? apiRemote : { remoteRef: 'origin/release', head: 'a'.repeat(40) },
+            ]),
+          }),
+        ),
+      ).resolves.toMatchObject({ ok: false, repositoryName: 'api' })
+    },
+  )
+
   test('lists user-selectable local destinations without requiring the persisted base branch to be checked out', async () => {
     const cleanStatuses = vi.fn(async (repoId: string) => {
       const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
@@ -442,7 +682,11 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     )
 
     expect(result.ok && result.plan.kind === 'batch-merge-out' && result.plan.members[0]?.destinationBranches).toEqual([
-      expect.objectContaining({ destination: { kind: 'local', branch: 'main' }, ready: true, requiresTemporaryWorktree: false }),
+      expect.objectContaining({
+        destination: { kind: 'local', branch: 'main' },
+        ready: true,
+        requiresTemporaryWorktree: false,
+      }),
       expect.objectContaining({
         destination: { kind: 'local', branch: 'release/v2' },
         ready: false,
@@ -556,7 +800,10 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
       expect.objectContaining({ source: { kind: 'local', branch: 'main' }, head: 'base-head' }),
       expect.objectContaining({ source: { kind: 'local', branch: 'release/v2' }, head: 'release-head' }),
       expect.objectContaining({ source: { kind: 'local', branch: 'origin/main' }, head: 'local-origin-main' }),
-      expect.objectContaining({ source: { kind: 'remote', remoteRef: 'origin/feature/a' }, head: 'remote-target-head' }),
+      expect.objectContaining({
+        source: { kind: 'remote', remoteRef: 'origin/feature/a' },
+        head: 'remote-target-head',
+      }),
       expect.objectContaining({ source: { kind: 'remote', remoteRef: 'origin/main' }, head: 'remote-main-head' }),
     ])
     expect(
@@ -631,6 +878,33 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetHead: repoId.endsWith('/api') ? 'new-head' : 'target-head',
           }),
         ),
+      }),
+    )
+
+    expect(result.ok).toBe(true)
+  })
+
+  test('does not block selected members when an ignored member is removed', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'push', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', { remotes: ['origin'] }),
+        ),
+      }),
+    )
+    expect(original.ok).toBe(true)
+    if (!original.ok) return
+
+    const current = manifest()
+    current.repositories.pop()
+    const result = await validateBranchWorkspaceGitActionPlan(
+      original.plan,
+      new Set(['web']),
+      dependencies({
+        readManifests: vi.fn(async () => ({ kind: 'ready' as const, manifests: [current] })),
+        getSnapshot: vi.fn(async () => snapshot('api', { remotes: ['origin'] })),
       }),
     )
 

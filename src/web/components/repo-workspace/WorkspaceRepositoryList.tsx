@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderGit2, GitCompareArrows, Terminal } from 'lucide-react'
+import { FolderGit2, FolderTree, GitCompareArrows, Terminal } from 'lucide-react'
 import { useMemo } from 'react'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
@@ -59,6 +59,7 @@ interface Props {
   onActivate: (id: string) => void
   onReorder: (fromId: string, toId: string) => void
   onToggleFileArea?: () => void
+  onOpenFileArea?: () => void
 }
 
 export function WorkspaceRepositoryList({
@@ -68,6 +69,7 @@ export function WorkspaceRepositoryList({
   onActivate,
   onReorder,
   onToggleFileArea,
+  onOpenFileArea,
 }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -96,6 +98,7 @@ export function WorkspaceRepositoryList({
               disabled={disabled}
               onActivate={onActivate}
               onToggleFileArea={onToggleFileArea}
+              onOpenFileArea={onOpenFileArea}
             />
           ))}
         </ul>
@@ -110,12 +113,14 @@ function SortableWorkspaceRepositoryRow({
   disabled,
   onActivate,
   onToggleFileArea,
+  onOpenFileArea,
 }: {
   repository: WorkspaceRepositoryListItem
   active: boolean
   disabled: boolean
   onActivate: (id: string) => void
   onToggleFileArea?: () => void
+  onOpenFileArea?: () => void
 }) {
   const t = useT()
   const terminalCount = useRepoTerminalCount(repository.id, repository.terminalWorktreePaths)
@@ -175,9 +180,24 @@ function SortableWorkspaceRepositoryRow({
     busy: internalTerminalAction.busy,
     onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
   }
+  const handleOpenFileArea = onOpenFileArea
+    ? () => {
+        onActivate(repository.id)
+        onOpenFileArea()
+      }
+    : undefined
 
   const row = (
     <WorkspaceItemContextMenu
+      fileArea={
+        handleOpenFileArea
+          ? {
+              disabled: repository.unavailable,
+              icon: <FolderTree aria-hidden="true" />,
+              onSelect: handleOpenFileArea,
+            }
+          : undefined
+      }
       editor={{ ...externalActions.editor, icon: <EditorAppIcon pref={externalActions.editor.iconPref} /> }}
       externalTerminal={{
         ...externalActions.externalTerminal,

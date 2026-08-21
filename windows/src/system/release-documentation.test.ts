@@ -33,36 +33,39 @@ describe('release documentation', () => {
     expect(page).toContain('Hobgoblin-&lt;version&gt;-linux-source.tar.gz')
   })
 
-  test('Pages highlights the v2.2.6 Windows and terminal workflows', () => {
+  test('Pages highlights the v2.2.7 coordinated Git workflows', () => {
     const page = readText('docs/index.html')
 
-    expect(page).toContain('v2.2.6')
+    expect(page).toContain('v2.2.7')
+    expect(page).toContain('searchable branch merges')
+    expect(page).toContain('concurrent batch Git actions')
+    expect(page).toContain('immediate in-app feedback')
     expect((page.match(/WSL/g) ?? []).length).toBeGreaterThanOrEqual(4)
     expect(page).toContain('hob .')
     expect(page).toContain('Cmd+Option+Up/Down')
     expect(page).toContain('Ctrl+Alt+Up/Down')
   })
 
-  test('v2.2.6 release identity and English notes cover every published asset', () => {
-    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.2.6' })
-    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 8')
-    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.2.6"')
+  test('v2.2.7 release identity and English notes cover every published asset', () => {
+    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.2.7' })
+    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 9')
+    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.2.7"')
 
-    const relativePath = 'docs/releases/v2.2.6.md'
+    const relativePath = 'docs/releases/v2.2.7.md'
     expect(existsSync(path.join(repoRoot, relativePath))).toBe(true)
     if (!existsSync(path.join(repoRoot, relativePath))) return
 
     const notes = readText(relativePath)
     for (const asset of [
-      'Hobgoblin-2.2.6-arm64.dmg',
-      'Hobgoblin-2.2.6-x64.dmg',
-      'Hobgoblin-2.2.6-arm64.exe',
-      'Hobgoblin-2.2.6-x64.exe',
-      'Hobgoblin-2.2.6-android.apk',
-      'Hobgoblin-2.2.6-linux-source.tar.gz',
+      'Hobgoblin-2.2.7-arm64.dmg',
+      'Hobgoblin-2.2.7-x64.dmg',
+      'Hobgoblin-2.2.7-arm64.exe',
+      'Hobgoblin-2.2.7-x64.exe',
+      'Hobgoblin-2.2.7-android.apk',
+      'Hobgoblin-2.2.7-linux-source.tar.gz',
     ]) {
       expect(notes).toContain(asset)
     }
-    expect(notes).toContain('compare/v2.2.5...v2.2.6')
+    expect(notes).toContain('compare/v2.2.6...v2.2.7')
   })
 })

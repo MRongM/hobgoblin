@@ -146,7 +146,10 @@ describe('repository branch merge-out writes', () => {
 
   test.each([
     ['expired token', { plans: [plan()], rawInput: { ...input(), planToken: 'sha256:old' } }],
-    ['dirty source', { plans: [plan({ ready: false, message: 'error.merge-out-source-dirty' })], rawInput: input() }],
+    [
+      'conflicted source',
+      { plans: [plan({ ready: false, message: 'error.merge-out-source-conflicted' })], rawInput: input() },
+    ],
     ['deleted destination', { plans: [plan({ destinations: [] })], rawInput: input() }],
     [
       'dirty destination',
@@ -181,6 +184,18 @@ describe('repository branch merge-out writes', () => {
 
   test('stops before merge when source truth changes after pull', async () => {
     const deps = dependencies({ plans: [plan(), plan({ sourceHead: 'changed-source-head' })] })
+
+    await expect(executeRepositoryBranchMergeOut(input('pull-merge-push'), deps)).resolves.toEqual({
+      ok: false,
+      message: 'error.merge-out-source-changed',
+    })
+    expect(deps.calls).toEqual(['pull'])
+  })
+
+  test('stops before merge when the source becomes conflicted after pull', async () => {
+    const deps = dependencies({
+      plans: [plan(), plan({ ready: false, message: 'error.merge-out-source-conflicted' })],
+    })
 
     await expect(executeRepositoryBranchMergeOut(input('pull-merge-push'), deps)).resolves.toEqual({
       ok: false,
@@ -307,9 +322,9 @@ describe('repository branch merge-out writes', () => {
     if (remote.kind !== 'remote') throw new Error('expected remote destination')
     const expectedPath = repositoryTemporaryWorktreePath(REPO_ID, 'merge-out', TOKEN, 'remote:origin/release/v2')
 
-    await expect(
-      executeRepositoryBranchMergeOut(input('pull-merge-push', remote), deps),
-    ).resolves.toMatchObject({ ok: true })
+    await expect(executeRepositoryBranchMergeOut(input('pull-merge-push', remote), deps)).resolves.toMatchObject({
+      ok: true,
+    })
 
     expect(deps.calls).toEqual(['fetch-remote', 'create', 'merge', 'push-head', 'cleanup'])
     expect(deps.fetchRemote).toHaveBeenCalledWith(REPO_ID, 'origin', undefined, undefined, {
@@ -326,20 +341,8 @@ describe('repository branch merge-out writes', () => {
       undefined,
       undefined,
     )
-    expect(deps.merge).toHaveBeenCalledWith(
-      REPO_ID,
-      expectedPath,
-      'refs/heads/feature/source',
-      undefined,
-      undefined,
-    )
-    expect(deps.pushWorktreeHead).toHaveBeenCalledWith(
-      REPO_ID,
-      expectedPath,
-      'origin/release/v2',
-      undefined,
-      undefined,
-    )
+    expect(deps.merge).toHaveBeenCalledWith(REPO_ID, expectedPath, 'refs/heads/feature/source', undefined, undefined)
+    expect(deps.pushWorktreeHead).toHaveBeenCalledWith(REPO_ID, expectedPath, 'origin/release/v2', undefined, undefined)
     expect(deps.removeWorktree).toHaveBeenCalledWith(
       REPO_ID,
       {
@@ -376,7 +379,16 @@ describe('repository branch merge-out writes', () => {
 
   test.each([
     ['deleted remote destination', plan({ destinations: [] }), 'error.merge-out-destination-changed'],
-    ['changed source', plan({ destination: remoteDestination(), sourceHead: 'changed' }), 'error.merge-out-source-changed'],
+    [
+      'changed source',
+      plan({ destination: remoteDestination(), sourceHead: 'changed' }),
+      'error.merge-out-source-changed',
+    ],
+    [
+      'conflicted source',
+      plan({ destination: remoteDestination(), ready: false, message: 'error.merge-out-source-conflicted' }),
+      'error.merge-out-source-changed',
+    ],
     [
       'changed remote head',
       plan({ destination: remoteDestination({ head: 'changed-remote-head' }) }),

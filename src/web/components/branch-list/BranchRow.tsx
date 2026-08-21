@@ -1,5 +1,5 @@
 import { type CSSProperties, type RefObject, useCallback, useMemo } from 'react'
-import { Trash2 } from 'lucide-react'
+import { FolderTree, Trash2 } from 'lucide-react'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
 import { BranchSummaryInline } from '#/web/components/repo-workspace/BranchSummaryInline.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
@@ -34,6 +34,7 @@ interface BranchRowProps {
   selected: string | null
   onSelectBranch: (branch: string) => void
   onWorktreeDoubleClick?: () => void
+  onOpenFileArea?: () => void
   selectedRef: RefObject<HTMLLIElement | null>
   showActions?: boolean
   actionMenuOpen?: boolean
@@ -50,6 +51,7 @@ export function BranchRow({
   selected,
   onSelectBranch,
   onWorktreeDoubleClick,
+  onOpenFileArea,
   selectedRef,
   showActions = true,
   actionMenuOpen,
@@ -73,6 +75,12 @@ export function BranchRow({
     policy: branchWorkspaceMember ? 'branch-workspace-member' : 'ordinary-worktree',
     hasWorktree: !!worktreePath,
   })
+  const handleOpenFileArea = onOpenFileArea
+    ? () => {
+        onSelectBranch(branch.name)
+        onOpenFileArea()
+      }
+    : undefined
   const setItemRef = useCallback(
     (node: HTMLLIElement | null) => {
       if (isSelected) {
@@ -157,6 +165,15 @@ export function BranchRow({
 
   return worktreePath ? (
     <WorkspaceItemContextMenu
+      fileArea={
+        handleOpenFileArea
+          ? {
+              disabled: false,
+              icon: <FolderTree aria-hidden="true" />,
+              onSelect: handleOpenFileArea,
+            }
+          : undefined
+      }
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={actionProjection.contextMenu.internalTerminal}

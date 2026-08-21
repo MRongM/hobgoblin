@@ -80,6 +80,29 @@ async function setRemoteBranchUpstream(input: {
   )(TARGET, input)
 }
 
+async function checkoutRemoteTrackingBranch(input: {
+  worktreePath: string
+  localBranch: string
+  remoteRef: string
+  signal?: AbortSignal
+  run?: unknown
+}) {
+  const checkout = (remoteGitOperations as Record<string, unknown>).checkoutRemoteTrackingBranch
+  expect(checkout).toBeTypeOf('function')
+  return await (
+    checkout as (
+      target: typeof TARGET,
+      input: {
+        worktreePath: string
+        localBranch: string
+        remoteRef: string
+        signal?: AbortSignal
+        run?: unknown
+      },
+    ) => Promise<unknown>
+  )(TARGET, input)
+}
+
 describe('remote git helpers', () => {
   test('builds browser and pull request URLs from remote verbose output', async () => {
     const run = async (command: { type: string }) => {
@@ -1058,6 +1081,52 @@ describe('remote git helpers', () => {
       TARGET,
       { signal: undefined, timeoutMs: 180_000 },
     )
+  })
+
+  test('checkoutRemoteTrackingBranch creates and switches in the selected remote worktree', async () => {
+    const run = vi.fn(async () => okRemoteResult('switched'))
+
+    const result = await checkoutRemoteTrackingBranch({
+      worktreePath: '/srv/repo-feature',
+      localBranch: 'feature/new',
+      remoteRef: 'origin/feature/new',
+      run,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'switched' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'gitCheckoutTracking',
+        path: '/srv/repo-feature',
+        localBranch: 'feature/new',
+        remoteRef: 'origin/feature/new',
+      },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('checkoutRemoteTrackingBranch rejects invalid inputs before SSH execution', async () => {
+    const run = vi.fn(async () => okRemoteResult('switched'))
+
+    await expect(
+      checkoutRemoteTrackingBranch({
+        worktreePath: 'relative/path',
+        localBranch: 'feature/new',
+        remoteRef: 'origin/feature/new',
+        run,
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-path' })
+    await expect(
+      checkoutRemoteTrackingBranch({
+        worktreePath: '/srv/repo-feature',
+        localBranch: 'feature/new',
+        remoteRef: 'origin/HEAD',
+        run,
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+    expect(run).not.toHaveBeenCalled()
   })
 
   test('setRemoteBranchUpstream sets and removes tracking for an existing branch', async () => {

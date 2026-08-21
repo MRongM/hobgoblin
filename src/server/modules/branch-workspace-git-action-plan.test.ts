@@ -320,9 +320,9 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
   })
 
   test.each([
-    ['pull', { targetTracking: 'origin/feature/a' }],
-    ['push', { remotes: ['origin'] }],
-  ] as const)('builds an ordered ready %s plan for target branches', async (kind, snapshotOptions) => {
+    ['pull', { targetTracking: 'origin/feature/a' }, 'origin/feature/a'],
+    ['push', { remotes: ['origin'] }, null],
+  ] as const)('builds an ordered ready %s plan for target branches', async (kind, snapshotOptions, upstream) => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,
       { kind, branchWorkspaceId: WORKSPACE_ID },
@@ -344,6 +344,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetBranch: 'feature/a',
             targetWorktreePath: '/workspace/goblin-feature-a/api',
             targetHead: 'target-head',
+            upstream,
+            trackingGone: false,
             ready: true,
           },
           {
@@ -351,6 +353,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetBranch: 'feature/a',
             targetWorktreePath: '/workspace/goblin-feature-a/web',
             targetHead: 'target-head',
+            upstream,
+            trackingGone: false,
             ready: true,
           },
         ],
@@ -382,8 +386,20 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         kind,
         ready: false,
         members: [
-          { repositoryName: 'api', ready: false, message },
-          { repositoryName: 'web', ready: false, message },
+          {
+            repositoryName: 'api',
+            upstream: kind === 'pull' ? 'origin/feature/a' : null,
+            trackingGone: kind === 'pull',
+            ready: false,
+            message,
+          },
+          {
+            repositoryName: 'web',
+            upstream: kind === 'pull' ? 'origin/feature/a' : null,
+            trackingGone: kind === 'pull',
+            ready: false,
+            message,
+          },
         ],
       },
     })
@@ -456,7 +472,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     expect(getRemoteBranchInfo).toHaveBeenNthCalledWith(2, '/workspace/web', undefined)
   })
 
-  test('keeps batch upstream members with no remote candidates visible but unselectable', async () => {
+  test('keeps batch upstream members with neither tracking nor remote candidates visible but unselectable', async () => {
     const result = await buildBranchWorkspaceGitActionPlan(
       ROOT,
       { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
@@ -469,8 +485,33 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         kind: 'batch-set-upstream',
         ready: false,
         members: [
-          { ready: false, message: 'workspace.branch-workspace.git-action.remote-branch-required' },
-          { ready: false, message: 'workspace.branch-workspace.git-action.remote-branch-required' },
+          { ready: false, currentUpstream: null },
+          { ready: false, currentUpstream: null },
+        ],
+      },
+    })
+  })
+
+  test('keeps tracked members selectable for upstream removal without remote candidates', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-set-upstream', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getSnapshot: vi.fn(async (repoId: string) =>
+          snapshot(repoId.endsWith('/api') ? 'api' : 'web', { targetTracking: 'origin/feature/a' }),
+        ),
+        getRemoteBranchInfo: vi.fn(async () => []),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-set-upstream',
+        ready: true,
+        members: [
+          { ready: true, currentUpstream: 'origin/feature/a', remoteBranches: [] },
+          { ready: true, currentUpstream: 'origin/feature/a', remoteBranches: [] },
         ],
       },
     })
@@ -660,6 +701,107 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         ],
       },
     })
+  })
+
+  test('keeps a batch merge-out member ready when its source has only ordinary uncommitted changes', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          const sourceEntries =
+            repositoryName === 'api'
+              ? [
+                  { x: 'M', y: ' ', path: 'src/staged.ts' },
+                  { x: ' ', y: 'M', path: 'src/unstaged.ts' },
+                  { x: '?', y: '?', path: 'scratch/untracked.txt' },
+                ]
+              : []
+          return [
+            status(`/workspace/${repositoryName}`),
+            status(`/workspace/goblin-feature-a/${repositoryName}`, sourceEntries),
+          ]
+        }),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-merge-out',
+        members: [
+          { repositoryName: 'api', ready: true },
+          { repositoryName: 'web', ready: true },
+        ],
+      },
+    })
+    expect(result.ok && result.plan.members[0]).not.toHaveProperty('message')
+  })
+
+  test('keeps a conflicted batch merge-out source visible but unavailable', async () => {
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+      dependencies({
+        getStatus: vi.fn(async (repoId: string) => {
+          const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+          return [
+            status(`/workspace/${repositoryName}`),
+            status(
+              `/workspace/goblin-feature-a/${repositoryName}`,
+              repositoryName === 'api' ? [{ x: 'U', y: 'U', path: 'src/conflicted.ts' }] : [],
+            ),
+          ]
+        }),
+      }),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        kind: 'batch-merge-out',
+        members: [
+          {
+            repositoryName: 'api',
+            ready: false,
+            message: 'workspace.branch-workspace.git-action.source-worktree-conflicted',
+          },
+          { repositoryName: 'web', ready: true },
+        ],
+      },
+    })
+  })
+
+  test('ignores ordinary source status changes in batch merge-out tokens but tracks conflicts and HEAD', async () => {
+    const build = async (entries: WorktreeStatus['entries'], apiTargetHead = 'target-head') =>
+      await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-merge-out', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) =>
+            snapshot(repoId.endsWith('/api') ? 'api' : 'web', {
+              targetHead: repoId.endsWith('/api') ? apiTargetHead : 'target-head',
+            }),
+          ),
+          getStatus: vi.fn(async (repoId: string) => {
+            const repositoryName = repoId.endsWith('/api') ? 'api' : 'web'
+            return [
+              status(`/workspace/${repositoryName}`),
+              status(`/workspace/goblin-feature-a/${repositoryName}`, repositoryName === 'api' ? entries : []),
+            ]
+          }),
+        }),
+      )
+
+    const staged = await build([{ x: 'M', y: ' ', path: 'src/a.ts' }])
+    const untracked = await build([{ x: '?', y: '?', path: 'scratch/b.txt' }])
+    const conflicted = await build([{ x: 'U', y: 'U', path: 'src/a.ts' }])
+    const changedHead = await build([{ x: 'M', y: ' ', path: 'src/a.ts' }], 'changed-source-head')
+
+    expect(staged.ok && untracked.ok && staged.plan.token).toBe(untracked.ok && untracked.plan.token)
+    expect(staged.ok && conflicted.ok && staged.plan.token).not.toBe(conflicted.ok && conflicted.plan.token)
+    expect(staged.ok && changedHead.ok && staged.plan.token).not.toBe(changedHead.ok && changedHead.plan.token)
   })
 
   test('excludes the member target and marks a dirty destination worktree unavailable', async () => {

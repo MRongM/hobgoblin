@@ -126,7 +126,6 @@ describe('BranchWorkspaceList', () => {
             onReduce={onReduce}
             onAddDependencies={onAddDependencies}
             onRemoveDependencies={onRemoveDependencies}
-            gitActionPanel={{ itemId: item.id, content: <div data-testid="mock-branch-git-panel" /> }}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
@@ -243,7 +242,6 @@ describe('BranchWorkspaceList', () => {
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
-    expect(container.querySelector('[data-testid="mock-branch-git-panel"]')).not.toBeNull()
     expect(container.querySelector('[aria-label="workspace.branch-workspace.open-editor"]')).toBeNull()
     act(() => toggle?.click())
     const memberRow = container.querySelector('[data-testid="branch-workspace-member-api"]')
@@ -326,41 +324,6 @@ describe('BranchWorkspaceList', () => {
 
     expect(onActivate).toHaveBeenCalledWith(item.id)
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
-  })
-
-  test('renders an inline Git action panel only below its target item', () => {
-    const first = { ...workspace('ready'), repositories: [repositoryMember()] }
-    const second = {
-      ...workspace('ready'),
-      id: 'branch-2',
-      branch: 'feature/payments',
-      path: '/workspace/goblin-feature-payments',
-    }
-    act(() =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[first, second]}
-            activeId={first.id}
-            gitActionPanel={{ itemId: second.id, content: <div data-testid="mock-branch-git-panel" /> }}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={() => {}}
-            onCancel={() => {}}
-          />,
-        ),
-      ),
-    )
-
-    expect(
-      container.querySelector('[data-branch-workspace-id="branch-1"] [data-testid="mock-branch-git-panel"]'),
-    ).toBeNull()
-    expect(
-      container.querySelector('[data-branch-workspace-id="branch-2"] [data-testid="mock-branch-git-panel"]'),
-    ).not.toBeNull()
   })
 
   test('expands an inactive workspace without selecting it', () => {
@@ -848,6 +811,84 @@ describe('BranchWorkspaceList', () => {
     )
     expect(container.querySelector('[data-testid="branch-workspace-member-list"]')).toBeNull()
     expect(onToggleFileArea).toHaveBeenCalledWith(item)
+  })
+
+  test('selects the exact branch workspace before opening its file area from the context menu', async () => {
+    const item = workspace('ready')
+    const onActivate = vi.fn()
+    const onOpenFileArea = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            onActivate={onActivate}
+            onOpenFileArea={onOpenFileArea}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    const row = container.querySelector('[data-branch-workspace-state="ready"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing branch workspace row')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onActivate).toHaveBeenCalledWith(item.id)
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onActivate.mock.invocationCallOrder[0]).toBeLessThan(onOpenFileArea.mock.invocationCallOrder[0]!)
+  })
+
+  test('selects the exact member worktree before opening its file area from the context menu', async () => {
+    const member = repositoryMember()
+    const item = { ...workspace('ready'), repositories: [member] }
+    const onSelectRepositoryMember = vi.fn()
+    const onOpenFileArea = vi.fn()
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={item.id}
+            getMemberPresentation={() => ({
+              dirty: false,
+              changeCount: null,
+              navigable: true,
+              repositoryId: '/workspace/api',
+              worktreePath: member.worktreePath,
+            })}
+            onActivate={() => {}}
+            onSelectRepositoryMember={onSelectRepositoryMember}
+            onOpenFileArea={onOpenFileArea}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
+    const row = container
+      .querySelector('[data-testid="branch-workspace-member-api"]')
+      ?.closest<HTMLElement>('[data-workspace-list-item]')
+    if (!row) throw new Error('missing member worktree row')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onSelectRepositoryMember).toHaveBeenCalledWith(item, member)
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onSelectRepositoryMember.mock.invocationCallOrder[0]).toBeLessThan(
+      onOpenFileArea.mock.invocationCallOrder[0]!,
+    )
   })
 
   test('keeps a non-navigable repository member disabled while retaining tmux cleanup', async () => {

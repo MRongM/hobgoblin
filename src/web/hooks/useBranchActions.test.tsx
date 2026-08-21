@@ -40,8 +40,7 @@ vi.mock('#/web/main-window-navigation.tsx', () => ({
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string, values?: { branch?: string }) =>
-    values?.branch ? `${key}:${values.branch}` : key,
+  useT: () => (key: string, values?: { branch?: string }) => (values?.branch ? `${key}:${values.branch}` : key),
 }))
 
 const REPO_ID = '/tmp/gbl-use-branch-actions-test-repo'
@@ -158,6 +157,7 @@ describe('useBranchActions', () => {
     act(() => actions?.push())
     expect(runBranchAction).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('origin/main')
+    expect(document.querySelector('[data-push-upstream]')?.textContent).toContain('action.branch-upstream-current')
 
     await act(async () => {
       document.querySelector<HTMLButtonElement>('[data-slot="alert-dialog-footer"] button:last-child')?.click()

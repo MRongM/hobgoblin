@@ -285,7 +285,7 @@ describe('useBranchWriteActions', () => {
     })
   })
 
-  test('keeps merge-out visible but disabled when the exact source status is dirty or missing', async () => {
+  test('keeps merge-out enabled when the source has ordinary uncommitted changes', async () => {
     const repo = seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
@@ -303,8 +303,38 @@ describe('useBranchWriteActions', () => {
     if (!captured.current) throw new Error('actions not ready')
     expect(captured.current.mainItems.find((item) => item.id === 'mergeOut')).toMatchObject({
       visible: true,
+      disabled: false,
+      title: 'action.merge-out-title:feature/current',
+    })
+  })
+
+  test.each([
+    [
+      'unresolved conflicts',
+      [{ path: '/tmp/repo-feature', isMain: false, entries: [{ path: 'src/a.ts', x: 'U', y: 'U' }] }],
+      'action.merge-out-source-conflicted',
+    ],
+    ['missing status', [], 'action.merge-out-source-unavailable'],
+  ])('keeps merge-out visible but disabled for %s', async (_name, status, title) => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('feature/current', { worktree: { path: '/tmp/repo-feature' } })],
+      currentBranch: 'feature/current',
+      status,
+    })
+    const captured: { current: ReturnType<typeof useBranchWriteActions> | null } = { current: null }
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (captured.current = value)} />,
+      )
+    })
+
+    if (!captured.current) throw new Error('actions not ready')
+    expect(captured.current.mainItems.find((item) => item.id === 'mergeOut')).toMatchObject({
+      visible: true,
       disabled: true,
-      title: 'action.merge-out-source-dirty',
+      title,
     })
   })
 
@@ -346,9 +376,7 @@ describe('useBranchWriteActions', () => {
     await flush()
 
     openSelect('#merge-out-select')
-    const remoteOption = document.body.querySelector<HTMLElement>(
-      '[data-merge-destination-key="remote:origin/main"]',
-    )
+    const remoteOption = document.body.querySelector<HTMLElement>('[data-merge-destination-key="remote:origin/main"]')
     if (!remoteOption) throw new Error('Missing remote merge-out destination')
     act(() => {
       remoteOption.dispatchEvent(new MouseEvent('click', { bubbles: true }))

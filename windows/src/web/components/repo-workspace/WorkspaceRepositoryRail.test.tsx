@@ -1367,9 +1367,9 @@ describe('WorkspaceRepositoryRail', () => {
     })
     const command = vi.mocked(terminalCommandBridge.writeInput).mock.calls[0]![1]
     expect(command).toContain('batch-merge-in')
-    expect(command).toContain('/workspace/goblin-feature-auth/api')
-    expect(command).toContain('/workspace/goblin-feature-auth/web')
-    expect(command).toContain('remote rejected')
+    expect(command).not.toContain('/workspace/goblin-feature-auth/api')
+    expect(command).not.toContain('/workspace/goblin-feature-auth/web')
+    expect(command).not.toContain('remote rejected')
     expect(command).not.toMatch(/[\r\n]$/)
   })
 

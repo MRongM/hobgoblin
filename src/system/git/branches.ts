@@ -165,6 +165,29 @@ export async function checkoutBranch(cwd: string, name: string, signal?: AbortSi
   return gitResultWithOptions(cwd, { signal }, 'switch', '--', name)
 }
 
+export async function checkoutTrackingBranch(
+  cwd: string,
+  localBranch: string,
+  remoteRef: string,
+  signal?: AbortSignal,
+): Promise<ExecResult> {
+  if (!isSafeBranchName(localBranch) || !isRemoteTrackingRef(remoteRef)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const checkedOut = await gitResultWithOptions(
+    cwd,
+    { signal },
+    'switch',
+    '--track',
+    '-c',
+    localBranch,
+    '--',
+    remoteRef,
+  )
+  if (checkedOut.ok) await recordBranchCreatedFrom(cwd, localBranch, remoteRef, signal)
+  return checkedOut
+}
+
 export async function createBranch(
   cwd: string,
   branch: string,

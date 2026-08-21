@@ -71,6 +71,7 @@ import {
   normalizeFileTreeSearchLimit,
 } from '#/shared/file-tree.ts'
 import { normalizeRepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
+import { normalizeWorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 
 export function createRepoRoutes() {
   const app = new Hono()
@@ -695,11 +696,12 @@ export function createRepoRoutes() {
     const body = await c.req.json().catch(() => null)
     const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
     const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
-    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const target = normalizeWorktreeBranchSwitchTarget(body?.target)
     const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    if (!target) return c.json({ ok: false, message: 'error.invalid-arguments' })
     return c.json(
       await jsonOr(
-        () => checkoutWorktreeBranch(repoId, worktreePath, branch, c.req.raw.signal, sourceToken),
+        () => checkoutWorktreeBranch(repoId, worktreePath, target, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'checkout-in-worktree',
       ),

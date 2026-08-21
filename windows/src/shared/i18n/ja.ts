@@ -281,9 +281,12 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-merge-out': '一括送り出し',
   'workspace.branch-workspace.git-action.batch-merge-out-description':
     '選択した各メンバー worktree のローカルマージ先ブランチを選び、リポジトリ順にマージします。',
+  'workspace.branch-workspace.git-action.batch-set-upstream': 'アップストリームを一括変更',
+  'workspace.branch-workspace.git-action.batch-set-upstream-description':
+    '選択した各メンバー worktree のリモートブランチを選び、対象ブランチのアップストリームをリポジトリ順に更新します。',
   'workspace.branch-workspace.git-action.select-all-members': '利用可能なメンバーをすべて選択',
   'workspace.branch-workspace.git-action.selected-count': '{selected}/{total} 件のメンバーを選択',
-  'workspace.branch-workspace.git-action.select-member': '{repository} を一括マージ対象に選択',
+  'workspace.branch-workspace.git-action.select-member': '{repository} をこの一括操作のメンバーとして選択',
   'workspace.branch-workspace.git-action.not-selected': '未選択',
   'workspace.branch-workspace.git-action.progress': '一括マージの進行状況',
   'workspace.branch-workspace.git-action.source-branch': '{repository} のソースブランチ',
@@ -292,6 +295,9 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.destination-branch': '{repository} のマージ先ブランチ',
   'workspace.branch-workspace.git-action.select-destination': 'マージ先を選択',
   'workspace.branch-workspace.git-action.destination-branch-required': 'マージ先ブランチを選択してください。',
+  'workspace.branch-workspace.git-action.current-upstream': '現在のアップストリーム',
+  'workspace.branch-workspace.git-action.select-upstream': 'アップストリームを選択',
+  'workspace.branch-workspace.git-action.select-upstream-for-member': '{repository} のアップストリームを選択',
   'workspace.branch-workspace.git-action.temporary-worktree': '一時 worktree',
   'workspace.branch-workspace.git-action.merge-in': '取り込む',
   'workspace.branch-workspace.git-action.pull-merge-in-push': '対象をプル、取り込み、プッシュ',
@@ -322,6 +328,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.step.merge': 'マージ中',
   'workspace.branch-workspace.git-action.step.push': 'プッシュ中',
   'workspace.branch-workspace.git-action.step.cleanup': 'クリーンアップ中',
+  'workspace.branch-workspace.git-action.step.upstream': 'アップストリームを更新中',
   'workspace.branch-workspace.git-action.failure-step.commit': 'コミット',
   'workspace.branch-workspace.git-action.failure-step.discard': '破棄',
   'workspace.branch-workspace.git-action.failure-step.prepare': '準備',
@@ -330,6 +337,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.failure-step.merge': 'マージ',
   'workspace.branch-workspace.git-action.failure-step.push': 'プッシュ',
   'workspace.branch-workspace.git-action.failure-step.cleanup': 'クリーンアップ',
+  'workspace.branch-workspace.git-action.failure-step.upstream': 'アップストリーム',
   'workspace.branch-workspace.git-action.not-ready': 'ブランチワークスペースはまだ準備できていません。',
   'workspace.branch-workspace.git-action.no-repositories': '処理対象のリポジトリがありません。',
   'workspace.branch-workspace.git-action.operation-active': '別のGit操作が実行中です。',
@@ -354,6 +362,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.remote-required': '一括プッシュには各リポジトリのリモートが必要です。',
   'workspace.branch-workspace.git-action.remote-branches-unavailable':
     'このリポジトリのリモートブランチを読み込めませんでした。',
+  'workspace.branch-workspace.git-action.remote-branch-required': 'リモートブランチを選択してください。',
   'workspace.branch-workspace.git-action.remote-destination-requires-push':
     'リモートの宛先では取得、マージ、プッシュが必要です。',
   'workspace.branch-workspace.git-action.destination-worktree-unavailable':
@@ -1454,6 +1463,10 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal-font.title': 'フォント',
   'settings.terminal-font-size': 'フォントサイズ',
   'settings.terminal-font-size-hint': 'アプリ内ターミナルのフォントサイズを調整します。',
+  'settings.terminal-navigation-controls.title': 'ターミナルナビゲーション',
+  'settings.terminal-navigation-controls.visible': 'ターミナルナビゲーションコントロールを表示',
+  'settings.terminal-navigation-controls.visible-hint':
+    '前のターミナル、次のターミナル、一番下へをまとめて表示します。非表示でもキーボードショートカットは使用できます。',
   'settings.terminal-custom-buttons.title': 'カスタムターミナルボタン',
   'settings.terminal-custom-buttons.hint':
     'ターミナル下部のボタンバーを表示します。ボタンはすぐ実行するか、編集できるようターミナル入力行へ入力できます。',
@@ -1509,6 +1522,10 @@ export const ja: Record<DictKey, string> = {
   'settings.general.open-from-terminal-body':
     'macOS では、Terminal やスクリプトからローカルリポジトリのパスを Hobgoblin に直接渡して開けます。',
   'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
+  'settings.general.open-app-config-title': 'アプリケーション設定を開く',
+  'settings.general.open-app-config-body': '選択したエディターでアプリケーション設定とワークスペース設定を含むディレクトリを開きます。',
+  'settings.general.open-app-config-action': '設定ディレクトリを開く',
+  'settings.general.open-app-config-failed': 'アプリケーション設定を開けませんでした',
   'settings.fetch.off': 'オフ',
   'settings.fetch.30s': '30 秒',
   'settings.fetch.1m': '1 分',

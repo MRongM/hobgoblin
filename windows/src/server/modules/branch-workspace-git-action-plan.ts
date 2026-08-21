@@ -21,6 +21,7 @@ import {
   type BranchWorkspaceBatchMergeInSourcePlan,
   type BranchWorkspaceBatchMergeOutDestinationPlan,
   type BranchWorkspaceBatchMergeOutMemberPlan,
+  type BranchWorkspaceBatchSetUpstreamMemberPlan,
   type BranchWorkspaceGitActionPlan,
   type BranchWorkspaceGitActionPlanRequest,
   type BranchWorkspaceGitActionPlanResult,
@@ -73,8 +74,12 @@ export async function buildBranchWorkspaceGitActionPlan(
     if (normalized.request.kind === 'batch-merge-out') {
       return await buildBatchMergeOutPlan(normalizedRootId, manifest, dependencies, signal)
     }
+    if (normalized.request.kind === 'batch-set-upstream') {
+      return await buildBatchSetUpstreamPlan(normalizedRootId, manifest, dependencies, signal)
+    }
     return await buildSyncPlan(normalizedRootId, manifest, normalized.request.kind, dependencies, signal)
   } catch (error) {
+    if (isAbortError(error)) throw error
     return { ok: false, message: safeMessage(error) }
   }
 }
@@ -93,11 +98,7 @@ export async function validateBranchWorkspaceGitActionPlan(
   )
   if (!current.ok) return current
 
-  if (
-    current.plan.kind !== expected.kind ||
-    current.plan.members.length !== expected.members.length ||
-    current.plan.members.some((member, index) => member.repositoryName !== expected.members[index]?.repositoryName)
-  ) {
+  if (current.plan.kind !== expected.kind) {
     return { ok: false, message: 'workspace.branch-workspace.git-action.repository-changed' }
   }
   const currentMembers = new Map(current.plan.members.map((member) => [member.repositoryName, member]))
@@ -105,7 +106,7 @@ export async function validateBranchWorkspaceGitActionPlan(
     if (completedRepositoryNames.has(member.repositoryName)) continue
     if (currentMembers.get(member.repositoryName)?.fingerprint !== member.fingerprint) {
       return {
-        ok: false,
+        ok: false as const,
         message: 'workspace.branch-workspace.git-action.repository-changed',
         repositoryName: member.repositoryName,
       }
@@ -131,36 +132,45 @@ async function buildBatchCommitPlan(
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  const members: BranchWorkspaceBatchCommitMemberPlan[] = []
-  for (const member of manifest.repositories) {
-    signal?.throwIfAborted()
-    const facts = await readMemberFacts(
-      rootId,
-      member.repositoryName,
-      member.targetBranch,
-      member.worktreePath,
-      dependencies,
-      signal,
-    )
-    if (!facts.ok) return facts
-    const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
-    if (!patch.ok) {
-      return {
-        ok: false,
-        message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
-        repositoryName: member.repositoryName,
+  const memberPlans = await Promise.all(
+    manifest.repositories.map(async (member) => {
+      signal?.throwIfAborted()
+      const facts = await readMemberFacts(
+        rootId,
+        member.repositoryName,
+        member.targetBranch,
+        member.worktreePath,
+        dependencies,
+        signal,
+      )
+      if (!facts.ok) return facts
+      const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
+      if (!patch.ok) {
+        return {
+          ok: false as const,
+          message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
+          repositoryName: member.repositoryName,
+        }
       }
-    }
-    const entries = normalizedStatusEntries(facts.status.entries)
-    members.push({
-      repositoryName: member.repositoryName,
-      repoId: facts.repoId,
-      targetBranch: member.targetBranch,
-      targetWorktreePath: member.worktreePath,
-      dirty: entries.length > 0,
-      changeCount: entries.length,
-      fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
-    })
+      const entries = normalizedStatusEntries(facts.status.entries)
+      return {
+        ok: true as const,
+        member: {
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
+          dirty: entries.length > 0,
+          changeCount: entries.length,
+          fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
+        },
+      }
+    }),
+  )
+  const members: BranchWorkspaceBatchCommitMemberPlan[] = []
+  for (const memberPlan of memberPlans) {
+    if (!memberPlan.ok) return memberPlan
+    members.push(memberPlan.member)
   }
   const planWithoutToken = {
     kind: 'batch-commit' as const,
@@ -177,36 +187,45 @@ async function buildBatchDiscardPlan(
   dependencies: BranchWorkspaceGitActionPlanDependencies,
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  const members: BranchWorkspaceBatchDiscardMemberPlan[] = []
-  for (const member of manifest.repositories) {
-    signal?.throwIfAborted()
-    const facts = await readMemberFacts(
-      rootId,
-      member.repositoryName,
-      member.targetBranch,
-      member.worktreePath,
-      dependencies,
-      signal,
-    )
-    if (!facts.ok) return facts
-    const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
-    if (!patch.ok) {
-      return {
-        ok: false,
-        message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
-        repositoryName: member.repositoryName,
+  const memberPlans = await Promise.all(
+    manifest.repositories.map(async (member) => {
+      signal?.throwIfAborted()
+      const facts = await readMemberFacts(
+        rootId,
+        member.repositoryName,
+        member.targetBranch,
+        member.worktreePath,
+        dependencies,
+        signal,
+      )
+      if (!facts.ok) return facts
+      const patch = await (dependencies.getPatch ?? getRepositoryPatch)(facts.repoId, member.worktreePath, signal)
+      if (!patch.ok) {
+        return {
+          ok: false as const,
+          message: patch.message || 'workspace.branch-workspace.git-action.read-failed',
+          repositoryName: member.repositoryName,
+        }
       }
-    }
-    const entries = normalizedStatusEntries(facts.status.entries)
-    members.push({
-      repositoryName: member.repositoryName,
-      repoId: facts.repoId,
-      targetBranch: member.targetBranch,
-      targetWorktreePath: member.worktreePath,
-      paths: entries.map((entry) => entry.path),
-      changeCount: entries.length,
-      fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
-    })
+      const entries = normalizedStatusEntries(facts.status.entries)
+      return {
+        ok: true as const,
+        member: {
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
+          paths: entries.map((entry) => entry.path),
+          changeCount: entries.length,
+          fingerprint: repositoryPlanFingerprint({ head: facts.head, status: entries, patch: patch.message }),
+        },
+      }
+    }),
+  )
+  const members: BranchWorkspaceBatchDiscardMemberPlan[] = []
+  for (const memberPlan of memberPlans) {
+    if (!memberPlan.ok) return memberPlan
+    members.push(memberPlan.member)
   }
   const planWithoutToken = {
     kind: 'batch-discard' as const,
@@ -441,6 +460,94 @@ async function buildSyncPlan(
   return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
 }
 
+async function buildBatchSetUpstreamPlan(
+  rootId: string,
+  manifest: BranchWorkspaceManifest,
+  dependencies: BranchWorkspaceGitActionPlanDependencies,
+  signal?: AbortSignal,
+): Promise<BranchWorkspaceGitActionPlanResult> {
+  const members: BranchWorkspaceBatchSetUpstreamMemberPlan[] = []
+  for (const member of manifest.repositories) {
+    signal?.throwIfAborted()
+    try {
+      const facts = await readMemberFacts(
+        rootId,
+        member.repositoryName,
+        member.targetBranch,
+        member.worktreePath,
+        dependencies,
+        signal,
+        true,
+      )
+      if (!facts.ok) {
+        members.push(unreadableBatchSetUpstreamMember(rootId, member, facts.message))
+        continue
+      }
+      const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
+      const remoteBranches = [...facts.remoteBranches].sort((left, right) => left.remoteRef.localeCompare(right.remoteRef))
+      const ready = remoteBranches.length > 0
+      const message = ready ? undefined : 'workspace.branch-workspace.git-action.remote-branch-required'
+      members.push({
+        repositoryName: member.repositoryName,
+        repoId: facts.repoId,
+        targetBranch: member.targetBranch,
+        targetWorktreePath: member.worktreePath,
+        targetHead: facts.head,
+        currentUpstream: branch.tracking ?? null,
+        trackingGone: branch.trackingGone === true,
+        remoteBranches,
+        ready,
+        ...(message ? { message } : {}),
+        fingerprint: repositoryPlanFingerprint({
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
+          targetHead: facts.head,
+          currentUpstream: branch.tracking ?? null,
+          trackingGone: branch.trackingGone === true,
+          remoteBranches: remoteBranches.map(({ remoteRef, head }) => ({ remoteRef, head })),
+        }),
+      })
+    } catch (error) {
+      if (isAbortError(error)) throw error
+      members.push(unreadableBatchSetUpstreamMember(rootId, member, safeMessage(error)))
+    }
+  }
+  const planWithoutToken = {
+    kind: 'batch-set-upstream' as const,
+    rootId,
+    branchWorkspaceId: manifest.id,
+    members,
+    ready: members.every((member) => member.ready),
+  }
+  return { ok: true, plan: { token: repositoryPlanFingerprint(planWithoutToken), ...planWithoutToken } }
+}
+
+function unreadableBatchSetUpstreamMember(
+  rootId: string,
+  member: BranchWorkspaceManifest['repositories'][number],
+  message: string,
+): BranchWorkspaceBatchSetUpstreamMemberPlan {
+  const repoId = workspaceRepositoryId(rootId, member.repositoryName) ?? member.repositoryName
+  const identity = {
+    repositoryName: member.repositoryName,
+    repoId,
+    targetBranch: member.targetBranch,
+    targetWorktreePath: member.worktreePath,
+  }
+  return {
+    ...identity,
+    targetHead: '',
+    currentUpstream: null,
+    trackingGone: false,
+    remoteBranches: [],
+    ready: false,
+    message,
+    fingerprint: repositoryPlanFingerprint({ ...identity, readFailure: message }),
+  }
+}
+
 async function readMemberFacts(
   rootId: string,
   repositoryName: string,
@@ -510,6 +617,10 @@ async function readRemoteBranches(
     if (error instanceof Error && error.name === 'AbortError') throw error
     return { ok: false }
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function safeMessage(error: unknown): string {

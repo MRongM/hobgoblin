@@ -4,7 +4,9 @@ import type { RepoSnapshot } from '#/shared/rpc.ts'
 const mocks = vi.hoisted(() => ({
   checkGitAvailable: vi.fn(),
   checkoutBranch: vi.fn(),
+  checkoutTrackingBranch: vi.fn(),
   checkoutRemoteBranch: vi.fn(),
+  checkoutRemoteTrackingBranch: vi.fn(),
   cloneGitRepository: vi.fn(),
   commitAllChanges: vi.fn(),
   commitRemoteChanges: vi.fn(),
@@ -106,6 +108,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('#/system/git/branches.ts', () => ({
   checkoutBranch: mocks.checkoutBranch,
+  checkoutTrackingBranch: mocks.checkoutTrackingBranch,
   createBranch: mocks.createBranch,
   createTrackingBranch: mocks.createTrackingBranch,
   deleteBranch: mocks.deleteBranch,
@@ -241,6 +244,7 @@ vi.mock('#/system/terminals.ts', () => ({
 
 vi.mock('#/system/ssh/git.ts', () => ({
   checkoutRemoteBranch: mocks.checkoutRemoteBranch,
+  checkoutRemoteTrackingBranch: mocks.checkoutRemoteTrackingBranch,
   commitRemoteChanges: mocks.commitRemoteChanges,
   createRemoteBranch: mocks.createRemoteBranch,
   createRemoteFileTreeDirectory: mocks.createRemoteFileTreeDirectory,
@@ -310,7 +314,9 @@ beforeEach(() => {
   mocks.fsMkdir.mockResolvedValue(undefined)
   mocks.isGitRepo.mockResolvedValue(true)
   mocks.checkoutBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.checkoutTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked and switched local' })
   mocks.checkoutRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
+  mocks.checkoutRemoteTrackingBranch.mockResolvedValue({ ok: true, message: 'tracked and switched remote' })
   mocks.cloneGitRepository.mockResolvedValue({ ok: true, message: 'cloned', path: '/tmp/project' })
   mocks.commitAllChanges.mockResolvedValue({ ok: true, message: 'committed local' })
   mocks.commitRemoteChanges.mockResolvedValue({ ok: true, message: 'committed remote' })
@@ -2900,11 +2906,10 @@ describe('repo mutation invalidation publishing', () => {
   test('checkoutWorktreeBranch switches remote worktrees through the SSH backend and publishes invalidation', async () => {
     const { checkoutWorktreeBranch } = await import('#/server/modules/repo-write-paths.ts')
 
-    const result = await checkoutWorktreeBranch(
-      'ssh-config://prod/srv/repo',
-      '/data/deer-flow-bugfix_409',
-      'feat/agent-task',
-    )
+    const result = await checkoutWorktreeBranch('ssh-config://prod/srv/repo', '/data/deer-flow-bugfix_409', {
+      kind: 'localBranch',
+      branch: 'feat/agent-task',
+    })
 
     expect(result).toEqual({ ok: true, message: 'ok' })
     expect(mocks.checkoutBranch).not.toHaveBeenCalled()
@@ -2913,6 +2918,55 @@ describe('repo mutation invalidation publishing', () => {
       'feat/agent-task',
       '/data/deer-flow-bugfix_409',
       { signal: undefined },
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('checkoutWorktreeBranch creates and switches to a local tracking branch atomically', async () => {
+    const { checkoutWorktreeBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await checkoutWorktreeBranch('/tmp/repo', '/tmp/repo-worktree', {
+      kind: 'remoteBranch',
+      remoteRef: 'origin/feature/remote',
+      localBranch: 'feature/remote',
+    })
+
+    expect(result).toEqual({ ok: true, message: 'tracked and switched local' })
+    expect(mocks.checkoutBranch).not.toHaveBeenCalled()
+    expect(mocks.checkoutTrackingBranch).toHaveBeenCalledWith(
+      '/tmp/repo-worktree',
+      'feature/remote',
+      'origin/feature/remote',
+      undefined,
+    )
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: '/tmp/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('checkoutWorktreeBranch creates and switches to an SSH tracking branch atomically', async () => {
+    const { checkoutWorktreeBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await checkoutWorktreeBranch('ssh-config://prod/srv/repo', '/data/repo-feature', {
+      kind: 'remoteBranch',
+      remoteRef: 'origin/feature/remote',
+      localBranch: 'feature/remote',
+    })
+
+    expect(result).toEqual({ ok: true, message: 'tracked and switched remote' })
+    expect(mocks.checkoutRemoteBranch).not.toHaveBeenCalled()
+    expect(mocks.checkoutRemoteTrackingBranch).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      {
+        worktreePath: '/data/repo-feature',
+        localBranch: 'feature/remote',
+        remoteRef: 'origin/feature/remote',
+        signal: undefined,
+      },
     )
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
       repoId: 'ssh-config://prod/srv/repo',

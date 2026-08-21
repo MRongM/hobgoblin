@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { Trans } from 'react-i18next'
 import { ConfirmCheckbox } from '#/web/components/ConfirmCheckbox.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { BranchUpstreamDisplay } from '#/web/components/branch-list/BranchUpstreamDisplay.tsx'
 import { formatWorktreePath } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
@@ -15,6 +16,8 @@ export interface RemoveConfirm {
 export interface PushConfirm {
   branch: string
   target: string
+  upstream: string | null
+  trackingGone: boolean
 }
 
 interface RetainedDialogViewState<T> {
@@ -273,14 +276,24 @@ export function BranchActionDialogs({
     <>
       <ConfirmDialog
         open={pushConfirm.open}
-        title={pushConfirm.payload ? t('action.confirm-push-protected-title', { branch: pushConfirm.payload.target }) : ''}
+        title={
+          pushConfirm.payload ? t('action.confirm-push-protected-title', { branch: pushConfirm.payload.target }) : ''
+        }
         message={
           pushConfirm.payload ? (
-            <Trans
-              i18nKey="action.confirm-push-protected-body"
-              values={{ branch: pushConfirm.payload.target }}
-              components={{ branch: <b className="text-foreground" /> }}
-            />
+            <div className="space-y-2">
+              <Trans
+                i18nKey="action.confirm-push-protected-body"
+                values={{ branch: pushConfirm.payload.target }}
+                components={{ branch: <b className="text-foreground" /> }}
+              />
+              <div data-push-upstream>
+                <BranchUpstreamDisplay
+                  upstream={pushConfirm.payload.upstream}
+                  trackingGone={pushConfirm.payload.trackingGone}
+                />
+              </div>
+            </div>
           ) : (
             ''
           )

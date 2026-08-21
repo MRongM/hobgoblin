@@ -29,6 +29,7 @@ import {
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
 import type { ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
+import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 
@@ -326,6 +327,7 @@ async function buildBatchMergeOutPlan(
     )
     if (!facts.ok) return facts
     const targetEntries = normalizedStatusEntries(facts.status.entries)
+    const sourceConflicted = hasUnmergedStatusEntries(targetEntries)
     const destinationBranches = facts.snapshot.branches
       .filter((branch) => branch.name !== member.targetBranch)
       .map((branch): BranchWorkspaceBatchMergeOutDestinationPlan => {
@@ -368,15 +370,14 @@ async function buildBatchMergeOutPlan(
             }),
           ),
       )
-    const ready = targetEntries.length === 0 && destinationBranches.some((branch) => branch.ready)
-    const message =
-      targetEntries.length > 0
-        ? 'workspace.branch-workspace.git-action.target-worktree-dirty'
-        : destinationBranches.length === 0
-          ? 'workspace.branch-workspace.git-action.destination-branch-required'
-          : destinationBranches.some((branch) => branch.ready)
-            ? undefined
-            : 'workspace.branch-workspace.git-action.destination-worktree-unavailable'
+    const ready = !sourceConflicted && destinationBranches.some((branch) => branch.ready)
+    const message = sourceConflicted
+      ? 'workspace.branch-workspace.git-action.source-worktree-conflicted'
+      : destinationBranches.length === 0
+        ? 'workspace.branch-workspace.git-action.destination-branch-required'
+        : destinationBranches.some((branch) => branch.ready)
+          ? undefined
+          : 'workspace.branch-workspace.git-action.destination-worktree-unavailable'
     members.push({
       repositoryName: member.repositoryName,
       repoId: facts.repoId,
@@ -388,7 +389,7 @@ async function buildBatchMergeOutPlan(
       destinationBranches,
       fingerprint: repositoryPlanFingerprint({
         targetHead: facts.head,
-        targetStatus: targetEntries,
+        sourceConflicted,
         destinationBranches,
       }),
     })
@@ -438,6 +439,8 @@ async function buildSyncPlan(
       targetBranch: member.targetBranch,
       targetWorktreePath: member.worktreePath,
       targetHead: facts.head,
+      upstream: branch.tracking ?? null,
+      trackingGone: branch.trackingGone === true,
       ready,
       ...(message ? { message } : {}),
       fingerprint: repositoryPlanFingerprint({
@@ -484,8 +487,10 @@ async function buildBatchSetUpstreamPlan(
         continue
       }
       const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
-      const remoteBranches = [...facts.remoteBranches].sort((left, right) => left.remoteRef.localeCompare(right.remoteRef))
-      const ready = remoteBranches.length > 0
+      const remoteBranches = [...facts.remoteBranches].sort((left, right) =>
+        left.remoteRef.localeCompare(right.remoteRef),
+      )
+      const ready = remoteBranches.length > 0 || branch.tracking != null
       const message = ready ? undefined : 'workspace.branch-workspace.git-action.remote-branch-required'
       members.push({
         repositoryName: member.repositoryName,

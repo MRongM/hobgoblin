@@ -177,7 +177,7 @@ A best-effort external attention delivery caused by an eligible unread terminal 
 _Avoid_: Unread state, queued notification, terminal bell event
 
 **In-app notification**:
-A transient message shown by Hobgoblin's shared notification surface in the current renderer, with success, info, warning, or error emphasis. It is distinct from system and Telegram notification delivery and is neither persisted nor synchronized across windows.
+A transient message shown immediately by Hobgoblin's shared notification surface in the current renderer, with success, info, warning, or error emphasis, independently of the selected navigation context. It is distinct from system and Telegram notification delivery and is neither queued for later navigation, persisted, nor synchronized across windows.
 _Avoid_: App global notification, system notification, desktop notification, Telegram notification
 
 **Shared proxy URL**:
@@ -316,6 +316,10 @@ _Avoid_: Worktree creation failure, dependency validation error, dependency repl
 The branch whose explorer and detail surfaces the user is currently viewing. Changing this context is navigation; it is distinct from checking out a Git branch and from targeting a branch action.
 _Avoid_: Active branch, current branch
 
+**Worktree branch switch**:
+An explicit action that changes the local branch checked out in one branch action target worktree. Selecting an existing local branch switches directly to it; selecting a remote-tracking branch ref creates and switches to a uniquely named local tracking branch, defaulting that local name from the remote ref while allowing the user to change it. It never overwrites an existing local branch and is distinct from changing the selected branch context.
+_Avoid_: Branch navigation, detached checkout, implicit local-branch overwrite
+
 **Branch creation source**:
 The exact local or remote branch ref selected when Hobgoblin creates a local branch. It is immutable creation provenance recorded beside that local branch, may be unknown for branches created outside Hobgoblin or before provenance recording existed, and is distinct from current commit ancestry, upstream tracking, the repository default branch, and a branch workspace creation base.
 _Avoid_: Baseline, inferred parent branch, merge destination
@@ -333,8 +337,8 @@ The top row of the repository file area, containing the Status, Files, Changes, 
 _Avoid_: Detail tabs, file tabs
 
 **Detached file area window**:
-A temporary auxiliary window that shows a live copy of the complete file area while keeping the source file area in its captured project and branch or worktree context. The tab active when detachment starts becomes the auxiliary window's initial tab, and its full file area tab bar remains independently navigable. Electron uses a native application window; Web uses a same-origin browser window.
-_Avoid_: File area focus mode, moved file tab, detached single-tab panel, generic secondary window
+A temporary auxiliary window that shows a live copy of the file area panel captured when detachment starts while keeping the source file area in place. It retains the captured project and branch or worktree context, but does not reproduce the project-level file area tab bar. Electron uses a native application window; Web uses a same-origin browser window.
+_Avoid_: File area focus mode, moved file tab, detached project, generic secondary window
 
 **Branch action target**:
 The branch or worktree explicitly targeted by an action. It may differ from the selected branch context, and targeting it does not imply navigating to it unless the action opens branch-specific application content.
@@ -353,7 +357,7 @@ The dialog-local, explicit choice of either one local branch or one remote-track
 _Avoid_: Branch name, inferred upstream, implicit tracking branch
 
 **Branch merge-out source**:
-The clean branch action target worktree whose checked-out branch supplies committed history to a merge-out. Uncommitted worktree content is never treated as part of that source and makes the action ineligible until committed or stashed.
+The branch action target's checked-out branch ref whose committed history supplies a merge-out. Ordinary staged, unstaged, and untracked worktree content is excluded and does not block the action; unresolved merge conflicts make the source ineligible, and changing the committed branch head changes the source.
 _Avoid_: Working tree contents, selected branch context, inferred source branch
 
 **Branch merge-out conflict site**:
@@ -448,6 +452,7 @@ _Avoid_: Orphan worktree, detached worktree
 **Branch workspace operation**:
 A server-coordinated creation, extension, reduction, repair, or removal of one branch workspace. Member work is applied sequentially with per-member results and no automatic rollback, but this cross-repository orchestration is not exposed as a separate batch concept.
 Creation succeeds only after final reconciliation observes the resulting branch workspace as ready; the successful result carries that observed state, while later reads continue to detect external drift. If the final remote read fails after the foreground UI has independently observed the workspace as ready with every planned step complete, the creation modal closes; all other failures remain visible and retryable. Whole-branch-workspace removal remains available from ready, incomplete, and drifted lifecycles, derives its managed scope from the durable manifest, and retains all destructive approvals and non-bypassable worktree safety boundaries.
+After an interrupted creation or extension, returning to member selection preserves completed members as fixed and allows pending or failed intent to be reselected through a new preview. That preview is read-only, never rolls back completed work, and replaces the interrupted intent only when its new plan is confirmed; unfinished reduction, repair, and removal operations remain non-replannable.
 Once a confirmed whole-branch-workspace removal starts, its progress remains in the foreground modal until execution settles. Successful removal closes the modal only after the workspace has been fully removed; failed removal remains visible with its completed and remaining work instead of becoming a background operation.
 During reduction, selected registered member worktrees are force-removed without a working-tree-status preflight or separate dirty-change approval, and internal terminals scoped below those member paths require close approval. A selected manifest-bound path that exists without worktree registration is treated as residual content and requires separate unmanaged-content approval before exact no-follow removal; an absent path needs only membership cleanup. Unselected member worktrees and one-time dependency content are not inspected or modified.
 When removal includes local branch cleanup, that cleanup applies only to branches created for the branch workspace and is explicitly forceful, so it may discard their unpushed commits; pre-existing branches are retained. Removing a branch workspace always force-removes its managed worktrees and may discard their uncommitted changes without a separate dirty-worktree preflight, while locked and primary worktrees remain removal safety boundaries. Modified copied auxiliary entries, unregistered contents, and internal terminals running anywhere under the branch workspace require separate destructive approval; approved terminals are closed before file removal, while symbolic-link removal never removes its target.
@@ -458,7 +463,7 @@ An explicit recovery action for an unreadable branch workspace registry. It remo
 _Avoid_: Delete branch workspace, worktree cleanup, repository cleanup
 
 **Branch workspace batch commit**:
-An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it attempts exactly one commit per dirty member sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed commits are never rolled back.
+An application-coordinated action that presents every dirty repository member with one editable, repository-specific AI commit message bound to the inspected change set. Before any commit it verifies that every member still matches that change set; after one explicit confirmation, it attempts exactly one commit per dirty member with bounded cross-repository concurrency. A repository-member failure is recorded without blocking other members, all failures are returned together in manifest order, and completed commits are never rolled back.
 _Avoid_: AI commit handoff, shared commit message, automatic commit
 
 **Branch workspace batch discard**:
@@ -470,7 +475,7 @@ An explicit, per-open opt-in mode of branch workspace batch commit that hides ma
 _Avoid_: Atomic workspace transaction, shared commit message, persisted automatic commit
 
 **Branch workspace batch pull**:
-An application-coordinated action that fast-forward pulls every repository member's target branch from its configured upstream sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed pulls are never rolled back.
+An application-coordinated action that fast-forward pulls selected repository members' target branches from their configured upstreams with bounded cross-repository concurrency. A repository-member failure is recorded without blocking other members, all failures are returned together in manifest order, and completed pulls are never rolled back.
 _Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
 
 **Branch workspace batch push**:
@@ -478,11 +483,11 @@ An application-coordinated action that pushes every repository member's target b
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
 **Branch workspace batch merge-in**:
-An application-coordinated action that integrates one explicitly selected local branch or remote-tracking branch ref per selected repository member into that member's checked-out target branch. A remote source is fetched before merge; the clean member worktree remains the merge destination and conflict site. Selected member pipelines retain manifest order, isolate a failed member while later members continue, return all member failures together, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates one explicitly selected local branch or remote-tracking branch ref per selected repository member into that member's checked-out target branch. A remote source is fetched before merge; the clean member worktree remains the merge destination and conflict site. Different repository-member pipelines run with bounded concurrency while each member's Git steps remain sequential; results retain manifest order, isolate and aggregate failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-out, source worktree merge, atomic batch merge
 
 **Branch workspace batch merge-out**:
-An application-coordinated action that integrates each selected repository member's target branch into one explicitly selected local branch or remote-tracking branch ref per member. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Selected member pipelines retain manifest order, isolate and aggregate member failures, and never roll back completed Git or remote writes.
+An application-coordinated action that integrates each selected repository member's committed target-branch history into one explicitly selected local branch or remote-tracking branch ref per member. Ordinary staged, unstaged, and untracked content in a source member worktree is excluded and does not block that member, while unresolved source conflicts do. A local destination reuses a clean existing worktree or an application-owned temporary worktree; a remote destination uses a fetched detached temporary worktree and an exact non-force push without creating a local branch. A batch containing any remote destination offers only the synchronized merge-and-push mode. Different repository-member pipelines run with bounded concurrency while each member's Git steps remain sequential; results retain manifest order, isolate and aggregate failures, and never roll back completed Git or remote writes.
 _Avoid_: Batch merge-in, merge-back, fixed base-branch merge, atomic batch merge
 
 **Branch workspace batch upstream change**:

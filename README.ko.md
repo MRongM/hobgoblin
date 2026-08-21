@@ -79,6 +79,8 @@ Hobgoblin은 [Goblin](https://nano-props.github.io/goblin/)에서 시작했습�
 - **Android:** `android.apk` 파일을 다운로드합니다. APK는 서명되지 않았으므로 설치 전에 서명해야 합니다.
 - **Linux Server Mode:** 배포용 소스 아카이브 `Hobgoblin-<version>-linux-source.tar.gz`를 다운로드합니다.
 
+로컬 리포지토리 작업을 수행하려면 `PATH`에서 Git 2.31.0 이상을 사용할 수 있어야 합니다. SSH를 통해 원격 리포지토리를 작업하는 경우 원격 호스트에도 Git 2.31.0 이상이 설치되어 있어야 합니다.
+
 현재 빌드는 서명되지 않았습니다.
 
 macOS에서는 Gatekeeper가 다운로드한 앱을 차단할 수 있습니다. 이 경우 앱을 오른쪽 클릭하고 **열기**를 선택한 뒤 확인하세요. 설치 후 격리 플래그를 제거할 수도 있습니다:

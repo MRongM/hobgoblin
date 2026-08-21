@@ -12,6 +12,7 @@ import {
   repositoryPlanFingerprint,
 } from '#/server/modules/repository-status-plan.ts'
 import type { BranchSnapshotInfo, WorktreeStatus } from '#/shared/git-types.ts'
+import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import { isValidBranch, isValidRepoLocator } from '#/shared/input-validation.ts'
 import {
@@ -79,6 +80,7 @@ export async function buildRepositoryBranchMergeOutPlan(
 
     const sourceHead = source.worktree.head ?? sourceStatus.head ?? source.lastCommitHash
     const sourceEntries = normalizedStatusEntries(sourceStatus.entries)
+    const sourceConflicted = hasUnmergedStatusEntries(sourceEntries)
     const destinations = projectRepositoryMergeDestinations({
       repoId,
       sourceBranch,
@@ -88,21 +90,20 @@ export async function buildRepositoryBranchMergeOutPlan(
       isOwnedTemporaryWorktree: (candidateRepoId, candidatePath) =>
         isRepositoryTemporaryWorktreePath(candidateRepoId, 'merge-out', candidatePath),
     })
-    const ready = sourceEntries.length === 0 && destinations.some((destination) => destination.ready)
-    const message =
-      sourceEntries.length > 0
-        ? 'error.merge-out-source-dirty'
-        : destinations.length === 0
-          ? 'error.merge-out-destination-required'
-          : destinations.some((destination) => destination.ready)
-            ? undefined
-            : 'error.merge-out-destination-unavailable'
+    const ready = !sourceConflicted && destinations.some((destination) => destination.ready)
+    const message = sourceConflicted
+      ? 'error.merge-out-source-conflicted'
+      : destinations.length === 0
+        ? 'error.merge-out-destination-required'
+        : destinations.some((destination) => destination.ready)
+          ? undefined
+          : 'error.merge-out-destination-unavailable'
     const token = repositoryPlanFingerprint({
       repoId,
       sourceBranch,
       sourceWorktreePath,
       sourceHead,
-      sourceStatus: sourceEntries,
+      sourceConflicted,
       destinations: destinations.map(({ destination, head }) => ({
         key: repositoryMergeBranchSelectionKey(destination),
         ...(destination.kind === 'remote' ? { head } : {}),
@@ -136,9 +137,7 @@ export function projectRepositoryMergeDestinations(
       const destinationStatus = worktreePath
         ? findRepositoryStatus(input.repoId, input.statuses, worktreePath)
         : undefined
-      const ownedTemporaryWorktree = Boolean(
-        worktreePath && input.isOwnedTemporaryWorktree(input.repoId, worktreePath),
-      )
+      const ownedTemporaryWorktree = Boolean(worktreePath && input.isOwnedTemporaryWorktree(input.repoId, worktreePath))
       const lockedTemporaryWorktree = ownedTemporaryWorktree && branch.worktree?.isLocked === true
       const unavailable = Boolean(worktreePath && !destinationStatus && !ownedTemporaryWorktree)
       const dirty = Boolean(destinationStatus && destinationStatus.entries.length > 0 && !ownedTemporaryWorktree)

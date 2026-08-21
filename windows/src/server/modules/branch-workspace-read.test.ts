@@ -333,7 +333,7 @@ describe('branch workspace read model', () => {
     }
     const deps = dependencies([unavailable, moved])
     deps.readRepositorySnapshot.mockImplementation(async (repoId) =>
-      repoId.endsWith('/api') ? null : repoSnapshot(moved.branch, path.join(ROOT, 'legacy-web-feature-moved')),
+      path.basename(repoId) === 'api' ? null : repoSnapshot(moved.branch, path.join(ROOT, 'legacy-web-feature-moved')),
     )
 
     await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
@@ -348,6 +348,29 @@ describe('branch workspace read model', () => {
           id: moved.id,
           state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           issues: [{ kind: 'worktree-path-mismatch', repositoryName: 'web' }],
+        },
+      ],
+    })
+  })
+
+  test('marks a Windows and WSL path pair as the same ready member worktree', async () => {
+    const current = manifest()
+    current.repositories[0] = {
+      ...current.repositories[0]!,
+      worktreePath: '/mnt/c/Workspace/hobgoblin-feature-auth/api',
+    }
+    const deps = dependencies([current])
+    deps.readRepositorySnapshot.mockResolvedValue(
+      repoSnapshot(current.branch, 'C:\\Workspace\\hobgoblin-feature-auth\\api'),
+    )
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          state: { kind: 'ready' },
+          issues: [],
+          repositories: [{ repositoryName: 'api', ready: true }],
         },
       ],
     })

@@ -125,6 +125,12 @@ export function useBranchActionItems(
     if (phase === 'queued' && queuedKey) return t(queuedKey)
     return t(loadingKey)
   }
+  const pushUpstreamLabel = [
+    branch.tracking ?? t('branches.no-upstream'),
+    branch.trackingGone ? t('action.branch-upstream-gone') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const remoteIcon = browserRemoteIcon(repositoryBrowserRemoteProvider(repo))
   const isRemoteRepo = !!repo.remote.target
   const showExternalTerminalAction = capabilities.canOpenTerminal && (isRemoteRepo || terminalAvailable)
@@ -205,6 +211,7 @@ export function useBranchActionItems(
     {
       id: 'push',
       label: branchActionLabel('push', 'action.push', 'action.push-loading', 'action.push-queued'),
+      title: `${t('action.branch-upstream-current')}: ${pushUpstreamLabel}`,
       disabled: disabled || !capabilities.canPush,
       busy: busy('push'),
       visible: true,

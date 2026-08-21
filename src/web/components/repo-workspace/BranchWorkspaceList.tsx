@@ -28,6 +28,7 @@ import {
   FolderMinus,
   FolderKanban,
   FolderPlus,
+  FolderTree,
   GitCompareArrows,
   GitFork,
   GitMerge,
@@ -90,6 +91,7 @@ export interface BranchWorkspaceListProps {
   changeCountById?: Readonly<Record<string, number>>
   onActivate: (id: string) => void
   onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
+  onOpenFileArea?: () => void
   onReorder: (orderedIds: string[]) => void | Promise<void>
   onInspect: (item: BranchWorkspaceSnapshot) => void
   onRepair: (item: BranchWorkspaceSnapshot) => void
@@ -111,7 +113,6 @@ export interface BranchWorkspaceListProps {
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, launchMode?: TerminalLaunchMode) => void | Promise<void>
   gitActionsDisabled?: boolean
   onGitAction?: (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => void
-  gitActionPanel?: { itemId: string; content: ReactNode } | null
 }
 
 export function BranchWorkspaceList({
@@ -123,6 +124,7 @@ export function BranchWorkspaceList({
   changeCountById = {},
   onActivate,
   onToggleFileArea,
+  onOpenFileArea,
   onReorder,
   onInspect,
   onRepair,
@@ -141,7 +143,6 @@ export function BranchWorkspaceList({
   onOpenInternalTerminal,
   gitActionsDisabled = false,
   onGitAction,
-  gitActionPanel = null,
 }: BranchWorkspaceListProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const sensors = useSensors(
@@ -190,6 +191,7 @@ export function BranchWorkspaceList({
               changeCountById={changeCountById}
               onActivate={selectRoot}
               onToggleFileArea={onToggleFileArea}
+              onOpenFileArea={onOpenFileArea}
               onToggleExpanded={() => toggleExpanded(item.id)}
               onInspect={onInspect}
               onRepair={onRepair}
@@ -208,7 +210,6 @@ export function BranchWorkspaceList({
               onOpenInternalTerminal={onOpenInternalTerminal}
               gitActionsDisabled={gitActionsDisabled}
               onGitAction={onGitAction}
-              gitActionPanel={gitActionPanel}
             />
           ))}
         </ul>
@@ -227,6 +228,7 @@ function BranchWorkspaceRow({
   changeCountById,
   onActivate,
   onToggleFileArea,
+  onOpenFileArea,
   onToggleExpanded,
   onInspect,
   onRepair,
@@ -245,7 +247,6 @@ function BranchWorkspaceRow({
   onOpenInternalTerminal,
   gitActionsDisabled,
   onGitAction,
-  gitActionPanel,
 }: Omit<BranchWorkspaceListProps, 'items' | 'activeId' | 'activeMemberRepositoryName' | 'onReorder'> & {
   item: BranchWorkspaceSnapshot
   scopeActive: boolean
@@ -294,6 +295,10 @@ function BranchWorkspaceRow({
   const activate = () => {
     if (!folderAvailable || busy) return
     if (!rootSelected) onActivate(item.id)
+  }
+  const openFileArea = () => {
+    activate()
+    onOpenFileArea?.()
   }
   const openInternal = async (launchMode: TerminalLaunchMode = 'native') => {
     if (onOpenInternalTerminal) return await onOpenInternalTerminal(item, launchMode)
@@ -564,6 +569,7 @@ function BranchWorkspaceRow({
             presentation={presentation}
             onSelectRepositoryMember={onSelectRepositoryMember}
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
+            onOpenFileArea={onOpenFileArea}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
             onRemoveMember={
               recoveryAction !== 'continue-reduce' &&
@@ -581,6 +587,15 @@ function BranchWorkspaceRow({
 
   return (
     <WorkspaceItemContextMenu
+      fileArea={
+        onOpenFileArea
+          ? {
+              disabled: openActionsDisabled,
+              icon: <FolderTree aria-hidden="true" />,
+              onSelect: openFileArea,
+            }
+          : undefined
+      }
       editor={{
         ...externalActions.editor,
         disabled: openActionsDisabled || externalActions.editor.disabled,
@@ -653,7 +668,6 @@ function BranchWorkspaceRow({
         expandedContent={
           <>
             {memberList}
-            {gitActionPanel?.itemId === item.id ? gitActionPanel.content : null}
             {tmuxCleanup.dialog}
           </>
         }

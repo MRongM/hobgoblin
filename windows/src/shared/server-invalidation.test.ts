@@ -102,6 +102,15 @@ describe('isBranchWorkspaceOperationUpdatedEvent', () => {
     expect(isBranchWorkspaceOperationUpdatedEvent({ ...validEvent, operation: null })).toBe(true)
   })
 
+  test('accepts an active batch upstream operation at its upstream step', () => {
+    expect(
+      isBranchWorkspaceOperationUpdatedEvent({
+        ...validEvent,
+        operation: { ...validEvent.operation, kind: 'batch-set-upstream', step: 'upstream' },
+      }),
+    ).toBe(true)
+  })
+
   test.each([
     { ...validEvent, rootId: ' /workspace' },
     { ...validEvent, branchWorkspaceId: '' },

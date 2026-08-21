@@ -1054,6 +1054,17 @@ describe('remote command scripts', () => {
     ).toBe(
       "git -C '/srv/repo' branch --track -- 'feature/new' 'origin/feature/new' && { git -C '/srv/repo' config --local 'branch.feature/new.hobgoblin-created-from' 'origin/feature/new' || true; }",
     )
+
+    expect(
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitCheckoutTracking',
+        path: "/srv/repo-feature/user's-work",
+        localBranch: "feature/user's-work",
+        remoteRef: "origin/feature/user's-work",
+      } as Parameters<typeof buildRemoteCommandInvocation>[1]).script,
+    ).toBe(
+      "git -C '/srv/repo-feature/user'\\''s-work' switch --track -c 'feature/user'\\''s-work' -- 'origin/feature/user'\\''s-work' && { git -C '/srv/repo-feature/user'\\''s-work' config --local 'branch.feature/user'\\''s-work.hobgoblin-created-from' 'origin/feature/user'\\''s-work' || true; }",
+    )
   })
 
   test('renders quoted remote branch upstream commands', () => {

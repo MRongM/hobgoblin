@@ -13,6 +13,10 @@ const hydrationMocks = vi.hoisted(() => ({
   repo: vi.fn(async () => {}),
 }))
 
+const branchWorkspaceQueryMocks = vi.hoisted(() => ({
+  data: null as unknown,
+}))
+
 vi.mock('#/web/stores/theme.ts', () => ({
   useThemeStore: { getState: () => ({ hydrate: hydrationMocks.theme }) },
 }))
@@ -36,6 +40,7 @@ vi.mock('#/web/runtime-settings-chrome.ts', () => ({
 
 vi.mock('#/web/branch-workspace-queries.ts', () => ({
   useBranchWorkspaceInvalidationSync: vi.fn(),
+  useBranchWorkspaceQuery: () => ({ data: branchWorkspaceQueryMocks.data, isLoading: false }),
 }))
 
 vi.mock('#/web/components/EffectiveProjectThemeBridge.tsx', () => ({
@@ -77,6 +82,7 @@ beforeEach(() => {
   hydrationMocks.theme.mockClear()
   hydrationMocks.i18n.mockClear()
   hydrationMocks.repo.mockClear()
+  branchWorkspaceQueryMocks.data = null
   resetReposStore()
   seedRepoState({
     id: '/repo',
@@ -97,7 +103,7 @@ afterEach(async () => {
 })
 
 describe('DetachedFileAreaWindow', () => {
-  test('hydrates the captured worktree and renders its complete file area with the captured tab selected', async () => {
+  test('hydrates the captured worktree and renders only the captured panel', async () => {
     const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
     await act(async () => {
       root.render(<DetachedFileAreaWindow request={request} />)
@@ -115,27 +121,57 @@ describe('DetachedFileAreaWindow', () => {
     expect(document.title).toBe('tab.changes — repo')
     expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('changes')
 
-    const toolbar = container.querySelector<HTMLElement>('[data-testid="repo-explorer-toolbar"]')
-    expect(toolbar).not.toBeNull()
-    expect(toolbar?.draggable).toBe(false)
-    expect(container.querySelectorAll('[data-repo-worktree-explorer] [role="tab"]')).toHaveLength(3)
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="explorer-tabs-overflow-toggle"]')?.click()
-    })
-    expect(container.querySelectorAll('[data-repo-worktree-explorer] [role="tab"]')).toHaveLength(6)
-
-    const statusTab = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('[data-repo-worktree-explorer] [role="tab"]'),
-    ).find((tab) => tab.textContent?.includes('tab.status'))
-    await act(async () => statusTab?.click())
-    expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('status')
+    expect(container.querySelector('[data-testid="repo-explorer-toolbar"]')).toBeNull()
+    expect(container.querySelector('[data-repo-worktree-explorer]')).toBeNull()
+    expect(container.querySelector('[role="tab"]')).toBeNull()
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="reveal-file"]')?.click()
     })
     expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('files')
 
-    expect(container.querySelector('[data-testid="detached-back"]')).toBeNull()
+    const back = container.querySelector<HTMLButtonElement>('[data-testid="detached-back"]')
+    expect(back?.textContent).toContain('tab.changes')
+    await act(async () => back?.click())
+    expect(container.querySelector('[data-testid="detached-panel"]')?.getAttribute('data-active-tab')).toBe('changes')
+  })
+
+  test('renders a detached branch workspace as one captured panel without its file area tab bar', async () => {
+    branchWorkspaceQueryMocks.data = {
+      ok: true,
+      items: [
+        {
+          id: 'feature-auth',
+          rootId: '/workspace',
+          branch: 'feature/auth',
+          directoryName: 'feature-auth',
+          path: '/workspace/feature-auth',
+          state: { kind: 'ready' },
+          available: true,
+          issues: [],
+          repositories: [],
+          auxiliaryEntries: [],
+        },
+      ],
+    }
+    const branchRequest: DetachedFileAreaWindowRequest = {
+      kind: 'branch-workspace',
+      root: { kind: 'local', id: '/workspace' },
+      branchWorkspaceId: 'feature-auth',
+      tab: 'changes',
+    }
+    const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
+
+    await act(async () => {
+      root.render(<DetachedFileAreaWindow request={branchRequest} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="branch-workspace-changes-panel"]')).not.toBeNull()
+    expect(container.querySelector('[data-branch-workspace-file-area]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-file-area-toolbar"]')).toBeNull()
+    expect(container.querySelector('[role="tab"]')).toBeNull()
   })
 
   test('shows a stable unavailable state when the captured branch no longer exists', async () => {

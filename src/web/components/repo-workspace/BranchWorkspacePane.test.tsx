@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BranchWorkspacePane } from '#/web/components/repo-workspace/BranchWorkspacePane.tsx'
 import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
-import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
+import { emptyRepo, explorerTabForRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
@@ -419,9 +419,20 @@ describe('BranchWorkspacePane', () => {
 
   test('opens compact parent files on the files tab from scope navigation', () => {
     compactUi = true
-    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+    const onOpenFileArea = vi.fn()
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={workspace()}
+          layout="left-right"
+          onOpenFileArea={onOpenFileArea}
+        />,
+      ),
+    )
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="show-scope"]')?.click())
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
     const changes = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[data-branch-workspace-file-area] [role="tab"]'),
     )[2]
@@ -765,6 +776,93 @@ describe('BranchWorkspacePane', () => {
     act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={nextWorkspace} layout="left-right" />))
 
     expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('true')
+  })
+
+  test('honors a one-shot file area request while the active branch workspace changes', () => {
+    const initialWorkspace = workspace()
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={initialWorkspace}
+          layout="left-right"
+          fileAreaOpenRequested={false}
+        />,
+      ),
+    )
+
+    const nextWorkspace = workspace()
+    nextWorkspace.id = 'branch-2'
+    nextWorkspace.branch = 'feature/other'
+    nextWorkspace.directoryName = 'goblin-feature-other'
+    nextWorkspace.path = '/workspace/goblin-feature-other'
+    act(() =>
+      root.render(
+        <BranchWorkspacePane rootId="/workspace" workspace={nextWorkspace} layout="left-right" fileAreaOpenRequested />,
+      ),
+    )
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
+
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={nextWorkspace}
+          layout="left-right"
+          fileAreaOpenRequested={false}
+        />,
+      ),
+    )
+    expect(fileAreaSplitPane()?.getAttribute('data-after-collapsed')).toBe('false')
+  })
+
+  test('honors a one-shot file area request by opening compact Files', () => {
+    compactUi = true
+
+    act(() =>
+      root.render(
+        <BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" fileAreaOpenRequested />,
+      ),
+    )
+
+    expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="branch-workspace-terminal-panel"]')).toBeNull()
+  })
+
+  test('selects Files for a member worktree while honoring the one-shot request', () => {
+    seedRepoState({
+      id: '/workspace/api',
+      branches: [createRepoBranch('feature/auth', { worktree: { path: '/workspace/goblin-feature-auth/api' } })],
+      currentBranch: 'main',
+      selectedBranch: 'feature/auth',
+    })
+    useReposStore.getState().setExplorerTab('/workspace/api', 'changes')
+
+    act(() =>
+      root.render(
+        <BranchWorkspacePane
+          rootId="/workspace"
+          workspace={{ ...workspace(), repositories: [repositoryMember()] }}
+          memberTarget={{
+            repositoryId: '/workspace/api',
+            repositoryName: 'api',
+            targetBranch: 'feature/auth',
+            checkedOutBranch: 'feature/auth',
+            worktreePath: '/workspace/goblin-feature-auth/api',
+          }}
+          layout="left-right"
+          fileAreaOpenRequested
+        />,
+      ),
+    )
+
+    expect(
+      container
+        .querySelector('[data-testid="repo-worktree-explorer"]')
+        ?.closest('[data-testid="split-pane"]')
+        ?.getAttribute('data-after-collapsed'),
+    ).toBe('false')
+    expect(explorerTabForRepo(useReposStore.getState().repos['/workspace/api']!)).toBe('files')
   })
 
   test('keeps global terminal focus when the active branch workspace changes', () => {

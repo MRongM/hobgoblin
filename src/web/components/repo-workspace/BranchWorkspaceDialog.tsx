@@ -13,6 +13,9 @@ import type {
 } from '#/shared/branch-workspaces.ts'
 import type { WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
 import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef } from '#/shared/worktree-create.ts'
+import { BranchPrefixPicker } from '#/web/components/branch-list/BranchPrefixPicker.tsx'
+import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
+import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
 import { WorktreeDependencyTree } from '#/web/components/WorktreeDependencyTree.tsx'
 import {
   MaterializationCandidateList,
@@ -28,6 +31,7 @@ import {
   DialogTitle,
 } from '#/web/components/ui/dialog.tsx'
 import { Input } from '#/web/components/ui/input.tsx'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/web/components/ui/select.tsx'
 import { Switch } from '#/web/components/ui/switch.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -75,6 +79,7 @@ interface BranchWorkspaceDialogProps {
   onPreview: (request: BranchWorkspacePlanRequest) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onRetry: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
+  onReturnToSelection: () => Promise<void> | void
   onCancel: () => Promise<unknown>
 }
 
@@ -102,6 +107,7 @@ export function BranchWorkspaceDialog({
   onPreview,
   onConfirm,
   onRetry,
+  onReturnToSelection,
   onCancel,
 }: BranchWorkspaceDialogProps) {
   const t = useT()
@@ -118,6 +124,7 @@ export function BranchWorkspaceDialog({
     Record<string, WorktreeBootstrapSelection[] | undefined>
   >({})
   const remoteBranchControllers = useRef<Record<string, AbortController>>({})
+  const [repositoryBranchQueries, setRepositoryBranchQueries] = useState<Record<string, string>>({})
   const [auxiliaryChoices, setAuxiliaryChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
   const [auxiliaryRefreshPending, setAuxiliaryRefreshPending] = useState(false)
   const [auxiliaryRefreshError, setAuxiliaryRefreshError] = useState<string | null>(null)
@@ -126,11 +133,21 @@ export function BranchWorkspaceDialog({
   const [approvals, setApprovals] = useState<BranchWorkspaceApproval[]>([])
 
   const fixedRepositories = useMemo(
-    () => new Map(workspace?.repositories.map((member) => [member.repositoryName, member]) ?? []),
+    () =>
+      new Map(
+        workspace?.repositories
+          .filter((member) => member.progress === 'complete')
+          .map((member) => [member.repositoryName, member]) ?? [],
+      ),
     [workspace],
   )
   const fixedAuxiliary = useMemo(
-    () => new Map(workspace?.auxiliaryEntries.map((entry) => [entry.name, entry]) ?? []),
+    () =>
+      new Map(
+        workspace?.auxiliaryEntries
+          .filter((entry) => entry.progress === 'complete')
+          .map((entry) => [entry.name, entry]) ?? [],
+      ),
     [workspace],
   )
   const initialDialogState = useRef({ workspace, repositories, fixedRepositories })
@@ -139,7 +156,7 @@ export function BranchWorkspaceDialog({
   useEffect(() => {
     if (!open) return
     const initial = initialDialogState.current
-    const initialBranch = mode === 'create' ? defaultBranchWorkspaceName() : (initial.workspace?.branch ?? '')
+    const initialBranch = initial.workspace?.branch ?? (mode === 'create' ? defaultBranchWorkspaceName() : '')
     const initialBases = Object.fromEntries(
       initial.repositories.map((repository) => [
         repository.name,
@@ -179,6 +196,7 @@ export function BranchWorkspaceDialog({
     setRemoteBranches({})
     setRepositoryBootstrapSources({})
     setRepositoryBootstrapSelections({})
+    setRepositoryBranchQueries({})
     setAuxiliaryChoices({})
     setAuxiliaryRefreshPending(false)
     setAuxiliaryRefreshError(null)
@@ -273,6 +291,36 @@ export function BranchWorkspaceDialog({
     }
   }
 
+  const applyBranchChange = (nextBranch: string) => {
+    setBranch(nextBranch)
+    setSyncBeforeCreate((current) =>
+      Object.fromEntries(
+        repositories.map((repository) => {
+          const fixed = fixedRepositories.get(repository.name)
+          if (fixed) return [repository.name, fixed.syncBeforeCreate]
+          const requestedBase = creationBases[repository.name] ?? defaultCreationBase(repository)
+          const previousBase = effectiveCreationBase(repository, branch.trim(), requestedBase)
+          const nextBase = effectiveCreationBase(repository, nextBranch.trim(), requestedBase)
+          return [
+            repository.name,
+            sameCreationBase(previousBase, nextBase)
+              ? (current[repository.name] ?? syncEligible(repository, nextBase))
+              : syncEligible(repository, nextBase),
+          ]
+        }),
+      ),
+    )
+    for (const repository of repositories) {
+      if (!repositoryDependenciesEnabled[repository.name]) continue
+      const base = effectiveCreationBase(
+        repository,
+        nextBranch.trim(),
+        creationBases[repository.name] ?? defaultCreationBase(repository),
+      )
+      initializeRepositoryBootstrap(repository, base)
+    }
+  }
+
   const initializeRepositoryBootstrap = (
     repository: BranchWorkspaceRepositoryOption,
     creationBase = effectiveCreationBase(
@@ -343,7 +391,10 @@ export function BranchWorkspaceDialog({
       const hasNewRepository = value.repositories.some(
         (repository) => !fixedRepositories.has(repository.repositoryName),
       )
-      return value.branch && value.repositories.length > 0 && (mode === 'create' || hasNewRepository) ? value : null
+      const hasNewAuxiliaryEntry = value.auxiliaryEntries.some((entry) => !fixedAuxiliary.has(entry.name))
+      return value.branch && value.repositories.length > 0 && (!workspace || hasNewRepository || hasNewAuxiliaryEntry)
+        ? value
+        : null
     }
     if (!workspace) return null
     if (mode === 'repair') return { operation: 'repair', branchWorkspaceId: workspace.id }
@@ -439,42 +490,20 @@ export function BranchWorkspaceDialog({
           <div className="grid gap-4">
             <label className="grid gap-1.5 text-xs font-medium">
               {t('workspace.branch-workspace.branch')}
-              <Input
-                aria-label={t('workspace.branch-workspace.branch')}
-                value={branch}
-                disabled={pending || !!workspace}
-                className="font-mono"
-                onChange={(event) => {
-                  const nextBranch = event.target.value
-                  setBranch(nextBranch)
-                  setSyncBeforeCreate((current) =>
-                    Object.fromEntries(
-                      repositories.map((repository) => {
-                        const fixed = fixedRepositories.get(repository.name)
-                        if (fixed) return [repository.name, fixed.syncBeforeCreate]
-                        const requestedBase = creationBases[repository.name] ?? defaultCreationBase(repository)
-                        const previousBase = effectiveCreationBase(repository, branch.trim(), requestedBase)
-                        const nextBase = effectiveCreationBase(repository, nextBranch.trim(), requestedBase)
-                        return [
-                          repository.name,
-                          sameCreationBase(previousBase, nextBase)
-                            ? (current[repository.name] ?? syncEligible(repository, nextBase))
-                            : syncEligible(repository, nextBase),
-                        ]
-                      }),
-                    ),
-                  )
-                  for (const repository of repositories) {
-                    if (!repositoryDependenciesEnabled[repository.name]) continue
-                    const base = effectiveCreationBase(
-                      repository,
-                      nextBranch.trim(),
-                      creationBases[repository.name] ?? defaultCreationBase(repository),
-                    )
-                    initializeRepositoryBootstrap(repository, base)
-                  }
-                }}
-              />
+              <div className="flex gap-2">
+                <BranchPrefixPicker
+                  value={branch}
+                  disabled={pending || !!workspace}
+                  onChange={(nextBranch) => applyBranchChange(nextBranch)}
+                />
+                <Input
+                  aria-label={t('workspace.branch-workspace.branch')}
+                  value={branch}
+                  disabled={pending || !!workspace}
+                  className="font-mono flex-1 min-w-0"
+                  onChange={(event) => applyBranchChange(event.target.value)}
+                />
+              </div>
             </label>
             <fieldset className="grid gap-2 rounded-md border border-separator p-3">
               <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
@@ -584,13 +613,11 @@ export function BranchWorkspaceDialog({
                           {t('workspace.branch-workspace.repository-dependencies-toggle')}
                         </span>
                       </label>
-                      <select
-                        aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
+                      <Select
                         value={creationBaseSelectValue(creationBase)}
                         disabled={pending || fixed || !selectedRepositories[repository.name] || existingTarget}
-                        className="h-8 rounded-md border border-input bg-background px-2 font-mono text-xs"
-                        onChange={(event) => {
-                          const nextCreationBase = parseCreationBaseSelectValue(event.target.value)
+                        onValueChange={(value) => {
+                          const nextCreationBase = parseCreationBaseSelectValue(value)
                           if (!nextCreationBase) return
                           setCreationBases((current) => ({
                             ...current,
@@ -604,24 +631,67 @@ export function BranchWorkspaceDialog({
                             initializeRepositoryBootstrap(repository, nextCreationBase)
                           }
                         }}
+                        onOpenChange={(open) => {
+                          if (!open) {
+                            setRepositoryBranchQueries((current) => {
+                              const next = { ...current }
+                              delete next[repository.name]
+                              return next
+                            })
+                          }
+                        }}
                       >
-                        <optgroup label={t('workspace.branch-workspace.creation-base-local')}>
-                          {(existingTarget ? [branch.trim()] : repository.branches).map((candidate) => (
-                            <option key={candidate} value={candidate}>
-                              {candidate}
-                            </option>
-                          ))}
-                        </optgroup>
-                        {!existingTarget && remoteState?.branches.length ? (
-                          <optgroup label={t('workspace.branch-workspace.creation-base-remote')}>
-                            {remoteState.branches.map((candidate) => (
-                              <option key={candidate} value={`remote:${candidate}`}>
+                        <SelectTrigger
+                          size="sm"
+                          aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
+                          className="font-mono text-xs"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent
+                          header={
+                            !existingTarget ? (
+                              <RemoteBranchSearchInput
+                                id={`branch-workspace-base-search-${repository.name}`}
+                                value={repositoryBranchQueries[repository.name] ?? ''}
+                                placeholder={t('branches.search-placeholder')}
+                                ariaLabel={t('branches.search-label')}
+                                disabled={pending || fixed || !selectedRepositories[repository.name]}
+                                onChange={(query) => {
+                                  setRepositoryBranchQueries((current) => ({
+                                    ...current,
+                                    [repository.name]: query,
+                                  }))
+                                }}
+                              />
+                            ) : undefined
+                          }
+                        >
+                          {(existingTarget ? [branch.trim()] : repository.branches)
+                            .filter((candidate) =>
+                              localBranchMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
+                            )
+                            .map((candidate) => (
+                              <SelectItem key={`local:${candidate}`} value={candidate} textValue={candidate}>
                                 {candidate}
-                              </option>
+                              </SelectItem>
                             ))}
-                          </optgroup>
-                        ) : null}
-                      </select>
+                          {!existingTarget &&
+                            remoteState?.branches
+                              .filter((candidate) =>
+                                remoteRefMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
+                              )
+                              .map((candidate) => (
+                                <SelectItem
+                                  key={`remote:${candidate}`}
+                                  value={`remote:${candidate}`}
+                                  textValue={candidate}
+                                >
+                                  {candidate}
+                                </SelectItem>
+                              ))}
+                        </SelectContent>
+                      </Select>
                       <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                         <input
                           type="checkbox"
@@ -692,33 +762,33 @@ export function BranchWorkspaceDialog({
                         </div>
                         {dependencySource ? (
                           <>
-                          <WorktreeBootstrapSourcePicker
-                            source={dependencySource}
-                            options={dependencySources.options}
-                            pending={pending}
-                            onSourceChange={(source) => {
-                              setRepositoryBootstrapSources((current) => ({
-                                ...current,
-                                [repository.name]: source,
-                              }))
-                              setRepositoryBootstrapSelections((current) => ({
-                                ...current,
-                                [repository.name]: [],
-                              }))
-                            }}
-                          />
-                          <WorktreeDependencyTree
-                            repoId={repository.id}
-                            sourceWorktreePath={dependencySource.worktreePath}
-                            selections={repositoryBootstrapSelections[repository.name] ?? []}
-                            disabled={pending}
-                            onSelectionsChange={(selections) =>
-                              setRepositoryBootstrapSelections((current) => ({
-                                ...current,
-                                [repository.name]: selections,
-                              }))
-                            }
-                          />
+                            <WorktreeBootstrapSourcePicker
+                              source={dependencySource}
+                              options={dependencySources.options}
+                              pending={pending}
+                              onSourceChange={(source) => {
+                                setRepositoryBootstrapSources((current) => ({
+                                  ...current,
+                                  [repository.name]: source,
+                                }))
+                                setRepositoryBootstrapSelections((current) => ({
+                                  ...current,
+                                  [repository.name]: [],
+                                }))
+                              }}
+                            />
+                            <WorktreeDependencyTree
+                              repoId={repository.id}
+                              sourceWorktreePath={dependencySource.worktreePath}
+                              selections={repositoryBootstrapSelections[repository.name] ?? []}
+                              disabled={pending}
+                              onSelectionsChange={(selections) =>
+                                setRepositoryBootstrapSelections((current) => ({
+                                  ...current,
+                                  [repository.name]: selections,
+                                }))
+                              }
+                            />
                           </>
                         ) : (
                           <p className="text-xs text-muted-foreground">
@@ -1037,6 +1107,17 @@ export function BranchWorkspaceDialog({
               {t(`workspace.branch-workspace.dialog.${mode}.confirm`)}
             </Button>
           ) : null}
+          {result && !result.ok && (mode === 'create' || mode === 'extend') ? (
+            <Button
+              type="button"
+              data-action="return-to-selection"
+              variant="outline"
+              disabled={pending}
+              onClick={onReturnToSelection}
+            >
+              {t('workspace.branch-workspace.return-to-selection')}
+            </Button>
+          ) : null}
           {result && !result.ok ? (
             <Button
               type="button"
@@ -1194,6 +1275,10 @@ function groupBranchCleanupSteps(steps: BranchWorkspacePlanStep[]): PlanStepDisp
 
 function isBranchCleanupStep(step: BranchWorkspacePlanStep): step is BranchCleanupStep {
   return !!step.repositoryName && (step.kind === 'delete-local-branch' || step.kind === 'delete-upstream-branch')
+}
+
+function localBranchMatchesQuery(branch: string, query: string): boolean {
+  return remoteRefMatchesQuery(branch, query)
 }
 
 function WorkspaceSummary({ workspace }: { workspace: BranchWorkspaceSnapshot }) {

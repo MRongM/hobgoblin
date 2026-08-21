@@ -183,10 +183,7 @@ describe('ProjectLocalPanel branch push', () => {
     const submitBranchAction = vi.fn()
     seedRepoState({
       id: REPO_ID,
-      branches: [
-        createRepoBranch('main'),
-        createRepoBranch('feature/local', { tracking: 'origin/main' }),
-      ],
+      branches: [createRepoBranch('main'), createRepoBranch('feature/local', { tracking: 'origin/main' })],
       currentBranch: 'main',
       selectedBranch: 'feature/local',
     })
@@ -203,6 +200,7 @@ describe('ProjectLocalPanel branch push', () => {
     )
     const pushButton = branchRow?.querySelector<HTMLButtonElement>('button[aria-label="local.branch-push"]')
     expect(pushButton).not.toBeNull()
+    expect(pushButton?.title).toContain('origin/main')
 
     await act(async () => {
       pushButton!.click()
@@ -210,6 +208,7 @@ describe('ProjectLocalPanel branch push', () => {
 
     expect(submitBranchAction).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('origin/main')
+    expect(document.querySelector('[data-push-upstream]')?.textContent).toContain('action.branch-upstream-current')
 
     const confirmButton = findButtonByText(document.body, 'action.confirm-push-confirm')
     expect(confirmButton).not.toBeNull()

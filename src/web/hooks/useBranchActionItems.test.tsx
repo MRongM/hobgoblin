@@ -192,6 +192,25 @@ describe('useBranchActionItems', () => {
     expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(false)
   })
 
+  test('keeps the push action label concise while exposing the configured upstream in its title', async () => {
+    const branch = createRepoBranch('feature/local', {
+      tracking: 'origin/feature/remote',
+      worktree: { path: '/tmp/repo-feature' },
+    })
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      branches: [branch],
+      remote: { hasRemotes: true },
+    })
+
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const push = groups.mainItems.find((item) => item.id === 'push')
+
+    expect(push?.label).toBe('action.push')
+    expect(push?.title).toBe('action.branch-upstream-current: origin/feature/remote')
+  })
+
   test('shows upstream management only in a worktree branch menu', async () => {
     repoClientMocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'origin/release'])
     const worktreeBranch = createRepoBranch('feature/worktree', {
@@ -838,7 +857,7 @@ describe('useBranchActionItems', () => {
 
     expect(visibleItems.every((item) => item.disabled)).toBe(true)
     expect(visibleItems.some((item) => item.busy)).toBe(false)
-    expect(groups.mainItems.find((item) => item.id === 'push')?.label).toBe('action.push')
+    expect(groups.mainItems.find((item) => item.id === 'push')?.label).toContain('action.push')
   })
 
   test('disables create worktree while another local branch action is pending', async () => {

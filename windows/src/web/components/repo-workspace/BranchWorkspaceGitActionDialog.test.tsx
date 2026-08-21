@@ -15,7 +15,10 @@ vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.providers,
   generateRepositoryCommitMessage: mocks.generate,
 }))
-vi.mock('#/web/stores/i18n.ts', () => ({ useT: () => (key: string) => key }))
+vi.mock('#/web/stores/i18n.ts', () => ({
+  useT: () => (key: string, values?: { repository?: string }) =>
+    key === 'workspace.branch-workspace.git-action.select-upstream-for-member' ? `${key}:${values?.repository}` : key,
+}))
 
 const batchPlan: BranchWorkspaceGitActionPlan = {
   kind: 'batch-commit',
@@ -78,6 +81,61 @@ function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitAction
         : {}),
       fingerprint: `sha256:${repositoryName}`,
     })),
+  }
+}
+
+function upstreamPlan(): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-set-upstream' }> {
+  return {
+    kind: 'batch-set-upstream',
+    token: 'sha256:upstream',
+    rootId: '/workspace',
+    branchWorkspaceId: 'ws-1',
+    ready: true,
+    members: [
+      {
+        repositoryName: 'api',
+        repoId: '/workspace/api',
+        targetBranch: 'feature/a',
+        targetWorktreePath: '/workspace/goblin-feature-a/api',
+        targetHead: 'api-target-head',
+        currentUpstream: 'origin/feature/a',
+        trackingGone: true,
+        remoteBranches: [
+          { remoteRef: 'origin/feature/a', head: 'api-feature-head' },
+          { remoteRef: 'origin/release', head: 'api-release-head' },
+        ],
+        ready: true,
+        fingerprint: 'sha256:api',
+      },
+      {
+        repositoryName: 'web',
+        repoId: '/workspace/web',
+        targetBranch: 'feature/a',
+        targetWorktreePath: '/workspace/goblin-feature-a/web',
+        targetHead: 'web-target-head',
+        currentUpstream: null,
+        trackingGone: false,
+        remoteBranches: [
+          { remoteRef: 'upstream/web-main', head: 'web-main-head' },
+          { remoteRef: 'upstream/web-release', head: 'web-release-head' },
+        ],
+        ready: true,
+        fingerprint: 'sha256:web',
+      },
+      {
+        repositoryName: 'docs',
+        repoId: '/workspace/docs',
+        targetBranch: 'feature/a',
+        targetWorktreePath: '/workspace/goblin-feature-a/docs',
+        targetHead: 'docs-target-head',
+        currentUpstream: null,
+        trackingGone: false,
+        remoteBranches: [],
+        ready: true,
+        message: 'workspace.branch-workspace.git-action.remote-branch-required',
+        fingerprint: 'sha256:docs',
+      },
+    ],
   }
 }
 
@@ -269,6 +327,165 @@ describe('BranchWorkspaceGitActionPanel', () => {
     render({ kind: 'batch-discard', plan: discardPlan(false) })
 
     expect(document.querySelector<HTMLButtonElement>('[data-action="batch-discard"]')?.disabled).toBe(true)
+  })
+
+  test('keeps each batch upstream member candidates and search query isolated', async () => {
+    const plan = upstreamPlan()
+    render({ kind: 'batch-set-upstream', plan })
+
+    expect(document.querySelector('[data-upstream-current="api"]')?.textContent).toContain('origin/feature/a')
+    expect(document.querySelector('[data-upstream-current="api"]')?.textContent).toContain(
+      'action.branch-upstream-gone',
+    )
+    expect(upstreamCheckbox('docs')?.disabled).toBe(true)
+    expect(document.querySelector('[data-upstream-current="docs"]')?.parentElement?.textContent).toContain(
+      'workspace.branch-workspace.git-action.remote-branch-required',
+    )
+
+    await openUpstreamRemote('api')
+    expect(document.querySelector('[data-upstream-remote-option="api:origin/release"]')).not.toBeNull()
+    expect(document.querySelector('[data-upstream-remote-option="web:upstream/web-release"]')).toBeNull()
+    await closeSelect()
+
+    await openUpstreamRemote('web')
+    setInputValue('branch-workspace-upstream-web-filter', 'release')
+    expect(document.querySelector('[data-upstream-remote-option="web:upstream/web-release"]')).not.toBeNull()
+    expect(document.querySelector('[data-upstream-remote-option="web:upstream/web-main"]')).toBeNull()
+    await closeSelect()
+
+    await openUpstreamRemote('api')
+    expect(document.querySelector('[data-upstream-remote-option="api:origin/feature/a"]')).not.toBeNull()
+  })
+
+  test('gives each batch upstream remote selector a unique member-specific accessible name', () => {
+    render({ kind: 'batch-set-upstream', plan: upstreamPlan() })
+
+    const api = document.querySelector<HTMLButtonElement>('[data-upstream-remote="api"]')
+    const web = document.querySelector<HTMLButtonElement>('[data-upstream-remote="web"]')
+    expect(api?.getAttribute('aria-label')).toBe('workspace.branch-workspace.git-action.select-upstream-for-member:api')
+    expect(web?.getAttribute('aria-label')).toBe('workspace.branch-workspace.git-action.select-upstream-for-member:web')
+    expect(api?.textContent).toContain('workspace.branch-workspace.git-action.select-upstream')
+  })
+
+  test('requires explicit candidate mappings and submits selected members in manifest order', async () => {
+    const plan = upstreamPlan()
+    let resolveExecution: ((result: BranchWorkspaceGitActionResult | null) => void) | null = null
+    const onBatchSetUpstream = vi.fn(
+      () => new Promise<BranchWorkspaceGitActionResult | null>((resolve) => (resolveExecution = resolve)),
+    )
+    render({ kind: 'batch-set-upstream', plan, onBatchSetUpstream })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')
+    expect(action?.disabled).toBe(true)
+
+    await act(async () => upstreamCheckbox('web')?.click())
+    await selectUpstreamRemote('api', 'origin/release')
+    expect(action?.disabled).toBe(false)
+    expect(upstreamRow('web')?.textContent).toContain('workspace.branch-workspace.git-action.not-selected')
+
+    await act(async () => upstreamSelectAllCheckbox()?.click())
+    expect(action?.disabled).toBe(true)
+    await selectUpstreamRemote('web', 'upstream/web-release')
+    expect(action?.disabled).toBe(false)
+
+    await act(async () => upstreamSelectAllCheckbox()?.click())
+    expect(action?.disabled).toBe(true)
+    await act(async () => upstreamSelectAllCheckbox()?.click())
+    expect(action?.disabled).toBe(false)
+
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+    expect(onBatchSetUpstream).toHaveBeenCalledWith([
+      { repositoryName: 'api', remoteRef: 'origin/release' },
+      { repositoryName: 'web', remoteRef: 'upstream/web-release' },
+    ])
+    expect(upstreamCheckbox('api')?.disabled).toBe(true)
+    expect(upstreamCheckbox('web')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-upstream-remote="api"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-upstream-remote="web"]')?.disabled).toBe(true)
+
+    await act(async () => resolveExecution?.(null))
+  })
+
+  test('prioritizes upstream result phases over ready selection state and resets local state on reopen or plan token change', async () => {
+    const plan = upstreamPlan()
+    render({ kind: 'batch-set-upstream', plan })
+
+    await selectUpstreamRemote('api', 'origin/release')
+    await selectUpstreamRemote('web', 'upstream/web-release')
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-set-upstream',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        {
+          repositoryName: 'web',
+          phase: 'failed',
+          step: 'upstream',
+          message: 'workspace.branch-workspace.git-action.execute-failed',
+        },
+      ],
+    }
+    render({ kind: 'batch-set-upstream', plan, result })
+    await flush()
+
+    expect(upstreamRow('api')?.textContent).toContain('workspace.branch-workspace.git-action.phase.succeeded')
+    expect(upstreamRow('web')?.textContent).toContain('workspace.branch-workspace.git-action.phase.failed')
+    expect(upstreamRow('docs')?.textContent).toContain('workspace.branch-workspace.git-action.remote-branch-required')
+
+    await act(async () => upstreamCheckbox('api')?.click())
+    await act(async () => upstreamCheckbox('web')?.click())
+    expect(upstreamRow('api')?.textContent).toContain('workspace.branch-workspace.git-action.not-selected')
+    expect(upstreamRow('web')?.textContent).toContain('workspace.branch-workspace.git-action.not-selected')
+
+    render({ open: false, kind: 'batch-set-upstream', plan, result: null })
+    render({ kind: 'batch-set-upstream', plan, result: null })
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.disabled).toBe(true)
+
+    await selectUpstreamRemote('api', 'origin/release')
+    await selectUpstreamRemote('web', 'upstream/web-release')
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.disabled).toBe(false)
+    render({ kind: 'batch-set-upstream', plan: { ...plan, token: 'sha256:upstream-next' }, result: null })
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.disabled).toBe(true)
+  })
+
+  test('clears upstream mapping, query, and execution lock when the inline panel reopens', async () => {
+    const plan = upstreamPlan()
+    let resolveExecution: ((result: BranchWorkspaceGitActionResult | null) => void) | null = null
+    const onBatchSetUpstream = vi.fn(
+      () => new Promise<BranchWorkspaceGitActionResult | null>((resolve) => (resolveExecution = resolve)),
+    )
+    render({ kind: 'batch-set-upstream', plan, onBatchSetUpstream })
+
+    await selectUpstreamRemote('api', 'origin/release')
+    await openUpstreamRemote('web')
+    setInputValue('branch-workspace-upstream-web-filter', 'release')
+    const webRelease = document.querySelector<HTMLElement>('[data-upstream-remote-option="web:upstream/web-release"]')
+    await act(async () => {
+      webRelease?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+    expect(upstreamCheckbox('api')?.disabled).toBe(true)
+
+    render({ open: false, kind: 'batch-set-upstream', plan, onBatchSetUpstream })
+    render({ kind: 'batch-set-upstream', plan, onBatchSetUpstream })
+
+    expect(upstreamCheckbox('api')?.disabled).toBe(false)
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.disabled).toBe(true)
+    await openUpstreamRemote('web')
+    expect(document.querySelector('[data-upstream-remote-option="web:upstream/web-main"]')).not.toBeNull()
+
+    await act(async () => resolveExecution?.(null))
   })
 
   test('keeps failed batch discard available for retry and shows the discard failure step', async () => {
@@ -632,9 +849,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
       trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
       await Promise.resolve()
     })
-    const option = document.querySelector<HTMLElement>(
-      `[data-merge-destination-option="api:local:${longBranch}"]`,
-    )
+    const option = document.querySelector<HTMLElement>(`[data-merge-destination-option="api:local:${longBranch}"]`)
     expect(option?.className).toContain('break-all')
     expect(option?.textContent).toBe(longBranch)
     expect(document.body.textContent).not.toContain('workspace.branch-workspace.git-action.temporary-worktree')
@@ -838,6 +1053,47 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
   })
 
+  test('hands a failed merge-out repository and its selected destination branch to AI', async () => {
+    const plan = mergeOutPlan()
+    const failure: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-out',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'merge failed',
+      members: [{ repositoryName: 'api', phase: 'failed', step: 'merge', message: 'merge failed' }],
+    }
+    const onBatchMergeOut = vi.fn(async () => failure)
+    const onBatchErrorAiHandoff = vi.fn(async () => true)
+    render({ kind: 'batch-merge-out', plan, onBatchMergeOut, onBatchErrorAiHandoff })
+
+    await act(async () => mergeCheckbox('web')?.click())
+    await selectMergeDestination('api', 'release/v2')
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
+      await Promise.resolve()
+    })
+    render({ kind: 'batch-merge-out', plan, result: failure, onBatchMergeOut, onBatchErrorAiHandoff })
+    await flush()
+
+    const codex = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'action.merge-conflict-ai-codex',
+    )
+    await act(async () => codex?.click())
+    await flush()
+
+    expect(onBatchErrorAiHandoff).toHaveBeenCalledWith({
+      provider: 'codex',
+      kind: 'batch-merge-out',
+      failures: [
+        expect.objectContaining({
+          repositoryName: 'api',
+          destinationBranch: 'release/v2',
+        }),
+      ],
+    })
+  })
+
   test('hands all merge-in failures to AI and closes after a successful handoff', async () => {
     const plan = mergeInPlan()
     const conflictWorktree = {
@@ -1006,7 +1262,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
       action?.click()
       await Promise.resolve()
     })
-    expect(onSync).toHaveBeenCalledWith(kind)
+    expect(onSync).toHaveBeenCalledWith(kind, ['api', 'web'])
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
@@ -1018,6 +1274,37 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain(
       'workspace.branch-workspace.git-action.target-upstream-required',
     )
+  })
+
+  test('selects ready sync members by default and executes only that subset', async () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    plan.ready = false
+    plan.members[1]!.ready = false
+    plan.members[1]!.message = 'workspace.branch-workspace.git-action.remote-required'
+    const onSync = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'push' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    render({ kind: 'push', plan, onSync })
+
+    const api = document.querySelector<HTMLButtonElement>('[data-sync-repository="api"]')
+    const web = document.querySelector<HTMLButtonElement>('[data-sync-repository="web"]')
+    const action = document.querySelector<HTMLButtonElement>('[data-action="push"]')
+    expect(api?.getAttribute('data-state')).toBe('checked')
+    expect(web?.disabled).toBe(true)
+    expect(document.querySelector('[data-testid="branch-workspace-git-action-panel"]')?.textContent).toContain(
+      'workspace.branch-workspace.git-action.selected-count',
+    )
+
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+    expect(onSync).toHaveBeenCalledWith('push', ['api'])
   })
 })
 
@@ -1036,6 +1323,7 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         onBatchCommit={async () => null}
         onBatchCommitAndPush={async () => null}
         onBatchDiscard={async () => null}
+        onBatchSetUpstream={async () => null}
         onBatchMergeIn={async () => null}
         onBatchMergeOut={async () => null}
         onSync={async () => null}
@@ -1061,6 +1349,56 @@ function mergeCheckbox(repositoryName: string): HTMLButtonElement | null {
 
 function mergeSelectAllCheckbox(): HTMLButtonElement | null {
   return document.querySelector<HTMLButtonElement>('[data-merge-select-all]')
+}
+
+function upstreamSelectAllCheckbox(): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>('[data-merge-select-all]')
+}
+
+function upstreamCheckbox(repositoryName: string): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>(`[data-upstream-repository="${repositoryName}"]`)
+}
+
+function upstreamRow(repositoryName: string): HTMLElement | null {
+  return upstreamCheckbox(repositoryName)?.closest('.border-b') ?? null
+}
+
+async function openUpstreamRemote(repositoryName: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[data-upstream-remote="${repositoryName}"]`)
+  if (!trigger) throw new Error(`Missing upstream trigger for ${repositoryName}`)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function closeSelect() {
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+function setInputValue(id: string, value: string) {
+  const input = document.getElementById(id)
+  if (!(input instanceof HTMLInputElement)) throw new Error(`Missing input ${id}`)
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+async function selectUpstreamRemote(repositoryName: string, remoteRef: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[data-upstream-remote="${repositoryName}"]`)
+  if (!trigger) throw new Error(`Missing upstream trigger for ${repositoryName}`)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await Promise.resolve()
+  })
+  const option = document.querySelector<HTMLElement>(`[data-upstream-remote-option="${repositoryName}:${remoteRef}"]`)
+  if (!option) throw new Error(`Missing upstream remote option ${repositoryName}:${remoteRef}`)
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
 }
 
 async function selectMergeDestination(

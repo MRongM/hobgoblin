@@ -7,6 +7,7 @@ import { RepoView } from '#/web/components/RepoView.tsx'
 import { MainWindowNavigationProvider, type MainWindowNavigationActions } from '#/web/main-window-navigation.tsx'
 import { resetReposStore, seedRepoState, createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
 
 const branchWorkspaceQueryState = vi.hoisted(() => ({
   includeItem: true,
@@ -21,6 +22,8 @@ const branchWorkspaceQueryState = vi.hoisted(() => ({
     ready: boolean
   }>,
 }))
+
+const branchWorkspacePaneState = vi.hoisted(() => ({ fileAreaOpenRequestCount: 0 }))
 
 vi.mock('#/web/components/BranchDetail.tsx', () => ({
   BranchDetail: ({
@@ -130,34 +133,39 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspacePane.tsx', () => ({
     workspace,
     memberTarget,
     fallbackNotice,
+    fileAreaOpenRequested,
     onOpenFileArea,
     onCollapseFileArea,
   }: {
     workspace: { branch: string; path: string }
     memberTarget?: { repositoryId: string } | null
     fallbackNotice?: { repositoryName: string; reason: string } | null
+    fileAreaOpenRequested?: boolean
     onOpenFileArea?: () => void
     onCollapseFileArea?: () => void
-  }) => (
-    <div
-      data-testid="branch-workspace-pane"
-      data-path={workspace.path}
-      data-member-repo-id={memberTarget?.repositoryId ?? ''}
-      data-fallback-member={fallbackNotice?.repositoryName ?? ''}
-    >
-      {workspace.branch}
-      {onOpenFileArea ? (
-        <button type="button" data-testid="open-member-file-area" onClick={onOpenFileArea}>
-          open member file area
-        </button>
-      ) : null}
-      {onCollapseFileArea ? (
-        <button type="button" data-testid="collapse-branch-workspace-file-area" onClick={onCollapseFileArea}>
-          collapse branch workspace file area
-        </button>
-      ) : null}
-    </div>
-  ),
+  }) => {
+    if (fileAreaOpenRequested) branchWorkspacePaneState.fileAreaOpenRequestCount += 1
+    return (
+      <div
+        data-testid="branch-workspace-pane"
+        data-path={workspace.path}
+        data-member-repo-id={memberTarget?.repositoryId ?? ''}
+        data-fallback-member={fallbackNotice?.repositoryName ?? ''}
+      >
+        {workspace.branch}
+        {onOpenFileArea ? (
+          <button type="button" data-testid="open-member-file-area" onClick={onOpenFileArea}>
+            open member file area
+          </button>
+        ) : null}
+        {onCollapseFileArea ? (
+          <button type="button" data-testid="collapse-branch-workspace-file-area" onClick={onCollapseFileArea}>
+            collapse branch workspace file area
+          </button>
+        ) : null}
+      </div>
+    )
+  },
 }))
 
 vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
@@ -167,6 +175,7 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
     plainWorkspaceTerminalPanel,
     fileAreaCollapsed,
     compactSurface,
+    onOpenFileArea,
     onCollapseFileArea,
     onToggleFileArea,
     onShowCompactDetail,
@@ -180,6 +189,7 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
     plainWorkspaceTerminalPanel?: ReactNode
     fileAreaCollapsed?: boolean
     compactSurface?: 'scope' | 'files'
+    onOpenFileArea?: () => void
     onCollapseFileArea?: () => void
     onToggleFileArea?: () => void
     onShowCompactDetail?: () => void
@@ -196,6 +206,11 @@ vi.mock('#/web/components/repo-workspace/RepoExplorerPane.tsx', () => ({
       data-compact-surface={compactSurface ?? ''}
       data-terminal-focus-mode={String(!!terminalFocusMode)}
     >
+      {onOpenFileArea && (
+        <button type="button" data-testid="open-file-area" onClick={onOpenFileArea}>
+          open files
+        </button>
+      )}
       {onToggleFileArea && (
         <button type="button" data-testid="toggle-file-area" onClick={onToggleFileArea}>
           toggle files
@@ -248,6 +263,7 @@ let root: Root | null = null
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
 beforeEach(() => {
+  branchWorkspacePaneState.fileAreaOpenRequestCount = 0
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
   branchWorkspaceQueryState.repositories = []
@@ -324,6 +340,58 @@ describe('RepoView', () => {
     )
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
     expect(container?.querySelector('[data-testid="split-pane"]')).toBeNull()
+  })
+
+  test('opens the compact Files surface through the idempotent file area intent', async () => {
+    seedRepoWithSelectedWorktree()
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+    renderRepoView()
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+    })
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="open-file-area"]')?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'files',
+    )
+    expect(explorerTabForRepo(useReposStore.getState().repos[REPO_ID]!)).toBe('files')
+  })
+
+  test('keeps an idempotent file area request when the active repository changes in the same interaction', async () => {
+    const nextRepoId = '/tmp/gbl-repo-view-next-repo'
+    seedRepoState({
+      id: nextRepoId,
+      branches: [createRepoBranch('main', { worktree: { path: nextRepoId } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const nextRepo = useReposStore.getState().repos[nextRepoId]!
+    seedRepoWithSelectedWorktree()
+    useReposStore.setState((state) => ({ repos: { ...state.repos, [nextRepoId]: nextRepo } }))
+    useReposStore.getState().setExplorerTab(nextRepoId, 'changes')
+    renderRepoView()
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>('[data-testid="show-compact-explorer"]')?.click()
+    })
+    const requestOpenFileArea = container?.querySelector<HTMLButtonElement>('[data-testid="open-file-area"]')
+    expect(requestOpenFileArea).not.toBeNull()
+
+    act(() => {
+      root!.render(
+        <MainWindowNavigationProvider value={navigationWith({})}>
+          <RepoView repoId={nextRepoId} />
+        </MainWindowNavigationProvider>,
+      )
+      requestOpenFileArea?.click()
+    })
+
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-compact-surface')).toBe(
+      'files',
+    )
+    expect(explorerTabForRepo(useReposStore.getState().repos[nextRepoId]!)).toBe('files')
   })
 
   test('keeps compact explorer actions visible without a desktop focus preference', async () => {
@@ -909,6 +977,7 @@ describe('RepoView', () => {
       })
     })
     act(() => container?.querySelector<HTMLButtonElement>('[data-testid="open-member-file-area"]')?.click())
+    expect(branchWorkspacePaneState.fileAreaOpenRequestCount).toBe(1)
     act(() => {
       useReposStore.setState({ workspaceActiveContextByRoot: { [REPO_ID]: { kind: 'overview' } } })
     })

@@ -108,17 +108,47 @@ export function settingsInvalidationScopesForPrefsPatch(patch: Record<string, un
 function isBranchWorkspaceActiveOperation(value: unknown): value is BranchWorkspaceActiveOperation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const operation = value as Partial<BranchWorkspaceActiveOperation>
-  return (
-    isBranchWorkspaceGitActionKind(operation.kind) &&
-    isProgressCount(operation.currentStep) &&
-    isProgressCount(operation.completedCount) &&
-    isProgressCount(operation.totalCount) &&
-    operation.currentStep <= operation.totalCount &&
-    operation.completedCount <= operation.totalCount &&
-    typeof operation.cancellable === 'boolean' &&
-    (operation.repositoryName === undefined || isSafeEventText(operation.repositoryName)) &&
-    (operation.step === undefined || isBranchWorkspaceGitActionStep(operation.step))
-  )
+  if (
+    !isBranchWorkspaceGitActionKind(operation.kind) ||
+    !isProgressCount(operation.currentStep) ||
+    !isProgressCount(operation.completedCount) ||
+    !isProgressCount(operation.totalCount) ||
+    operation.currentStep > operation.totalCount ||
+    operation.completedCount > operation.totalCount ||
+    typeof operation.cancellable !== 'boolean' ||
+    (operation.activeMembers !== undefined && !isBranchWorkspaceActiveMembers(operation.activeMembers)) ||
+    (operation.completedRepositoryNames !== undefined &&
+      !isCompletedRepositoryNames(operation.completedRepositoryNames, operation.completedCount)) ||
+    (operation.repositoryName !== undefined && !isSafeEventText(operation.repositoryName)) ||
+    (operation.step !== undefined && !isBranchWorkspaceGitActionStep(operation.step))
+  ) {
+    return false
+  }
+  const completedRepositoryNames = new Set(operation.completedRepositoryNames ?? [])
+  return !operation.activeMembers?.some((member) => completedRepositoryNames.has(member.repositoryName))
+}
+
+function isBranchWorkspaceActiveMembers(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 4) return false
+  const repositoryNames = new Set<string>()
+  for (const member of value) {
+    if (!member || typeof member !== 'object' || Array.isArray(member)) return false
+    const candidate = member as { repositoryName?: unknown; step?: unknown }
+    if (!isSafeEventText(candidate.repositoryName) || !isBranchWorkspaceGitActionStep(candidate.step)) return false
+    if (repositoryNames.has(candidate.repositoryName)) return false
+    repositoryNames.add(candidate.repositoryName)
+  }
+  return true
+}
+
+function isCompletedRepositoryNames(value: unknown, completedCount: number): boolean {
+  if (!Array.isArray(value) || value.length !== completedCount) return false
+  const repositoryNames = new Set<string>()
+  for (const repositoryName of value) {
+    if (!isSafeEventText(repositoryName) || repositoryNames.has(repositoryName)) return false
+    repositoryNames.add(repositoryName)
+  }
+  return true
 }
 
 function isBranchWorkspaceGitActionKind(value: unknown): boolean {

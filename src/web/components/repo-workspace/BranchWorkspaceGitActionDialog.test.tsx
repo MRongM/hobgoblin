@@ -17,9 +17,7 @@ vi.mock('#/web/repo-client.ts', () => ({
 }))
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, values?: { repository?: string }) =>
-    key === 'workspace.branch-workspace.git-action.select-upstream-for-member'
-      ? `${key}:${values?.repository}`
-      : key,
+    key === 'workspace.branch-workspace.git-action.select-upstream-for-member' ? `${key}:${values?.repository}` : key,
 }))
 
 const batchPlan: BranchWorkspaceGitActionPlan = {
@@ -72,6 +70,8 @@ function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitAction
       targetBranch: 'feature/a',
       targetWorktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
       targetHead: `target-head-${index}`,
+      upstream: repositoryName === 'api' ? 'origin/feature/a' : 'upstream/feature/web',
+      trackingGone: false,
       ready,
       ...(!ready
         ? {
@@ -156,7 +156,11 @@ function mergeOutPlan(): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-me
             : destination,
         ),
       }),
-      mergeOutMember('docs', { ready: false, message: 'destination unavailable', destinationBranches: [] }),
+      mergeOutMember('docs', {
+        ready: false,
+        message: 'workspace.branch-workspace.git-action.source-worktree-conflicted',
+        destinationBranches: [],
+      }),
     ],
   }
 }
@@ -271,6 +275,18 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceGitActionPanel', () => {
+  test.each([
+    ['batch-commit', batchPlan],
+    ['batch-discard', discardPlan()],
+    ['batch-set-upstream', upstreamPlan()],
+    ['pull', syncPlan('pull')],
+    ['push', syncPlan('push')],
+  ] as const)('renders unified batch progress for %s', (kind, plan) => {
+    render({ kind, plan })
+
+    expect(document.querySelector('[data-testid="branch-workspace-batch-progress"]')).not.toBeNull()
+  })
+
   test('keeps the batch-merge-out identity while its plan is loading', async () => {
     render({ kind: 'batch-merge-out', plan: null })
     await flush()
@@ -364,12 +380,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
 
     const api = document.querySelector<HTMLButtonElement>('[data-upstream-remote="api"]')
     const web = document.querySelector<HTMLButtonElement>('[data-upstream-remote="web"]')
-    expect(api?.getAttribute('aria-label')).toBe(
-      'workspace.branch-workspace.git-action.select-upstream-for-member:api',
-    )
-    expect(web?.getAttribute('aria-label')).toBe(
-      'workspace.branch-workspace.git-action.select-upstream-for-member:web',
-    )
+    expect(api?.getAttribute('aria-label')).toBe('workspace.branch-workspace.git-action.select-upstream-for-member:api')
+    expect(web?.getAttribute('aria-label')).toBe('workspace.branch-workspace.git-action.select-upstream-for-member:web')
     expect(api?.textContent).toContain('workspace.branch-workspace.git-action.select-upstream')
   })
 
@@ -404,8 +416,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
       await Promise.resolve()
     })
     expect(onBatchSetUpstream).toHaveBeenCalledWith([
-      { repositoryName: 'api', remoteRef: 'origin/release' },
-      { repositoryName: 'web', remoteRef: 'upstream/web-release' },
+      { repositoryName: 'api', action: 'set', remoteRef: 'origin/release' },
+      { repositoryName: 'web', action: 'set', remoteRef: 'upstream/web-release' },
     ])
     expect(upstreamCheckbox('api')?.disabled).toBe(true)
     expect(upstreamCheckbox('web')?.disabled).toBe(true)
@@ -413,6 +425,27 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector<HTMLButtonElement>('[data-upstream-remote="web"]')?.disabled).toBe(true)
 
     await act(async () => resolveExecution?.(null))
+  })
+
+  test('toggles a selected member to remove its upstream and submits an unset action', async () => {
+    const onBatchSetUpstream = vi.fn(async () => null)
+    render({ kind: 'batch-set-upstream', plan: upstreamPlan(), onBatchSetUpstream })
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-batch-unset-upstream-api"]')?.click()
+      upstreamCheckbox('web')?.click()
+    })
+
+    expect(upstreamRow('api')?.textContent).toContain('workspace.branch-workspace.git-action.remove-upstream-selected')
+    expect(document.querySelector<HTMLButtonElement>('[data-upstream-remote="api"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.disabled).toBe(false)
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="batch-set-upstream"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(onBatchSetUpstream).toHaveBeenCalledWith([{ repositoryName: 'api', action: 'unset' }])
   })
 
   test('prioritizes upstream result phases over ready selection state and resets local state on reopen or plan token change', async () => {
@@ -672,6 +705,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(summary?.textContent).toContain('web hook rejected')
     expect(summary?.textContent).toContain('workspace.branch-workspace.git-action.failure-step.commit')
     expect(document.body.textContent).toContain('workspace.branch-workspace.git-action.member-failure-ai-handoff')
+    expect(document.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).toBeNull()
 
     await act(async () => buttonWithExactText('action.merge-conflict-ai-codex')?.click())
     await flush()
@@ -868,6 +902,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(mergeCheckbox('web')?.dataset.state).toBe('checked')
     expect(mergeCheckbox('docs')?.dataset.state).toBe('unchecked')
     expect(mergeCheckbox('docs')?.disabled).toBe(true)
+    expect(document.body.textContent).toContain('workspace.branch-workspace.git-action.source-worktree-conflicted')
   })
 
   test.each([
@@ -994,10 +1029,10 @@ describe('BranchWorkspaceGitActionPanel', () => {
         kind: 'batch-merge-out',
         currentStep: 2,
         completedCount: 1,
+        completedRepositoryNames: ['web'],
         totalCount: 2,
         cancellable: true,
-        repositoryName: 'web',
-        step: 'merge',
+        activeMembers: [{ repositoryName: 'api', step: 'merge' }],
       },
     })
 
@@ -1006,8 +1041,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(progress?.dataset.total).toBe('2')
     expect(mergeSelectAllCheckbox()?.disabled).toBe(true)
     expect(mergeCheckbox('api')?.disabled).toBe(true)
-    expect(document.querySelector<HTMLElement>('[data-merge-step="api:merge"]')?.dataset.status).toBe('complete')
-    expect(document.querySelector<HTMLElement>('[data-merge-step="web:merge"]')?.dataset.status).toBe('active')
+    expect(document.querySelector<HTMLElement>('[data-merge-step="api:merge"]')?.dataset.status).toBe('active')
+    expect(document.querySelector<HTMLElement>('[data-merge-step="web:merge"]')?.dataset.status).toBe('complete')
 
     finish?.({
       ok: true,
@@ -1057,6 +1092,48 @@ describe('BranchWorkspaceGitActionPanel', () => {
     ]
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(1, 'merge', expectedTargets)
     expect(onBatchMergeOut).toHaveBeenNthCalledWith(2, 'merge', expectedTargets)
+  })
+
+  test('hands a failed merge-out repository and its selected destination branch to AI', async () => {
+    const plan = mergeOutPlan()
+    const failure: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-merge-out',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'merge failed',
+      members: [{ repositoryName: 'api', phase: 'failed', step: 'merge', message: 'merge failed' }],
+    }
+    const onBatchMergeOut = vi.fn(async () => failure)
+    const onBatchErrorAiHandoff = vi.fn(async () => true)
+    render({ kind: 'batch-merge-out', plan, onBatchMergeOut, onBatchErrorAiHandoff })
+
+    await act(async () => mergeCheckbox('web')?.click())
+    await selectMergeDestination('api', 'release/v2')
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-action="merge"]')?.click()
+      await Promise.resolve()
+    })
+    render({ kind: 'batch-merge-out', plan, result: failure, onBatchMergeOut, onBatchErrorAiHandoff })
+    await flush()
+
+    const codex = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'action.merge-conflict-ai-codex',
+    )
+    expect(document.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).not.toBeNull()
+    await act(async () => codex?.click())
+    await flush()
+
+    expect(onBatchErrorAiHandoff).toHaveBeenCalledWith({
+      provider: 'codex',
+      kind: 'batch-merge-out',
+      failures: [
+        expect.objectContaining({
+          repositoryName: 'api',
+          destinationBranch: 'release/v2',
+        }),
+      ],
+    })
   })
 
   test('hands all merge-in failures to AI and closes after a successful handoff', async () => {
@@ -1110,6 +1187,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     )
     expect(actions).not.toBeNull()
     expect(codex).not.toBeUndefined()
+    expect(document.querySelector('button[aria-label="action.merge-conflict-ai-copy-prompt"]')).not.toBeNull()
 
     await act(async () => codex?.click())
     await flush()
@@ -1221,6 +1299,8 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(panel?.textContent).toContain('api')
     expect(panel?.textContent).toContain('web')
     expect(panel?.textContent).toContain('feature/a')
+    expect(document.querySelector('[data-sync-upstream="api"]')?.textContent).toContain('origin/feature/a')
+    expect(document.querySelector('[data-sync-upstream="web"]')?.textContent).toContain('upstream/feature/web')
     expect(action?.querySelector(icon)).not.toBeNull()
 
     await act(async () => {
@@ -1229,6 +1309,18 @@ describe('BranchWorkspaceGitActionPanel', () => {
     })
     expect(onSync).toHaveBeenCalledWith(kind, ['api', 'web'])
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('shows missing and gone upstream states in batch sync rows', () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    plan.members[0]!.upstream = null
+    plan.members[1]!.trackingGone = true
+
+    render({ kind: 'push', plan })
+
+    expect(document.querySelector('[data-sync-upstream="api"]')?.textContent).toContain('branches.no-upstream')
+    expect(document.querySelector('[data-sync-upstream="web"]')?.textContent).toContain('action.branch-upstream-gone')
   })
 
   test('keeps an unready sync action disabled and shows the member readiness reason', () => {

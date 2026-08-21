@@ -59,6 +59,16 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
     })
   })
 
+  test.each([
+    ['Windows separator variants', 'C:\\workspace\\goblin-feature-auth\\api', 'C:/workspace/goblin-feature-auth/api'],
+    ['Windows and WSL paths', 'C:\\workspace\\goblin-feature-auth\\api', '/mnt/c/workspace/goblin-feature-auth/api'],
+  ])('resolves equivalent %s as the same member worktree', (_label, declaredPath, observedPath) => {
+    expect(resolve(member({ worktreePath: declaredPath }), { repo: repository({ path: observedPath }) })).toMatchObject({
+      ok: true,
+      target: { worktreePath: declaredPath },
+    })
+  })
+
   test('rejects a member that is not configured in the workspace', () => {
     expect(resolve(member(), { configured: false })).toEqual({
       ok: false,

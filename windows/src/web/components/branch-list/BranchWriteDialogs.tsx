@@ -145,6 +145,7 @@ export function MergeInDialog({
   const t = useT()
   const [selected, setSelected] = useState('')
   const [remoteBranches, setRemoteBranches] = useState<string[]>([])
+  const [branchQuery, setBranchQuery] = useState('')
   const [remoteState, setRemoteState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [errorReason, setErrorReason] = useState<ExecResult['reason'] | null>(null)
@@ -163,6 +164,7 @@ export function MergeInDialog({
     if (!open) {
       setSelected('')
       setRemoteBranches([])
+      setBranchQuery('')
       setRemoteState('idle')
       setError(null)
       setErrorReason(null)
@@ -172,6 +174,7 @@ export function MergeInDialog({
     const controller = new AbortController()
     setSelected('')
     setRemoteBranches([])
+    setBranchQuery('')
     setRemoteState('loading')
     void getRepositoryRemoteBranches(repoId, controller.signal)
       .then((branches) => {
@@ -236,34 +239,42 @@ export function MergeInDialog({
             <SelectTrigger id="merge-select" className="min-w-0 w-full">
               <SelectValue placeholder={t('action.merge-in-placeholder')} />
             </SelectTrigger>
-            <SelectContent>
-              {candidates.map((candidate) => {
-                const key = repositoryMergeBranchSelectionKey(candidate)
-                const name = candidate.kind === 'local' ? candidate.branch : candidate.remoteRef
-                const text = candidate.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
-                return (
-                  <SelectItem
-                    key={key}
-                    value={key}
-                    textValue={text}
-                    data-merge-source-key={key}
-                    data-merge-source-kind={candidate.kind}
-                  >
-                    {text}
-                  </SelectItem>
-                )
-              })}
+            <SelectContent
+              header={
+                <RemoteBranchSearchInput
+                  id="merge-in-branch-search"
+                  value={branchQuery}
+                  placeholder={t('branches.search-placeholder')}
+                  ariaLabel={t('branches.search-label')}
+                  onChange={setBranchQuery}
+                />
+              }
+            >
+              {candidates
+                .filter((candidate) => mergeBranchMatchesQuery(candidate, branchQuery))
+                .map((candidate) => {
+                  const key = repositoryMergeBranchSelectionKey(candidate)
+                  const name = candidate.kind === 'local' ? candidate.branch : candidate.remoteRef
+                  const text = candidate.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
+                  return (
+                    <SelectItem
+                      key={key}
+                      value={key}
+                      textValue={text}
+                      data-merge-source-key={key}
+                      data-merge-source-kind={candidate.kind}
+                    >
+                      {text}
+                    </SelectItem>
+                  )
+                })}
             </SelectContent>
           </Select>
-          {remoteState === 'loading' && (
-            <FieldDescription>{t('action.merge-in-remote-loading')}</FieldDescription>
-          )}
+          {remoteState === 'loading' && <FieldDescription>{t('action.merge-in-remote-loading')}</FieldDescription>}
           {remoteState === 'loaded' && remoteBranches.length === 0 && (
             <FieldDescription>{t('action.merge-in-remote-empty')}</FieldDescription>
           )}
-          {remoteState === 'error' && (
-            <FieldDescription>{t('action.merge-in-remote-load-failed')}</FieldDescription>
-          )}
+          {remoteState === 'error' && <FieldDescription>{t('action.merge-in-remote-load-failed')}</FieldDescription>}
           {remoteSelected && <FieldDescription>{t('action.merge-in-remote-fetch-note')}</FieldDescription>}
         </Field>
         {error && <MergeDialogError>{error.startsWith('error.merge-out') ? t(error) : error}</MergeDialogError>}
@@ -321,6 +332,7 @@ export function MergeOutDialog({
   const t = useT()
   const [plan, setPlan] = useState<RepositoryBranchMergeOutPlan | null>(null)
   const [selected, setSelected] = useState('')
+  const [branchQuery, setBranchQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [conflictWorktree, setConflictWorktree] = useState<{ branch: string; path: string } | null>(null)
@@ -334,6 +346,7 @@ export function MergeOutDialog({
     setLoading(true)
     setPlan(null)
     setSelected('')
+    setBranchQuery('')
     if (!preserveError) setError(null)
     setConflictWorktree(null)
     try {
@@ -365,6 +378,7 @@ export function MergeOutDialog({
       planAbortRef.current = null
       setPlan(null)
       setSelected('')
+      setBranchQuery('')
       setLoading(false)
       setError(null)
       setConflictWorktree(null)
@@ -434,36 +448,48 @@ export function MergeOutDialog({
                 placeholder={loading ? t('action.merge-out-loading') : t('action.merge-out-destination-placeholder')}
               />
             </SelectTrigger>
-            <SelectContent>
-              {plan?.destinations.map((candidate) => {
-                const key = repositoryMergeBranchSelectionKey(candidate.destination)
-                const name = repositoryMergeBranchDisplayName(candidate.destination)
-                const text =
-                  candidate.destination.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
-                return (
-                  <SelectItem
-                    key={key}
-                    value={key}
-                    textValue={text}
-                    disabled={!candidate.ready}
-                    data-merge-destination-key={key}
-                    data-merge-destination-kind={candidate.destination.kind}
-                  >
-                    <span className="flex min-w-0 items-center justify-between gap-3">
-                      <span className="truncate">{text}</span>
-                      {candidate.blockReason ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {t(
-                            candidate.blockReason === 'dirty-worktree'
-                              ? 'action.merge-out-destination-dirty'
-                              : 'action.merge-out-destination-unavailable',
-                          )}
-                        </span>
-                      ) : null}
-                    </span>
-                  </SelectItem>
-                )
-              })}
+            <SelectContent
+              header={
+                <RemoteBranchSearchInput
+                  id="merge-out-branch-search"
+                  value={branchQuery}
+                  placeholder={t('branches.search-placeholder')}
+                  ariaLabel={t('branches.search-label')}
+                  disabled={loading || !plan}
+                  onChange={setBranchQuery}
+                />
+              }
+            >
+              {plan?.destinations
+                .filter((candidate) => mergeBranchMatchesQuery(candidate.destination, branchQuery))
+                .map((candidate) => {
+                  const key = repositoryMergeBranchSelectionKey(candidate.destination)
+                  const name = repositoryMergeBranchDisplayName(candidate.destination)
+                  const text = candidate.destination.kind === 'remote' ? `${name} (${t('tab.remote-branches')})` : name
+                  return (
+                    <SelectItem
+                      key={key}
+                      value={key}
+                      textValue={text}
+                      disabled={!candidate.ready}
+                      data-merge-destination-key={key}
+                      data-merge-destination-kind={candidate.destination.kind}
+                    >
+                      <span className="flex min-w-0 items-center justify-between gap-3">
+                        <span className="truncate">{text}</span>
+                        {candidate.blockReason ? (
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {t(
+                              candidate.blockReason === 'dirty-worktree'
+                                ? 'action.merge-out-destination-dirty'
+                                : 'action.merge-out-destination-unavailable',
+                            )}
+                          </span>
+                        ) : null}
+                      </span>
+                    </SelectItem>
+                  )
+                })}
             </SelectContent>
           </Select>
           {destination?.destination.kind === 'remote' ? (
@@ -507,6 +533,11 @@ export function MergeOutDialog({
       </form>
     </FormDialog>
   )
+}
+
+function mergeBranchMatchesQuery(candidate: RepositoryMergeBranchSelection, query: string): boolean {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  return !normalizedQuery || repositoryMergeBranchDisplayName(candidate).toLocaleLowerCase().includes(normalizedQuery)
 }
 
 function MergeDialogError({ children }: { children: string }) {

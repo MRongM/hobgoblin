@@ -102,6 +102,36 @@ describe('isBranchWorkspaceOperationUpdatedEvent', () => {
     expect(isBranchWorkspaceOperationUpdatedEvent({ ...validEvent, operation: null })).toBe(true)
   })
 
+  test('accepts distinct concurrently active repository member steps', () => {
+    expect(
+      isBranchWorkspaceOperationUpdatedEvent({
+        ...validEvent,
+        operation: {
+          ...validEvent.operation,
+          currentStep: 2,
+          activeMembers: [
+            { repositoryName: 'api', step: 'pull' },
+            { repositoryName: 'web', step: 'merge' },
+          ],
+        },
+      }),
+    ).toBe(true)
+  })
+
+  test('accepts exact completed repository identities for out-of-order concurrent progress', () => {
+    expect(
+      isBranchWorkspaceOperationUpdatedEvent({
+        ...validEvent,
+        operation: {
+          ...validEvent.operation,
+          completedCount: 1,
+          completedRepositoryNames: ['web'],
+          activeMembers: [{ repositoryName: 'api', step: 'merge' }],
+        },
+      }),
+    ).toBe(true)
+  })
+
   test('accepts an active batch upstream operation at its upstream step', () => {
     expect(
       isBranchWorkspaceOperationUpdatedEvent({
@@ -119,6 +149,39 @@ describe('isBranchWorkspaceOperationUpdatedEvent', () => {
     { ...validEvent, operation: { ...validEvent.operation, completedCount: 0.5 } },
     { ...validEvent, operation: { ...validEvent.operation, totalCount: '2' } },
     { ...validEvent, operation: { ...validEvent.operation, step: 'checkout' } },
+    { ...validEvent, operation: { ...validEvent.operation, activeMembers: 'api' } },
+    { ...validEvent, operation: { ...validEvent.operation, activeMembers: [] } },
+    {
+      ...validEvent,
+      operation: {
+        ...validEvent.operation,
+        activeMembers: [
+          { repositoryName: 'api', step: 'pull' },
+          { repositoryName: 'api', step: 'merge' },
+        ],
+      },
+    },
+    {
+      ...validEvent,
+      operation: { ...validEvent.operation, activeMembers: [{ repositoryName: '', step: 'pull' }] },
+    },
+    {
+      ...validEvent,
+      operation: { ...validEvent.operation, activeMembers: [{ repositoryName: 'api', step: 'checkout' }] },
+    },
+    { ...validEvent, operation: { ...validEvent.operation, completedRepositoryNames: 'api' } },
+    {
+      ...validEvent,
+      operation: { ...validEvent.operation, completedCount: 1, completedRepositoryNames: ['api', 'web'] },
+    },
+    {
+      ...validEvent,
+      operation: { ...validEvent.operation, completedCount: 2, completedRepositoryNames: ['api', 'api'] },
+    },
+    {
+      ...validEvent,
+      operation: { ...validEvent.operation, completedCount: 1, completedRepositoryNames: [''] },
+    },
   ])('rejects malformed operation events', (event) => {
     expect(isBranchWorkspaceOperationUpdatedEvent(event)).toBe(false)
   })

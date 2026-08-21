@@ -368,6 +368,7 @@ function renderList(
   const onClose = vi.fn()
   const onReorder = vi.fn()
   const onToggleFileArea = vi.fn()
+  const onOpenFileArea = vi.fn()
   const closeTerminal =
     fixture.closeTerminal ?? vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>()
   const terminalCommands = terminalCommandContext(closeTerminal)
@@ -383,12 +384,13 @@ function renderList(
             onClose={onClose}
             onReorder={onReorder}
             onToggleFileArea={onToggleFileArea}
+            onOpenFileArea={onOpenFileArea}
           />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
   })
-  return { onActivate, onClose, onReorder, onToggleFileArea, closeTerminal, terminalCommands }
+  return { onActivate, onClose, onReorder, onToggleFileArea, onOpenFileArea, closeTerminal, terminalCommands }
 }
 
 describe('SidebarProjectList', () => {
@@ -583,6 +585,17 @@ describe('SidebarProjectList', () => {
     expect(onActivate).toHaveBeenCalledTimes(2)
     expect(onActivate).toHaveBeenLastCalledWith('/repo-a')
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('activates the exact project before opening its file area from the context menu', async () => {
+    const { onActivate, onOpenFileArea } = renderList()
+    const row = projectRow('/repo-b')
+
+    await clickContextMenuItem(row, 'file-area.open')
+
+    expect(onActivate).toHaveBeenCalledWith('/repo-b')
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+    expect(onActivate.mock.invocationCallOrder[0]).toBeLessThan(onOpenFileArea.mock.invocationCallOrder[0]!)
   })
 
   test('closes a project from More without activating it', async () => {
@@ -872,6 +885,7 @@ describe('SidebarProjectList', () => {
     const row = projectRow('/repo-a')
 
     expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).toEqual([
+      'file-area.open',
       'worktrees.open-in-editor-label',
       'action.remote',
       'terminal.external',

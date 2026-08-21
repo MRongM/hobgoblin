@@ -31,6 +31,15 @@ const discardPlan: BranchWorkspaceGitActionPlan = {
   members: [],
 }
 
+const upstreamPlan: BranchWorkspaceGitActionPlan = {
+  kind: 'batch-set-upstream',
+  token: 'sha256:upstream',
+  rootId: '/workspace',
+  branchWorkspaceId: 'ws-1',
+  ready: true,
+  members: [],
+}
+
 function syncPlan(kind: 'pull' | 'push'): BranchWorkspaceGitActionPlan {
   return {
     kind,
@@ -38,7 +47,17 @@ function syncPlan(kind: 'pull' | 'push'): BranchWorkspaceGitActionPlan {
     rootId: '/workspace',
     branchWorkspaceId: 'ws-1',
     ready: true,
-    members: [],
+    members: [
+      {
+        repositoryName: 'api',
+        repoId: '/workspace/api',
+        targetBranch: 'feature/a',
+        targetWorktreePath: '/workspace/goblin-feature-a/api',
+        targetHead: 'target-head',
+        ready: true,
+        fingerprint: 'sha256:api',
+      },
+    ],
   }
 }
 
@@ -93,7 +112,7 @@ describe('useBranchWorkspaceGitActions', () => {
     })
   })
 
-  test.each(['pull', 'push'] as const)('plans and executes coordinated %s', async (kind) => {
+  test.each(['pull', 'push'] as const)('plans and executes selected coordinated %s members', async (kind) => {
     const expectedPlan = syncPlan(kind)
     mocks.plan.mockResolvedValue({ ok: true, plan: expectedPlan })
     mocks.execute.mockResolvedValue({
@@ -113,12 +132,13 @@ describe('useBranchWorkspaceGitActions', () => {
     )
 
     await act(async () => state!.requestPlan(kind, 'ws-1'))
-    await act(async () => state!.executeSync(kind))
+    await act(async () => state!.executeSync(kind, ['api']))
 
     expect(state!.plan).toEqual(expectedPlan)
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       kind,
       planToken: expectedPlan.token,
+      repositoryNames: ['api'],
     })
   })
 
@@ -147,6 +167,34 @@ describe('useBranchWorkspaceGitActions', () => {
     expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
       kind: 'batch-discard',
       planToken: discardPlan.token,
+    })
+  })
+
+  test('executes the batch upstream mappings from the loaded plan', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan: upstreamPlan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind: 'batch-set-upstream',
+      planToken: upstreamPlan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-set-upstream', 'ws-1'))
+    await act(async () => state!.executeBatchSetUpstream([{ repositoryName: 'api', remoteRef: 'origin/release' }]))
+
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      kind: 'batch-set-upstream',
+      planToken: 'sha256:upstream',
+      upstreams: [{ repositoryName: 'api', remoteRef: 'origin/release' }],
     })
   })
 

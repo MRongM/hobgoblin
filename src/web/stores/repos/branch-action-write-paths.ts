@@ -6,14 +6,22 @@ import type { RepoBranchAction, RunBranchActionOptions } from '#/web/stores/repo
 export interface BranchPushTarget {
   branch: string
   display: string
+  upstream: string | null
+  trackingGone: boolean
   protected: boolean
 }
 
-export function getBranchPushTarget(branch: { name: string; tracking?: string }): BranchPushTarget {
+export function getBranchPushTarget(branch: {
+  name: string
+  tracking?: string
+  trackingGone?: boolean
+}): BranchPushTarget {
   const upstream = branch.tracking ? parseRemoteBranchRef(branch.tracking) : null
   return {
     branch: branch.name,
     display: upstream?.fullRef ?? branch.name,
+    upstream: branch.tracking ?? null,
+    trackingGone: branch.trackingGone === true,
     protected: PROTECTED_BRANCHES.has(upstream?.branch ?? branch.name),
   }
 }
@@ -28,10 +36,7 @@ export function removeWorktreeNeedsForceConfirm(
   forceDeleteBranch: boolean,
 ): boolean {
   return (
-    !result.ok &&
-    result.message === 'error.cannot-remove-unpushed-worktree' &&
-    alsoDeleteBranch &&
-    !forceDeleteBranch
+    !result.ok && result.message === 'error.cannot-remove-unpushed-worktree' && alsoDeleteBranch && !forceDeleteBranch
   )
 }
 
@@ -39,7 +44,11 @@ export async function dispatchRepoBranchAction(
   repoId: string,
   instanceToken: number,
   action: RepoBranchAction,
-  runBranchAction: (id: string, action: RepoBranchAction, options?: RunBranchActionOptions) => Promise<ExecResult | null>,
+  runBranchAction: (
+    id: string,
+    action: RepoBranchAction,
+    options?: RunBranchActionOptions,
+  ) => Promise<ExecResult | null>,
   options?: {
     deferResultMessages?: string[]
     handleResult?: (result: ExecResult) => boolean

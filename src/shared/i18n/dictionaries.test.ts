@@ -30,6 +30,13 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('labels every branch workspace plan-preview action as the next step', () => {
+    expect(en['workspace.branch-workspace.preview']).toBe('Next')
+    expect(zh['workspace.branch-workspace.preview']).toBe('下一步')
+    expect(ja['workspace.branch-workspace.preview']).toBe('次へ')
+    expect(ko['workspace.branch-workspace.preview']).toBe('다음')
+  })
+
   test('preserves official classic theme names in every dictionary', () => {
     const expected = {
       'settings.theme-preset.catppuccin': 'Catppuccin',
@@ -148,6 +155,8 @@ describe('i18n dictionaries', () => {
       'action.merge-in-and-push-confirm',
       'action.merge-out',
       'action.merge-out-title',
+      'action.merge-out-source-conflicted',
+      'action.merge-out-source-unavailable',
       'action.merge-out-source-label',
       'action.merge-out-destination-label',
       'action.merge-out-destination-placeholder',
@@ -157,7 +166,7 @@ describe('i18n dictionaries', () => {
       'action.merge-out-loading',
       'action.merge-out-confirm',
       'action.merge-out-pull-merge-push-confirm',
-      'error.merge-out-source-dirty',
+      'error.merge-out-source-conflicted',
       'error.merge-out-source-worktree-unavailable',
       'error.merge-out-destination-dirty',
       'error.merge-out-destination-worktree-unavailable',
@@ -220,6 +229,8 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.git-action.select-upstream',
       'workspace.branch-workspace.git-action.select-upstream-for-member',
       'workspace.branch-workspace.git-action.remote-branch-required',
+      'workspace.branch-workspace.git-action.remove-upstream',
+      'workspace.branch-workspace.git-action.remove-upstream-selected',
       'workspace.branch-workspace.git-action.step.upstream',
       'workspace.branch-workspace.git-action.failure-step.upstream',
     ] as const satisfies readonly DictKey[]
@@ -232,9 +243,7 @@ describe('i18n dictionaries', () => {
     expect(ja['workspace.branch-workspace.git-action.select-member']).toBe(
       '{repository} をこの一括操作のメンバーとして選択',
     )
-    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe(
-      '{repository} 구성원을 이 일괄 작업에 포함',
-    )
+    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe('{repository} 구성원을 이 일괄 작업에 포함')
     expect(ja['workspace.branch-workspace.git-action.select-member']).not.toContain('マージ')
     expect(ko['workspace.branch-workspace.git-action.select-member']).not.toContain('병합')
   })
@@ -428,6 +437,7 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.git-action.source-branch',
       'workspace.branch-workspace.git-action.select-source',
       'workspace.branch-workspace.git-action.source-branch-required',
+      'workspace.branch-workspace.git-action.source-worktree-conflicted',
       'workspace.branch-workspace.git-action.destination-branch',
       'workspace.branch-workspace.git-action.select-destination',
       'workspace.branch-workspace.git-action.destination-branch-required',
@@ -705,7 +715,7 @@ describe('i18n dictionaries', () => {
   })
 
   test('includes file area collapse copy in every dictionary', () => {
-    const keys = ['file-area.collapse', 'file-area.expand'] as const
+    const keys = ['file-area.collapse', 'file-area.expand', 'file-area.open'] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const key of keys) {

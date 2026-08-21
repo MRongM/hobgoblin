@@ -28,8 +28,9 @@ import {
 import { useIsSmallScreen } from '#/web/hooks/useIsSmallScreen.ts'
 import { RepoTab } from '#/web/components/repo-tabs/RepoTab.tsx'
 import { RepoTabTooltipLayer } from '#/web/components/repo-tabs/RepoTabTooltipLayer.tsx'
+import { RecentReposMenuSub } from '#/web/components/repo-tabs/RecentReposMenuSub.tsx'
 import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
-import type { RepoTabStripLabels, RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
+import type { RecentRepoMenuActions, RepoTabStripLabels, RepoTabSummary } from '#/web/components/repo-tabs/types.ts'
 
 function shouldShowInactiveSeparator({
   leftId,
@@ -65,7 +66,7 @@ function navigatedRepoTabId(
   return repos[index]?.id ?? null
 }
 
-interface RepoTabStripProps {
+interface RepoTabStripProps extends RecentRepoMenuActions {
   repos: RepoTabSummary[]
   activeId: string | null
   labels: RepoTabStripLabels
@@ -116,8 +117,14 @@ function OpenRepoMenuItems({
   onOpenLocal,
   onOpenRemote,
   onClone,
+  recentRepos = [],
+  onOpenRecent = () => {},
+  onClearRecent = () => {},
   onClearCache,
-}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'> & { onClearCache: () => void }) {
+}: Pick<
+  RepoTabStripProps,
+  'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone' | 'recentRepos' | 'onOpenRecent' | 'onClearRecent'
+> & { onClearCache: () => void }) {
   return (
     <>
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenLocal}>
@@ -135,6 +142,12 @@ function OpenRepoMenuItems({
         {labels.clone}
         {labels.cloneShortcut && <DropdownMenuShortcut>{labels.cloneShortcut}</DropdownMenuShortcut>}
       </DropdownMenuItem>
+      <RecentReposMenuSub
+        recentRepos={recentRepos}
+        labels={labels}
+        onOpenRecent={onOpenRecent}
+        onClearRecent={onClearRecent}
+      />
       <DropdownMenuSeparator />
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onClearCache}>
         <Trash2 />
@@ -260,6 +273,9 @@ export function RepoTabStrip({
   onOpenLocal,
   onOpenRemote,
   onClone,
+  recentRepos = [],
+  onOpenRecent = () => {},
+  onClearRecent = () => {},
 }: RepoTabStripProps) {
   const isSmallScreen = useIsSmallScreen()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -335,9 +351,12 @@ export function RepoTabStrip({
         <DropdownMenuContent side="bottom" align="start" className="w-max">
           <OpenRepoMenuItems
             labels={labels}
+            recentRepos={recentRepos}
             onOpenLocal={onOpenLocal}
             onOpenRemote={onOpenRemote}
             onClone={onClone}
+            onOpenRecent={onOpenRecent}
+            onClearRecent={onClearRecent}
             onClearCache={requestClearCache}
           />
         </DropdownMenuContent>
@@ -391,9 +410,12 @@ export function RepoTabStrip({
                     {dropdownRepos.length > 0 && <DropdownMenuSeparator />}
                     <OpenRepoMenuItems
                       labels={labels}
+                      recentRepos={recentRepos}
                       onOpenLocal={onOpenLocal}
                       onOpenRemote={onOpenRemote}
                       onClone={onClone}
+                      onOpenRecent={onOpenRecent}
+                      onClearRecent={onClearRecent}
                       onClearCache={requestClearCache}
                     />
                   </DropdownMenuContent>

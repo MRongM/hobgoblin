@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import * as aiTerminalHandoff from '#/web/ai-terminal-handoff.ts'
 import {
   buildAiHandoffCommand,
   buildBranchWorkspaceBatchErrorAiCommand,
@@ -51,6 +52,21 @@ describe('AI terminal handoff', () => {
     expect(buildMergeConflictAiCommand('claude')).toContain('current Git merge conflicts in this working tree')
   })
 
+  test('uses one provider-independent prompt for worktree conflict copy and commands', () => {
+    const api = aiTerminalHandoff as typeof aiTerminalHandoff & {
+      buildMergeConflictAiPrompt: () => string
+    }
+
+    expect(api.buildMergeConflictAiPrompt).toBeTypeOf('function')
+    const prompt = api.buildMergeConflictAiPrompt()
+
+    expect(prompt).toContain('current Git merge conflicts in this working tree')
+    expect(prompt).not.toContain('codex exec')
+    expect(prompt).not.toContain('claude --print')
+    expect(buildMergeConflictAiCommand('codex')).toBe(buildAiHandoffCommand('codex', prompt))
+    expect(buildMergeConflictAiCommand('claude')).toBe(buildAiHandoffCommand('claude', prompt))
+  })
+
   test('builds one reviewable branch-workspace command for every failed batch member', () => {
     const command = buildBranchWorkspaceBatchErrorAiCommand('claude', 'batch-merge-in', [
       {
@@ -71,17 +87,72 @@ describe('AI terminal handoff', () => {
 
     expect(command).toContain('claude --print')
     expect(command).toContain('batch-merge-in')
-    expect(command).toContain('api')
-    expect(command).toContain('web')
-    expect(command).toContain('merge')
-    expect(command).toContain('push')
-    expect(command).toContain('merge conflict in')
-    expect(command).toContain('config')
-    expect(command).toContain('/workspace/goblin-feature-a/api')
-    expect(command).toContain('/workspace/goblin-feature-a/web')
     expect(command).toContain('git merge --continue')
     expect(command).toContain('destructive Git commands')
+    expect(command).not.toContain('api')
+    expect(command).not.toContain('/workspace/goblin-feature-a')
     expect(command).not.toMatch(/[\r\n]/)
+  })
+
+  test('includes failed repositories and destination branches for batch merge-out', () => {
+    const failures = [
+      {
+        repositoryName: 'api',
+        destinationBranch: 'release/v2',
+        step: 'merge',
+        message: 'conflict details',
+        worktreePath: '/workspace/api',
+      },
+      {
+        repositoryName: 'web',
+        destinationBranch: 'origin/staging',
+        step: 'push',
+        message: 'remote rejected',
+        worktreePath: '/workspace/web',
+      },
+    ] satisfies Parameters<typeof buildBranchWorkspaceBatchErrorAiCommand>[2]
+    const command = buildBranchWorkspaceBatchErrorAiCommand('codex', 'batch-merge-out', failures)
+
+    expect(command).toContain('api')
+    expect(command).toContain('release/v2')
+    expect(command).toContain('web')
+    expect(command).toContain('origin/staging')
+    expect(command).toContain('For every listed repository and destination branch pair')
+    expect(command).toContain('minimum working-tree edits needed for the batch merge-out retry to succeed')
+    expect(command).not.toContain('conflict details')
+    expect(command).not.toContain('remote rejected')
+    expect(command).not.toContain('/workspace/api')
+    expect(command).not.toContain('/workspace/web')
+    expect(command).not.toMatch(/[\r\n]/)
+  })
+
+  test('uses one provider-independent prompt for batch conflict copy and commands', () => {
+    const failures = [
+      {
+        repositoryName: 'api',
+        destinationBranch: 'release/v2',
+        step: 'merge',
+        message: 'conflict details',
+        worktreePath: '/workspace/api',
+      },
+    ] satisfies Parameters<typeof buildBranchWorkspaceBatchErrorAiCommand>[2]
+    const api = aiTerminalHandoff as typeof aiTerminalHandoff & {
+      buildBranchWorkspaceBatchErrorAiPrompt: (
+        kind: Parameters<typeof buildBranchWorkspaceBatchErrorAiCommand>[1],
+        failures: Parameters<typeof buildBranchWorkspaceBatchErrorAiCommand>[2],
+      ) => string
+    }
+
+    expect(api.buildBranchWorkspaceBatchErrorAiPrompt).toBeTypeOf('function')
+    const prompt = api.buildBranchWorkspaceBatchErrorAiPrompt('batch-merge-out', failures)
+
+    expect(prompt).toContain('batch-merge-out')
+    expect(prompt).toContain('release/v2')
+    expect(prompt).not.toContain('codex exec')
+    expect(prompt).not.toContain('claude --print')
+    expect(buildBranchWorkspaceBatchErrorAiCommand('codex', 'batch-merge-out', failures)).toBe(
+      buildAiHandoffCommand('codex', prompt),
+    )
   })
 
   test('activates a branch workspace and preserves its full terminal identity', async () => {

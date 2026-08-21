@@ -63,6 +63,7 @@ const repositoryListState = vi.hoisted(() => ({
     onActivate: (id: string) => void
     onReorder: (fromId: string, toId: string) => void
     onToggleFileArea?: () => void
+    onOpenFileArea?: () => void
   },
 }))
 
@@ -118,6 +119,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
   reorder: vi.fn(async () => true),
   cancel: vi.fn(async () => {}),
   requestPlan: vi.fn(async () => true),
+  returnToSelection: vi.fn(),
   plan: null as BranchWorkspacePlan | null,
   pending: false,
   refresh: vi.fn(),
@@ -132,6 +134,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
+    onReturnToSelection: () => Promise<void> | void
   },
 }))
 
@@ -205,6 +208,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     activeId: string | null
     activeMemberRepositoryName?: string | null
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
+    onOpenFileArea?: () => void
     changeCountById?: Readonly<Record<string, number>>
     getMemberPresentation?: (
       item: BranchWorkspaceSnapshot,
@@ -268,6 +272,7 @@ vi.mock('#/web/hooks/useBranchWorkspaceActions.ts', () => ({
     retry: vi.fn(async () => null),
     cancel: branchWorkspaceState.cancel,
     reorder: branchWorkspaceState.reorder,
+    returnToSelection: branchWorkspaceState.returnToSelection,
     reset: vi.fn(),
   }),
 }))
@@ -322,6 +327,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     workspace,
     progressWorkspace,
     fixedReduceRepositoryName,
+    onReturnToSelection,
     onRefreshAuxiliaryCandidates,
   }: {
     open: boolean
@@ -333,6 +339,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     workspace: BranchWorkspaceSnapshot | null
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
+    onReturnToSelection: () => Promise<void> | void
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
   }) => {
     branchWorkspaceState.dialogProps = {
@@ -342,6 +349,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
       workspace,
       progressWorkspace,
       fixedReduceRepositoryName,
+      onReturnToSelection,
     }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
@@ -446,6 +454,7 @@ beforeEach(() => {
   branchWorkspaceState.cancel.mockResolvedValue(undefined)
   branchWorkspaceState.requestPlan.mockReset()
   branchWorkspaceState.requestPlan.mockResolvedValue(true)
+  branchWorkspaceState.returnToSelection.mockReset()
   branchWorkspaceState.plan = null
   branchWorkspaceState.pending = false
   branchWorkspaceState.dialogProps = null
@@ -1355,7 +1364,31 @@ describe('WorkspaceRepositoryRail', () => {
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
-  test('plans a Git action for the clicked branch workspace and mounts its panel below that item', async () => {
+  test('opens the workspace root file area from the Overview context menu', async () => {
+    const onOpenFileArea = vi.fn()
+    renderRail({ currentRepoId: API, onOpenFileArea })
+
+    const openItem = (await openOverviewContextMenu()).find((item) => item.textContent?.includes('file-area.open'))
+    expect(openItem).toBeDefined()
+
+    await act(async () => {
+      openItem?.click()
+      await Promise.resolve()
+    })
+
+    expect(activateWorkspaceOverview).toHaveBeenCalledWith(ROOT)
+    expect(onOpenFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('forwards the idempotent file area open intent to repository and branch workspace rows', () => {
+    const onOpenFileArea = vi.fn()
+    renderRail({ currentRepoId: ROOT, onOpenFileArea })
+
+    expect(repositoryListState.props?.onOpenFileArea).toBe(onOpenFileArea)
+    expect(branchWorkspaceListState.props?.onOpenFileArea).toBe(onOpenFileArea)
+  })
+
+  test('plans a Git action for the clicked branch workspace and renders its dialog at the rail level', async () => {
     renderRail({ currentRepoId: ROOT })
     const item = branchWorkspaceState.items[1]!
 
@@ -1366,7 +1399,6 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(branchGitActionState.reset).toHaveBeenCalledTimes(1)
     expect(branchGitActionState.requestPlan).toHaveBeenCalledWith('push', item.id)
-    expect(branchWorkspaceListState.props?.gitActionPanel?.itemId).toBe(item.id)
     expect(container?.querySelector('[data-testid="mock-branch-git-action-panel"]')?.getAttribute('data-kind')).toBe(
       'push',
     )
@@ -1422,9 +1454,9 @@ describe('WorkspaceRepositoryRail', () => {
     })
     const command = vi.mocked(terminalCommandBridge.writeInput).mock.calls[0]![1]
     expect(command).toContain('batch-merge-in')
-    expect(command).toContain('/workspace/goblin-feature-auth/api')
-    expect(command).toContain('/workspace/goblin-feature-auth/web')
-    expect(command).toContain('remote rejected')
+    expect(command).not.toContain('/workspace/goblin-feature-auth/api')
+    expect(command).not.toContain('/workspace/goblin-feature-auth/web')
+    expect(command).not.toContain('remote rejected')
     expect(command).not.toMatch(/[\r\n]$/)
   })
 
@@ -1581,6 +1613,41 @@ describe('WorkspaceRepositoryRail', () => {
 
     expect(branchWorkspaceState.dialogProps?.workspace).toBe(stableWorkspace)
     expect(branchWorkspaceState.dialogProps?.progressWorkspace).toBe(liveWorkspace)
+
+    branchWorkspaceState.items = originalItems
+  })
+
+  test('refreshes and promotes the latest partial snapshot before returning a failed creation to selection', async () => {
+    const originalItems = branchWorkspaceState.items
+    const partialWorkspace: BranchWorkspaceSnapshot = {
+      ...originalItems[0]!,
+      state: { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' },
+      repositories: originalItems[0]!.repositories.map((member, index) =>
+        index === 0 ? member : { ...member, progress: 'failed' as const, ready: false },
+      ),
+    }
+    branchWorkspaceState.items = [partialWorkspace, ...originalItems.slice(1)]
+    branchWorkspaceState.refresh.mockResolvedValue({
+      ok: true,
+      rootId: ROOT,
+      items: branchWorkspaceState.items,
+      auxiliaryCandidates: [],
+    })
+    branchWorkspaceState.plan = creationPlan(partialWorkspace)
+    renderRail({ currentRepoId: ROOT })
+
+    act(() => container?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.create"]')?.click())
+    expect(branchWorkspaceState.dialogProps?.workspace).toBeNull()
+    expect(branchWorkspaceState.dialogProps?.progressWorkspace).toBe(partialWorkspace)
+
+    const onReturnToSelection = branchWorkspaceState.dialogProps?.onReturnToSelection
+    expect(onReturnToSelection).toBeTypeOf('function')
+    if (!onReturnToSelection) return
+    await act(async () => await onReturnToSelection())
+
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+    expect(branchWorkspaceState.returnToSelection).toHaveBeenCalledTimes(1)
+    expect(branchWorkspaceState.dialogProps?.workspace).toBe(partialWorkspace)
 
     branchWorkspaceState.items = originalItems
   })
@@ -1899,10 +1966,26 @@ function removalPlan(workspace: BranchWorkspaceSnapshot): BranchWorkspacePlan {
   }
 }
 
+function creationPlan(workspace: BranchWorkspaceSnapshot): BranchWorkspacePlan {
+  return {
+    ...removalPlan(workspace),
+    operation: 'create',
+    steps: [{ id: 'directory', kind: 'create-directory', label: workspace.directoryName }],
+  }
+}
+
 function overviewButton(): HTMLButtonElement | null | undefined {
   return Array.from(container?.querySelectorAll<HTMLButtonElement>('button') ?? []).find((button) =>
     button.textContent?.includes('./'),
   )
+}
+
+async function openOverviewContextMenu(): Promise<HTMLElement[]> {
+  await act(async () => {
+    overviewButton()?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+    await Promise.resolve()
+  })
+  return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
 }
 
 function renderRail({

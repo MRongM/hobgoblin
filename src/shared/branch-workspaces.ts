@@ -101,12 +101,19 @@ export interface BranchWorkspaceAuxiliarySnapshot extends BranchWorkspaceAuxilia
   resolvedSourcePath?: string
 }
 
+export interface BranchWorkspaceActiveMemberOperation {
+  repositoryName: string
+  step: BranchWorkspaceGitActionStep
+}
+
 export interface BranchWorkspaceActiveOperation {
   kind: BranchWorkspaceGitActionKind
   currentStep: number
   completedCount: number
   totalCount: number
   cancellable: boolean
+  activeMembers?: BranchWorkspaceActiveMemberOperation[]
+  completedRepositoryNames?: string[]
   repositoryName?: string
   step?: BranchWorkspaceGitActionStep
 }

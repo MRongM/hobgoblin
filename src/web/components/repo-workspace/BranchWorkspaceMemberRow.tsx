@@ -70,6 +70,7 @@ interface BranchWorkspaceMemberRowProps {
   presentation: BranchWorkspaceMemberPresentation
   onSelectRepositoryMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onToggleFileArea?: () => void
+  onOpenFileArea?: () => void
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onRemoveMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
 }
@@ -117,6 +118,7 @@ function BranchWorkspaceMemberRowFrame({
   actions,
   onSelectRepositoryMember,
   onToggleFileArea,
+  onOpenFileArea,
   onOpenInternalTerminal,
   onRemoveMember,
 }: BranchWorkspaceMemberRowProps & { actions: BranchActionItemGroups }) {
@@ -302,6 +304,18 @@ function BranchWorkspaceMemberRowFrame({
 
   return (
     <WorkspaceItemContextMenu
+      fileArea={
+        onOpenFileArea
+          ? {
+              disabled: forceDisabled || !onSelectRepositoryMember,
+              icon: <FolderTree aria-hidden="true" />,
+              onSelect: () => {
+                onSelectRepositoryMember?.(item, member)
+                onOpenFileArea()
+              },
+            }
+          : undefined
+      }
       actions={actionProjection.contextMenu.actions}
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}

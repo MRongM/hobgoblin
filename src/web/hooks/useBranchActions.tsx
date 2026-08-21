@@ -1,11 +1,7 @@
 import { useState } from 'react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoBranchState } from '#/web/stores/repos/types.ts'
-import {
-  BranchActionDialogs,
-  type PushConfirm,
-  type RemoveConfirm,
-} from '#/web/components/BranchActionDialogs.tsx'
+import { BranchActionDialogs, type PushConfirm, type RemoveConfirm } from '#/web/components/BranchActionDialogs.tsx'
 import type { ExecResult } from '#/web/types.ts'
 import { PROTECTED_BRANCHES } from '#/shared/git-types.ts'
 import { getRepositoryPatch, openRepositoryEditor, openRepositoryTerminal } from '#/web/repo-client.ts'
@@ -155,7 +151,12 @@ export function useBranchActions(repo: BranchActionRepo, branch: RepoBranchState
     if (guardBusy()) return
     const target = getBranchPushTarget(branch)
     if (target.protected) {
-      pushConfirm.openWith({ branch: target.branch, target: target.display })
+      pushConfirm.openWith({
+        branch: target.branch,
+        target: target.display,
+        upstream: target.upstream,
+        trackingGone: target.trackingGone,
+      })
       return
     }
     void runRepoAction({ kind: 'push', branch: branch.name })

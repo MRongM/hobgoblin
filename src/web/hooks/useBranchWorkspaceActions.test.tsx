@@ -228,6 +228,46 @@ describe('useBranchWorkspaceActions', () => {
     expect(mocks.abort).toHaveBeenCalledWith('/workspace')
   })
 
+  test('returns a failed execution to selection without discarding its request', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({
+      ok: false,
+      message: 'workspace.branch-workspace.execute-failed',
+      branchWorkspaceId: 'branch-1',
+    })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    const request = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch' as const, branch: 'main' },
+          syncBeforeCreate: false,
+        },
+      ],
+      auxiliaryEntries: [],
+    }
+
+    await act(async () => state!.requestPlan(request))
+    await act(async () => state!.confirm([]))
+    act(() => state!.returnToSelection())
+
+    expect(state!.plan).toBeNull()
+    expect(state!.result).toBeNull()
+    expect(state!.error).toBeNull()
+    expect(state!.request).toEqual(request)
+    expect(mocks.plan).toHaveBeenCalledTimes(1)
+    expect(mocks.execute).toHaveBeenCalledTimes(1)
+  })
+
   test('reorders through the server and invalidates only after success', async () => {
     mocks.reorder.mockResolvedValue({ ok: true })
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')

@@ -1,12 +1,18 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Eye, EyeOff, Folder, FolderPlus, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
+import { Eye, EyeOff, Folder, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '#/web/components/ui/context-menu.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
@@ -137,6 +143,17 @@ export function WorkspaceRepositoryRail({
   const dialogProgressWorkspace = branchActions.plan
     ? (branchItems.find((item) => item.id === branchActions.plan?.branchWorkspaceId) ?? null)
     : null
+  const returnBranchDialogToSelection = async () => {
+    const branchWorkspaceId = branchActions.plan?.branchWorkspaceId
+    const refreshed = await branchQuery.refresh().catch(() => null)
+    const refreshedWorkspace =
+      branchWorkspaceId && refreshed?.ok
+        ? (refreshed.items.find((item) => item.id === branchWorkspaceId) ?? null)
+        : null
+    const latestWorkspace = refreshedWorkspace ?? dialogProgressWorkspace
+    if (latestWorkspace) setDialogWorkspace(latestWorkspace)
+    branchActions.returnToSelection()
+  }
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
@@ -174,6 +191,12 @@ export function WorkspaceRepositoryRail({
       revealTerminal: () => setDetailCollapsed(false),
     })
   }
+  const handleOverviewFileAreaOpen = onOpenFileArea
+    ? () => {
+        activateWorkspaceOverview(workspaceRootId)
+        onOpenFileArea()
+      }
+    : undefined
   const candidateNameById = useMemo(
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
@@ -343,10 +366,7 @@ export function WorkspaceRepositoryRail({
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
     if (!selectionChanged || !terminalReadContext || !terminalCommands) return
-    const memberWorktreeKey = worktreeTerminalKey(
-      resolution.target.repositoryId,
-      resolution.target.worktreePath,
-    )
+    const memberWorktreeKey = worktreeTerminalKey(resolution.target.repositoryId, resolution.target.worktreePath)
     const selectedTerminal = terminalReadContext
       .worktreeSnapshot(memberWorktreeKey)
       .sessions.find((session) => session.selected)
@@ -437,39 +457,34 @@ export function WorkspaceRepositoryRail({
     await branchQuery.refresh().catch(() => undefined)
     toast.success(t(`workspace.branch-workspace.cleanup-success.${result.outcome}`))
   }
-  const gitActionPanel =
-    gitActionOpen && gitActionTarget
-      ? {
-          itemId: gitActionTarget.id,
-          content: (
-            <BranchWorkspaceGitActionPanel
-              open
-              kind={gitActionKind}
-              plan={branchGitActions.plan}
-              result={branchGitActions.result}
-              activeOperation={gitActionTarget.activeOperation ?? null}
-              pending={branchGitActions.pending}
-              error={branchGitActions.error}
-              onOpenChange={(open) => {
-                setGitActionOpen(open)
-                if (!open) {
-                  setGitActionTargetId(null)
-                  if (!branchGitActions.pending) branchGitActions.reset()
-                }
-              }}
-              onBatchCommit={branchGitActions.executeBatchCommit}
-              onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
-              onBatchDiscard={branchGitActions.executeBatchDiscard}
-              onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
-              onBatchMergeIn={branchGitActions.executeBatchMergeIn}
-              onBatchMergeOut={branchGitActions.executeBatchMergeOut}
-              onSync={branchGitActions.executeSync}
-              onCancel={branchGitActions.cancel}
-              onBatchErrorAiHandoff={handoffBatchErrorsToBranchWorkspace}
-            />
-          ),
-        }
-      : null
+  const gitActionPanelElement =
+    gitActionOpen && gitActionTarget ? (
+      <BranchWorkspaceGitActionPanel
+        open
+        kind={gitActionKind}
+        plan={branchGitActions.plan}
+        result={branchGitActions.result}
+        activeOperation={gitActionTarget.activeOperation ?? null}
+        pending={branchGitActions.pending}
+        error={branchGitActions.error}
+        onOpenChange={(open) => {
+          setGitActionOpen(open)
+          if (!open) {
+            setGitActionTargetId(null)
+            if (!branchGitActions.pending) branchGitActions.reset()
+          }
+        }}
+        onBatchCommit={branchGitActions.executeBatchCommit}
+        onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
+        onBatchDiscard={branchGitActions.executeBatchDiscard}
+        onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
+        onBatchMergeIn={branchGitActions.executeBatchMergeIn}
+        onBatchMergeOut={branchGitActions.executeBatchMergeOut}
+        onSync={branchGitActions.executeSync}
+        onCancel={branchGitActions.cancel}
+        onBatchErrorAiHandoff={handoffBatchErrorsToBranchWorkspace}
+      />
+    ) : null
 
   const reorderRepositories = async (fromId: string, toId: string) => {
     if (!reorderReady) return
@@ -616,6 +631,7 @@ export function WorkspaceRepositoryRail({
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
               onActivate={handleOverviewActivate}
+              onOpenFileArea={handleOverviewFileAreaOpen}
               onToggleFileArea={onToggleFileArea}
             />
             <WorkspaceRepositoryList
@@ -625,6 +641,7 @@ export function WorkspaceRepositoryRail({
               onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
               onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
               onToggleFileArea={onToggleFileArea}
+              onOpenFileArea={onOpenFileArea}
             />
           </WorkspaceRepositoryListPane>
         ) : null}
@@ -688,10 +705,10 @@ export function WorkspaceRepositoryRail({
                   disabled={branchActions.pending || branchDependencyActions.pending}
                   gitActionsDisabled={branchGitActions.pending}
                   onGitAction={openGitAction}
-                  gitActionPanel={gitActionPanel}
                   changeCountById={branchWorkspaceChangeCountById}
                   onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                   onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
+                  onOpenFileArea={onOpenFileArea}
                   onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                   onInspect={(item) =>
                     openBranchDialog(
@@ -740,6 +757,7 @@ export function WorkspaceRepositoryRail({
           </div>
         )}
       </div>
+      {gitActionPanelElement}
       <BranchWorkspaceDialog
         open={branchDialogOpen}
         mode={branchDialogMode}
@@ -763,6 +781,7 @@ export function WorkspaceRepositoryRail({
         onPreview={branchActions.requestPlan}
         onConfirm={branchActions.confirm}
         onRetry={branchActions.retry}
+        onReturnToSelection={returnBranchDialogToSelection}
         onCancel={branchActions.cancel}
       />
       <BranchWorkspaceDependencyDialog
@@ -802,6 +821,7 @@ function ManifestRow({
   hasTerminalBell,
   hasTerminalOutputActivity,
   onActivate,
+  onOpenFileArea,
   onToggleFileArea,
 }: {
   active: boolean
@@ -810,10 +830,11 @@ function ManifestRow({
   hasTerminalBell: boolean
   hasTerminalOutputActivity: boolean
   onActivate: () => void
+  onOpenFileArea?: () => void
   onToggleFileArea?: () => void
 }) {
   const t = useT()
-  return (
+  const row = (
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
@@ -847,5 +868,17 @@ function ManifestRow({
         {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
       </span>
     </button>
+  )
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem disabled={!onOpenFileArea} onSelect={() => onOpenFileArea?.()}>
+          <FolderTree aria-hidden="true" />
+          {t('file-area.open')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

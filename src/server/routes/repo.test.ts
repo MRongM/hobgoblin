@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cleanupRepositoryWorktree: vi.fn(),
+  checkoutWorktreeBranch: vi.fn(),
   createRepositoryWorktree: vi.fn(),
   createRepositoryFileTreeFile: vi.fn(),
   discardRepositoryChanges: vi.fn(),
@@ -47,7 +48,7 @@ vi.mock('#/server/modules/repo-write-paths.ts', () => ({
   abortCloneOperation: vi.fn(),
   abortRepositoryOperation: vi.fn(),
   checkoutRepositoryBranch: vi.fn(),
-  checkoutWorktreeBranch: vi.fn(),
+  checkoutWorktreeBranch: mocks.checkoutWorktreeBranch,
   cleanupRepositoryWorktree: mocks.cleanupRepositoryWorktree,
   cloneRepository: vi.fn(),
   commitRepositoryChanges: vi.fn(),
@@ -162,6 +163,7 @@ describe('repo routes', () => {
     mocks.deleteRepositoryRemoteTag.mockResolvedValue({ ok: true, message: 'deleted' })
     mocks.removeRepositoryWorktree.mockResolvedValue({ ok: true, message: 'removed' })
     mocks.cleanupRepositoryWorktree.mockResolvedValue({ ok: true, message: 'pruned' })
+    mocks.checkoutWorktreeBranch.mockResolvedValue({ ok: true, message: 'switched' })
     mocks.buildRepositoryBranchMergeOutPlan.mockResolvedValue({
       ok: true,
       plan: {
@@ -224,6 +226,60 @@ describe('repo routes', () => {
       expect.any(AbortSignal),
       'client_456',
     )
+  })
+
+  test('routes a normalized remote worktree branch switch target', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+    const target = {
+      kind: 'remoteBranch',
+      remoteRef: ' origin/feature/remote ',
+      localBranch: ' feature/remote ',
+    }
+
+    const response = await app.request('http://localhost/checkout-in-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        worktreePath: '/repo-worktree',
+        target,
+        sourceToken: 'client_123',
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'switched' })
+    expect(mocks.checkoutWorktreeBranch).toHaveBeenCalledWith(
+      '/repo',
+      '/repo-worktree',
+      {
+        kind: 'remoteBranch',
+        remoteRef: 'origin/feature/remote',
+        localBranch: 'feature/remote',
+      },
+      expect.any(AbortSignal),
+      'client_123',
+    )
+  })
+
+  test('rejects an invalid worktree branch switch target before mutation', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/checkout-in-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        worktreePath: '/repo-worktree',
+        target: { kind: 'remoteBranch', remoteRef: 'origin/HEAD', localBranch: 'feature/remote' },
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.checkoutWorktreeBranch).not.toHaveBeenCalled()
   })
 
   test('passes the raw merge-out plan request and abort signal to the authoritative planner', async () => {
