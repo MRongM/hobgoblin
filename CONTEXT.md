@@ -9,12 +9,16 @@ Core model: **multi-project × multi-worktree/branch × multi-terminal**. Users 
 ## Language
 
 **Independent Windows version**:
-The standalone Hobgoblin product for Windows, built from the independent `windows/` package and maintained alongside the Android platform package. It owns its platform behavior and release assets, and is distinct from the primary application Windows version built from the primary application’s root `src/` source tree.
+The standalone Hobgoblin product for Windows, built from the independent `windows/` package and maintained alongside the Android platform package. It owns its platform behavior and package-local build outputs, is not published as the official Windows release artifact, and is distinct from the primary application Windows version built from the primary application’s root `src/` source tree.
 _Avoid_: primary application Windows version, Windows mode, Windows compatibility branch, shared Windows adaptation
 
 **Primary application Windows version**:
-The Windows Hobgoblin version built from the primary application’s root `src/` source tree and ordinary application package. It remains part of the primary desktop/web application and is distinct from the independently built Windows version under `windows/`.
+The Windows Hobgoblin version built from the primary application’s root `src/` source tree and ordinary application package. It remains part of the primary desktop/web application, supplies the official Windows release artifacts, and is distinct from the independently built Windows version under `windows/`.
 _Avoid_: independent Windows version, Windows mode, shared Windows adaptation
+
+**Official Windows release artifact**:
+An architecture-qualified Windows installer published in the versioned Hobgoblin GitHub Release and built from the primary application Windows version. It is distinct from package-local independent Windows build outputs and temporary Windows test artifacts.
+_Avoid_: independent Windows release asset, Windows test artifact, primary Windows test build
 
 **Android terminals tab**:
 The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal by descending retained-terminal opened time so the newest item is first and an existing session can be reopened quickly. Each item shows that opened time in localized relative form, and its header status badge distinguishes running (green), disconnected/failed (red), exited (gray), and starting (neutral) states while preserving a text label. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.

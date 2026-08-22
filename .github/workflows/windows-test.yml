@@ -2,31 +2,33 @@ name: Windows Test Build
 
 on:
   workflow_call:
-    inputs:
-      include_primary:
-        description: Build the primary application Windows x64 test artifact
-        required: false
-        type: boolean
-        default: false
   workflow_dispatch:
-    inputs:
-      include_primary:
-        description: Build the primary application Windows x64 test artifact
-        required: false
-        type: boolean
-        default: true
   pull_request:
     paths:
+      - .github/workflows/release.yml
       - .github/workflows/windows-test.yml
+      - bun.lock
+      - electron-builder.ts
       - package.json
+      - scripts/build-release-artifacts.ts
+      - src/**
+      - tsconfig*.json
+      - vite.config.ts
       - windows/**
   push:
     branches:
       - main
       - windows
     paths:
+      - .github/workflows/release.yml
       - .github/workflows/windows-test.yml
+      - bun.lock
+      - electron-builder.ts
       - package.json
+      - scripts/build-release-artifacts.ts
+      - src/**
+      - tsconfig*.json
+      - vite.config.ts
       - windows/**
 
 permissions:
@@ -38,50 +40,7 @@ concurrency:
 
 jobs:
   build-primary-windows:
-    if: ${{ inputs.include_primary }}
-    name: Build primary application Windows x64
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.11
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Typecheck primary application
-        run: bun run typecheck
-
-      - name: Test primary Windows terminal compatibility
-        run: >-
-          bun run test --
-          src/server/terminal/terminal-pty-runtime.test.ts
-          src/server/terminal/windows-terminal-shell.test.ts
-
-      - name: Build primary application Windows test artifact
-        run: |
-          bun run build:web
-          bun run build:electron -- --win dir --x64 --publish never
-
-      - name: Upload primary application Windows test artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hobgoblin-primary-windows-x64-${{ github.sha }}
-          path: release/win-unpacked/**/*
-          if-no-files-found: error
-          retention-days: 7
-
-  build-independent-windows:
-    name: Build independent Windows ${{ matrix.arch }}
+    name: Build primary application Windows ${{ matrix.arch }}
     strategy:
       fail-fast: false
       matrix:
@@ -105,55 +64,31 @@ jobs:
         with:
           bun-version: 1.3.11
 
-      - name: Verify Windows package version
-        shell: pwsh
-        run: |
-          $rootVersion = (Get-Content "package.json" -Raw | ConvertFrom-Json).version
-          $windowsVersion = (Get-Content "windows/package.json" -Raw | ConvertFrom-Json).version
-          if ($rootVersion -ne $windowsVersion) {
-            throw "Windows package version $windowsVersion must equal root release version $rootVersion"
-          }
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        working-directory: windows
 
-      - name: Typecheck
+      - name: Typecheck primary application
         run: bun run typecheck
-        working-directory: windows
 
-      - name: Test Windows compatibility
+      - name: Test primary Windows compatibility
         run: >-
           bun run test --
           --testTimeout=15000
           scripts/build-release-artifacts.test.ts
-          scripts/build-windows-fast.test.ts
-          src/main/external-open.test.ts
-          src/main/terminal.test.ts
-          src/main/windows-cli-project-open.test.ts
+          scripts/windows-package-layout.test.ts
           src/server/terminal/terminal-pty-runtime.test.ts
-          src/server/terminal/terminal-scope.test.ts
           src/server/terminal/windows-terminal-shell.test.ts
           src/shared/file-path-target.test.ts
           src/shared/path-semantics.test.ts
           src/shared/worktree-guards.test.ts
-          src/system/open-app.test.ts
-          src/system/terminals.test.ts
-          src/system/hob-cli-windows.test.ts
           src/system/windows-terminal.test.ts
-          src/system/windows-user-path.test.ts
-          src/web/components/terminal/TerminalSessionRegistry.test.ts
-          src/web/components/terminal/terminal-repo-index.test.ts
-          src/web/components/terminal/terminal-session-keys.test.ts
           src/web/components/terminal/terminal-path-links.test.ts
           src/web/lib/editor-open-targets.test.ts
           src/web/lib/paths.test.ts
-        working-directory: windows
 
-      - name: Build Windows artifact
+      - name: Build primary Windows artifact
         id: build_artifact
-        run: bun run build:release -- --arch ${{ matrix.arch }}
-        working-directory: windows
+        run: bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}
 
       - name: Smoke test packaged Windows app startup
         shell: pwsh
@@ -443,7 +378,7 @@ jobs:
             }
           }
 
-          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE "windows/release"
+          $releaseRoot = Join-Path $env:GITHUB_WORKSPACE "release"
           $exe = Get-ChildItem -Path $releaseRoot -Recurse -Filter "Hobgoblin.exe" | Select-Object -First 1
           if (-not $exe) {
             Write-Host "Could not find unpacked Hobgoblin.exe. Release tree:"
@@ -516,16 +451,101 @@ jobs:
             throw $terminalSmokeError
           }
 
-      - name: Upload Windows startup smoke logs
+      - name: Upload primary Windows startup smoke logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}
+          name: hobgoblin-primary-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}
           path: ${{ runner.temp }}\Hobgoblin Smoke 用户 Data\**\*
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload independent Windows artifact
+      - name: Upload primary Windows artifact
+        if: ${{ !cancelled() && steps.build_artifact.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: hobgoblin-primary-windows-${{ matrix.arch }}-${{ github.sha }}
+          path: release/Hobgoblin-*-${{ matrix.arch }}.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  build-independent-windows:
+    if: ${{ github.event_name != 'workflow_call' }}
+    name: Test independent Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Verify Windows package version
+        shell: pwsh
+        run: |
+          $rootVersion = (Get-Content "package.json" -Raw | ConvertFrom-Json).version
+          $windowsVersion = (Get-Content "windows/package.json" -Raw | ConvertFrom-Json).version
+          if ($rootVersion -ne $windowsVersion) {
+            throw "Windows package version $windowsVersion must equal root release version $rootVersion"
+          }
+
+      - name: Install independent Windows dependencies
+        run: bun install --frozen-lockfile
+        working-directory: windows
+
+      - name: Typecheck independent Windows package
+        run: bun run typecheck
+        working-directory: windows
+
+      - name: Test independent Windows compatibility
+        run: >-
+          bun run test --
+          --testTimeout=15000
+          scripts/build-release-artifacts.test.ts
+          scripts/build-windows-fast.test.ts
+          src/main/external-open.test.ts
+          src/main/terminal.test.ts
+          src/main/windows-cli-project-open.test.ts
+          src/server/terminal/terminal-pty-runtime.test.ts
+          src/server/terminal/terminal-scope.test.ts
+          src/server/terminal/windows-terminal-shell.test.ts
+          src/shared/file-path-target.test.ts
+          src/shared/path-semantics.test.ts
+          src/shared/worktree-guards.test.ts
+          src/system/open-app.test.ts
+          src/system/terminals.test.ts
+          src/system/hob-cli-windows.test.ts
+          src/system/windows-terminal.test.ts
+          src/system/windows-user-path.test.ts
+          src/web/components/terminal/TerminalSessionRegistry.test.ts
+          src/web/components/terminal/terminal-repo-index.test.ts
+          src/web/components/terminal/terminal-session-keys.test.ts
+          src/web/components/terminal/terminal-path-links.test.ts
+          src/web/lib/editor-open-targets.test.ts
+          src/web/lib/paths.test.ts
+        working-directory: windows
+
+      - name: Build independent Windows test artifact
+        id: build_artifact
+        run: bun run build:release -- --arch ${{ matrix.arch }}
+        working-directory: windows
+
+      - name: Upload independent Windows test artifact
         if: ${{ !cancelled() && steps.build_artifact.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:

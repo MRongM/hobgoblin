@@ -1,3 +1,7 @@
+---
+status: superseded by ADR-0005
+---
+
 # Keep Windows as an independent platform package
 
 Windows is a standalone package under `windows/`, alongside Android, with its own application source, build configuration, dependencies, and release artifacts. We deliberately reject a root-package Windows installer or release path and a newly extracted shared-core refactor: the former weakens platform isolation, while the latter expands this migration beyond its proven Windows implementation. A manually requested Windows test build may additionally package the root `src/` application as an x64 unpacked test artifact; it is not an installer or a release asset.

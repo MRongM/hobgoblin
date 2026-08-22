@@ -9,8 +9,8 @@ class AndroidIdentityContractTest {
     fun `release identity matches the application version`() {
         val appBuild = File(androidProjectRoot(), "app/build.gradle.kts").readText()
 
-        assertTrue(appBuild.contains("""versionCode = 9"""))
-        assertTrue(appBuild.contains("""versionName = "2.2.7"""))
+        assertTrue(appBuild.contains("""versionCode = 10"""))
+        assertTrue(appBuild.contains("""versionName = "2.2.8"""))
     }
 
     @Test
