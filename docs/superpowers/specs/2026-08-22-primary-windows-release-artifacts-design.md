@@ -43,7 +43,7 @@ The installer remains unsigned, per-user, non-one-click, and allows installation
 
 - The primary build uses a two-entry native matrix: `windows-latest` for x64 and `windows-11-arm` for ARM64.
 - Each matrix entry installs root dependencies, typechecks root source, runs the applicable primary Windows compatibility tests, builds the root NSIS installer, runs the existing packaged startup/internal-terminal smoke against root `release/`, and uploads `release/Hobgoblin-*-${arch}.exe` under a primary-application artifact name.
-- A reusable Release call runs only the primary matrix.
+- The Release caller sets the reusable workflow's typed `official_release` input to `true`, so only the primary matrix runs. This boundary is explicit because a called workflow inherits the caller's `github` event context.
 - Standalone Windows test events may additionally build and test the independent package, but those artifacts keep an explicit `independent` name and never enter release publication.
 
 `.github/workflows/release.yml` remains the orchestrator. It calls the reusable Windows workflow, downloads the primary Windows artifacts with the other platform outputs, requires both exact `.exe` filenames, and uploads them with `--clobber`. The fix is published as v2.2.8 so the tag, workflow checkout, notes, and every asset share one immutable release identity; the existing v2.2.7 tag and assets remain unchanged.

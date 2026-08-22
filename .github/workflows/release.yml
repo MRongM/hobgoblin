@@ -46,6 +46,8 @@ jobs:
 
   build-windows:
     uses: ./.github/workflows/windows-test.yml
+    with:
+      official_release: true
 
   build-android:
     name: Build Android APK

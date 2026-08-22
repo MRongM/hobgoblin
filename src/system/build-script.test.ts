@@ -370,9 +370,13 @@ describe('desktop build scripts', () => {
   })
 
   test('Windows test workflow publishes primary installers and isolates independent test artifacts', () => {
+    const releaseWorkflow = readText('.github/workflows/release.yml')
     const windowsWorkflow = readText('.github/workflows/windows-test.yml')
 
     expect(windowsWorkflow).toContain('workflow_call:')
+    expect(windowsWorkflow).toContain('official_release:')
+    expect(windowsWorkflow).toContain('type: boolean')
+    expect(windowsWorkflow).toContain('default: false')
     expect(windowsWorkflow).not.toContain('include_primary:')
     expect(windowsWorkflow).toContain('build-primary-windows:')
     expect(windowsWorkflow).toContain('name: Build primary application Windows ${{ matrix.arch }}')
@@ -382,7 +386,9 @@ describe('desktop build scripts', () => {
     expect(windowsWorkflow).toContain('name: hobgoblin-primary-windows-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('path: release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(windowsWorkflow).toContain('build-independent-windows:')
-    expect(windowsWorkflow).toContain("if: ${{ github.event_name != 'workflow_call' }}")
+    expect(windowsWorkflow).toContain('if: ${{ inputs.official_release != true }}')
+    expect(windowsWorkflow).not.toContain("github.event_name != 'workflow_call'")
+    expect(releaseWorkflow).toContain('official_release: true')
     expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(windowsWorkflow).toContain('$releaseRoot = Join-Path $env:GITHUB_WORKSPACE "release"')
