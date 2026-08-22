@@ -98,7 +98,7 @@ async function main(): Promise<void> {
 
   const plan = createReleaseArtifactPlan(platform, arch, version)
   rmSync(path.join(repoRoot, 'release'), { recursive: true, force: true })
-  await run(process.execPath, [viteCli])
+  await run(process.execPath, [viteCli, 'build'])
   assertFileExists('dist/web/index.html')
   assertFileExists('dist/web/boot.js')
   await run(process.execPath, [electronBuilderCli, ...plan.builderArgs])
