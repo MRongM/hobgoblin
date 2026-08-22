@@ -24,12 +24,13 @@ describe('Windows platform package layout', () => {
     expect(ignoreFile).toContain('release')
   })
 
-  test('keeps Windows packaging out of the root application build path', () => {
+  test('keeps independent outputs isolated while root owns official Windows release packaging', () => {
     const repoRoot = path.resolve(windowsRoot, '..')
     const rootBuilderConfig = readFileSync(path.join(repoRoot, 'electron-builder.ts'), 'utf8')
     const rootReleaseScript = readFileSync(path.join(repoRoot, 'scripts', 'build-release-artifacts.ts'), 'utf8')
 
-    expect(rootBuilderConfig).not.toMatch(/^\s*win:\s*\{/m)
-    expect(rootReleaseScript).not.toContain("'windows'")
+    expect(rootBuilderConfig).toMatch(/^\s*win:\s*\{/m)
+    expect(rootReleaseScript).toContain("'windows'")
+    expect(rootReleaseScript).toContain("['--win', 'nsis']")
   })
 })

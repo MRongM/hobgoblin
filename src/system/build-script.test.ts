@@ -176,7 +176,8 @@ describe('desktop build scripts', () => {
     expect(windowsWorkflow).toContain('- arch: arm64')
     expect(windowsWorkflow).toContain('runner: windows-11-arm')
     expect(windowsWorkflow).toContain('runs-on: ${{ matrix.runner }}')
-    expect(windowsWorkflow).toContain('name: Test Windows compatibility')
+    expect(windowsWorkflow).toContain('name: Test primary Windows compatibility')
+    expect(windowsWorkflow).toContain('name: Test independent Windows compatibility')
     for (const windowsTestPath of [
       'src/main/external-open.test.ts',
       'src/main/terminal.test.ts',
@@ -199,6 +200,9 @@ describe('desktop build scripts', () => {
     }
     expect(windowsWorkflow).toContain('scripts/build-release-artifacts.test.ts')
     expect(windowsWorkflow).toContain('scripts/build-windows-fast.test.ts')
+    expect(windowsWorkflow).toContain(
+      'bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}',
+    )
     expect(windowsWorkflow).toContain('bun run build:release -- --arch ${{ matrix.arch }}')
     expect(windowsWorkflow).toContain('working-directory: windows')
     expect(windowsWorkflow).toContain('windows/package.json')
@@ -208,7 +212,11 @@ describe('desktop build scripts', () => {
     expect(windowsWorkflow).toContain('(wsl|pwsh|powershell)(?:\\.exe)?$')
     expect(windowsWorkflow).toContain('wslpath -a $WorkspacePath')
     expect(windowsWorkflow).toContain("printf '%s\\n' '__HOBGOBLIN_终端_IO_OK__'; pwd`r")
-    expect(windowsWorkflow).toContain('name: hobgoblin-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain(
+      'name: hobgoblin-primary-windows-startup-logs-${{ matrix.arch }}-${{ github.sha }}',
+    )
+    expect(windowsWorkflow).toContain('name: hobgoblin-primary-windows-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('path: release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
     expect(workflow).toContain('actions/setup-java@v4')
@@ -266,7 +274,7 @@ describe('desktop build scripts', () => {
     }
   }, 20_000)
 
-  test('root release artifact script only builds macOS artifacts', () => {
+  test('root release artifact script builds macOS and Windows artifacts', () => {
     const releaseScriptPath = path.join(repoRoot, 'scripts/build-release-artifacts.ts')
 
     expect(existsSync(releaseScriptPath)).toBe(true)
@@ -274,21 +282,19 @@ describe('desktop build scripts', () => {
     const releaseScript = readText('scripts/build-release-artifacts.ts')
 
     expect(releaseScript).toContain("const APP_NAME = 'Hobgoblin'")
-    expect(releaseScript).toContain("type ReleasePlatform = 'macos'")
-    expect(releaseScript).toContain("type ReleaseArch = 'arm64' | 'x64'")
-    expect(releaseScript).toContain("const SUPPORTED_ARCHES: ReleaseArch[] = ['arm64', 'x64']")
-    expect(releaseScript).toContain('return `${APP_NAME}-${version}-${arch}.dmg`')
-    expect(releaseScript).not.toContain("'windows'")
-    expect(releaseScript).not.toContain('return `${APP_NAME}-${version}-${arch}.exe`')
-    expect(releaseScript).toContain("path.join(repoRoot, 'release', expectedArtifactName(version, arch))")
+    expect(releaseScript).toContain("export type ReleasePlatform = 'macos' | 'windows'")
+    expect(releaseScript).toContain("export type ReleaseArch = 'arm64' | 'x64'")
+    expect(releaseScript).toContain("['--mac', 'dmg']")
+    expect(releaseScript).toContain("['--win', 'nsis']")
+    expect(releaseScript).toContain("platform === 'macos' ? 'dmg' : 'exe'")
+    expect(releaseScript).toContain("path.join('release', plan.artifactName)")
     expect(releaseScript).toContain("const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')")
-    expect(releaseScript).toContain('await $`bun ${viteCli} build`')
-    expect(releaseScript).toContain("const publishArgs = ['--publish', 'never']")
+    expect(releaseScript).toContain('await run(process.execPath, [viteCli])')
     expect(releaseScript).toContain(
       "const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')",
     )
-    expect(releaseScript).toContain("const platformArgs = ['--mac', 'dmg']")
-    expect(releaseScript).toContain('await $`bun ${electronBuilderCli} ${platformArgs} ${archFlag} ${publishArgs}`')
+    expect(releaseScript).toContain('await run(process.execPath, [electronBuilderCli, ...plan.builderArgs])')
+    expect(releaseScript).toContain('if (import.meta.main)')
   })
 
   test('desktop packaging includes bundled font notices and licenses', () => {
@@ -349,31 +355,38 @@ describe('desktop build scripts', () => {
     expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
-  test('root desktop release packaging remains macOS-only', () => {
+  test('root desktop release packaging supports Windows NSIS installers', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
-    expect(config.win).toBeUndefined()
-    expect(config.nsis).toBeUndefined()
+    expect(config.win).toMatchObject({
+      target: [{ target: 'nsis', arch: ['arm64', 'x64'] }],
+      artifactName: '${productName}-${version}-${arch}.${ext}',
+    })
+    expect(config.nsis).toEqual({
+      oneClick: false,
+      perMachine: false,
+      allowToChangeInstallationDirectory: true,
+    })
   })
 
-  test('Windows test workflow exposes separate primary and independent artifacts', () => {
+  test('Windows test workflow publishes primary installers and isolates independent test artifacts', () => {
     const windowsWorkflow = readText('.github/workflows/windows-test.yml')
 
-    expect(windowsWorkflow).toContain('include_primary:')
-    expect(windowsWorkflow).toContain('description: Build the primary application Windows x64 test artifact')
-    expect(windowsWorkflow).toMatch(
-      /workflow_call:\s+inputs:\s+include_primary:\s+description: Build the primary application Windows x64 test artifact\s+required: false\s+type: boolean\s+default: false/,
-    )
-    expect(windowsWorkflow).toMatch(
-      /workflow_dispatch:\s+inputs:\s+include_primary:\s+description: Build the primary application Windows x64 test artifact\s+required: false\s+type: boolean\s+default: true/,
-    )
+    expect(windowsWorkflow).toContain('workflow_call:')
+    expect(windowsWorkflow).not.toContain('include_primary:')
     expect(windowsWorkflow).toContain('build-primary-windows:')
-    expect(windowsWorkflow).toContain('if: ${{ inputs.include_primary }}')
-    expect(windowsWorkflow).toContain('bun run build:electron -- --win dir --x64 --publish never')
-    expect(windowsWorkflow).toContain('name: hobgoblin-primary-windows-x64-${{ github.sha }}')
-    expect(windowsWorkflow).toContain('path: release/win-unpacked/**/*')
+    expect(windowsWorkflow).toContain('name: Build primary application Windows ${{ matrix.arch }}')
+    expect(windowsWorkflow).toContain(
+      'bun scripts/build-release-artifacts.ts --platform windows --arch ${{ matrix.arch }}',
+    )
+    expect(windowsWorkflow).toContain('name: hobgoblin-primary-windows-${{ matrix.arch }}-${{ github.sha }}')
+    expect(windowsWorkflow).toContain('path: release/Hobgoblin-*-${{ matrix.arch }}.exe')
+    expect(windowsWorkflow).toContain('build-independent-windows:')
+    expect(windowsWorkflow).toContain("if: ${{ github.event_name != 'workflow_call' }}")
     expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
     expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
+    expect(windowsWorkflow).toContain('$releaseRoot = Join-Path $env:GITHUB_WORKSPACE "release"')
+    expect(windowsWorkflow).not.toContain('$releaseRoot = Join-Path $env:GITHUB_WORKSPACE "windows/release"')
     expect(windowsWorkflow).toContain('--testTimeout=15000')
     expect(windowsWorkflow).toContain('id: build_artifact')
     expect(windowsWorkflow).toContain("if: ${{ !cancelled() && steps.build_artifact.outcome == 'success' }}")
