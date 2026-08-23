@@ -1423,9 +1423,10 @@ export const ko: Record<DictKey, string> = {
   'settings.proxy.url': '프록시 URL',
   'settings.proxy.url-hint': '프록시를 활성화한 기능에서 공유합니다. HTTP, HTTPS 및 SOCKS5를 지원합니다.',
   'settings.proxy.git-title': 'Git 네트워크',
-  'settings.proxy.git-body': '로컬 Git 작업의 네트워크 동작을 설정합니다.',
+  'settings.proxy.git-body': '로컬 및 WSL Git 작업의 네트워크 동작을 설정합니다.',
   'settings.proxy.git-proxy': 'Git에서 프록시 사용',
-  'settings.proxy.git-proxy-hint': '로컬 저장소의 fetch, pull, push, clone에 공유 프록시 URL을 사용합니다.',
+  'settings.proxy.git-proxy-hint':
+    '로컬 clone과 로컬 또는 WSL 저장소의 fetch, pull, push에 공유 프록시 URL을 사용합니다.',
   'settings.proxy.git-timeout': 'Git 네트워크 시간 초과',
   'settings.proxy.git-timeout-hint': '시간 초과에 도달하면 Git 하위 프로세스를 취소합니다.',
   'settings.proxy.seconds': '초',

@@ -1446,9 +1446,10 @@ export const ja: Record<DictKey, string> = {
   'settings.proxy.url': 'プロキシ URL',
   'settings.proxy.url-hint': 'プロキシを有効にした機能で共有します。HTTP、HTTPS、SOCKS5 に対応しています。',
   'settings.proxy.git-title': 'Git ネットワーク',
-  'settings.proxy.git-body': 'ローカル Git 操作のネットワーク動作を設定します。',
+  'settings.proxy.git-body': 'ローカルおよび WSL Git 操作のネットワーク動作を設定します。',
   'settings.proxy.git-proxy': 'Git でプロキシを使用',
-  'settings.proxy.git-proxy-hint': 'ローカルリポジトリの fetch、pull、push、clone で共有プロキシ URL を使用します。',
+  'settings.proxy.git-proxy-hint':
+    'ローカル clone と、ローカルまたは WSL リポジトリの fetch、pull、push で共有プロキシ URL を使用します。',
   'settings.proxy.git-timeout': 'Git ネットワークタイムアウト',
   'settings.proxy.git-timeout-hint': 'タイムアウトに達したら Git 子プロセスをキャンセルします。',
   'settings.proxy.seconds': '秒',

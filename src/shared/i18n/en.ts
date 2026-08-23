@@ -1437,9 +1437,10 @@ export const en = {
   'settings.proxy.url-hint':
     'Shared by features that have their proxy switch enabled. Supports HTTP, HTTPS, and SOCKS5.',
   'settings.proxy.git-title': 'Git network',
-  'settings.proxy.git-body': 'Configure network behavior for local Git operations.',
+  'settings.proxy.git-body': 'Configure network behavior for local and WSL Git operations.',
   'settings.proxy.git-proxy': 'Use proxy for Git',
-  'settings.proxy.git-proxy-hint': 'Use the shared proxy URL for local repository fetch, pull, push, and clone.',
+  'settings.proxy.git-proxy-hint':
+    'Use the shared proxy URL for local clones and local or WSL repository fetch, pull, and push operations.',
   'settings.proxy.git-timeout': 'Git network timeout',
   'settings.proxy.git-timeout-hint': 'Cancels the Git child process when the timeout is reached.',
   'settings.proxy.seconds': 'sec',

@@ -152,6 +152,7 @@ export interface RemoteCommandOptions {
   timeoutMs?: number
   stdin?: string
   maxBuffer?: number
+  wslEnvironment?: Record<string, string>
 }
 
 export function buildRemoteCommandInvocation(
@@ -232,6 +233,8 @@ export async function runRemoteCommand(
 ): Promise<RemoteCommandResult> {
   if (options?.signal?.aborted) return { ok: false, stdout: '', stderr: '', message: 'cancelled' }
   const invocation = buildRemoteCommandInvocation(target, command)
+  const wslEnvironment =
+    target.transport === 'wsl' ? buildWslProcessEnvironment(options?.wslEnvironment, process.env) : undefined
   try {
     const { stdout, stderr } = await execa(invocation.command, invocation.args, {
       timeout: options?.timeoutMs ?? SSH_COMMAND_TIMEOUT_MS,
@@ -239,6 +242,7 @@ export async function runRemoteCommand(
       forceKillAfterDelay: 500,
       input: options?.stdin,
       maxBuffer: options?.maxBuffer ?? 2 * 1024 * 1024,
+      ...(wslEnvironment ? { env: wslEnvironment } : {}),
     })
     return { ok: true, stdout: stdout.trimEnd(), stderr: stderr.trimEnd() }
   } catch (err) {
@@ -253,6 +257,46 @@ export async function runRemoteCommand(
     }
     return { ok: false, stdout, stderr, message: stderr || e.message || 'unknown' }
   }
+}
+
+function buildWslProcessEnvironment(
+  values: Record<string, string> | undefined,
+  inherited: NodeJS.ProcessEnv,
+): Record<string, string> | undefined {
+  const entries = Object.entries(values ?? {}).filter(
+    (entry): entry is [string, string] => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(entry[0]) && typeof entry[1] === 'string',
+  )
+  if (entries.length === 0) return undefined
+
+  const inheritedWslEnv = environmentValue(inherited, 'WSLENV')
+  const names = inheritedWslEnv?.split(':').filter(Boolean) ?? []
+  const seen = new Set(
+    names
+      .map(wslEnvEntryName)
+      .filter(Boolean)
+      .map((name) => name.toLowerCase()),
+  )
+  for (const [name] of entries) {
+    const identity = name.toLowerCase()
+    if (seen.has(identity)) continue
+    seen.add(identity)
+    names.push(name)
+  }
+
+  return {
+    ...Object.fromEntries(entries),
+    WSLENV: names.join(':'),
+  }
+}
+
+function wslEnvEntryName(entry: string): string {
+  return entry.slice(0, entry.indexOf('/') < 0 ? undefined : entry.indexOf('/'))
+}
+
+function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const match = Object.entries(env).find(([key, value]) => key.toUpperCase() === name && typeof value === 'string')
+  const value = match?.[1]?.trim()
+  return value || undefined
 }
 
 function scriptForCommand(command: RemoteCommandKind): string {

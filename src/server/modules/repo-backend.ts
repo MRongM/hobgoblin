@@ -717,17 +717,20 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async getRemoteBranchInfo(signal) {
       return await getSshRemoteTrackingBranchInfo(target, { signal })
     },
-    async getRemoteTags(signal) {
-      return await getSshRemoteTags(target, { signal })
+    async getRemoteTags(signal, networkOptions) {
+      return await getSshRemoteTags(target, { signal, ...(networkOptions ? { networkOptions } : {}) })
     },
     async getLocalTags(signal) {
       return await getRemoteLocalTags(target, { signal })
     },
-    async fetch(signal) {
-      return await fetchRemoteRepository(target, { signal })
+    async fetch(signal, networkOptions) {
+      return await fetchRemoteRepository(target, { signal, ...(networkOptions ? { networkOptions } : {}) })
     },
-    async fetchRemote(remote, signal) {
-      return await fetchRemoteRepositoryByName(target, remote, { signal })
+    async fetchRemote(remote, signal, networkOptions) {
+      return await fetchRemoteRepositoryByName(target, remote, {
+        signal,
+        ...(networkOptions ? { networkOptions } : {}),
+      })
     },
     async checkout(branch, signal) {
       return await checkoutRemoteBranch(target, branch, undefined, { signal })
@@ -742,14 +745,24 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
             signal,
           })
     },
-    async pull(branch, worktreePath, signal) {
-      return await pullRemoteBranch(target, branch, worktreePath, { signal })
+    async pull(branch, worktreePath, signal, networkOptions) {
+      return await pullRemoteBranch(target, branch, worktreePath, {
+        signal,
+        ...(networkOptions ? { networkOptions } : {}),
+      })
     },
-    async push(branch, signal, _networkOptions, createUpstreamRemote) {
-      return await pushRemoteBranch(target, branch, { signal, createUpstreamRemote })
+    async push(branch, signal, networkOptions, createUpstreamRemote) {
+      return await pushRemoteBranch(target, branch, {
+        signal,
+        ...(networkOptions ? { networkOptions } : {}),
+        createUpstreamRemote,
+      })
     },
-    async pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal) {
-      return await pushRemoteWorktreeHeadToRemoteBranch(target, worktreePath, remote, branch, { signal })
+    async pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal, networkOptions) {
+      return await pushRemoteWorktreeHeadToRemoteBranch(target, worktreePath, remote, branch, {
+        signal,
+        ...(networkOptions ? { networkOptions } : {}),
+      })
     },
     async commitAll(worktreePath, message, signal) {
       return await commitRemoteChanges(target, worktreePath, message, { signal })
@@ -775,17 +788,27 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async createLocalTag(name, ref, signal) {
       return await createRemoteLocalTag(target, { name, ref, signal })
     },
-    async deleteRemoteServerBranch(remote, branch, signal) {
-      return await deleteSshRemoteServerBranch(target, { remote, branch, signal })
+    async deleteRemoteServerBranch(remote, branch, signal, networkOptions) {
+      return await deleteSshRemoteServerBranch(target, {
+        remote,
+        branch,
+        signal,
+        ...(networkOptions ? { networkOptions } : {}),
+      })
     },
-    async deleteRemoteServerTag(remote, tag, signal) {
-      return await deleteSshRemoteServerTag(target, { remote, tag, signal })
+    async deleteRemoteServerTag(remote, tag, signal, networkOptions) {
+      return await deleteSshRemoteServerTag(target, {
+        remote,
+        tag,
+        signal,
+        ...(networkOptions ? { networkOptions } : {}),
+      })
     },
     async deleteLocalTag(name, signal) {
       return await deleteRemoteLocalTag(target, { name, signal })
     },
-    async pushLocalTag(name, signal) {
-      return await pushRemoteLocalTag(target, { name, signal })
+    async pushLocalTag(name, signal, networkOptions) {
+      return await pushRemoteLocalTag(target, { name, signal, ...(networkOptions ? { networkOptions } : {}) })
     },
     async createWorktree(input, signal, options) {
       const created = await createRemoteWorktree(target, { ...input, signal })

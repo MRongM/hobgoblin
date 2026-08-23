@@ -53,6 +53,16 @@ const TARGET = normalizeRemoteTarget({
   remotePath: '/srv/repo',
 })!
 
+const WSL_TARGET = normalizeRemoteTarget({
+  transport: 'wsl',
+  alias: 'Ubuntu-24.04',
+  host: 'Ubuntu-24.04',
+  user: 'wsl',
+  port: 22,
+  remotePath: '/srv/repo',
+  wslExecutable: 'C:\\Windows\\System32\\wsl.exe',
+})!
+
 async function pruneRemoteWorktrees(input: { worktreePath: string; signal?: AbortSignal; run?: unknown }) {
   const prune = (remoteGitOperations as Record<string, unknown>).pruneRemoteWorktrees
   expect(prune).toBeTypeOf('function')
@@ -1698,6 +1708,36 @@ describe('remote git helpers', () => {
     })
     expect(run).toHaveBeenCalledWith({ type: 'gitFetchRemote', path: '/srv/repo', remote: 'upstream' }, TARGET, {
       signal,
+      timeoutMs: 180_000,
+    })
+  })
+
+  test('fetchRemoteRepositoryByName applies configured proxy and timeout only to WSL Git', async () => {
+    const wslRun = vi.fn(async () => okRemoteResult(''))
+    const networkOptions = {
+      timeoutMs: 240_000,
+      proxyUrl: 'socks5://127.0.0.1:7890',
+    }
+
+    await expect(
+      fetchRemoteRepositoryByName(WSL_TARGET, 'origin', { networkOptions, run: wslRun as any }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(wslRun).toHaveBeenCalledWith({ type: 'gitFetchRemote', path: '/srv/repo', remote: 'origin' }, WSL_TARGET, {
+      signal: undefined,
+      timeoutMs: 240_000,
+      wslEnvironment: {
+        ALL_PROXY: 'socks5://127.0.0.1:7890',
+        HTTPS_PROXY: 'socks5://127.0.0.1:7890',
+        all_proxy: 'socks5://127.0.0.1:7890',
+        https_proxy: 'socks5://127.0.0.1:7890',
+      },
+    })
+
+    const sshRun = vi.fn(async () => okRemoteResult(''))
+    await fetchRemoteRepositoryByName(TARGET, 'origin', { networkOptions, run: sshRun as any })
+    expect(sshRun).toHaveBeenCalledWith({ type: 'gitFetchRemote', path: '/srv/repo', remote: 'origin' }, TARGET, {
+      signal: undefined,
       timeoutMs: 180_000,
     })
   })

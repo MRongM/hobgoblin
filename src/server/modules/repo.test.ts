@@ -92,6 +92,8 @@ const mocks = vi.hoisted(() => ({
   removeWorktree: vi.fn(),
   removeRemoteWorktree: vi.fn(),
   resolveRemoteTarget: vi.fn(),
+  resolveUsableWindowsWslExecutable: vi.fn(),
+  listWindowsWslDistributions: vi.fn(),
   runServerCancellable: vi.fn(),
   setBackgroundSyncRepos: vi.fn(),
   publishRepoQueryInvalidation: vi.fn(),
@@ -232,6 +234,14 @@ vi.mock('#/shared/input-validation.ts', () => ({
 
 vi.mock('#/system/ssh/config.ts', () => ({
   resolveRemoteTarget: mocks.resolveRemoteTarget,
+}))
+
+vi.mock('#/shared/windows-wsl.ts', () => ({
+  resolveUsableWindowsWslExecutable: mocks.resolveUsableWindowsWslExecutable,
+}))
+
+vi.mock('#/system/wsl/distributions.ts', () => ({
+  listWindowsWslDistributions: mocks.listWindowsWslDistributions,
 }))
 
 vi.mock('#/system/ssh/diagnostics.ts', () => ({
@@ -465,6 +475,8 @@ beforeEach(() => {
       displayName: 'prod:repo',
     },
   })
+  mocks.resolveUsableWindowsWslExecutable.mockReturnValue('C:\\Windows\\System32\\wsl.exe')
+  mocks.listWindowsWslDistributions.mockResolvedValue(['Ubuntu-24.04'])
   mocks.getCurrentBranch.mockResolvedValue('main')
   mocks.getServerSettingsPrefs.mockResolvedValue({
     gitNetworkProxyEnabled: true,
@@ -1053,6 +1065,32 @@ describe('git network settings for SSH repository network operations', () => {
     expect(mocks.deleteSshRemoteServerTag).toHaveBeenCalledWith(
       expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
       { remote: 'origin', tag: 'release/v1.0.0', signal: expect.any(AbortSignal) },
+    )
+  })
+})
+
+describe('git network settings for WSL repository network operations', () => {
+  test('passes configured network options to Git inside the registered distribution', async () => {
+    const { fetchRepository } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(fetchRepository('wsl://Ubuntu-24.04/srv/repo', 'user')).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    expect(mocks.fetchRemoteRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transport: 'wsl',
+        alias: 'Ubuntu-24.04',
+        remotePath: '/srv/repo',
+      }),
+      {
+        signal: expect.any(AbortSignal),
+        networkOptions: {
+          timeoutMs: 240_000,
+          proxyUrl: 'socks5://127.0.0.1:7890',
+        },
+      },
     )
   })
 })
