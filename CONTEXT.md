@@ -13,7 +13,7 @@ The standalone Hobgoblin product for Windows, built from the independent `window
 _Avoid_: primary application Windows version, Windows mode, Windows compatibility branch, shared Windows adaptation
 
 **Primary application Windows version**:
-The Windows Hobgoblin version built from the primary application’s root `src/` source tree and ordinary application package. It remains part of the primary desktop/web application, supplies the official Windows release artifacts, and is distinct from the independently built Windows version under `windows/`.
+The Windows Hobgoblin version built from the primary application’s root `src/` source tree and ordinary application package. It remains part of the primary desktop/web application, supplies the official Windows release artifacts, and is distinct from the independently built Windows version under `windows/`. It is the target product for the current Windows Git and terminal portability work; the independent Windows version may provide comparison evidence but is not an acceptance target unless separately agreed.
 _Avoid_: independent Windows version, Windows mode, shared Windows adaptation
 
 **Official Windows release artifact**:
@@ -128,8 +128,12 @@ _Avoid_: Windows Terminal, terminal emulator, external terminal
 The automatic Windows internal-terminal shell policy that starts a usable WSL session before any native Windows shell, while retaining native-shell fallback when WSL is unavailable or cannot start. It applies equally to the primary application Windows version and the independent Windows version, and is distinct from a user-selected distribution or an external Windows Terminal profile.
 _Avoid_: WSL-only terminal, Windows Terminal integration, configured WSL distribution
 
+**Windows project Git execution environment**:
+The native Windows environment in which Hobgoblin performs application-owned Git, branch, and worktree operations for a local Windows project, independently of that project's internal terminal shell. When its internal shell is WSL, an interactive `git` typed in that shell is the distribution's Linux Git and may have different configuration or credentials; changing the shell never changes the project's identity or Hobgoblin's Git backend. Only a WSL project uses its registered distribution for application-owned Git operations.
+_Avoid_: WSL shell Git backend, terminal-selected Git backend, automatic WSL project
+
 **WSL project**:
-A repository or multi-repository workspace stored in one registered WSL distribution and identified by that distribution together with an absolute Linux path. Hobgoblin executes its Git, file, worktree, and terminal operations inside that distribution and persists an opaque `wsl://` identity; a Windows UNC projection is never the project identity. It is distinct from a Windows project whose internal shell happens to be WSL and from an SSH remote project.
+A repository or multi-repository workspace stored in one registered WSL distribution and identified by that distribution together with an absolute Linux path. Hobgoblin executes its Git, file, worktree, and terminal operations inside that distribution and persists an opaque `wsl://` identity; a Windows UNC projection is never the project identity. Configured Git network proxy and timeout preferences apply to its Git network operations without changing SSH project behavior. It is distinct from a Windows project whose internal shell happens to be WSL and from an SSH remote project.
 _Avoid_: UNC project, Windows-mounted project, SSH project, WSL shell project
 
 **Selectable Windows external terminal**:
