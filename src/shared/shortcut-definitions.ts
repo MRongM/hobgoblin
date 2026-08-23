@@ -8,6 +8,7 @@ export type RendererMenuCommandId =
   | 'app-settings'
   | 'file-open-local-repo'
   | 'file-open-local-repo-path'
+  | 'file-open-wsl-project'
   | 'file-clone-repo'
   | 'file-open-remote-repo'
   | 'file-close-tab'
@@ -78,6 +79,9 @@ export const RENDERER_MENU_COMMANDS: RendererMenuCommandDefinition[] = [
   rendererMenuCommand('file-open-local-repo', 'menu.file.open-local-repo', { type: 'open-repo-requested' }),
   rendererMenuCommand('file-open-local-repo-path', 'menu.file.open-local-repo-path', {
     type: 'open-repo-path-requested',
+  }),
+  rendererMenuCommand('file-open-wsl-project', 'menu.file.open-wsl-project', {
+    type: 'open-wsl-repo-requested',
   }),
   rendererMenuCommand('file-clone-repo', 'menu.file.clone-repo', { type: 'clone-repo-requested' }),
   rendererMenuCommand('file-open-remote-repo', 'menu.file.open-remote-repo', {

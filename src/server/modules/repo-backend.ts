@@ -66,7 +66,7 @@ import {
 import { resolveKnownWorktree, resolvePrunableWorktree, resolveRemovableWorktree } from '#/shared/worktree-guards.ts'
 import { isValidCwd, MAX_IPC_PATH_LENGTH } from '#/shared/input-validation.ts'
 import { validateBranchDeletionPolicy, validateRemovableWorktreeState } from '#/shared/repo-action-policy.ts'
-import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { testRemoteRepository } from '#/system/ssh/diagnostics.ts'
 import {
   checkoutRemoteBranch,
@@ -119,11 +119,7 @@ import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 type PreparedUpstreamDeletion = { upstream: string | null }
 
-function validateUpstreamDeletion(
-  branch: string,
-  upstream: string,
-  branches: BranchSnapshotInfo[],
-): ExecResult | null {
+function validateUpstreamDeletion(branch: string, upstream: string, branches: BranchSnapshotInfo[]): ExecResult | null {
   if (isProtectedRemoteBranchRef(upstream)) {
     return { ok: false, message: 'error.cannot-delete-protected-branch' }
   }
@@ -229,7 +225,7 @@ export interface RepoBackend {
 export async function resolveRemoteRepoTarget(repoId: string): Promise<RemoteRepoTarget> {
   const parsed = parseRemoteRepoId(repoId)
   if (!parsed) throw new Error('error.ssh-config-changed')
-  return (await resolveSshRemoteTarget(parsed)).target
+  return (await resolveRepositoryRemoteTarget(parsed)).target
 }
 
 export function isValidRepositoryWorktreePath(repoId: string, worktreePath: unknown): worktreePath is string {

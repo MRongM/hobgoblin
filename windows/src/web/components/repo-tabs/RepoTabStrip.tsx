@@ -1,5 +1,5 @@
 import { type ReactNode, type Ref, useCallback, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Download, FolderOpen, Plus, Server, Trash2 } from 'lucide-react'
+import { ChevronDown, Download, FolderOpen, Plus, Server, TerminalSquare, Trash2 } from 'lucide-react'
 import {
   DndContext,
   type DragEndEvent,
@@ -73,6 +73,7 @@ interface RepoTabStripProps {
   onClose: (id: string) => void
   onReorder: (activeId: string, overId: string) => void
   onOpenLocal: () => void
+  onOpenWsl?: () => void
   onOpenRemote: () => void
   onClone: () => void
 }
@@ -114,10 +115,13 @@ function RepoTabEdgeAction({
 function OpenRepoMenuItems({
   labels,
   onOpenLocal,
+  onOpenWsl,
   onOpenRemote,
   onClone,
   onClearCache,
-}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone'> & { onClearCache: () => void }) {
+}: Pick<RepoTabStripProps, 'labels' | 'onOpenLocal' | 'onOpenWsl' | 'onOpenRemote' | 'onClone'> & {
+  onClearCache: () => void
+}) {
   return (
     <>
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenLocal}>
@@ -125,6 +129,12 @@ function OpenRepoMenuItems({
         {labels.openLocal}
         {labels.openLocalShortcut && <DropdownMenuShortcut>{labels.openLocalShortcut}</DropdownMenuShortcut>}
       </DropdownMenuItem>
+      {onOpenWsl && (
+        <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenWsl}>
+          <TerminalSquare />
+          {labels.openWsl}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenRemote}>
         <Server />
         {labels.openRemote}
@@ -258,6 +268,7 @@ export function RepoTabStrip({
   onClose,
   onReorder,
   onOpenLocal,
+  onOpenWsl,
   onOpenRemote,
   onClone,
 }: RepoTabStripProps) {
@@ -336,6 +347,7 @@ export function RepoTabStrip({
           <OpenRepoMenuItems
             labels={labels}
             onOpenLocal={onOpenLocal}
+            onOpenWsl={onOpenWsl}
             onOpenRemote={onOpenRemote}
             onClone={onClone}
             onClearCache={requestClearCache}
@@ -392,6 +404,7 @@ export function RepoTabStrip({
                     <OpenRepoMenuItems
                       labels={labels}
                       onOpenLocal={onOpenLocal}
+                      onOpenWsl={onOpenWsl}
                       onOpenRemote={onOpenRemote}
                       onClone={onClone}
                       onClearCache={requestClearCache}

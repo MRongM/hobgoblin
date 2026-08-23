@@ -17,6 +17,7 @@ const shellMock = vi.hoisted(() => ({
 
 const bootstrapMock = vi.hoisted(() => ({
   runtimeKind: 'web' as 'web' | 'electron',
+  hostPlatform: 'darwin' as NodeJS.Platform,
 }))
 
 const uiModeMock = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ const uiModeMock = vi.hoisted(() => ({
 vi.mock('#/web/bootstrap.ts', () => ({
   getInitialBootstrap: () => ({
     runtime: { kind: bootstrapMock.runtimeKind, bridgeVersion: 1, capabilities: [] },
+    hostPlatform: bootstrapMock.hostPlatform,
     homeDir: bootstrapMock.runtimeKind === 'electron' ? '/Users/test' : '',
     initialI18n: null,
     initialSettings: null,
@@ -206,6 +208,7 @@ afterEach(() => {
   container = null
   shellMock.state = null
   bootstrapMock.runtimeKind = 'web'
+  bootstrapMock.hostPlatform = 'darwin'
   uiModeMock.mode = 'default'
   useReposStore.setState({ repos: {} })
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
@@ -238,6 +241,14 @@ describe('App shell topbar visibility', () => {
 
     expect(container?.querySelector('[data-testid="global-topbar"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-tabs"]')).toBeNull()
+  })
+
+  test('shows the explicit WSL project shortcut in the Windows empty state', async () => {
+    await renderApp({ runtime: 'web', hostPlatform: 'win32', workspaceMode: 'split', visibleRepoId: null })
+
+    await clickButton('repo-tabs.open-wsl')
+
+    expect(shellMock.state?.overlays.openWslRepoPathDialog).toHaveBeenCalledTimes(1)
   })
 
   test('hides the compact topbar for an available Git project', async () => {
@@ -408,6 +419,7 @@ describe('App shell topbar visibility', () => {
 
 async function renderApp({
   runtime,
+  hostPlatform = 'darwin',
   workspaceMode,
   closeConfirmOpen = false,
   confirmCloseRepo = vi.fn(),
@@ -415,6 +427,7 @@ async function renderApp({
   routeSettingsPage = null,
 }: {
   runtime: 'web' | 'electron'
+  hostPlatform?: NodeJS.Platform
   workspaceMode: RepoWorkspaceMode
   closeConfirmOpen?: boolean
   confirmCloseRepo?: () => void
@@ -423,6 +436,7 @@ async function renderApp({
 }) {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   bootstrapMock.runtimeKind = runtime
+  bootstrapMock.hostPlatform = hostPlatform
   shellMock.state = shellStateWith(workspaceMode, {
     closeConfirmOpen,
     confirmCloseRepo,
@@ -462,10 +476,11 @@ function shellStateWith(
     anyOpen: false,
     closeAllOverlays: vi.fn(),
     openRepoPathDialog: vi.fn(),
+    openWslRepoPathDialog: vi.fn(),
     openCloneRepo: vi.fn(),
     openRemoteRepo: vi.fn(),
     state: {
-      openRepo: { open: false },
+      openRepo: { open: false, source: 'local' as const },
       clone: { open: false },
       openRemoteRepo: { open: false },
     },

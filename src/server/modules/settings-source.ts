@@ -196,7 +196,14 @@ function normalizeFontFamilyPref(value: unknown): FontFamilyPref {
 }
 
 function normalizeTerminalPref(value: unknown): TerminalPref {
-  return value === 'auto' || value === 'ghostty' || value === 'terminal' ? value : DEFAULT_TERMINAL_APP
+  return value === 'auto' ||
+    value === 'ghostty' ||
+    value === 'terminal' ||
+    value === 'wsl' ||
+    value === 'powershell' ||
+    value === 'cmd'
+    ? value
+    : DEFAULT_TERMINAL_APP
 }
 
 function normalizeEditorPref(value: unknown): EditorPref {
@@ -551,6 +558,7 @@ function isImmediateWorkspaceRepository(rootId: string, repositoryId: string): b
       !!root &&
       !!repository &&
       root.alias === repository.alias &&
+      root.transport === repository.transport &&
       path.posix.dirname(repository.remotePath) === root.remotePath
     )
   }

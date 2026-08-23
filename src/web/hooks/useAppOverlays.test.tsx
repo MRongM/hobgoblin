@@ -21,11 +21,15 @@ function Harness() {
       <button id="open-repo" type="button" onClick={overlays.openRepoPathDialog}>
         open repo
       </button>
+      <button id="open-wsl-repo" type="button" onClick={overlays.openWslRepoPathDialog}>
+        open WSL repo
+      </button>
       <button id="close-all" type="button" onClick={overlays.closeAllOverlays}>
         close all
       </button>
       <output id="clone-open">{overlays.state.clone.open ? 'open' : 'closed'}</output>
       <output id="open-repo-open">{overlays.state.openRepo.open ? 'open' : 'closed'}</output>
+      <output id="open-repo-source">{overlays.state.openRepo.source}</output>
       <output id="any-open">{overlays.anyOpen ? 'open' : 'closed'}</output>
     </>
   )
@@ -46,11 +50,15 @@ function RoutedHarness() {
       <button id="open-repo" type="button" onClick={overlays.openRepoPathDialog}>
         open repo
       </button>
+      <button id="open-wsl-repo" type="button" onClick={overlays.openWslRepoPathDialog}>
+        open WSL repo
+      </button>
       <button id="close-all" type="button" onClick={overlays.closeAllOverlays}>
         close all
       </button>
       <output id="clone-open">{overlays.state.clone.open ? 'open' : 'closed'}</output>
       <output id="open-repo-open">{overlays.state.openRepo.open ? 'open' : 'closed'}</output>
+      <output id="open-repo-source">{overlays.state.openRepo.source}</output>
       <output id="any-open">{overlays.anyOpen ? 'open' : 'closed'}</output>
     </>
   )
@@ -81,14 +89,16 @@ describe('useAppOverlays', () => {
     })
 
     click('#open-clone')
-    click('#open-repo')
+    click('#open-wsl-repo')
     expect(text('#clone-open')).toBe('open')
     expect(text('#open-repo-open')).toBe('open')
+    expect(text('#open-repo-source')).toBe('wsl')
     expect(text('#any-open')).toBe('open')
 
     click('#close-all')
     expect(text('#clone-open')).toBe('closed')
     expect(text('#open-repo-open')).toBe('closed')
+    expect(text('#open-repo-source')).toBe('local')
     expect(text('#any-open')).toBe('closed')
   })
 

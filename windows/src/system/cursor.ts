@@ -1,4 +1,4 @@
-import { hasEditorCli, openByEditorCli, openRemoteByAppCli } from '#/system/open-app.ts'
+import { hasEditorCli, openByEditorCli, openRemoteByAppCli, openWslByAppCli } from '#/system/open-app.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 
 const APP_NAME = 'Cursor'
@@ -14,4 +14,11 @@ export function openInCursor(target: EditorOpenTarget): Promise<{ ok: boolean; m
 
 export function openRemoteInCursor(alias: string, target: EditorOpenTarget): Promise<{ ok: boolean; message: string }> {
   return openRemoteByAppCli(APP_NAME, CLI_NAME, alias, target)
+}
+
+export function openWslInCursor(
+  distribution: string,
+  target: EditorOpenTarget,
+): Promise<{ ok: boolean; message: string }> {
+  return openWslByAppCli(APP_NAME, CLI_NAME, distribution, target)
 }

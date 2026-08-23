@@ -239,6 +239,7 @@ export interface BranchWorkspaceRepositoryPlan {
   confirmationRequired: boolean
   satisfied: boolean
   action?: 'create-worktree' | 'remove-worktree' | 'remove-entry' | 'delete-branch' | 'satisfied'
+  pruneBeforeCreate?: boolean
   worktreePresent?: boolean
   deleteBranch?: boolean
   deleteUpstream?: boolean

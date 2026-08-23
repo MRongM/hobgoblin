@@ -37,6 +37,7 @@ interface SharedRendererIntentDeps {
   currentRepoId: string | null
   closeAllOverlays: () => void
   openRepoPathDialog: () => void
+  openWslRepoPathDialog: () => void
   openCloneRepo: () => void
   openRemoteRepo: () => void
   isOverlayOpen: () => boolean
@@ -134,6 +135,9 @@ export async function handleWorkspaceRendererIntent(
       return true
     case 'open-repo-path':
       deps.openRepoPathDialog()
+      return true
+    case 'open-wsl-repo':
+      deps.openWslRepoPathDialog()
       return true
     case 'open-clone-repo':
       deps.openCloneRepo()

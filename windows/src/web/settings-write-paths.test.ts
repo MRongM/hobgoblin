@@ -21,7 +21,7 @@ const appDataClientMocks = vi.hoisted(() => ({
       pref: 'auto',
       resolved: null,
       available: false,
-      appAvailability: { ghostty: false, terminal: false },
+      appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
       detectedAt: 0,
     },
     editor: {
@@ -52,7 +52,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     pref,
     resolved: null,
     available: false,
-    appAvailability: { ghostty: false, terminal: false },
+    appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
     detectedAt: 0,
   })),
   setProjectColorTheme: vi.fn<() => Promise<RepoSettingsEntry[]>>(async () => []),
@@ -127,7 +127,7 @@ describe('settings write paths', () => {
         pref: 'auto',
         resolved: null,
         available: false,
-        appAvailability: { ghostty: false, terminal: false },
+        appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
         detectedAt: 0,
       },
       editor: {
@@ -169,7 +169,7 @@ describe('settings write paths', () => {
       pref,
       resolved: null,
       available: false,
-      appAvailability: { ghostty: false, terminal: false },
+      appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
       detectedAt: 0,
     }))
     appDataClientMocks.setProjectColorTheme.mockReset()
@@ -279,7 +279,7 @@ describe('settings write paths', () => {
         pref: 'auto',
         resolved: null,
         available: false,
-        appAvailability: { ghostty: false, terminal: false },
+        appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
         detectedAt: 0,
       },
       editor: {

@@ -11,7 +11,7 @@ import {
   RadioTower,
   type LucideIcon,
 } from 'lucide-react'
-import { isRemoteRepoId, localRepoSessionEntry, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import { isSshRepoId, localRepoSessionEntry, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
 import { Toolbar } from '#/web/components/Layout.tsx'
 import { RepoExplorerPanel } from '#/web/components/repo-workspace/RepoExplorerPanel.tsx'
 import { ToolbarTabStrip, ToolbarTabStripBody } from '#/web/components/tab-strip/ToolbarTabStrip.tsx'
@@ -58,8 +58,8 @@ export function RepoWorktreeExplorer({
   const t = useT()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
-  const isRemoteRepo = isRemoteRepoId(repoId)
-  const activeVisibleTab = activeTab === 'ports' && !isRemoteRepo ? 'files' : activeTab
+  const supportsPorts = isSshRepoId(repoId)
+  const activeVisibleTab = activeTab === 'ports' && !supportsPorts ? 'files' : activeTab
   const repo = useReposStore((state) => state.repos[repoId])
   const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
   const hasWorktree = !!selected?.worktree?.path
@@ -85,7 +85,7 @@ export function RepoWorktreeExplorer({
   const orderedTabs = hasWorktree ? [baseTabs[2], baseTabs[0], baseTabs[1], ...baseTabs.slice(3)] : baseTabs
   const tabs = [
     ...orderedTabs,
-    ...(isRemoteRepo ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
+    ...(supportsPorts ? [{ id: 'ports' as const, label: t('ports.title'), icon: RadioTower }] : []),
   ] satisfies { id: ExplorerTab; label: string; icon: LucideIcon }[]
   const primaryTabs = tabs.slice(0, 3)
   const overflowTabs = tabs.slice(3)

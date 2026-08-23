@@ -6,7 +6,7 @@ import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspa
 import { probeRepository as probeRepositoryDefault } from '#/server/modules/repo-read-paths.ts'
 import { isPrimaryGitWorktree } from '#/system/git/repository-role.ts'
 import { REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER, runRemoteCommand } from '#/system/ssh/commands.ts'
-import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
 import {
   isRemoteRepoId,
@@ -27,7 +27,7 @@ interface WorkspaceDiscoveryDependencies {
   probeRepository?: (cwd: string) => Promise<ProbeResult>
   isPrimaryWorktree?: (cwd: string) => Promise<boolean>
   readConfig?: typeof readWorkspaceConfig
-  resolveRemoteTarget?: typeof resolveSshRemoteTarget
+  resolveRemoteTarget?: typeof resolveRepositoryRemoteTarget
   runRemote?: typeof runRemoteCommand
 }
 
@@ -170,7 +170,7 @@ async function discoverRemoteWorkspaceRepositories(
 
   let target
   try {
-    target = (await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(parsed)).target
+    target = (await (dependencies.resolveRemoteTarget ?? resolveRepositoryRemoteTarget)(parsed)).target
   } catch (error) {
     return {
       ok: false,
@@ -282,7 +282,7 @@ async function restoreRemoteConfiguredWorkspace(
 
   let target
   try {
-    target = (await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(parsed)).target
+    target = (await (dependencies.resolveRemoteTarget ?? resolveRepositoryRemoteTarget)(parsed)).target
   } catch (error) {
     return {
       ok: false,

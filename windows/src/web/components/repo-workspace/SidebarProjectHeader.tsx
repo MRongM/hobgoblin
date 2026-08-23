@@ -19,6 +19,7 @@ import {
   PanelRightOpen,
   Plus,
   Server,
+  TerminalSquare,
   Trash2,
 } from 'lucide-react'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -42,6 +43,7 @@ import {
 import { cn } from '#/web/lib/cn.ts'
 import { activeProjectId as selectActiveProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 
 interface Props {
   repoId: string
@@ -72,6 +74,7 @@ export function SidebarProjectHeader({
   const activeProjectId = useReposStore(selectActiveProjectId) ?? repoId
   const activeName = useReposStore((s) => s.repos[activeProjectId]?.name ?? '')
   const projects = useProjectSummaries()
+  const supportsWslImport = getInitialBootstrap().hostPlatform === 'win32'
 
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
   const activeProjectKind = activeProject?.isGitRepo === false ? 'plain' : 'git'
@@ -168,6 +171,12 @@ export function SidebarProjectHeader({
                 <FolderOpen />
                 {t('repo-tabs.open-local')}
               </DropdownMenuItem>
+              {supportsWslImport && (
+                <DropdownMenuItem onSelect={shellActions.openWslRepoPathDialog}>
+                  <TerminalSquare />
+                  {t('repo-tabs.open-wsl')}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={shellActions.openRemoteRepo}>
                 <Server />
                 {t('repo-tabs.open-remote')}

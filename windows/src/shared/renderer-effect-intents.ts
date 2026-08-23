@@ -5,6 +5,7 @@ import type { LangPref, ThemePref } from '#/shared/settings.ts'
 export type RendererEffectIntent =
   | { type: 'open-repo-requested' }
   | { type: 'open-repo-path-requested' }
+  | { type: 'open-wsl-repo-requested' }
   | { type: 'open-remote-repo-requested' }
   | { type: 'clone-repo-requested' }
   | { type: 'app-quitting' }

@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, statSync } from 'node:fs'
+import { accessSync, constants, lstatSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 function candidateDirectories(extraDirectories: string[]): string[] {
@@ -15,9 +15,20 @@ function candidateDirectories(extraDirectories: string[]): string[] {
 }
 
 function isExecutableFile(filePath: string): boolean {
-  if (!existsSync(filePath)) return false
+  let isExecutableCandidate = false
   try {
-    if (!statSync(filePath).isFile()) return false
+    isExecutableCandidate = statSync(filePath).isFile()
+  } catch {
+    try {
+      // Windows App Execution Aliases (for example WindowsApps/wt.exe) are
+      // executable reparse-point symlinks, but Bun's statSync may return EACCES.
+      isExecutableCandidate = lstatSync(filePath).isSymbolicLink()
+    } catch {
+      return false
+    }
+  }
+  if (!isExecutableCandidate) return false
+  try {
     accessSync(filePath, constants.X_OK)
     return true
   } catch {

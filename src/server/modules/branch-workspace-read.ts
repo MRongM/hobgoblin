@@ -204,6 +204,10 @@ async function reconcileRepositoryMember(
     issues.push({ kind: 'worktree-path-mismatch', repositoryName: member.repositoryName })
     return { ...member, ready: false }
   }
+  if (branch.worktree.isPrunable) {
+    issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
+    return { ...member, ready: false }
+  }
   return { ...member, ready: true }
 }
 
@@ -217,9 +221,7 @@ function projectState(
     return { kind: 'needs-action', action: 'repair', reason: 'drift' }
   }
   const hasCreateProgress = issues.some(
-    (issue) =>
-      issue.kind === 'repository-pending' ||
-      issue.kind === 'repository-failed',
+    (issue) => issue.kind === 'repository-pending' || issue.kind === 'repository-failed',
   )
   if (hasCreateProgress) {
     return { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }

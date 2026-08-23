@@ -1,5 +1,5 @@
 import { type ComponentType } from 'react'
-import { RotateCw } from 'lucide-react'
+import { RotateCw, TerminalSquare } from 'lucide-react'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
@@ -22,6 +22,7 @@ import { useExternalAppSettingsController } from '#/web/runtime-settings-externa
 import { useT } from '#/web/stores/i18n.ts'
 import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
 import { cn } from '#/web/lib/cn.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 interface ExternalToolItem {
   id: string
   Icon: ComponentType<{ className?: string }>
@@ -42,6 +43,27 @@ const TERMINAL_APPS: ExternalToolItem[] = [
     Icon: AppleTerminalIcon,
     titleKey: 'settings.apps.tool.terminal.title',
     commandKey: 'settings.apps.tool.terminal.command',
+  },
+]
+
+const WINDOWS_TERMINAL_SHELLS: ExternalToolItem[] = [
+  {
+    id: 'wsl',
+    Icon: TerminalSquare,
+    titleKey: 'settings.apps.tool.wsl.title',
+    commandKey: 'settings.apps.tool.wsl.command',
+  },
+  {
+    id: 'powershell',
+    Icon: TerminalSquare,
+    titleKey: 'settings.apps.tool.powershell.title',
+    commandKey: 'settings.apps.tool.powershell.command',
+  },
+  {
+    id: 'cmd',
+    Icon: TerminalSquare,
+    titleKey: 'settings.apps.tool.cmd.title',
+    commandKey: 'settings.apps.tool.cmd.command',
   },
 ]
 
@@ -107,6 +129,7 @@ function DetectionList({ items }: { items: Array<ExternalToolItem & { available:
 
 export function ExternalAppSettings() {
   const t = useT()
+  const isWindows = getInitialBootstrap().hostPlatform === 'win32'
   const { data } = useExternalAppsQuery()
   if (!data) return null
   const terminalApp = data.terminal.pref
@@ -114,11 +137,18 @@ export function ExternalAppSettings() {
   const editorApp = data.editor.pref
   const editorAppAvailability = data.editor.appAvailability
   const { refreshExternalApps, refreshing, setTerminalApp, setEditorApp } = useExternalAppSettingsController()
-  const terminalOptions: { value: TerminalPref; labelKey: string }[] = [
-    { value: 'auto', labelKey: 'settings.terminal.auto' },
-    { value: 'ghostty', labelKey: 'settings.terminal.ghostty' },
-    { value: 'terminal', labelKey: 'settings.terminal.terminal' },
-  ]
+  const terminalOptions: { value: TerminalPref; labelKey: string }[] = isWindows
+    ? [
+        { value: 'auto', labelKey: 'settings.terminal.auto-windows' },
+        { value: 'wsl', labelKey: 'settings.terminal.wsl' },
+        { value: 'powershell', labelKey: 'settings.terminal.powershell' },
+        { value: 'cmd', labelKey: 'settings.terminal.cmd' },
+      ]
+    : [
+        { value: 'auto', labelKey: 'settings.terminal.auto' },
+        { value: 'ghostty', labelKey: 'settings.terminal.ghostty' },
+        { value: 'terminal', labelKey: 'settings.terminal.terminal' },
+      ]
   const editorOptions: { value: EditorPref; labelKey: string }[] = [
     { value: 'auto', labelKey: 'settings.editor.auto' },
     { value: 'vscode', labelKey: 'settings.editor.vscode' },
@@ -131,7 +161,7 @@ export function ExternalAppSettings() {
         <SettingsList>
           <SettingsRow
             controlId="settings-terminal"
-            label={t('settings.terminal')}
+            label={t(isWindows ? 'settings.terminal.windows-external' : 'settings.terminal')}
             control={
               <SettingsSelect
                 id="settings-terminal"
@@ -176,9 +206,9 @@ export function ExternalAppSettings() {
         }
       >
         <DetectionList
-          items={TERMINAL_APPS.map((item) => ({
+          items={(isWindows ? WINDOWS_TERMINAL_SHELLS : TERMINAL_APPS).map((item) => ({
             ...item,
-            available: item.id === 'ghostty' ? terminalAppAvailability.ghostty : terminalAppAvailability.terminal,
+            available: terminalAppAvailability[item.id as keyof typeof terminalAppAvailability],
           }))}
         />
       </SettingsGroup>

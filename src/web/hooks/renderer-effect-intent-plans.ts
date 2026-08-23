@@ -9,6 +9,7 @@ type WorkspaceRendererIntent = Extract<
   RendererEffectIntent,
   | { type: 'open-repo-requested' }
   | { type: 'open-repo-path-requested' }
+  | { type: 'open-wsl-repo-requested' }
   | { type: 'open-remote-repo-requested' }
   | { type: 'clone-repo-requested' }
   | { type: 'close-repo-requested' }
@@ -42,6 +43,7 @@ export type WorkspaceIntentPlan =
   | { kind: 'noop' }
   | { kind: 'open-repo' }
   | { kind: 'open-repo-path' }
+  | { kind: 'open-wsl-repo' }
   | { kind: 'open-clone-repo' }
   | { kind: 'open-remote-repo' }
   | { kind: 'close-repo'; repoId: string }
@@ -118,6 +120,8 @@ export function createWorkspaceIntentPlan(
       return { kind: 'open-repo' }
     case 'open-repo-path-requested':
       return { kind: 'open-repo-path' }
+    case 'open-wsl-repo-requested':
+      return { kind: 'open-wsl-repo' }
     case 'clone-repo-requested':
       return { kind: 'open-clone-repo' }
     case 'open-remote-repo-requested':
@@ -158,6 +162,7 @@ function isWorkspaceRendererIntent(event: RendererEffectIntent): event is Worksp
   return (
     event.type === 'open-repo-requested' ||
     event.type === 'open-repo-path-requested' ||
+    event.type === 'open-wsl-repo-requested' ||
     event.type === 'open-remote-repo-requested' ||
     event.type === 'clone-repo-requested' ||
     event.type === 'close-repo-requested' ||

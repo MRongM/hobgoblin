@@ -304,4 +304,39 @@ describe('branch workspace local materialization source', () => {
       ),
     ).rejects.toThrow('workspace.branch-workspace.remote-operation-failed')
   })
+
+  test('creates a branch workspace directory inside the selected WSL distribution', async () => {
+    const rootId = normalizeRemoteRepoId({
+      transport: 'wsl',
+      alias: 'Ubuntu Dev',
+      remotePath: '/home/dev/workspace',
+    })
+    const target = normalizeRemoteTarget({
+      transport: 'wsl',
+      alias: 'Ubuntu Dev',
+      host: 'Ubuntu Dev',
+      user: 'wsl',
+      port: 22,
+      remotePath: '/home/dev/workspace',
+      wslExecutable: 'C:\\Windows\\System32\\wsl.exe',
+    })!
+    const resolveRemoteTarget = vi.fn(async () => ({ target }))
+    const createRemoteDirectory = vi.fn(async () => undefined)
+
+    await createBranchWorkspaceDirectory(rootId, '/home/dev/workspace/hob-feature-auth', undefined, {
+      resolveRemoteTarget,
+      createRemoteDirectory,
+    })
+
+    expect(resolveRemoteTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'Ubuntu Dev', remotePath: '/home/dev/workspace', transport: 'wsl' }),
+      undefined,
+    )
+    expect(createRemoteDirectory).toHaveBeenCalledWith(
+      target,
+      '/home/dev/workspace',
+      '/home/dev/workspace/hob-feature-auth',
+      { signal: undefined },
+    )
+  })
 })

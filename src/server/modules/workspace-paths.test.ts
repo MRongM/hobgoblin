@@ -62,6 +62,20 @@ describe('workspace paths', () => {
     expect(workspaceRepositoryPath(repository)).toBe('/srv/workspace/api')
   })
 
+  test('keeps WSL ids opaque while deriving Linux branch workspace paths', () => {
+    const root = normalizeRemoteRepoId({ transport: 'wsl', alias: 'Ubuntu Dev', remotePath: '/home/dev/workspace' })
+    const repository = normalizeRemoteRepoId({
+      transport: 'wsl',
+      alias: 'Ubuntu Dev',
+      remotePath: '/home/dev/workspace/api',
+    })
+
+    expect(workspaceRootId(root)).toBe(root)
+    expect(workspaceRepositoryId(root, 'api')).toBe(repository)
+    expect(workspaceRepositoryPath(repository)).toBe('/home/dev/workspace/api')
+    expect(branchWorkspacePath(root, 'hob-feature-auth')).toBe('/home/dev/workspace/hob-feature-auth')
+  })
+
   test('rejects unsafe members and malformed remote repository ids', () => {
     const root = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/workspace' })
 

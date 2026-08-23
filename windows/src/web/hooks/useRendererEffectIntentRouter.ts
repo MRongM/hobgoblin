@@ -22,6 +22,7 @@ interface RendererEffectIntentRouterOptions {
   currentRepoId: string | null
   closeAllOverlays: () => void
   openRepoPathDialog: () => void
+  openWslRepoPathDialog: () => void
   openCloneRepo: () => void
   openRemoteRepo: () => void
   isOverlayOpen: () => boolean
@@ -33,6 +34,7 @@ export function useRendererEffectIntentRouter({
   currentRepoId,
   closeAllOverlays,
   openRepoPathDialog,
+  openWslRepoPathDialog,
   openCloneRepo,
   openRemoteRepo,
   isOverlayOpen,
@@ -72,6 +74,7 @@ export function useRendererEffectIntentRouter({
       currentRepoId: currentRepoIdRef.current,
       closeAllOverlays,
       openRepoPathDialog,
+      openWslRepoPathDialog,
       openCloneRepo,
       openRemoteRepo,
       isOverlayOpen: () => isOverlayOpenRef.current(),
@@ -121,6 +124,7 @@ export function useRendererEffectIntentRouter({
     openCloneRepo,
     openRemoteRepo,
     openRepoPathDialog,
+    openWslRepoPathDialog,
     setDetailCollapsed,
     setSelectedTerminal,
     t,

@@ -340,6 +340,7 @@ describe('workspace routes', () => {
         planToken: 'sha256:plan',
         approvals: ['outside-root-source', 'worktree-bootstrap'],
         sourceToken: 'workspace_create_1',
+        force: true,
       }),
     })
     const abortResponse = await app.request('/api/workspace/branch-workspaces/abort', {
@@ -369,6 +370,7 @@ describe('workspace routes', () => {
       planToken: 'sha256:plan',
       approvals: ['outside-root-source', 'worktree-bootstrap'],
       sourceToken: 'workspace_create_1',
+      force: true,
     })
     expect(mocks.abortBranchWorkspace).toHaveBeenCalledWith('/workspace')
     expect(mocks.reorderBranchWorkspaces).toHaveBeenCalledWith('/workspace', ['third', 'first'])
@@ -431,6 +433,18 @@ describe('workspace routes', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ rootId: '/workspace', planToken: 'sha256:plan', approvals: ['unknown'] }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.executeBranchWorkspace).not.toHaveBeenCalled()
+  })
+
+  test('rejects a malformed branch workspace force flag before execution', async () => {
+    const app = new Hono().route('/api/workspace', createWorkspaceRoutes())
+    const response = await app.request('/api/workspace/branch-workspaces/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rootId: '/workspace', planToken: 'sha256:plan', approvals: [], force: 'yes' }),
     })
 
     await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })

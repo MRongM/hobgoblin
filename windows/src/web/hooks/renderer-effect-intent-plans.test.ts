@@ -8,6 +8,22 @@ import {
 } from '#/web/hooks/renderer-effect-intent-plans.ts'
 
 describe('renderer effect intent plans', () => {
+  test('routes the native WSL project command to the WSL dialog shortcut', () => {
+    expect(
+      createWorkspaceIntentPlan(
+        { type: 'open-wsl-repo-requested' },
+        {
+          overlayBlocked: false,
+          workspaceShortcutSuppressed: false,
+          terminalFocused: false,
+          currentRepoId: null,
+          currentProjectId: null,
+          currentRepo: null,
+        },
+      ),
+    ).toEqual({ kind: 'open-wsl-repo' })
+  })
+
   test('creates a worktree terminal bell plan when the bell key matches a known worktree', () => {
     resetReposStore()
     const repo = seedRepoState({

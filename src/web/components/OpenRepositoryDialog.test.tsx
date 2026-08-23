@@ -8,6 +8,19 @@ import { OpenRepositoryDialog } from '#/web/components/OpenRepositoryDialog.tsx'
 import { setRendererBridgeForTests } from '#/web/renderer-bridge.ts'
 import type { OpenRepoResult } from '#/web/stores/repos/types.ts'
 
+const wslImportMocks = vi.hoisted(() => ({
+  hostPlatform: 'darwin' as NodeJS.Platform,
+  getDistributions: vi.fn(async () => ['Ubuntu']),
+}))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: wslImportMocks.hostPlatform, homeDir: '/Users/tester' }),
+}))
+
+vi.mock('#/web/remote-client.ts', () => ({
+  getWindowsWslDistributions: wslImportMocks.getDistributions,
+}))
+
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 let rpcCalls: Array<{ path: string; input?: unknown }> = []
@@ -17,6 +30,8 @@ const testWindow = window as unknown as { goblinNative?: unknown }
 beforeEach(() => {
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   rpcCalls = []
+  wslImportMocks.hostPlatform = 'darwin'
+  wslImportMocks.getDistributions.mockReset().mockResolvedValue(['Ubuntu'])
   setRendererBridgeForTests(null)
   testWindow.goblinNative = {
     homeDir: '/Users/tester',
@@ -47,6 +62,20 @@ afterEach(() => {
 })
 
 describe('OpenRepositoryDialog', () => {
+  test('keeps WSL discovery and controls disabled on macOS', async () => {
+    render(
+      <OpenRepositoryDialog
+        open
+        onClose={vi.fn()}
+        onOpen={vi.fn(async () => ({ ok: true as const, id: '/Users/tester/Developer/repo' }))}
+      />,
+    )
+    await flush()
+
+    expect(queryButtonByText('repo-tabs.open-source-wsl')).toBeNull()
+    expect(wslImportMocks.getDistributions).not.toHaveBeenCalled()
+  })
+
   test('keeps the inline status row mounted', () => {
     render(
       <OpenRepositoryDialog
@@ -208,6 +237,29 @@ describe('OpenRepositoryDialog', () => {
     render(<OpenRepositoryDialog open onClose={onClose} onOpen={onOpen} />)
 
     expect(queryButtonByText('repo-tabs.open-path-choose')).toBeNull()
+  })
+
+  test('opens with WSL preselected and submits the selected distribution with the Linux path', async () => {
+    wslImportMocks.hostPlatform = 'win32'
+    const onClose = vi.fn()
+    const onOpen = vi.fn(
+      async (): Promise<OpenRepoResult> => ({
+        ok: true,
+        id: 'wsl://Ubuntu/root/src/hobgoblin',
+      }),
+    )
+    render(<OpenRepositoryDialog open initialSource="wsl" onClose={onClose} onOpen={onOpen} />)
+    await flush()
+
+    expect(wslImportMocks.getDistributions).toHaveBeenCalledOnce()
+    expect(document.body.textContent).toContain('repo-tabs.open-wsl-title')
+    expect(buttonByText('repo-tabs.open-source-wsl').getAttribute('data-variant')).toBe('default')
+    setInputValue('#open-repo-path', '/root/src/hobgoblin')
+    click('button[type="submit"]')
+    await flush()
+
+    expect(onOpen).toHaveBeenCalledWith('wsl://Ubuntu/root/src/hobgoblin')
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })
 

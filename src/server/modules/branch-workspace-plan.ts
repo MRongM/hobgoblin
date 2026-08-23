@@ -251,7 +251,7 @@ async function buildExistingBranchWorkspacePlan(
   if (request.operation === 'reduce') {
     return await buildReducePlan(manifest, resources.config.repo, request, dependencies, signal)
   }
-  return await buildRemovePlan(manifest, resources.config.repo, request, dependencies, signal)
+  return await buildRemovePlan(manifest, request, dependencies, signal)
 }
 
 async function buildReducePlan(
@@ -507,11 +507,13 @@ async function planRepairRepository(
     if (!sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)) {
       return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
     }
-    return {
-      ok: true,
-      repository: {
-        ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, true),
-      },
+    if (!branch.worktree.isPrunable) {
+      return {
+        ok: true,
+        repository: {
+          ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, true),
+        },
+      }
     }
   }
   const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
@@ -534,7 +536,10 @@ async function planRepairRepository(
     : ({ kind: 'newBranch', newBranch: member.targetBranch, creationBase: memberCreationBase } as const)
   return {
     ok: true,
-    repository: repairRepositoryPlan(member, repoId, mode, false),
+    repository: {
+      ...repairRepositoryPlan(member, repoId, mode, false),
+      ...(branch?.worktree?.isPrunable ? { pruneBeforeCreate: true } : {}),
+    },
   }
 }
 
@@ -562,7 +567,6 @@ function repairRepositoryPlan(
 
 async function buildRemovePlan(
   manifest: BranchWorkspaceManifest,
-  configuredRepositories: string[],
   request: Extract<BranchWorkspacePlanRequest, { operation: 'remove' }>,
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
@@ -578,9 +582,6 @@ async function buildRemovePlan(
   const unmanagedMemberEntries: string[] = []
   for (const member of manifest.repositories) {
     signal?.throwIfAborted()
-    if (!configuredRepositories.includes(member.repositoryName)) {
-      return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    }
     const repository = await planRemoveRepository(manifest, member, request, dependencies, signal)
     if (!repository.ok) return repository
     repositories.push(repository.repository)
@@ -635,7 +636,11 @@ async function buildRemovePlan(
     unmanagedEntries = [...new Set([...unmanagedEntries, ...children.filter((name) => !managed.has(name))])]
   }
 
-  const terminalSessionIds = await descendantTerminalSessionIds(manifest, configuredRepositories, dependencies)
+  const terminalSessionIds = await descendantTerminalSessionIds(
+    manifest,
+    manifest.repositories.map((member) => member.repositoryName),
+    dependencies,
+  )
   if (!terminalSessionIds) return { ok: false, message: 'workspace.branch-workspace.terminal-read-failed' }
   const requiredApprovals: BranchWorkspaceApproval[] = []
   if (modifiedCopy) requiredApprovals.push('modified-copy')
@@ -697,7 +702,10 @@ async function planRemoveRepository(
 > {
   const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal).catch(() => null)
+  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+    includeWorktreeStatus: false,
+    includeRemote: false,
+  }).catch(() => null)
   if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   const branch = snapshot.branches.find((candidate) => candidate.name === member.targetBranch)
   const registered = registeredWorktreeAtPath(manifest.rootId, snapshot, member.worktreePath)
@@ -718,17 +726,19 @@ async function planRemoveRepository(
   const targetCheckedOutElsewhere =
     !!branch?.worktree && !sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)
   const deleteBranch =
-    request.alsoDeleteBranch && member.branchOrigin === 'created' && !!branch && !targetCheckedOutElsewhere
-  if (deleteBranch && PROTECTED_BRANCHES.has(member.targetBranch)) {
-    return { ok: false, message: 'workspace.branch-workspace.protected-branch' }
-  }
+    request.alsoDeleteBranch &&
+    member.branchOrigin === 'created' &&
+    !!branch &&
+    !targetCheckedOutElsewhere &&
+    !PROTECTED_BRANCHES.has(member.targetBranch)
   const deleteUpstreamRequested = request.alsoDeleteUpstream && deleteBranch
   const upstream = branch?.tracking ? parseRemoteBranchRef(branch.tracking) : null
   const upstreamAlreadyAbsent = branch?.trackingGone === true && upstream !== null
-  const deleteUpstream = deleteUpstreamRequested && !upstreamAlreadyAbsent
-  if (deleteUpstream && (!upstream || isProtectedRemoteBranchRef(upstream.fullRef))) {
-    return { ok: false, message: 'workspace.branch-workspace.upstream-unavailable' }
-  }
+  const deleteUpstream =
+    deleteUpstreamRequested &&
+    !upstreamAlreadyAbsent &&
+    upstream !== null &&
+    !isProtectedRemoteBranchRef(upstream.fullRef)
   const satisfied = !worktree && !deleteBranch
   return {
     ok: true,

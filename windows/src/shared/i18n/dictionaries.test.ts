@@ -43,6 +43,10 @@ describe('i18n dictionaries', () => {
   })
 
   test('localizes menu and remote repository copy for non-English dictionaries', () => {
+    expect(zh['menu.file.open-wsl-project']).toBe('打开 WSL 项目…')
+    expect(ko['menu.file.open-wsl-project']).toBe('WSL 프로젝트 열기…')
+    expect(ja['menu.file.open-wsl-project']).toBe('WSL プロジェクトを開く…')
+
     expect(zh['menu.file.open-remote-repo']).toBe('打开远程仓库…')
     expect(ko['menu.file.open-remote-repo']).toBe('원격 리포지토리 열기…')
     expect(ja['menu.file.open-remote-repo']).toBe('リモートリポジトリを開く…')
@@ -50,6 +54,10 @@ describe('i18n dictionaries', () => {
     expect(zh['repo-tabs.open-remote']).toBe('打开远程仓库…')
     expect(ko['repo-tabs.open-remote']).toBe('원격 리포지토리 열기…')
     expect(ja['repo-tabs.open-remote']).toBe('リモートリポジトリを開く…')
+
+    expect(zh['repo-tabs.open-wsl']).toBe('打开 WSL 项目…')
+    expect(ko['repo-tabs.open-wsl']).toBe('WSL 프로젝트 열기…')
+    expect(ja['repo-tabs.open-wsl']).toBe('WSL プロジェクトを開く…')
 
     expect(ko['repo-tabs.open-remote-host-label']).toBe('호스트')
     expect(ja['repo-tabs.open-remote-host-label']).toBe('ホスト')
@@ -232,9 +240,7 @@ describe('i18n dictionaries', () => {
     expect(ja['workspace.branch-workspace.git-action.select-member']).toBe(
       '{repository} をこの一括操作のメンバーとして選択',
     )
-    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe(
-      '{repository} 구성원을 이 일괄 작업에 포함',
-    )
+    expect(ko['workspace.branch-workspace.git-action.select-member']).toBe('{repository} 구성원을 이 일괄 작업에 포함')
     expect(ja['workspace.branch-workspace.git-action.select-member']).not.toContain('マージ')
     expect(ko['workspace.branch-workspace.git-action.select-member']).not.toContain('병합')
   })

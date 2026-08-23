@@ -423,7 +423,7 @@ describe('settings-client', () => {
             pref: 'ghostty',
             resolved: 'ghostty',
             available: true,
-            appAvailability: { ghostty: true, terminal: false },
+            appAvailability: { ghostty: true, terminal: false, wsl: false, powershell: false, cmd: false },
             detectedAt: 1,
           },
           editor: {
@@ -443,7 +443,7 @@ describe('settings-client', () => {
       pref: 'ghostty',
       resolved: 'ghostty',
       available: true,
-      appAvailability: { ghostty: true, terminal: false },
+      appAvailability: { ghostty: true, terminal: false, wsl: false, powershell: false, cmd: false },
       detectedAt: 1,
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -478,7 +478,7 @@ describe('settings-client', () => {
             pref: 'auto',
             resolved: null,
             available: false,
-            appAvailability: { ghostty: false, terminal: false },
+            appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
             detectedAt: 1,
           },
           editor: {
