@@ -762,11 +762,18 @@ export async function pullRemoteBranch(
 export async function pushRemoteBranch(
   target: RemoteRepoTarget,
   branch: string,
-  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+  options: { signal?: AbortSignal; createUpstreamRemote?: string; run?: RemoteGitRunner } = {},
 ): Promise<ExecResult> {
   if (!isSafeBranchName(branch)) return { ok: false, message: 'error.invalid-arguments' }
+  if (options.createUpstreamRemote !== undefined && !isSafeRemoteName(options.createUpstreamRemote)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const pushTarget = await resolveRemotePushTarget(target, branch, { signal: options.signal, run })
+  const pushTarget = await resolveRemotePushTarget(target, branch, {
+    signal: options.signal,
+    createUpstreamRemote: options.createUpstreamRemote,
+    run,
+  })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if ('ok' in pushTarget) return pushTarget
   const result = await run(
@@ -1505,14 +1512,14 @@ async function getRemoteBranchMergeFacts(
 async function resolveRemotePushTarget(
   target: RemoteRepoTarget,
   branch: string,
-  options: { signal?: AbortSignal; run: RemoteGitRunner },
+  options: { signal?: AbortSignal; createUpstreamRemote?: string; run: RemoteGitRunner },
 ): Promise<{ remote: string; branch: string; setUpstream: boolean } | ExecResult> {
   const [remotes, upstream] = await Promise.all([
     getRemoteRemotes(target, options),
     getRemoteUpstreamParts(target, branch, options),
   ])
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
-  return resolvePushTargetForRemotes(remotes, upstream, branch)
+  return resolvePushTargetForRemotes(remotes, upstream, branch, options.createUpstreamRemote)
 }
 
 function splitUpstream(upstream: string): { remote: string; branch: string } | null {

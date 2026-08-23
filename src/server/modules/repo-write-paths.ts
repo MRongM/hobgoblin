@@ -40,11 +40,7 @@ import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { type CloneRepoResult } from '#/shared/rpc.ts'
-import {
-  isProtectedRemoteBranchRef,
-  parseRemoteBranchInput,
-  parseRemoteBranchRef,
-} from '#/shared/remote-branches.ts'
+import { isProtectedRemoteBranchRef, parseRemoteBranchInput, parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 import {
   normalizeRepositoryMergeBranchSelection,
   repositoryMergeBranchFullRef,
@@ -68,6 +64,10 @@ type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
 export interface RepoMutationInvalidationOptions {
   publishInvalidation?: boolean
+}
+
+export interface RepoPushOptions extends RepoMutationInvalidationOptions {
+  createUpstreamRemote?: string
 }
 
 const MAX_CLONE_URL_LENGTH = 4096
@@ -358,15 +358,18 @@ export async function pushRepositoryBranch(
   branch: string,
   signal?: AbortSignal,
   sourceToken?: string,
-  options?: RepoMutationInvalidationOptions,
+  options?: RepoPushOptions,
 ): Promise<ExecResult> {
+  if (options?.createUpstreamRemote !== undefined && !isSafeRemoteName(options.createUpstreamRemote)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
   const backend = await resolveRepoBackend(cwd)
   const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
   return await runUserNetworkMutation(
     cwd,
     signal,
     sourceToken,
-    async (mergedSignal) => await backend.push(branch, mergedSignal, networkOptions),
+    async (mergedSignal) => await backend.push(branch, mergedSignal, networkOptions, options?.createUpstreamRemote),
     options,
   )
 }

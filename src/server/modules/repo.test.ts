@@ -790,11 +790,46 @@ describe('git network settings for local repository network operations', () => {
 
     await expect(pushRepositoryBranch('/tmp/repo', 'feature/a')).resolves.toEqual({ ok: true, message: 'ok' })
 
-    expect(mocks.pushBranch).toHaveBeenCalledWith('/tmp/repo', 'feature/a', expect.any(AbortSignal), {
-      timeoutMs: 240_000,
-      proxyUrl: 'socks5://127.0.0.1:7890',
-    })
+    expect(mocks.pushBranch).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'feature/a',
+      expect.any(AbortSignal),
+      {
+        timeoutMs: 240_000,
+        proxyUrl: 'socks5://127.0.0.1:7890',
+      },
+      undefined,
+    )
   })
+
+  test('pushRepositoryBranch passes an explicit upstream creation remote to local push', async () => {
+    const { pushRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      pushRepositoryBranch('/tmp/repo', 'feature/a', undefined, undefined, { createUpstreamRemote: 'fork' }),
+    ).resolves.toEqual({ ok: true, message: 'ok' })
+
+    expect(mocks.pushBranch).toHaveBeenCalledWith(
+      '/tmp/repo',
+      'feature/a',
+      expect.any(AbortSignal),
+      expect.objectContaining({ timeoutMs: 240_000 }),
+      'fork',
+    )
+  })
+
+  test.each(['bad remote', '-fork', 'fork/main'])(
+    'pushRepositoryBranch rejects invalid explicit upstream creation remote %s',
+    async (createUpstreamRemote) => {
+      const { pushRepositoryBranch } = await import('#/server/modules/repo-write-paths.ts')
+
+      await expect(
+        pushRepositoryBranch('/tmp/repo', 'feature/a', undefined, undefined, { createUpstreamRemote }),
+      ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+      expect(mocks.pushBranch).not.toHaveBeenCalled()
+    },
+  )
 
   test('fetchRepositoryRemote fetches the exact local remote with configured network options', async () => {
     const { fetchRepositoryRemote } = await import('#/server/modules/repo-write-paths.ts')
@@ -1679,14 +1714,9 @@ describe('repo mutation invalidation publishing', () => {
     const { setRepositoryBranchUpstream } = await import('#/server/modules/repo-write-paths.ts')
 
     await expect(
-      setRepositoryBranchUpstream(
-        '/tmp/repo',
-        'feature/local',
-        'origin/release',
-        undefined,
-        'repo_branch_test',
-        { publishInvalidation: false },
-      ),
+      setRepositoryBranchUpstream('/tmp/repo', 'feature/local', 'origin/release', undefined, 'repo_branch_test', {
+        publishInvalidation: false,
+      }),
     ).resolves.toEqual({ ok: true, message: 'updated local upstream' })
 
     expect(mocks.setBranchUpstream).toHaveBeenCalledWith('/tmp/repo', 'feature/local', 'origin/release', undefined)
@@ -2826,9 +2856,7 @@ describe('repo mutation invalidation publishing', () => {
 
   test('mergeRepositoryBranchSelection fetches and revalidates a remote source before merging its full ref', async () => {
     const head = 'a'.repeat(40)
-    mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValueOnce([
-      { remoteRef: 'origin/feature/a', head },
-    ])
+    mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValueOnce([{ remoteRef: 'origin/feature/a', head }])
     const { mergeRepositoryBranchSelection } = await import('#/server/modules/repo-write-paths.ts')
 
     const result = await mergeRepositoryBranchSelection('/tmp/repo', '/tmp/repo-worktree', {

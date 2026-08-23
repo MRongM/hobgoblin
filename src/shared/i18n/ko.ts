@@ -269,7 +269,7 @@ export const ko: Record<DictKey, string> = {
     '각 대상 브랜치를 업스트림에서 저장소 순서대로 fast-forward 가져옵니다.',
   'workspace.branch-workspace.git-action.push': '일괄 푸시',
   'workspace.branch-workspace.git-action.push-description':
-    '각 대상 브랜치를 확인된 원격 대상으로 저장소 순서대로 푸시합니다.',
+    '각 대상 브랜치를 저장소 순서대로 푸시합니다. 필요한 경우 저장소 원격을 선택해 같은 이름의 업스트림을 만듭니다.',
   'workspace.branch-workspace.git-action.batch-merge-in': '일괄 들여오기 병합',
   'workspace.branch-workspace.git-action.batch-merge-in-description':
     '선택한 각 멤버 워크트리의 로컬 소스 브랜치를 선택한 뒤 대상 브랜치에 저장소 순서대로 병합합니다.',
@@ -295,6 +295,9 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.current-upstream': '현재 업스트림',
   'workspace.branch-workspace.git-action.select-upstream': '업스트림 선택',
   'workspace.branch-workspace.git-action.select-upstream-for-member': '{repository}의 업스트림 선택',
+  'workspace.branch-workspace.git-action.create-upstream': '업스트림 만들기',
+  'workspace.branch-workspace.git-action.select-push-remote': '{repository}의 푸시 원격 선택',
+  'workspace.branch-workspace.git-action.creating-upstream': '업스트림 {upstream} 만들기',
   'workspace.branch-workspace.git-action.temporary-worktree': '임시 워크트리',
   'workspace.branch-workspace.git-action.merge-in': '들여오기 병합',
   'workspace.branch-workspace.git-action.pull-merge-in-push': '대상 가져오기, 들여오기 병합 및 푸시',
@@ -356,6 +359,8 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     '이 작업에는 선택한 각 대상 브랜치의 사용 가능한 업스트림이 필요합니다.',
   'workspace.branch-workspace.git-action.remote-required': '일괄 푸시에는 각 저장소의 원격이 필요합니다.',
+  'workspace.branch-workspace.git-action.create-upstream-remote-required':
+    '새 업스트림이 필요한 각 브랜치의 원격을 일괄 푸시에서 선택하세요.',
   'workspace.branch-workspace.git-action.remote-branches-unavailable': '이 저장소의 원격 브랜치를 읽을 수 없습니다.',
   'workspace.branch-workspace.git-action.remote-branch-required': '원격 브랜치를 선택하세요.',
   'workspace.branch-workspace.git-action.remote-destination-requires-push':

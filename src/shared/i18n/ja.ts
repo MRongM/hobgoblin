@@ -276,7 +276,7 @@ export const ja: Record<DictKey, string> = {
     '各対象ブランチをアップストリームからリポジトリ順に fast-forward でプルします。',
   'workspace.branch-workspace.git-action.push': '一括プッシュ',
   'workspace.branch-workspace.git-action.push-description':
-    '各対象ブランチを解決済みのリモート送信先へリポジトリ順にプッシュします。',
+    '各対象ブランチをリポジトリ順にプッシュします。必要な場合はリポジトリのリモートを選択し、同名のアップストリームを作成します。',
   'workspace.branch-workspace.git-action.batch-merge-in': '一括取り込み',
   'workspace.branch-workspace.git-action.batch-merge-in-description':
     '選択した各メンバー worktree のローカルソースブランチを選び、対象ブランチへリポジトリ順にマージします。',
@@ -302,6 +302,9 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.current-upstream': '現在のアップストリーム',
   'workspace.branch-workspace.git-action.select-upstream': 'アップストリームを選択',
   'workspace.branch-workspace.git-action.select-upstream-for-member': '{repository} のアップストリームを選択',
+  'workspace.branch-workspace.git-action.create-upstream': 'アップストリームを作成',
+  'workspace.branch-workspace.git-action.select-push-remote': '{repository} のプッシュ先リモートを選択',
+  'workspace.branch-workspace.git-action.creating-upstream': 'アップストリーム {upstream} を作成',
   'workspace.branch-workspace.git-action.temporary-worktree': '一時 worktree',
   'workspace.branch-workspace.git-action.merge-in': '取り込む',
   'workspace.branch-workspace.git-action.pull-merge-in-push': '対象をプル、取り込み、プッシュ',
@@ -366,6 +369,8 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     'この操作には選択した各対象ブランチの利用可能なアップストリームが必要です。',
   'workspace.branch-workspace.git-action.remote-required': '一括プッシュには各リポジトリのリモートが必要です。',
+  'workspace.branch-workspace.git-action.create-upstream-remote-required':
+    '新しいアップストリームが必要な各ブランチのリモートを一括プッシュで選択してください。',
   'workspace.branch-workspace.git-action.remote-branches-unavailable':
     'このリポジトリのリモートブランチを読み込めませんでした。',
   'workspace.branch-workspace.git-action.remote-branch-required': 'リモートブランチを選択してください。',

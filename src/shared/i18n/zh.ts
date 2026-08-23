@@ -256,7 +256,8 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.pull': '批量拉取',
   'workspace.branch-workspace.git-action.pull-description': '按仓库顺序从上游快进拉取每个子工作区目标分支。',
   'workspace.branch-workspace.git-action.push': '批量推送',
-  'workspace.branch-workspace.git-action.push-description': '按仓库顺序将每个子工作区目标分支推送到已解析的远端。',
+  'workspace.branch-workspace.git-action.push-description':
+    '按仓库顺序推送每个子工作区目标分支；缺少可用上游时，可选择仓库远端并创建同名上游分支。',
   'workspace.branch-workspace.git-action.batch-merge-in': '批量合入',
   'workspace.branch-workspace.git-action.batch-merge-in-description':
     '为每个选中的成员工作树选择本地来源分支，再按仓库顺序逐个合入其目标分支。',
@@ -282,6 +283,9 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.current-upstream': '当前上游',
   'workspace.branch-workspace.git-action.select-upstream': '选择上游',
   'workspace.branch-workspace.git-action.select-upstream-for-member': '为 {repository} 选择上游',
+  'workspace.branch-workspace.git-action.create-upstream': '创建上游',
+  'workspace.branch-workspace.git-action.select-push-remote': '为 {repository} 选择推送远端',
+  'workspace.branch-workspace.git-action.creating-upstream': '将创建上游 {upstream}',
   'workspace.branch-workspace.git-action.temporary-worktree': '临时工作树',
   'workspace.branch-workspace.git-action.merge-in': '合入',
   'workspace.branch-workspace.git-action.pull-merge-in-push': '拉取目标、合入并推送',
@@ -338,6 +342,8 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.source-worktree-conflicted': '源工作树存在未解决的合并冲突。',
   'workspace.branch-workspace.git-action.target-upstream-required': '此操作要求每个所选目标分支都有可用上游。',
   'workspace.branch-workspace.git-action.remote-required': '批量推送要求每个成员工作树所属仓库都有可用远端。',
+  'workspace.branch-workspace.git-action.create-upstream-remote-required':
+    '请在批量推送中为每个需要新上游的分支选择远端。',
   'workspace.branch-workspace.git-action.remote-branches-unavailable': '无法读取此仓库的远程分支。',
   'workspace.branch-workspace.git-action.remote-branch-required': '请选择远程分支。',
   'workspace.branch-workspace.git-action.remote-destination-requires-push': '远程目标必须使用获取、合并并推送模式。',

@@ -105,7 +105,7 @@ export function SidebarProjectHeader({
   return (
     <div data-testid="sidebar-project-header" className="flex shrink-0 flex-col bg-topbar text-topbar-foreground">
       <div
-        className="topbar flex min-w-0 shrink-0 items-center gap-0.5 overflow-hidden"
+        className="topbar sidebar-project-topbar flex min-w-0 shrink-0 items-center gap-0.5 overflow-hidden"
         style={{ height: topbarHeightPx }}
       >
         {onShowCompactDetail && (

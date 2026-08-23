@@ -163,6 +163,14 @@ describe('SidebarProjectHeader', () => {
     expect(listWrapper?.className).not.toContain('border-separator')
   })
 
+  test('marks its topbar for sidebar-edge chrome alignment', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" />)
+    })
+
+    expect(container!.querySelector<HTMLElement>('.topbar')?.className).toContain('sidebar-project-topbar')
+  })
+
   test('keeps the global project list expansion state when the active project changes', () => {
     act(() => {
       root!.render(<SidebarProjectHeader repoId="/repo-a" />)

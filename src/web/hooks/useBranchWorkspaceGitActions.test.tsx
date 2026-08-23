@@ -56,6 +56,8 @@ function syncPlan(kind: 'pull' | 'push'): BranchWorkspaceGitActionPlan {
         targetHead: 'target-head',
         upstream: 'origin/feature/a',
         trackingGone: false,
+        requiresUpstreamCreation: false,
+        pushRemotes: kind === 'push' ? ['origin'] : [],
         ready: true,
         fingerprint: 'sha256:api',
       },
@@ -134,14 +136,23 @@ describe('useBranchWorkspaceGitActions', () => {
     )
 
     await act(async () => state!.requestPlan(kind, 'ws-1'))
-    await act(async () => state!.executeSync(kind, ['api']))
+    const selection =
+      kind === 'pull'
+        ? { kind, repositoryNames: ['api'] }
+        : { kind, targets: [{ repositoryName: 'api', action: 'push' as const }] }
+    await act(async () => state!.executeSync(selection))
 
     expect(state!.plan).toEqual(expectedPlan)
-    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
-      kind,
-      planToken: expectedPlan.token,
-      repositoryNames: ['api'],
-    })
+    expect(mocks.execute).toHaveBeenCalledWith(
+      '/workspace',
+      kind === 'pull'
+        ? { kind, planToken: expectedPlan.token, repositoryNames: ['api'] }
+        : {
+            kind,
+            planToken: expectedPlan.token,
+            targets: [{ repositoryName: 'api', action: 'push' }],
+          },
+    )
   })
 
   test('plans and executes batch discard with only the server-owned plan token', async () => {
@@ -232,6 +243,11 @@ describe('useBranchWorkspaceGitActions', () => {
     await act(async () => state!.executeBatchCommitAndPush([]))
 
     expect(calls).toEqual(['plan:batch-commit', 'execute:batch-commit', 'plan:push', 'execute:push'])
+    expect(mocks.execute).toHaveBeenLastCalledWith('/workspace', {
+      kind: 'push',
+      planToken: pushPlan.token,
+      targets: [{ repositoryName: 'api', action: 'push' }],
+    })
     expect(state!.plan).toEqual(pushPlan)
     expect(state!.result).toMatchObject({ ok: true, kind: 'push', planToken: pushPlan.token })
   })
@@ -308,6 +324,8 @@ describe('useBranchWorkspaceGitActions', () => {
           targetHead: 'target-head',
           upstream: null,
           trackingGone: false,
+          requiresUpstreamCreation: true,
+          pushRemotes: [],
           ready: false,
           message: 'workspace.branch-workspace.git-action.remote-required',
           fingerprint: 'sha256:api',
@@ -337,6 +355,37 @@ describe('useBranchWorkspaceGitActions', () => {
     expect(mocks.execute).toHaveBeenCalledTimes(1)
     expect(state!.plan).toEqual(pushPlan)
     expect(state!.error).toBe('workspace.branch-workspace.git-action.remote-required')
+  })
+
+  test('keeps an ambiguous fresh push plan visible for manual remote selection', async () => {
+    const pushPlan = syncPlan('push')
+    if (pushPlan.kind !== 'push') throw new Error('expected push plan')
+    pushPlan.members[0]!.upstream = null
+    pushPlan.members[0]!.requiresUpstreamCreation = true
+    pushPlan.members[0]!.pushRemotes = ['backup', 'fork']
+    mocks.plan.mockResolvedValueOnce({ ok: true, plan }).mockResolvedValueOnce({ ok: true, plan: pushPlan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      kind: 'batch-commit',
+      planToken: plan.token,
+      branchWorkspaceId: 'ws-1',
+      members: [],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () => state!.requestPlan('batch-commit', 'ws-1'))
+    await act(async () => state!.executeBatchCommitAndPush([]))
+
+    expect(mocks.execute).toHaveBeenCalledTimes(1)
+    expect(state!.plan).toEqual(pushPlan)
+    expect(state!.error).toBe('workspace.branch-workspace.git-action.create-upstream-remote-required')
   })
 })
 

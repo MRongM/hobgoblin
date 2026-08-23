@@ -248,25 +248,57 @@ describe('branch workspace Git action inputs', () => {
     })
   })
 
-  test.each(['pull', 'push'] as const)('normalizes a selected coordinated %s execution input', (kind) => {
+  test('normalizes a selected coordinated pull execution input', () => {
     expect(
       normalizeBranchWorkspaceGitActionPlanRequest({
-        kind,
+        kind: 'pull',
         branchWorkspaceId: ' branch-1 ',
       }),
     ).toEqual({
       ok: true,
-      request: { kind, branchWorkspaceId: 'branch-1' },
+      request: { kind: 'pull', branchWorkspaceId: 'branch-1' },
     })
     expect(
       normalizeBranchWorkspaceGitActionExecuteInput({
-        kind,
+        kind: 'pull',
         planToken: ' sha256:plan ',
         repositoryNames: [' web ', 'api'],
       }),
     ).toEqual({
       ok: true,
-      input: { kind, planToken: 'sha256:plan', repositoryNames: ['web', 'api'] },
+      input: { kind: 'pull', planToken: 'sha256:plan', repositoryNames: ['web', 'api'] },
+    })
+  })
+
+  test('normalizes coordinated push targets with explicit upstream creation', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionPlanRequest({
+        kind: 'push',
+        branchWorkspaceId: ' branch-1 ',
+      }),
+    ).toEqual({
+      ok: true,
+      request: { kind: 'push', branchWorkspaceId: 'branch-1' },
+    })
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'push',
+        planToken: ' sha256:plan ',
+        targets: [
+          { repositoryName: ' web ', action: 'create-upstream', remote: ' fork ' },
+          { repositoryName: 'api', action: 'push' },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      input: {
+        kind: 'push',
+        planToken: 'sha256:plan',
+        targets: [
+          { repositoryName: 'web', action: 'create-upstream', remote: 'fork' },
+          { repositoryName: 'api', action: 'push' },
+        ],
+      },
     })
   })
 
@@ -308,9 +340,37 @@ describe('branch workspace Git action inputs', () => {
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', targets: [] },
     { kind: 'batch-merge-out', planToken: 'sha256:plan', mode: 'merge', sources: [] },
     { kind: 'pull', planToken: 'sha256:plan' },
-    { kind: 'push', planToken: 'sha256:plan', repositoryNames: [] },
+    { kind: 'push', planToken: 'sha256:plan', targets: [] },
+    { kind: 'push', planToken: 'sha256:plan', repositoryNames: ['api'] },
     { kind: 'pull', planToken: 'sha256:plan', repositoryNames: ['api', 'api'] },
-    { kind: 'push', planToken: 'sha256:plan', repositoryNames: ['../api'] },
+    {
+      kind: 'push',
+      planToken: 'sha256:plan',
+      targets: [
+        { repositoryName: 'api', action: 'push' },
+        { repositoryName: 'api', action: 'create-upstream', remote: 'origin' },
+      ],
+    },
+    {
+      kind: 'push',
+      planToken: 'sha256:plan',
+      targets: [{ repositoryName: '../api', action: 'push' }],
+    },
+    {
+      kind: 'push',
+      planToken: 'sha256:plan',
+      targets: [{ repositoryName: 'api', action: 'create-upstream', remote: '../origin' }],
+    },
+    {
+      kind: 'push',
+      planToken: 'sha256:plan',
+      targets: [{ repositoryName: 'api', action: 'create-upstream' }],
+    },
+    {
+      kind: 'push',
+      planToken: 'sha256:plan',
+      targets: [{ repositoryName: 'api', action: 'force' }],
+    },
     {
       kind: 'batch-merge-in',
       planToken: 'sha256:plan',

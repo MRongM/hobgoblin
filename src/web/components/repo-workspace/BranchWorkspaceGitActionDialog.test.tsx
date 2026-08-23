@@ -16,8 +16,13 @@ vi.mock('#/web/repo-client.ts', () => ({
   generateRepositoryCommitMessage: mocks.generate,
 }))
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string, values?: { repository?: string }) =>
-    key === 'workspace.branch-workspace.git-action.select-upstream-for-member' ? `${key}:${values?.repository}` : key,
+  useT: () => (key: string, values?: { repository?: string; upstream?: string }) => {
+    if (key === 'workspace.branch-workspace.git-action.select-upstream-for-member') {
+      return `${key}:${values?.repository}`
+    }
+    if (key === 'workspace.branch-workspace.git-action.creating-upstream') return `${key}:${values?.upstream}`
+    return key
+  },
 }))
 
 const batchPlan: BranchWorkspaceGitActionPlan = {
@@ -72,6 +77,8 @@ function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitAction
       targetHead: `target-head-${index}`,
       upstream: repositoryName === 'api' ? 'origin/feature/a' : 'upstream/feature/web',
       trackingGone: false,
+      requiresUpstreamCreation: kind === 'push' && !ready,
+      pushRemotes: kind === 'push' && ready ? ['origin', 'upstream'] : [],
       ready,
       ...(!ready
         ? {
@@ -1302,12 +1309,23 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector('[data-sync-upstream="api"]')?.textContent).toContain('origin/feature/a')
     expect(document.querySelector('[data-sync-upstream="web"]')?.textContent).toContain('upstream/feature/web')
     expect(action?.querySelector(icon)).not.toBeNull()
+    if (kind === 'push') expect(document.querySelector('[data-push-remote]')).toBeNull()
 
     await act(async () => {
       action?.click()
       await Promise.resolve()
     })
-    expect(onSync).toHaveBeenCalledWith(kind, ['api', 'web'])
+    expect(onSync).toHaveBeenCalledWith(
+      kind === 'pull'
+        ? { kind, repositoryNames: ['api', 'web'] }
+        : {
+            kind,
+            targets: [
+              { repositoryName: 'api', action: 'push' },
+              { repositoryName: 'web', action: 'push' },
+            ],
+          },
+    )
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
@@ -1315,6 +1333,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     const plan = syncPlan('push')
     if (plan.kind !== 'push') throw new Error('expected push plan')
     plan.members[0]!.upstream = null
+    plan.members[0]!.requiresUpstreamCreation = true
     plan.members[1]!.trackingGone = true
 
     render({ kind: 'push', plan })
@@ -1361,7 +1380,62 @@ describe('BranchWorkspaceGitActionPanel', () => {
       action?.click()
       await Promise.resolve()
     })
-    expect(onSync).toHaveBeenCalledWith('push', ['api'])
+    expect(onSync).toHaveBeenCalledWith({
+      kind: 'push',
+      targets: [{ repositoryName: 'api', action: 'push' }],
+    })
+  })
+
+  test('defaults origin and requires an explicit remote for ambiguous upstream creation', async () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    Object.assign(plan.members[0]!, {
+      upstream: null,
+      requiresUpstreamCreation: true,
+      pushRemotes: ['fork', 'origin'],
+    })
+    Object.assign(plan.members[1]!, {
+      upstream: null,
+      requiresUpstreamCreation: true,
+      pushRemotes: ['backup', 'fork'],
+    })
+    const onSync = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'push' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    render({ kind: 'push', plan, onSync })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="push"]')
+    expect(document.querySelector('[data-push-remote="api"]')?.textContent).toContain('origin')
+    expect(document.querySelector('[data-sync-push-target="api"]')?.textContent).toContain('origin/feature/a')
+    expect(action?.disabled).toBe(true)
+
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-sync-repository="web"]')?.click())
+    expect(action?.disabled).toBe(false)
+    expect(document.querySelector<HTMLButtonElement>('[data-push-remote="web"]')?.disabled).toBe(true)
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-sync-repository="web"]')?.click())
+    expect(action?.disabled).toBe(true)
+
+    await selectPushRemote('web', 'fork')
+    expect(document.querySelector('[data-sync-push-target="web"]')?.textContent).toContain('fork/feature/a')
+    expect(action?.disabled).toBe(false)
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+
+    expect(onSync).toHaveBeenCalledWith({
+      kind: 'push',
+      targets: [
+        { repositoryName: 'api', action: 'create-upstream', remote: 'origin' },
+        { repositoryName: 'web', action: 'create-upstream', remote: 'fork' },
+      ],
+    })
+    expect(document.querySelector<HTMLButtonElement>('[data-sync-repository="api"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-push-remote="api"]')?.disabled).toBe(true)
   })
 })
 
@@ -1452,6 +1526,21 @@ async function selectUpstreamRemote(repositoryName: string, remoteRef: string) {
   })
   const option = document.querySelector<HTMLElement>(`[data-upstream-remote-option="${repositoryName}:${remoteRef}"]`)
   if (!option) throw new Error(`Missing upstream remote option ${repositoryName}:${remoteRef}`)
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function selectPushRemote(repositoryName: string, remote: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[data-push-remote="${repositoryName}"]`)
+  if (!trigger) throw new Error(`Missing push remote trigger for ${repositoryName}`)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await Promise.resolve()
+  })
+  const option = document.querySelector<HTMLElement>(`[data-push-remote-option="${repositoryName}:${remote}"]`)
+  if (!option) throw new Error(`Missing push remote option ${repositoryName}:${remote}`)
   await act(async () => {
     option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await Promise.resolve()

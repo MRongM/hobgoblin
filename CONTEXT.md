@@ -483,7 +483,7 @@ An application-coordinated action that fast-forward pulls selected repository me
 _Avoid_: Workspace pull-all, base-branch pull, atomic batch pull
 
 **Branch workspace batch push**:
-An application-coordinated action that pushes every repository member's target branch to its resolved push target sequentially. A repository-member failure is recorded without blocking later members, all failures are returned together, and completed pushes are never rolled back.
+An application-coordinated action that pushes selected repository members' target branches to their resolved push targets sequentially. A member without a usable upstream may explicitly create a same-name branch on one selected repository remote and set it as upstream; a repository-member failure is recorded without blocking later members, all failures are returned together, and completed pushes are never rolled back.
 _Avoid_: Merge-back push, base-branch push, atomic batch push
 
 **Branch workspace batch merge-in**:

@@ -1514,6 +1514,47 @@ describe('remote git helpers', () => {
     )
   })
 
+  test('pushRemoteBranch creates an upstream on an explicit remote when fallback resolution is ambiguous', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      switch (command.type) {
+        case 'gitRemoteVerbose':
+          return okRemoteResult(
+            [
+              'fork\tgit@github.com:alice/project.git (fetch)',
+              'fork\tgit@github.com:alice/project.git (push)',
+              'backup\tgit@github.com:acme/project.git (fetch)',
+              'backup\tgit@github.com:acme/project.git (push)',
+            ].join('\n'),
+          )
+        case 'gitUpstream':
+          return failRemoteResult('no upstream')
+        case 'gitPush':
+          return okRemoteResult('pushed')
+        default:
+          return okRemoteResult('')
+      }
+    })
+
+    const result = await pushRemoteBranch(TARGET, 'feature/test', {
+      createUpstreamRemote: 'fork',
+      run: run as any,
+    })
+
+    expect(result).toEqual({ ok: true, message: 'pushed' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'gitPush',
+        path: '/srv/repo',
+        remote: 'fork',
+        branch: 'feature/test',
+        targetBranch: 'feature/test',
+        setUpstream: true,
+      },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
   test('materializes deep remote selections in best-effort literal mode', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       if (command.type === 'bootstrapRemoteWorktree') {

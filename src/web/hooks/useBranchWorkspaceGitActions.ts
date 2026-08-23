@@ -10,6 +10,7 @@ import type {
   BranchWorkspaceGitActionPlan,
   BranchWorkspaceGitActionResult,
   BranchWorkspaceMergeMode,
+  BranchWorkspaceSyncSelection,
 } from '#/shared/branch-workspace-git-actions.ts'
 import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 import {
@@ -17,6 +18,7 @@ import {
   executeBranchWorkspaceGitAction,
   planBranchWorkspaceGitAction,
 } from '#/web/workspace-client.ts'
+import { branchWorkspacePushTargets, initialBranchWorkspacePushRemotes } from '#/web/branch-workspace-batch-push.ts'
 
 export function useBranchWorkspaceGitActions(rootId: string | null) {
   const queryClient = useQueryClient()
@@ -112,15 +114,18 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
 
       const pushPlan = await loadPlan('push', commitPlan.branchWorkspaceId)
       if (!pushPlan || pushPlan.kind !== 'push') return null
-      const repositoryNames = pushPlan.members.filter((member) => member.ready).map((member) => member.repositoryName)
-      if (repositoryNames.length === 0) {
-        setError(
-          pushPlan.members.find((member) => !member.ready)?.message ??
-            'workspace.branch-workspace.git-action.execute-failed',
-        )
+      const unavailable = pushPlan.members.find((member) => !member.ready)
+      if (unavailable) {
+        setError(unavailable.message ?? 'workspace.branch-workspace.git-action.execute-failed')
         return null
       }
-      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token, repositoryNames })
+      const repositoryNames = pushPlan.members.map((member) => member.repositoryName)
+      const targets = branchWorkspacePushTargets(pushPlan, repositoryNames, initialBranchWorkspacePushRemotes(pushPlan))
+      if (!targets) {
+        setError('workspace.branch-workspace.git-action.create-upstream-remote-required')
+        return null
+      }
+      return await executePlan(pushPlan, { kind: 'push', planToken: pushPlan.token, targets })
     },
     [executePlan, loadPlan, plan],
   )
@@ -155,9 +160,11 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   )
 
   const executeSync = useCallback(
-    async (kind: 'pull' | 'push', repositoryNames: string[]) => {
-      if (!plan || plan.kind !== kind) return null
-      return await execute({ kind, planToken: plan.token, repositoryNames })
+    async (selection: BranchWorkspaceSyncSelection) => {
+      if (!plan || plan.kind !== selection.kind) return null
+      return selection.kind === 'pull'
+        ? await execute({ kind: selection.kind, planToken: plan.token, repositoryNames: selection.repositoryNames })
+        : await execute({ kind: selection.kind, planToken: plan.token, targets: selection.targets })
     },
     [execute, plan],
   )

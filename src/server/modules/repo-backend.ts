@@ -119,11 +119,7 @@ import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 type PreparedUpstreamDeletion = { upstream: string | null }
 
-function validateUpstreamDeletion(
-  branch: string,
-  upstream: string,
-  branches: BranchSnapshotInfo[],
-): ExecResult | null {
+function validateUpstreamDeletion(branch: string, upstream: string, branches: BranchSnapshotInfo[]): ExecResult | null {
   if (isProtectedRemoteBranchRef(upstream)) {
     return { ok: false, message: 'error.cannot-delete-protected-branch' }
   }
@@ -168,7 +164,12 @@ export interface RepoBackend {
     signal?: AbortSignal,
     networkOptions?: GitNetworkOptions,
   ): Promise<ExecResult>
-  push(branch: string, signal?: AbortSignal, networkOptions?: GitNetworkOptions): Promise<ExecResult>
+  push(
+    branch: string,
+    signal?: AbortSignal,
+    networkOptions?: GitNetworkOptions,
+    createUpstreamRemote?: string,
+  ): Promise<ExecResult>
   pushWorktreeHeadToRemoteBranch(
     worktreePath: string,
     remote: string,
@@ -466,9 +467,9 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
       return await pullBranch(repoId, branch, worktreePath, signal, networkOptions)
     },
-    async push(branch, signal, networkOptions) {
+    async push(branch, signal, networkOptions, createUpstreamRemote) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
-      return await pushBranch(repoId, branch, signal, networkOptions)
+      return await pushBranch(repoId, branch, signal, networkOptions, createUpstreamRemote)
     },
     async pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal, networkOptions) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
@@ -744,8 +745,8 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     async pull(branch, worktreePath, signal) {
       return await pullRemoteBranch(target, branch, worktreePath, { signal })
     },
-    async push(branch, signal) {
-      return await pushRemoteBranch(target, branch, { signal })
+    async push(branch, signal, _networkOptions, createUpstreamRemote) {
+      return await pushRemoteBranch(target, branch, { signal, createUpstreamRemote })
     },
     async pushWorktreeHeadToRemoteBranch(worktreePath, remote, branch, signal) {
       return await pushRemoteWorktreeHeadToRemoteBranch(target, worktreePath, remote, branch, { signal })

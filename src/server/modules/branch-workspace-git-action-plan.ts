@@ -30,8 +30,9 @@ import {
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
 import type { ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
 import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
-import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
+import { parseRemoteBranchRef, type RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
+import { isSafeRemoteName } from '#/shared/worktree-create.ts'
 
 export interface BranchWorkspaceGitActionPlanDependencies {
   readManifests?: typeof readBranchWorkspaceManifests
@@ -423,16 +424,21 @@ async function buildSyncPlan(
     )
     if (!facts.ok) return facts
     const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
-    const ready =
-      kind === 'pull' ? Boolean(branch.tracking && !branch.trackingGone) : facts.snapshot.remote?.hasRemotes === true
+    const pushRemotes =
+      kind === 'push'
+        ? (facts.snapshot.remote?.remotes ?? [])
+            .map((remote) => remote.name)
+            .filter(isSafeRemoteName)
+            .sort((left, right) => left.localeCompare(right))
+        : []
+    const upstreamRemote = branch.tracking ? parseRemoteBranchRef(branch.tracking)?.remote : undefined
+    const requiresUpstreamCreation = kind === 'push' && (!upstreamRemote || !pushRemotes.includes(upstreamRemote))
+    const ready = kind === 'pull' ? Boolean(branch.tracking && !branch.trackingGone) : pushRemotes.length > 0
     const message = ready
       ? undefined
       : kind === 'pull'
         ? 'workspace.branch-workspace.git-action.target-upstream-required'
         : 'workspace.branch-workspace.git-action.remote-required'
-    const remotes = (facts.snapshot.remote?.remotes ?? [])
-      .map((remote) => ({ name: remote.name, pushUrl: remote.pushUrl }))
-      .sort((left, right) => left.name.localeCompare(right.name))
     members.push({
       repositoryName: member.repositoryName,
       repoId: facts.repoId,
@@ -441,6 +447,8 @@ async function buildSyncPlan(
       targetHead: facts.head,
       upstream: branch.tracking ?? null,
       trackingGone: branch.trackingGone === true,
+      requiresUpstreamCreation,
+      pushRemotes,
       ready,
       ...(message ? { message } : {}),
       fingerprint: repositoryPlanFingerprint({
@@ -449,7 +457,7 @@ async function buildSyncPlan(
         status: normalizedStatusEntries(facts.status.entries),
         upstream: branch.tracking ?? null,
         trackingGone: branch.trackingGone === true,
-        remotes,
+        pushRemotes,
       }),
     })
   }

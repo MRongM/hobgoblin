@@ -346,6 +346,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetHead: 'target-head',
             upstream,
             trackingGone: false,
+            requiresUpstreamCreation: kind === 'push',
+            pushRemotes: kind === 'push' ? ['origin'] : [],
             ready: true,
           },
           {
@@ -355,12 +357,52 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             targetHead: 'target-head',
             upstream,
             trackingGone: false,
+            requiresUpstreamCreation: kind === 'push',
+            pushRemotes: kind === 'push' ? ['origin'] : [],
             ready: true,
           },
         ],
       },
     })
   })
+
+  test.each([
+    ['usable upstream', { targetTracking: 'origin/feature/a', remotes: ['origin'] }, false, ['origin']],
+    [
+      'gone tracking branch with an existing remote',
+      { targetTracking: 'origin/feature/a', targetTrackingGone: true, remotes: ['origin'] },
+      false,
+      ['origin'],
+    ],
+    ['missing upstream', { remotes: ['upstream', 'origin'] }, true, ['origin', 'upstream']],
+    ['deleted upstream remote', { targetTracking: 'origin/feature/a', remotes: ['fork'] }, true, ['fork']],
+    ['local upstream', { targetTracking: 'feature/base', remotes: ['origin'] }, true, ['origin']],
+  ] as const)(
+    'projects push target state for %s',
+    async (_label, snapshotOptions, requiresUpstreamCreation, pushRemotes) => {
+      const result = await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'push', branchWorkspaceId: WORKSPACE_ID },
+        dependencies({
+          getSnapshot: vi.fn(async (repoId: string) =>
+            snapshot(repoId.endsWith('/api') ? 'api' : 'web', snapshotOptions),
+          ),
+        }),
+      )
+
+      expect(result).toMatchObject({
+        ok: true,
+        plan: {
+          kind: 'push',
+          ready: true,
+          members: [
+            { repositoryName: 'api', requiresUpstreamCreation, pushRemotes },
+            { repositoryName: 'web', requiresUpstreamCreation, pushRemotes },
+          ],
+        },
+      })
+    },
+  )
 
   test.each([
     [
@@ -390,6 +432,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             repositoryName: 'api',
             upstream: kind === 'pull' ? 'origin/feature/a' : null,
             trackingGone: kind === 'pull',
+            requiresUpstreamCreation: kind === 'push',
+            pushRemotes: [],
             ready: false,
             message,
           },
@@ -397,6 +441,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
             repositoryName: 'web',
             upstream: kind === 'pull' ? 'origin/feature/a' : null,
             trackingGone: kind === 'pull',
+            requiresUpstreamCreation: kind === 'push',
+            pushRemotes: [],
             ready: false,
             message,
           },
@@ -418,6 +464,8 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
       )
 
     const original = await build('target-head', ['origin'])
+    const reordered = await build('target-head', ['upstream', 'origin'])
+    const reorderedAgain = await build('target-head', ['origin', 'upstream'])
     const changedHead = await build('changed-head', ['origin'])
     const changedRemotes = await build('target-head', ['upstream'])
 
@@ -425,6 +473,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     expect(original.ok && changedRemotes.ok && original.plan.token).not.toBe(
       changedRemotes.ok && changedRemotes.plan.token,
     )
+    expect(reordered.ok && reorderedAgain.ok && reordered.plan.token).toBe(reorderedAgain.ok && reorderedAgain.plan.token)
   })
 
   test('projects current upstream and same-repository remote candidates for each batch upstream member', async () => {

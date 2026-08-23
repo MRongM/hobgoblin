@@ -187,8 +187,10 @@ function syncPlan(kind: 'pull' | 'push', ready = true, repositoryNames = ['api',
       targetBranch: 'feature/a',
       targetWorktreePath: `${ROOT}/goblin-feature-a/${repositoryName}`,
       targetHead: `target-head-${index}`,
-      upstream: kind === 'pull' ? `origin/feature/${repositoryName}` : null,
+      upstream: `origin/feature/${repositoryName}`,
       trackingGone: false,
+      requiresUpstreamCreation: kind === 'push' && !ready,
+      pushRemotes: kind === 'push' && ready ? ['origin'] : [],
       ready,
       ...(!ready
         ? {
@@ -201,6 +203,20 @@ function syncPlan(kind: 'pull' | 'push', ready = true, repositoryNames = ['api',
       fingerprint: `sha256:${repositoryName}`,
     })),
   }
+}
+
+function pushCreationPlan(
+  repositoryNames = ['api'],
+  pushRemotes: string[] = ['backup', 'fork'],
+): BranchWorkspaceGitActionPlan {
+  const plan = syncPlan('push', true, repositoryNames)
+  if (plan.kind !== 'push') throw new Error('expected push plan')
+  for (const member of plan.members) {
+    member.upstream = null
+    member.requiresUpstreamCreation = true
+    member.pushRemotes = pushRemotes
+  }
+  return plan
 }
 
 function batchSetUpstreamPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
@@ -2115,7 +2131,14 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
 
     await expect(
-      service.execute(ROOT, { kind: 'push', planToken: plan.token, repositoryNames: ['api', 'web', 'docs'] }),
+      service.execute(ROOT, {
+        kind: 'push',
+        planToken: plan.token,
+        targets: ['api', 'web', 'docs'].map((repositoryName) => ({
+          repositoryName,
+          action: 'push' as const,
+        })),
+      }),
     ).resolves.toMatchObject({
       ok: false,
       members: [
@@ -2211,9 +2234,125 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
 
     await expect(
-      service.execute(ROOT, { kind: 'push', planToken: plan.token, repositoryNames: ['api', 'web'] }),
+      service.execute(ROOT, {
+        kind: 'push',
+        planToken: plan.token,
+        targets: ['api', 'web'].map((repositoryName) => ({ repositoryName, action: 'push' as const })),
+      }),
     ).resolves.toMatchObject({ ok: true })
     expect(calls).toEqual(['/workspace/api:feature/a', '/workspace/web:feature/a'])
+  })
+
+  test('creates an upstream on the selected remote and locks that mapping across retries', async () => {
+    const plan = pushCreationPlan()
+    const push = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, message: 'rejected' })
+      .mockResolvedValueOnce({ ok: true, message: 'pushed' })
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      push,
+    })
+    await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
+    const selected = {
+      kind: 'push' as const,
+      planToken: plan.token,
+      targets: [{ repositoryName: 'api', action: 'create-upstream' as const, remote: 'fork' }],
+    }
+
+    await expect(service.execute(ROOT, selected)).resolves.toMatchObject({ ok: false })
+    expect(push).toHaveBeenCalledWith('/workspace/api', 'feature/a', expect.any(AbortSignal), undefined, {
+      publishInvalidation: false,
+      createUpstreamRemote: 'fork',
+    })
+
+    await expect(
+      service.execute(ROOT, {
+        ...selected,
+        targets: [{ repositoryName: 'api', action: 'create-upstream', remote: 'backup' }],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(push).toHaveBeenCalledTimes(1)
+
+    await expect(service.execute(ROOT, selected)).resolves.toMatchObject({ ok: true })
+    expect(push).toHaveBeenCalledTimes(2)
+  })
+
+  test('skips a completed upstream creation when retry validation sees its new upstream', async () => {
+    const plan = pushCreationPlan(['api', 'web'], ['origin'])
+    const refreshedPlan = pushCreationPlan(['api', 'web'], ['origin'])
+    if (refreshedPlan.kind !== 'push') throw new Error('expected push plan')
+    Object.assign(refreshedPlan.members[0]!, {
+      upstream: 'origin/feature/a',
+      requiresUpstreamCreation: false,
+    })
+    let validatedPlan = plan
+    const push = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, message: 'pushed api' })
+      .mockResolvedValueOnce({ ok: false, message: 'web rejected' })
+      .mockResolvedValueOnce({ ok: true, message: 'pushed web' })
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan: validatedPlan })),
+      push,
+    })
+    await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
+    const input = {
+      kind: 'push' as const,
+      planToken: plan.token,
+      targets: ['api', 'web'].map((repositoryName) => ({
+        repositoryName,
+        action: 'create-upstream' as const,
+        remote: 'origin',
+      })),
+    }
+
+    await expect(service.execute(ROOT, input)).resolves.toMatchObject({ ok: false })
+    validatedPlan = refreshedPlan
+    await expect(service.execute(ROOT, input)).resolves.toMatchObject({ ok: true })
+
+    expect(push.mock.calls.map((call) => call[0])).toEqual(['/workspace/api', '/workspace/web', '/workspace/web'])
+  })
+
+  test('rejects push actions that do not match the server push plan', async () => {
+    let plan = pushCreationPlan()
+    const push = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      push,
+    })
+
+    await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
+    await expect(
+      service.execute(ROOT, {
+        kind: 'push',
+        planToken: plan.token,
+        targets: [{ repositoryName: 'api', action: 'push' }],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+    await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
+    await expect(
+      service.execute(ROOT, {
+        kind: 'push',
+        planToken: plan.token,
+        targets: [{ repositoryName: 'api', action: 'create-upstream', remote: 'missing' }],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+
+    plan = syncPlan('push', true, ['api'])
+    await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
+    await expect(
+      service.execute(ROOT, {
+        kind: 'push',
+        planToken: plan.token,
+        targets: [{ repositoryName: 'api', action: 'create-upstream', remote: 'origin' }],
+      }),
+    ).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(push).not.toHaveBeenCalled()
   })
 
   test('pushes selected ready members when another member is unavailable', async () => {
@@ -2235,7 +2374,11 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     await service.plan(ROOT, { kind: 'push', branchWorkspaceId: 'ws-1' })
 
     await expect(
-      service.execute(ROOT, { kind: 'push', planToken: plan.token, repositoryNames: ['api'] }),
+      service.execute(ROOT, {
+        kind: 'push',
+        planToken: plan.token,
+        targets: [{ repositoryName: 'api', action: 'push' }],
+      }),
     ).resolves.toMatchObject({
       ok: true,
       members: [
@@ -2262,9 +2405,19 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
     })
     await service.plan(ROOT, { kind, branchWorkspaceId: 'ws-1' })
 
-    await expect(
-      service.execute(ROOT, { kind, planToken: plan.token, repositoryNames: ['api', 'web'] }),
-    ).resolves.toMatchObject({
+    const input =
+      kind === 'pull'
+        ? { kind, planToken: plan.token, repositoryNames: ['api', 'web'] }
+        : {
+            kind,
+            planToken: plan.token,
+            targets: ['api', 'web'].map((repositoryName) => ({
+              repositoryName,
+              action: 'create-upstream' as const,
+              remote: 'origin',
+            })),
+          }
+    await expect(service.execute(ROOT, input)).resolves.toMatchObject({
       ok: false,
       message:
         kind === 'pull'

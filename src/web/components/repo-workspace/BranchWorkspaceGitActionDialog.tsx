@@ -13,6 +13,7 @@ import type {
   BranchWorkspaceGitActionPlan,
   BranchWorkspaceGitActionResult,
   BranchWorkspaceMergeMode,
+  BranchWorkspaceSyncSelection,
   BranchWorkspaceSyncPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
@@ -53,6 +54,7 @@ import {
 import { cn } from '#/web/lib/cn.ts'
 import { remoteBranchRefMatchesQuery } from '#/shared/remote-branches.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { branchWorkspacePushTargets, initialBranchWorkspacePushRemotes } from '#/web/branch-workspace-batch-push.ts'
 
 interface BranchWorkspaceGitActionPanelProps {
   open: boolean
@@ -79,7 +81,7 @@ interface BranchWorkspaceGitActionPanelProps {
     mode: BranchWorkspaceMergeMode,
     targets: BranchWorkspaceBatchMergeOutTargetInput[],
   ) => Promise<BranchWorkspaceGitActionResult | null>
-  onSync: (kind: 'pull' | 'push', repositoryNames: string[]) => Promise<BranchWorkspaceGitActionResult | null>
+  onSync: (selection: BranchWorkspaceSyncSelection) => Promise<BranchWorkspaceGitActionResult | null>
   onCancel: () => Promise<unknown>
   onBatchErrorAiHandoff: (input: BranchWorkspaceBatchErrorAiHandoffInput) => Promise<boolean>
 }
@@ -127,8 +129,10 @@ export function BranchWorkspaceGitActionPanel({
   const [upstreams, setUpstreams] = useState<Record<string, string>>({})
   const [upstreamQueries, setUpstreamQueries] = useState<Record<string, string>>({})
   const [upstreamActions, setUpstreamActions] = useState<Record<string, 'set' | 'unset'>>({})
+  const [pushRemotes, setPushRemotes] = useState<Record<string, string>>({})
   const [startedMergeMode, setStartedMergeMode] = useState<BranchWorkspaceMergeMode | null>(null)
   const [startedUpstreamUpdate, setStartedUpstreamUpdate] = useState(false)
+  const [startedSync, setStartedSync] = useState(false)
   const generationController = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -171,8 +175,10 @@ export function BranchWorkspaceGitActionPanel({
     setUpstreams({})
     setUpstreamQueries({})
     setUpstreamActions({})
+    setPushRemotes(plan?.kind === 'push' ? initialBranchWorkspacePushRemotes(plan) : {})
     setStartedMergeMode(null)
     setStartedUpstreamUpdate(false)
+    setStartedSync(false)
   }, [open, plan?.token])
 
   useEffect(() => {
@@ -303,6 +309,10 @@ export function BranchWorkspaceGitActionPanel({
   })
   const upstreamSelectionReady =
     selectedUpstreamMembers.length > 0 && selectedUpstreams.length === selectedUpstreamMembers.length
+  const selectedPushTargets =
+    plan?.kind === 'push' ? branchWorkspacePushTargets(plan, selectedSyncRepositories, pushRemotes) : null
+  const syncSelectionReady =
+    selectedSyncRepositories.length > 0 && (plan?.kind === 'pull' || selectedPushTargets !== null)
 
   const nonMergeProgress = plan
     ? plan.kind === 'batch-commit'
@@ -417,8 +427,12 @@ export function BranchWorkspaceGitActionPanel({
             result={result}
             activeOperation={activeOperation}
             selectedRepositories={selectedSyncRepositories}
-            disabled={pending}
+            pushRemotes={pushRemotes}
+            disabled={pending || startedSync}
             onSelectedRepositoriesChange={setSelectedSyncRepositories}
+            onPushRemoteChange={(repositoryName, remote) =>
+              setPushRemotes((current) => ({ ...current, [repositoryName]: remote }))
+            }
           />
         ) : null}
 
@@ -502,8 +516,18 @@ export function BranchWorkspaceGitActionPanel({
               <Button
                 type="button"
                 data-action={plan.kind}
-                disabled={pending || selectedSyncRepositories.length === 0}
-                onClick={() => void runAndClose(() => onSync(plan.kind, selectedSyncRepositories))}
+                disabled={pending || !syncSelectionReady}
+                onClick={() => {
+                  const selection: BranchWorkspaceSyncSelection | null =
+                    plan.kind === 'pull'
+                      ? { kind: plan.kind, repositoryNames: selectedSyncRepositories }
+                      : selectedPushTargets
+                        ? { kind: plan.kind, targets: selectedPushTargets }
+                        : null
+                  if (!selection) return
+                  setStartedSync(true)
+                  void runAndClose(() => onSync(selection))
+                }}
               >
                 {plan.kind === 'pull' ? (
                   <ArrowDown className="size-4" aria-hidden="true" />
@@ -1588,15 +1612,19 @@ function SyncContent({
   result,
   activeOperation,
   selectedRepositories,
+  pushRemotes,
   disabled,
   onSelectedRepositoriesChange,
+  onPushRemoteChange,
 }: {
   plan: BranchWorkspaceSyncPlan
   result: BranchWorkspaceGitActionResult | null
   activeOperation: BranchWorkspaceActiveOperation | null
   selectedRepositories: string[]
+  pushRemotes: Record<string, string>
   disabled: boolean
   onSelectedRepositoriesChange: (repositoryNames: string[]) => void
+  onPushRemoteChange: (repositoryName: string, remote: string) => void
 }) {
   const t = useT()
   const selectableRepositories = plan.members.filter((member) => member.ready).map((member) => member.repositoryName)
@@ -1629,10 +1657,11 @@ function SyncContent({
           const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
           const activeStep = branchWorkspaceActiveMemberStep(activeOperation, member.repositoryName)
           const isSelected = selected.has(member.repositoryName)
+          const pushRemote = pushRemotes[member.repositoryName]
           return (
             <div
               key={member.repositoryName}
-              className="grid grid-cols-[1rem_2rem_minmax(0,1fr)_minmax(0,1.4fr)_7rem] items-center gap-2 border-b border-separator/60 px-3 py-2.5 text-xs last:border-b-0"
+              className="grid grid-cols-[1rem_2rem_minmax(0,1fr)_minmax(10rem,1.6fr)_7rem] items-center gap-2 border-b border-separator/60 px-3 py-2.5 text-xs last:border-b-0"
             >
               <Checkbox
                 data-sync-repository={member.repositoryName}
@@ -1650,6 +1679,50 @@ function SyncContent({
                 <div data-sync-upstream={member.repositoryName}>
                   <BranchUpstreamDisplay upstream={member.upstream} trackingGone={member.trackingGone} />
                 </div>
+                {plan.kind === 'push' && member.requiresUpstreamCreation ? (
+                  <div className="grid min-w-0 gap-1">
+                    <Select
+                      value={pushRemote}
+                      disabled={disabled || !isSelected}
+                      onValueChange={(remote) => onPushRemoteChange(member.repositoryName, remote)}
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        data-push-remote={member.repositoryName}
+                        aria-label={t('workspace.branch-workspace.git-action.select-push-remote', {
+                          repository: member.repositoryName,
+                        })}
+                      >
+                        <SelectValue
+                          placeholder={t('workspace.branch-workspace.git-action.select-push-remote', {
+                            repository: member.repositoryName,
+                          })}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {member.pushRemotes.map((remote) => (
+                          <SelectItem
+                            key={remote}
+                            value={remote}
+                            data-push-remote-option={`${member.repositoryName}:${remote}`}
+                          >
+                            {remote}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {pushRemote ? (
+                      <span
+                        data-sync-push-target={member.repositoryName}
+                        className="truncate font-mono text-[10px] text-muted-foreground"
+                      >
+                        {t('workspace.branch-workspace.git-action.creating-upstream', {
+                          upstream: `${pushRemote}/${member.targetBranch}`,
+                        })}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <span className={cn('text-[10px] text-muted-foreground', !member.ready && 'text-warning')}>
                 {activeStep
@@ -1662,7 +1735,14 @@ function SyncContent({
                       ? t(member.message ?? 'workspace.branch-workspace.git-action.execute-failed')
                       : !isSelected
                         ? t('workspace.branch-workspace.git-action.not-selected')
-                        : t('workspace.branch-workspace.git-action.ready')}
+                        : plan.kind === 'push' && member.requiresUpstreamCreation
+                          ? t(
+                              pushRemote
+                                ? 'workspace.branch-workspace.git-action.create-upstream'
+                                : 'workspace.branch-workspace.git-action.select-push-remote',
+                              { repository: member.repositoryName },
+                            )
+                          : t('workspace.branch-workspace.git-action.ready')}
               </span>
             </div>
           )

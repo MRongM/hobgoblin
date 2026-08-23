@@ -279,7 +279,7 @@ export const en = {
     'Fast-forward pull each target branch from its upstream in repository order.',
   'workspace.branch-workspace.git-action.push': 'Batch push',
   'workspace.branch-workspace.git-action.push-description':
-    'Push each target branch to its resolved remote destination in repository order.',
+    'Push each target branch in repository order. Select a repository remote to create a same-name upstream when needed.',
   'workspace.branch-workspace.git-action.batch-merge-in': 'Batch merge in',
   'workspace.branch-workspace.git-action.batch-merge-in-description':
     'Select member worktrees and a local source branch for each, then merge each source into its member target in repository order.',
@@ -305,6 +305,9 @@ export const en = {
   'workspace.branch-workspace.git-action.current-upstream': 'Current upstream',
   'workspace.branch-workspace.git-action.select-upstream': 'Select upstream',
   'workspace.branch-workspace.git-action.select-upstream-for-member': 'Select upstream for {repository}',
+  'workspace.branch-workspace.git-action.create-upstream': 'create upstream',
+  'workspace.branch-workspace.git-action.select-push-remote': 'Select push remote for {repository}',
+  'workspace.branch-workspace.git-action.creating-upstream': 'Create upstream {upstream}',
   'workspace.branch-workspace.git-action.temporary-worktree': 'temporary worktree',
   'workspace.branch-workspace.git-action.merge-in': 'Merge in',
   'workspace.branch-workspace.git-action.pull-merge-in-push': 'Pull target, merge in & push',
@@ -366,6 +369,8 @@ export const en = {
   'workspace.branch-workspace.git-action.target-upstream-required':
     'This action requires a usable upstream for every selected target branch.',
   'workspace.branch-workspace.git-action.remote-required': 'Every repository needs a remote before batch push.',
+  'workspace.branch-workspace.git-action.create-upstream-remote-required':
+    'Select a remote for each branch that needs a new upstream, then run batch push.',
   'workspace.branch-workspace.git-action.remote-branches-unavailable':
     'Could not read remote branches for this repository.',
   'workspace.branch-workspace.git-action.remote-branch-required': 'Select a remote branch.',
