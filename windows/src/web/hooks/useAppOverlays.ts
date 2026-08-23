@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useOverlayRegistry } from '#/web/hooks/useOverlayRegistry.ts'
+import type { OpenRepositorySource } from '#/web/lib/open-repo-dialog.ts'
 export const APP_OVERLAY_KEYS = ['clone', 'openRepo', 'openRemoteRepo'] as const
 export type AppOverlayKey = (typeof APP_OVERLAY_KEYS)[number]
 
@@ -16,6 +17,7 @@ export function useAppOverlays(options: AppOverlayRouteOptions = {}) {
   const { anyOpen, closeAll, open, setOpen, state: openByKey } = registry
   const routeOverlay = options.routeOverlay ?? null
   const routeDriven = typeof options.onRouteOverlayChange === 'function'
+  const [openRepoSource, setOpenRepoSource] = useState<OpenRepositorySource>('local')
 
   const openCloneRepo = useCallback(() => {
     if (routeDriven) {
@@ -36,16 +38,29 @@ export function useAppOverlays(options: AppOverlayRouteOptions = {}) {
     [options, routeDriven, routeOverlay, setOpen],
   )
 
+  const openRepoDialog = useCallback(
+    (source: OpenRepositorySource) => {
+      setOpenRepoSource(source)
+      if (routeDriven) {
+        options.onRouteOverlayChange?.('openRepo')
+        return
+      }
+      open('openRepo')
+    },
+    [open, options, routeDriven],
+  )
+
   const openRepoPathDialog = useCallback(() => {
-    if (routeDriven) {
-      options.onRouteOverlayChange?.('openRepo')
-      return
-    }
-    open('openRepo')
-  }, [open, options, routeDriven])
+    openRepoDialog('local')
+  }, [openRepoDialog])
+
+  const openWslRepoPathDialog = useCallback(() => {
+    openRepoDialog('wsl')
+  }, [openRepoDialog])
 
   const setOpenRepoOpen = useCallback(
     (open: boolean) => {
+      if (!open) setOpenRepoSource('local')
       if (routeDriven) {
         options.onRouteOverlayChange?.(open ? 'openRepo' : routeOverlay === 'openRepo' ? null : routeOverlay)
         return
@@ -77,6 +92,7 @@ export function useAppOverlays(options: AppOverlayRouteOptions = {}) {
   )
 
   const closeAllOverlays = useCallback(() => {
+    setOpenRepoSource('local')
     if (routeDriven) {
       options.onRouteOverlayChange?.(null)
       return
@@ -87,10 +103,10 @@ export function useAppOverlays(options: AppOverlayRouteOptions = {}) {
   const state = useMemo(
     () => ({
       clone: { open: routeDriven ? routeOverlay === 'clone' : openByKey.clone },
-      openRepo: { open: routeDriven ? routeOverlay === 'openRepo' : openByKey.openRepo },
+      openRepo: { open: routeDriven ? routeOverlay === 'openRepo' : openByKey.openRepo, source: openRepoSource },
       openRemoteRepo: { open: routeDriven ? routeOverlay === 'openRemoteRepo' : openByKey.openRemoteRepo },
     }),
-    [openByKey.clone, openByKey.openRepo, openByKey.openRemoteRepo, routeDriven, routeOverlay],
+    [openByKey.clone, openByKey.openRepo, openByKey.openRemoteRepo, openRepoSource, routeDriven, routeOverlay],
   )
 
   return {
@@ -99,6 +115,7 @@ export function useAppOverlays(options: AppOverlayRouteOptions = {}) {
     openCloneRepo,
     setCloneOpen,
     openRepoPathDialog,
+    openWslRepoPathDialog,
     setOpenRepoOpen,
     openRemoteRepo,
     setOpenRemoteRepoOpen,

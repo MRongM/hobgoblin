@@ -203,6 +203,22 @@ describe('openInPreferredTerminal', () => {
     expect(openInAppleTerminal).not.toHaveBeenCalled()
   })
 
+  test.each(['wsl', 'powershell', 'cmd'] as const)(
+    'opens the explicitly selected %s Windows external terminal',
+    async (pref) => {
+      setPlatform('win32')
+      vi.mocked(isWindowsTerminalAvailable).mockReturnValue(true)
+
+      await expect(openInPreferredTerminal(windowsTarget, pref)).resolves.toEqual({
+        ok: true,
+        message: 'C:\\repo',
+      })
+
+      expect(isWindowsTerminalAvailable).toHaveBeenCalledWith(pref)
+      expect(openInWindowsTerminal).toHaveBeenCalledWith('C:\\repo', pref)
+    },
+  )
+
   test('coalesces concurrent duplicate Windows opens for the same normalized directory', async () => {
     setPlatform('win32')
     vi.mocked(isWindowsTerminalAvailable).mockReturnValue(true)

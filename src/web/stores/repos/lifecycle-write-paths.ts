@@ -143,7 +143,9 @@ export function addResolvedRepo(
         existing.remote.target.host !== resolvedRepo.target.host ||
         existing.remote.target.user !== resolvedRepo.target.user ||
         existing.remote.target.port !== resolvedRepo.target.port ||
-        existing.remote.target.remotePath !== resolvedRepo.target.remotePath)
+        existing.remote.target.remotePath !== resolvedRepo.target.remotePath ||
+        existing.remote.target.transport !== resolvedRepo.target.transport ||
+        existing.remote.target.wslExecutable !== resolvedRepo.target.wslExecutable)
     const capabilityChanged = existing.isGitRepo !== nextIsGitRepo
     const availabilityChanged = existing.availability.phase !== 'available'
     const workspaceAssociationChanged =

@@ -491,11 +491,13 @@ async function planRepairRepository(
     if (!sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)) {
       return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
     }
-    return {
-      ok: true,
-      repository: {
-        ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, true),
-      },
+    if (!branch.worktree.isPrunable) {
+      return {
+        ok: true,
+        repository: {
+          ...repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: member.targetBranch }, true),
+        },
+      }
     }
   }
   const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
@@ -518,7 +520,10 @@ async function planRepairRepository(
     : ({ kind: 'newBranch', newBranch: member.targetBranch, creationBase: memberCreationBase } as const)
   return {
     ok: true,
-    repository: repairRepositoryPlan(member, repoId, mode, false),
+    repository: {
+      ...repairRepositoryPlan(member, repoId, mode, false),
+      ...(branch?.worktree?.isPrunable ? { pruneBeforeCreate: true } : {}),
+    },
   }
 }
 

@@ -78,6 +78,7 @@ interface BranchWorkspaceDialogProps {
   onRefreshAuxiliaryCandidates: () => Promise<BranchWorkspaceReadResult>
   onPreview: (request: BranchWorkspacePlanRequest) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
+  onForceConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onRetry: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onReturnToSelection: () => Promise<void> | void
   onCancel: () => Promise<unknown>
@@ -106,6 +107,7 @@ export function BranchWorkspaceDialog({
   onRefreshAuxiliaryCandidates,
   onPreview,
   onConfirm,
+  onForceConfirm,
   onRetry,
   onReturnToSelection,
   onCancel,
@@ -439,6 +441,25 @@ export function BranchWorkspaceDialog({
   const allSelectableRepositoriesSelected =
     selectableRepositories.length > 0 && selectedSelectableCount === selectableRepositories.length
   const someSelectableRepositoriesSelected = selectedSelectableCount > 0 && !allSelectableRepositoriesSelected
+  const synchronizableSelectedRepositories = visibleRepositories.filter((repository) => {
+    if (!repository.available || fixedRepositories.has(repository.name) || !selectedRepositories[repository.name]) {
+      return false
+    }
+    const creationBase = effectiveCreationBase(
+      repository,
+      branch.trim(),
+      creationBases[repository.name] ?? defaultCreationBase(repository),
+    )
+    return syncEligible(repository, creationBase)
+  })
+  const synchronizedSelectedCount = synchronizableSelectedRepositories.filter(
+    (repository) => syncBeforeCreate[repository.name],
+  ).length
+  const allSynchronizableSelectedRepositoriesSynchronized =
+    synchronizableSelectedRepositories.length > 0 &&
+    synchronizedSelectedCount === synchronizableSelectedRepositories.length
+  const someSynchronizableSelectedRepositoriesSynchronized =
+    synchronizedSelectedCount > 0 && !allSynchronizableSelectedRepositoriesSynchronized
   const operationProgress =
     plan && plan.steps.length > 0 && (mode === 'create' || mode === 'remove') && (pending || result !== null)
       ? projectBranchWorkspaceOperationProgress(plan, progressWorkspace, {
@@ -507,38 +528,63 @@ export function BranchWorkspaceDialog({
             </label>
             <fieldset className="grid gap-2 rounded-md border border-separator p-3">
               <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
-              <label className="flex items-center gap-2 border-b border-separator pb-2 text-xs font-medium">
-                <input
-                  type="checkbox"
-                  ref={(element) => {
-                    if (element) element.indeterminate = someSelectableRepositoriesSelected
-                  }}
-                  aria-label={t('workspace.branch-workspace.repositories-select-all')}
-                  checked={allSelectableRepositoriesSelected}
-                  disabled={pending || selectableRepositories.length === 0}
-                  onChange={() => {
-                    const selected = !allSelectableRepositoriesSelected
-                    const selectableNames = new Set(selectableRepositories.map((repository) => repository.name))
-                    setSelectedRepositories((current) => ({
-                      ...current,
-                      ...Object.fromEntries([...selectableNames].map((name) => [name, selected])),
-                    }))
-                    for (const repository of selectableRepositories) {
-                      if (selected) {
-                        void loadRemoteBranches(repository)
-                        continue
-                      }
-                      setRepositoryDependenciesEnabled((current) => ({
+              <div className="grid grid-cols-1 gap-3 border-b border-separator pb-2 text-xs font-medium sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.55fr)_minmax(8rem,0.8fr)_minmax(7rem,0.6fr)]">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    ref={(element) => {
+                      if (element) element.indeterminate = someSelectableRepositoriesSelected
+                    }}
+                    aria-label={t('workspace.branch-workspace.repositories-select-all')}
+                    checked={allSelectableRepositoriesSelected}
+                    disabled={pending || selectableRepositories.length === 0}
+                    onChange={() => {
+                      const selected = !allSelectableRepositoriesSelected
+                      const selectableNames = new Set(selectableRepositories.map((repository) => repository.name))
+                      setSelectedRepositories((current) => ({
                         ...current,
-                        [repository.name]: false,
+                        ...Object.fromEntries([...selectableNames].map((name) => [name, selected])),
                       }))
-                      clearRepositoryBootstrap(repository.name)
-                      remoteBranchControllers.current[repository.name]?.abort()
-                    }
-                  }}
-                />
-                <span>{t('workspace.branch-workspace.repositories-select-all')}</span>
-              </label>
+                      for (const repository of selectableRepositories) {
+                        if (selected) {
+                          void loadRemoteBranches(repository)
+                          continue
+                        }
+                        setRepositoryDependenciesEnabled((current) => ({
+                          ...current,
+                          [repository.name]: false,
+                        }))
+                        clearRepositoryBootstrap(repository.name)
+                        remoteBranchControllers.current[repository.name]?.abort()
+                      }
+                    }}
+                  />
+                  <span>{t('workspace.branch-workspace.repositories-select-all')}</span>
+                </label>
+                <label className="flex items-center gap-2 text-muted-foreground sm:col-start-4">
+                  <input
+                    type="checkbox"
+                    ref={(element) => {
+                      if (element) {
+                        element.indeterminate = someSynchronizableSelectedRepositoriesSynchronized
+                      }
+                    }}
+                    aria-label={t('workspace.branch-workspace.sync-before-create-select-all')}
+                    checked={allSynchronizableSelectedRepositoriesSynchronized}
+                    disabled={pending || synchronizableSelectedRepositories.length === 0}
+                    onChange={() => {
+                      const synchronized = !allSynchronizableSelectedRepositoriesSynchronized
+                      setSyncBeforeCreate((current) => ({
+                        ...current,
+                        ...Object.fromEntries(
+                          synchronizableSelectedRepositories.map((repository) => [repository.name, synchronized]),
+                        ),
+                      }))
+                    }}
+                  />
+                  <span className="truncate">{t('workspace.branch-workspace.sync-before-create')}</span>
+                </label>
+              </div>
               {visibleRepositories.map((repository) => {
                 const fixed = fixedRepositories.has(repository.name)
                 const requestedCreationBase = creationBases[repository.name] ?? defaultCreationBase(repository)
@@ -1091,6 +1137,18 @@ export function BranchWorkspaceDialog({
               }}
             >
               {t('workspace.branch-workspace.preview')}
+            </Button>
+          ) : null}
+          {plan && mode === 'remove' ? (
+            <Button
+              type="button"
+              data-action="force-confirm"
+              variant="destructive"
+              title={t('workspace.branch-workspace.force-delete-description')}
+              disabled={pending || !requiredApprovalsSatisfied}
+              onClick={() => void run(onForceConfirm)}
+            >
+              {t('workspace.branch-workspace.force-delete')}
             </Button>
           ) : null}
           {plan ? (

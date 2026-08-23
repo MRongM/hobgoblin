@@ -19,6 +19,7 @@ export interface RepoTabStripLabels {
   open: string
   openLocal: string
   openLocalShortcut: string | null
+  openWsl: string
   openRemote: string
   openRemoteShortcut: string | null
   clone: string

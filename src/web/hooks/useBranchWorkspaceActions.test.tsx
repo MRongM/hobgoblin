@@ -143,6 +143,54 @@ describe('useBranchWorkspaceActions', () => {
     })
   })
 
+  test('sends force removal separately and reports member cleanup warnings', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      branchWorkspaceId: 'branch-1',
+      warnings: [
+        {
+          kind: 'member-worktree-cleanup-failed',
+          repositoryName: 'api',
+          message: 'cleanup failed',
+        },
+      ],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    await act(async () =>
+      state!.requestPlan({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      }),
+    )
+
+    await act(async () => state!.forceConfirm(['worktree-bootstrap']))
+
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      planToken: plan.token,
+      approvals: ['worktree-bootstrap'],
+      force: true,
+    })
+    expect(mocks.warning).toHaveBeenCalledWith('workspace.branch-workspace.force-delete-cleanup-warning:1', {
+      description: 'api: cleanup failed',
+    })
+  })
+
   test('writes a successful creation snapshot into cache without refetching', async () => {
     mocks.plan.mockResolvedValue({ ok: true, plan })
     mocks.execute.mockResolvedValue({ ok: true, branchWorkspaceId: 'branch-1', snapshot: readySnapshot })

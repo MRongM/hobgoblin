@@ -12,31 +12,64 @@ import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { OpenRepoResult } from '#/web/stores/repos/types.ts'
+import { getWindowsWslDistributions } from '#/web/remote-client.ts'
+import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
+import type { OpenRepositorySource } from '#/web/lib/open-repo-dialog.ts'
 interface Props {
   open: boolean
+  initialSource?: OpenRepositorySource
   onClose: () => void
   onOpen: (path: string) => Promise<OpenRepoResult>
 }
 
-export function OpenRepositoryDialog({ open, onClose, onOpen }: Props) {
+export function OpenRepositoryDialog({ open, initialSource = 'local', onClose, onOpen }: Props) {
   const t = useT()
   const compact = useIsCompactUi()
+  const supportsWslImport = getInitialBootstrap().hostPlatform === 'win32'
+  const requestedSource = initialSource === 'wsl' && supportsWslImport ? 'wsl' : 'local'
   const [path, setPath] = useState('')
+  const [source, setSource] = useState<OpenRepositorySource>(requestedSource)
+  const [distribution, setDistribution] = useState('')
+  const [distributions, setDistributions] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const { pending, reset, runLatest } = useLatestAsyncTask()
 
   const trimmedPath = path.trim()
-  const resolvedPath = untildify(trimmedPath)
-  const canSubmit = resolvedPath.length > 0 && !pending
-  const canChoosePath = hasNativeDirectoryPicker()
+  const effectiveSource = supportsWslImport ? source : 'local'
+  const resolvedPath = effectiveSource === 'local' ? untildify(trimmedPath) : trimmedPath
+  const canSubmit =
+    resolvedPath.length > 0 &&
+    !pending &&
+    (effectiveSource === 'local' || (distribution.trim().length > 0 && resolvedPath.startsWith('/')))
+  const canChoosePath = effectiveSource === 'local' && hasNativeDirectoryPicker()
   const statusText = error ?? ''
 
   useEffect(() => {
     if (!open) return
     setPath('')
+    setSource(requestedSource)
+    setDistribution('')
     reset()
     setError(null)
-  }, [open, reset])
+    if (!supportsWslImport) {
+      setDistributions([])
+      return
+    }
+    let cancelled = false
+    void getWindowsWslDistributions()
+      .then((items) => {
+        if (cancelled) return
+        setDistributions(items)
+        setDistribution(items[0] ?? '')
+      })
+      .catch(() => {
+        if (!cancelled) setDistributions([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, requestedSource, reset, supportsWslImport])
 
   async function choosePath() {
     if (pending || !canChoosePath) return
@@ -55,7 +88,11 @@ export function OpenRepositoryDialog({ open, onClose, onOpen }: Props) {
     if (!canSubmit) return
     setError(null)
     try {
-      const result = await runLatest(() => onOpen(resolvedPath))
+      const input =
+        effectiveSource === 'wsl'
+          ? normalizeRemoteRepoId({ transport: 'wsl', alias: distribution.trim(), remotePath: resolvedPath })
+          : resolvedPath
+      const result = await runLatest(() => onOpen(input))
       if (result.status === 'stale') return
       if (result.value.ok) {
         onClose()
@@ -74,8 +111,8 @@ export function OpenRepositoryDialog({ open, onClose, onOpen }: Props) {
         if (!nextOpen && !pending) onClose()
       }}
       showCloseButton={!pending}
-      title={t('repo-tabs.open-title')}
-      description={t('repo-tabs.open-description')}
+      title={effectiveSource === 'wsl' ? t('repo-tabs.open-wsl-title') : t('repo-tabs.open-title')}
+      description={effectiveSource === 'wsl' ? t('repo-tabs.open-wsl-description') : t('repo-tabs.open-description')}
     >
       <form
         className="space-y-0"
@@ -84,8 +121,56 @@ export function OpenRepositoryDialog({ open, onClose, onOpen }: Props) {
           void handleSubmit()
         }}
       >
+        {supportsWslImport ? (
+          <Field>
+            <FieldLabel>{t('repo-tabs.open-source-label')}</FieldLabel>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={source === 'local' ? 'default' : 'outline'}
+                disabled={pending}
+                onClick={() => setSource('local')}
+              >
+                {t('repo-tabs.open-source-local')}
+              </Button>
+              <Button
+                type="button"
+                variant={source === 'wsl' ? 'default' : 'outline'}
+                disabled={pending}
+                onClick={() => setSource('wsl')}
+              >
+                {t('repo-tabs.open-source-wsl')}
+              </Button>
+            </div>
+          </Field>
+        ) : null}
+        {effectiveSource === 'wsl' ? (
+          <Field>
+            <FieldLabel htmlFor="open-repo-wsl-distribution">{t('repo-tabs.open-wsl-distribution-label')}</FieldLabel>
+            <Input
+              id="open-repo-wsl-distribution"
+              disabled={pending}
+              value={distribution}
+              list={distributions.length > 0 ? 'open-repo-wsl-distributions' : undefined}
+              onChange={(event) => {
+                setDistribution(event.target.value)
+                setError(null)
+              }}
+              placeholder={t('repo-tabs.open-wsl-distribution-placeholder')}
+            />
+            {distributions.length > 0 ? (
+              <datalist id="open-repo-wsl-distributions">
+                {distributions.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            ) : null}
+          </Field>
+        ) : null}
         <Field>
-          <FieldLabel htmlFor="open-repo-path">{t('repo-tabs.open-path-label')}</FieldLabel>
+          <FieldLabel htmlFor="open-repo-path">
+            {effectiveSource === 'wsl' ? t('repo-tabs.open-wsl-path-label') : t('repo-tabs.open-path-label')}
+          </FieldLabel>
           <div className={cn('gap-2', compact ? 'flex flex-col' : 'flex')}>
             <Input
               id="open-repo-path"
@@ -96,7 +181,11 @@ export function OpenRepositoryDialog({ open, onClose, onOpen }: Props) {
                 setPath(event.target.value)
                 setError(null)
               }}
-              placeholder={t('repo-tabs.open-path-placeholder')}
+              placeholder={
+                effectiveSource === 'wsl'
+                  ? t('repo-tabs.open-wsl-path-placeholder')
+                  : t('repo-tabs.open-path-placeholder')
+              }
               className="min-w-0 flex-1 font-mono text-xs"
             />
             {canChoosePath ? (
@@ -115,11 +204,21 @@ export function OpenRepositoryDialog({ open, onClose, onOpen }: Props) {
         </Field>
 
         <DialogFooter className="pt-4">
-          <Button type="button" variant="outline" className={cn(compact && 'w-full')} disabled={pending} onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            className={cn(compact && 'w-full')}
+            disabled={pending}
+            onClick={onClose}
+          >
             {t('dialog.cancel')}
           </Button>
           <Button type="submit" className={cn(compact && 'w-full')} disabled={!canSubmit}>
-            {pending ? t('repo-tabs.open-opening') : t('repo-tabs.open-local-confirm')}
+            {pending
+              ? t('repo-tabs.open-opening')
+              : effectiveSource === 'wsl'
+                ? t('repo-tabs.open-wsl-confirm')
+                : t('repo-tabs.open-local-confirm')}
           </Button>
         </DialogFooter>
       </form>

@@ -125,6 +125,16 @@ bun run install:app
 
 This builds a host-architecture `Hobgoblin.app`, installs it to `~/Applications`, and safely creates `$HOME/.local/bin/hob` when that path is available. It never overwrites an existing command.
 
+### Fast Windows build from WSL
+
+When the repository is on a Windows-mounted drive, build the primary Windows app with the Windows-native toolchain from WSL:
+
+```bash
+bash scripts/build-windows-from-wsl.sh
+```
+
+The default creates `release/win-unpacked`. Pass `--installer` for the NSIS installer, `--install` to build and silently install it, `--typecheck` to verify first, `--clean` to clear only `release/`, or `--arch arm64` for Windows ARM64. If Windows exposes a local proxy, pass its URL or port, for example `--proxy 7890`. The script verifies and reuses either its ignored `tmp/electron-cache` or a matching Windows Electron cache before downloading through npmmirror.
+
 ## Develop
 
 Install dependencies and start the development app:

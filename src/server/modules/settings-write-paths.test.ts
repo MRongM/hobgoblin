@@ -110,7 +110,7 @@ describe('settings write paths', () => {
         pref: 'ghostty',
         resolved: 'ghostty',
         available: true,
-        appAvailability: { ghostty: true, terminal: false },
+        appAvailability: { ghostty: true, terminal: false, wsl: false, powershell: false, cmd: false },
         detectedAt: 1,
       },
       editor: {

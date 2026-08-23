@@ -1,6 +1,9 @@
 import { toast } from 'sonner'
 import { chooseLocalRepositoryPath, hasNativeDirectoryPicker } from '#/web/app-shell-client.ts'
 import type { OpenRepoResult } from '#/web/stores/repos/types.ts'
+
+export type OpenRepositorySource = 'local' | 'wsl'
+
 interface Options {
   ensureWorkspaceOpen: (path: string) => Promise<OpenRepoResult>
   activateRepo?: (repoId: string) => void

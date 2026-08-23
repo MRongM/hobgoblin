@@ -432,9 +432,7 @@ describe('branch workspace create planner', () => {
     const workspacePath = path.join(rootId, 'hob-feature-auth')
     const expectedPath = path.join(workspacePath, 'api')
     const gitPath =
-      process.platform === 'win32'
-        ? '/mnt/c/Workspace/hob-feature-auth/api'
-        : 'C:\\Workspace\\hob-feature-auth\\api'
+      process.platform === 'win32' ? '/mnt/c/Workspace/hob-feature-auth/api' : 'C:\\Workspace\\hob-feature-auth\\api'
     const repoId = path.join(rootId, 'api')
     const deps = dependencies({ [repoId]: snapshot(branch('main'), branch(BRANCH, gitPath)) })
     deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
@@ -954,6 +952,39 @@ describe('branch workspace repair planner', () => {
       plan: {
         requiredApprovals: [],
         repositories: [{ action: 'create-worktree', worktreeBootstrap: { kind: 'skip' } }],
+        steps: [{ kind: 'create-worktree', repositoryName: 'api' }],
+      },
+    })
+  })
+
+  test('plans an exact prunable registration for cleanup before recreating its worktree', async () => {
+    const current = existingManifest()
+    const staleBranch = branch(BRANCH, current.repositories[0]!.worktreePath)
+    staleBranch.worktree = {
+      path: current.repositories[0]!.worktreePath,
+      isPrunable: true,
+    }
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('main'), staleBranch) })
+    deps.readConfig.mockResolvedValue({ kind: 'ready', config: { repo: ['api'] } })
+    deps.readManifests.mockResolvedValue({ kind: 'ready', manifests: [current] })
+    deps.inspectPath.mockImplementation(async (_rootId, candidatePath) =>
+      candidatePath === current.path
+        ? { ...missing(candidatePath), exists: true, kind: 'directory', resolvedPath: candidatePath }
+        : missing(candidatePath),
+    )
+
+    await expect(
+      buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+    ).resolves.toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            action: 'create-worktree',
+            pruneBeforeCreate: true,
+            mode: { kind: 'existingBranch', branch: BRANCH },
+          },
+        ],
         steps: [{ kind: 'create-worktree', repositoryName: 'api' }],
       },
     })

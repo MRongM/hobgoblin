@@ -141,7 +141,7 @@ export interface RemoteCommandResult {
 }
 
 export interface RemoteCommandInvocation {
-  command: 'ssh'
+  command: string
   args: string[]
   script: string
   tmuxSessionName?: string | null
@@ -159,6 +159,14 @@ export function buildRemoteCommandInvocation(
   command: RemoteCommandKind,
 ): RemoteCommandInvocation {
   const script = scriptForCommand(command)
+  if (target.transport === 'wsl') {
+    if (!target.wslExecutable) throw new Error('error.wsl-unavailable')
+    return {
+      command: target.wslExecutable,
+      args: ['--distribution', target.alias, '--exec', 'sh', '-lc', script],
+      script,
+    }
+  }
   const args = [
     '-T',
     '-o',
@@ -187,7 +195,7 @@ export function buildRemoteTerminalInvocation(
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
     {
-      alias: target.alias,
+      alias: target.transport === 'wsl' ? 'wsl' : target.alias,
       projectRoot: target.remotePath,
       workingDirectory: remotePath,
       terminalNumber: options.terminalNumber,
@@ -200,6 +208,15 @@ export function buildRemoteTerminalInvocation(
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')
+  if (target.transport === 'wsl') {
+    if (!target.wslExecutable) throw new Error('error.wsl-unavailable')
+    return {
+      command: target.wslExecutable,
+      args: ['--distribution', target.alias, '--exec', 'sh', '-lc', invocation.script],
+      script: invocation.script,
+      tmuxSessionName: invocation.tmuxSessionName,
+    }
+  }
   return {
     command: invocation.command,
     args: invocation.args,
@@ -1584,13 +1601,8 @@ function remoteBootstrapScript(command: Extract<RemoteCommandKind, { type: 'boot
   ].join('\n')
 }
 
-function remoteBootstrapInnerScript(
-  command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>,
-): string {
-  const items = [
-    ...command.copy.map((rel) => `copy\t${rel}`),
-    ...command.symlink.map((rel) => `symlink\t${rel}`),
-  ]
+function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>): string {
+  const items = [...command.copy.map((rel) => `copy\t${rel}`), ...command.symlink.map((rel) => `symlink\t${rel}`)]
     .map(shellQuote)
     .join(' ')
   return [

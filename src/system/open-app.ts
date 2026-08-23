@@ -187,3 +187,40 @@ export function openRemoteByAppCli(
     return { ok: true, message: remotePath }
   })
 }
+
+export function openWslByAppCli(
+  appName: string,
+  cliName: string,
+  distribution: string,
+  target: EditorOpenTarget,
+): Promise<{ ok: boolean; message: string }> {
+  const linuxPath = editorTargetPath(target)
+  if (
+    !distribution.trim() ||
+    distribution.length > 255 ||
+    /[\0/?#\\]/u.test(distribution) ||
+    !isSafeRemoteAbsolutePath(linuxPath)
+  ) {
+    return Promise.resolve({ ok: false, message: 'error.invalid-arguments' })
+  }
+  const command = process.platform === 'darwin' ? resolveAppCli(appName, cliName) : resolveEditorCommand(cliName)
+  if (!command) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
+  const authority = `wsl+${distribution.trim()}`
+  const args =
+    typeof target === 'string' || target.line === undefined
+      ? ['--remote', authority, linuxPath]
+      : ['--remote', authority, '--goto', editorTargetPathArgument(target)]
+  return execa(command, args, {
+    timeout: OPEN_TIMEOUT_MS,
+    forceKillAfterDelay: 500,
+    reject: false,
+  }).then((result) =>
+    result.failed
+      ? {
+          ok: false,
+          message:
+            result.stderr?.trim() || result.shortMessage || result.message || 'error.remote-editor-not-supported',
+        }
+      : { ok: true, message: linuxPath },
+  )
+}

@@ -40,6 +40,31 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('runs repository commands and internal terminals inside the selected WSL distribution', () => {
+    const target = normalizeRemoteTarget({
+      transport: 'wsl',
+      alias: 'Ubuntu',
+      host: 'Ubuntu',
+      user: 'wsl',
+      port: 22,
+      remotePath: '/root/src/repo',
+      wslExecutable: 'C:\\Windows\\System32\\wsl.exe',
+    })!
+    const command = buildRemoteCommandInvocation(target, { type: 'gitStatus', path: '/root/src/repo' })
+    const terminal = buildRemoteTerminalInvocation(target, '/root/src/repo', {
+      cols: 120,
+      rows: 40,
+      terminalNumber: 1,
+    })
+
+    expect(command.command).toBe('C:\\Windows\\System32\\wsl.exe')
+    expect(command.args.slice(0, 5)).toEqual(['--distribution', 'Ubuntu', '--exec', 'sh', '-lc'])
+    expect(command.args[5]).toBe(command.script)
+    expect(terminal.command).toBe('C:\\Windows\\System32\\wsl.exe')
+    expect(terminal.args.slice(0, 5)).toEqual(['--distribution', 'Ubuntu', '--exec', 'sh', '-lc'])
+    expect(terminal.script).toContain("cd '/root/src/repo' || exit")
+  })
+
   test('builds tmux list, kill, and copy-mode cancellation commands without session ids', () => {
     const serverName = 'hobgoblin-project-v1-44159cd9e973adba7b472e6f'
     const list = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListSessions', projectRoot: '/srv/repo' })

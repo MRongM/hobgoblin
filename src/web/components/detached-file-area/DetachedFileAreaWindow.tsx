@@ -7,6 +7,7 @@ import type {
   DetachedPlainProjectFileAreaRequest,
   FileAreaTabId,
 } from '#/shared/file-area.ts'
+import { isSshRepoId } from '#/shared/remote-repo.ts'
 import { EffectiveProjectThemeBridge } from '#/web/components/EffectiveProjectThemeBridge.tsx'
 import { ErrorBoundary } from '#/web/components/ErrorBoundary.tsx'
 import { EmptyState, ScrollPane } from '#/web/components/Layout.tsx'
@@ -68,7 +69,7 @@ function DetachedRepositoryFileArea({
     !!repo &&
     repo.availability.phase !== 'unavailable' &&
     branchAvailable &&
-    (request.tab !== 'ports' || request.repo.kind === 'remote')
+    (request.tab !== 'ports' || (request.repo.kind === 'remote' && isSshRepoId(request.repo.id)))
 
   useRepoStoreInvalidationRefresh()
   useSettingsQueryInvalidationSync()

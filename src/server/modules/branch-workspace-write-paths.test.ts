@@ -81,6 +81,7 @@ function planned(): BranchWorkspacePlan {
 
 function inMemorySource(initial: BranchWorkspaceManifest[] = [], onUpdate: () => void = () => {}) {
   let manifests = initial.map(cloneManifest)
+  let writeQueue = Promise.resolve()
   return {
     readManifests: vi.fn(async () =>
       manifests.length > 0
@@ -88,12 +89,15 @@ function inMemorySource(initial: BranchWorkspaceManifest[] = [], onUpdate: () =>
         : { kind: 'missing' as const },
     ),
     updateManifests: vi.fn(
-      async (
+      (
         _rootId: string,
         mutate: (items: BranchWorkspaceManifest[]) => BranchWorkspaceManifest[] | Promise<BranchWorkspaceManifest[]>,
       ) => {
-        onUpdate()
-        manifests = (await mutate(manifests.map(cloneManifest))).map(cloneManifest)
+        writeQueue = writeQueue.then(async () => {
+          onUpdate()
+          manifests = (await mutate(manifests.map(cloneManifest))).map(cloneManifest)
+        })
+        return writeQueue
       },
     ),
     get manifests() {
@@ -207,7 +211,7 @@ describe('branch workspace write service', () => {
     })
   })
 
-  test('persists intent before filesystem mutation and executes repositories sequentially in configured order', async () => {
+  test('persists intent before filesystem mutation and starts repositories in configured order', async () => {
     const plan = planned()
     const events: string[] = []
     const source = inMemorySource([], () => events.push('persist'))
@@ -259,6 +263,54 @@ describe('branch workspace write service', () => {
     expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['complete', 'complete'])
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(publishInvalidation).toHaveBeenCalledWith(ROOT)
+  })
+
+  test('creates multiple member worktrees concurrently', async () => {
+    const plan = planned()
+    const source = inMemorySource()
+    let releaseApi: (() => void) | undefined
+    let markWebStarted: (() => void) | undefined
+    const apiReleased = new Promise<void>((resolve) => {
+      releaseApi = resolve
+    })
+    const webStarted = new Promise<void>((resolve) => {
+      markWebStarted = resolve
+    })
+    const createWorktree = vi.fn(async (repoId: string) => {
+      if (repoId === '/workspace/api') await apiReleased
+      if (repoId === '/workspace/web') markWebStarted?.()
+      return { ok: true, message: 'created' }
+    })
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      createDirectory: vi.fn(async () => undefined),
+      createWorktree,
+      readSnapshot: vi.fn(async () => ({
+        ok: true as const,
+        rootId: ROOT,
+        items: [readySnapshot(plan)],
+        auxiliaryCandidates: [],
+      })),
+    })
+    await service.plan(ROOT, {
+      operation: 'create',
+      branch: 'feature/auth',
+      repositories: [
+        { repositoryName: 'api', baseBranch: 'main' },
+        { repositoryName: 'web', baseBranch: 'develop' },
+      ],
+      auxiliaryEntries: [],
+    })
+
+    const execution = service.execute(ROOT, { planToken: plan.token, approvals: [] })
+    await webStarted
+    expect(createWorktree).toHaveBeenCalledTimes(2)
+    releaseApi?.()
+
+    await expect(execution).resolves.toMatchObject({ ok: true, branchWorkspaceId: plan.branchWorkspaceId })
+    expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['complete', 'complete'])
   })
 
   test('persists completed progress and retries only the failed member without rollback', async () => {
@@ -386,8 +438,8 @@ describe('branch workspace write service', () => {
       ok: false,
       message: 'git failed',
     })
-    expect(createWorktree).toHaveBeenCalledTimes(1)
-    expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['failed', 'pending'])
+    expect(createWorktree).toHaveBeenCalledTimes(2)
+    expect(source.manifests[0]?.repositories.map((member) => member.progress)).toEqual(['failed', 'failed'])
   })
 
   test('requires every plan approval before persisting intent', async () => {
@@ -438,7 +490,7 @@ describe('branch workspace write service', () => {
       auxiliaryEntries: [],
     })
     const running = service.execute(ROOT, { planToken: plan.token, approvals: [] })
-    await vi.waitFor(() => expect(createWorktree).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(createWorktree).toHaveBeenCalledTimes(2))
 
     await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
       ok: false,
@@ -469,7 +521,7 @@ describe('branch workspace write service', () => {
     })
   })
 
-  test('repairs missing materialization and replaces only a recorded symlink', async () => {
+  test('prunes stale worktree registration before repairing missing materialization', async () => {
     const plan = repairPlanned()
     const source = inMemorySource([plan.manifest])
     const events: string[] = []
@@ -479,6 +531,10 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => {
         events.push('mkdir')
+      }),
+      cleanupWorktree: vi.fn(async () => {
+        events.push('prune')
+        return { ok: true, message: 'pruned' }
       }),
       createWorktree: vi.fn(async () => {
         events.push('worktree')
@@ -497,7 +553,7 @@ describe('branch workspace write service', () => {
       ok: true,
       branchWorkspaceId: plan.branchWorkspaceId,
     })
-    expect(events).toEqual(['mkdir', 'worktree', 'unlink', 'symlink'])
+    expect(events).toEqual(['mkdir', 'prune', 'worktree', 'unlink', 'symlink'])
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(source.manifests[0]?.repositories[0]?.progress).toBe('complete')
     expect(source.manifests[0]?.auxiliaryEntries).toEqual([])
@@ -645,6 +701,7 @@ describe('branch workspace write service', () => {
       alsoDeleteBranch: false,
       alsoDeleteUpstream: false,
       forceRemoveWorktree: true,
+      skipWorktreeStatus: true,
       forceDeleteBranch: false,
     })
     expect(removeWorktree.mock.calls[1]?.[1]).toMatchObject({
@@ -652,6 +709,7 @@ describe('branch workspace write service', () => {
       alsoDeleteBranch: false,
       alsoDeleteUpstream: false,
       forceRemoveWorktree: true,
+      skipWorktreeStatus: true,
       forceDeleteBranch: false,
     })
     expect(deleteBranch).toHaveBeenCalledWith(
@@ -662,6 +720,94 @@ describe('branch workspace write service', () => {
     )
     expect(events.at(-1)).toBe(`entry:${plan.path}`)
     expect(source.manifests).toEqual([])
+  })
+
+  test('force deletes the folder and config before best-effort member worktree cleanup', async () => {
+    const plan = removePlanned()
+    const events: string[] = []
+    const source = inMemorySource([plan.manifest], () => events.push('config'))
+    const removeEntry = vi.fn(async (_rootId: string, targetPath: string) => {
+      events.push(`folder:${targetPath}`)
+    })
+    const cleanupWorktree = vi.fn(async (repoId: string) => {
+      events.push(`cleanup:${repoId}`)
+      return repoId.endsWith('/api') ? { ok: false, message: 'cleanup failed' } : { ok: true, message: 'cleaned' }
+    })
+    const deleteBranch = vi.fn()
+    const deleteRemoteBranch = vi.fn()
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      closeSessions: vi.fn(async () => {
+        events.push('close-terminals')
+        return { closed: plan.terminalSessionIds, missing: [] }
+      }),
+      removeEntry,
+      cleanupWorktree,
+      deleteBranch,
+      deleteRemoteBranch,
+    })
+    await service.plan(ROOT, {
+      operation: 'remove',
+      branchWorkspaceId: plan.branchWorkspaceId,
+      alsoDeleteBranch: true,
+      alsoDeleteUpstream: false,
+    })
+
+    await expect(
+      service.execute(ROOT, {
+        planToken: plan.token,
+        approvals: ['close-terminals', 'unmanaged-content'],
+        force: true,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      warnings: [
+        {
+          kind: 'member-worktree-cleanup-failed',
+          repositoryName: 'api',
+          message: 'cleanup failed',
+        },
+      ],
+    })
+    expect(events).toEqual([
+      'close-terminals',
+      `folder:${plan.path}`,
+      'config',
+      'cleanup:/workspace/api',
+      'cleanup:/workspace/web',
+    ])
+    expect(removeEntry).toHaveBeenCalledTimes(1)
+    expect(source.manifests).toEqual([])
+    expect(deleteBranch).not.toHaveBeenCalled()
+    expect(deleteRemoteBranch).not.toHaveBeenCalled()
+  })
+
+  test('rejects force execution for non-removal plans', async () => {
+    const plan = planned()
+    const source = inMemorySource()
+    const createDirectory = vi.fn()
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      createDirectory,
+    })
+    await service.plan(ROOT, {
+      operation: 'create',
+      branch: plan.branch,
+      repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+      auxiliaryEntries: [],
+    })
+
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [], force: true })).resolves.toMatchObject({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+    expect(createDirectory).not.toHaveBeenCalled()
+    expect(source.updateManifests).not.toHaveBeenCalled()
   })
 
   test('persists remove progress and leaves delete-incomplete state when a later member fails', async () => {
@@ -901,7 +1047,7 @@ function repairPlanned(): BranchWorkspacePlan {
         },
       ],
     },
-    repositories: [{ ...plan.repositories[0]!, action: 'create-worktree', satisfied: false }],
+    repositories: [{ ...plan.repositories[0]!, action: 'create-worktree', satisfied: false, pruneBeforeCreate: true }],
     auxiliaryEntries: [
       {
         name: '.env',

@@ -102,6 +102,21 @@ test('initializes server-settings.json with defaults when no persisted settings 
   expect(await reloaded.getServerFetchIntervalSec()).toBe(120)
 })
 
+test.each(['wsl', 'powershell', 'cmd'] as const)(
+  'persists the Windows external terminal preference %s',
+  async (pref) => {
+    useTempServerSettingsDir()
+    const mod = await import('#/server/modules/settings-source.ts')
+
+    await expect(mod.updateServerSettingsPrefs({ terminalApp: pref })).resolves.toMatchObject({ terminalApp: pref })
+
+    mod.resetServerSettingsSourceForTests()
+    vi.resetModules()
+    const reloaded = await import('#/server/modules/settings-source.ts')
+    await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ terminalApp: pref })
+  },
+)
+
 test('normalizes and persists the scheduled status refresh interval', async () => {
   useTempServerSettingsDir()
   writeSettingsFile({ statusRefreshIntervalSec: 'invalid' })

@@ -23,7 +23,7 @@
 //     persisting instead of silently dropping their changes)
 
 import { useMemo } from 'react'
-import { Settings } from 'lucide-react'
+import { Settings, TerminalSquare } from 'lucide-react'
 import { Toaster } from '#/web/components/ui/sonner.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Topbar } from '#/web/components/Topbar.tsx'
@@ -69,6 +69,7 @@ import { MainWindowNavigationProvider, useMainWindowNavigation } from '#/web/mai
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 
 interface AppProps {
   routeSettingsPage?: SettingsPage | null
@@ -111,6 +112,7 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
     currentRepoId: visibleRepoId,
     closeAllOverlays: overlays.closeAllOverlays,
     openRepoPathDialog: overlays.openRepoPathDialog,
+    openWslRepoPathDialog: overlays.openWslRepoPathDialog,
     openCloneRepo: overlays.openCloneRepo,
     openRemoteRepo: overlays.openRemoteRepo,
     isOverlayOpen: () => modalOpen,
@@ -125,12 +127,20 @@ export function App({ routeSettingsPage = null, onRouteSettingsPageChange }: App
   const shellOverlayActions = useMemo(
     () => ({
       openRepoPathDialog: overlays.openRepoPathDialog,
+      openWslRepoPathDialog: overlays.openWslRepoPathDialog,
       openRemoteRepo: overlays.openRemoteRepo,
       openCloneRepo: overlays.openCloneRepo,
       openSettings: toggleSettings,
       settingsOpen,
     }),
-    [overlays.openRepoPathDialog, overlays.openRemoteRepo, overlays.openCloneRepo, settingsOpen, toggleSettings],
+    [
+      overlays.openRepoPathDialog,
+      overlays.openWslRepoPathDialog,
+      overlays.openRemoteRepo,
+      overlays.openCloneRepo,
+      settingsOpen,
+      toggleSettings,
+    ],
   )
 
   return (
@@ -282,6 +292,7 @@ function MainWindowViewportContent({
             <RepoTabs
               currentRepoId={visibleRepoId}
               onOpenRepoPathDialog={overlays.openRepoPathDialog}
+              onOpenWsl={overlays.openWslRepoPathDialog}
               onOpenRemote={overlays.openRemoteRepo}
               onClone={overlays.openCloneRepo}
             />
@@ -328,7 +339,11 @@ function MainWindowOverlays({
         onClose={() => onRouteSettingsPageChange?.(null)}
         onPageChange={(page) => onRouteSettingsPageChange?.(page)}
       />
-      <RepoOpenDialog open={overlays.state.openRepo.open} onOpenChange={overlays.setOpenRepoOpen} />
+      <RepoOpenDialog
+        open={overlays.state.openRepo.open}
+        initialSource={overlays.state.openRepo.source}
+        onOpenChange={overlays.setOpenRepoOpen}
+      />
       <RepoCloneDialog open={overlays.state.clone.open} onOpenChange={overlays.setCloneOpen} />
       <OpenRemoteRepositoryDialog
         open={overlays.state.openRemoteRepo.open}
@@ -385,6 +400,7 @@ function EmptyState() {
   const shellActions = useShellOverlayActions()
   const navigation = useMainWindowNavigation()
   const ensureWorkspaceOpen = useReposStore((s) => s.ensureWorkspaceOpen)
+  const supportsWslImport = getInitialBootstrap().hostPlatform === 'win32'
 
   async function handleOpenLocal() {
     if (!shellActions) return
@@ -406,6 +422,12 @@ function EmptyState() {
             <Button variant="outline" size="sm" onClick={() => void handleOpenLocal()}>
               {t('repo-tabs.open-local')}
             </Button>
+            {supportsWslImport && (
+              <Button variant="outline" size="sm" onClick={shellActions.openWslRepoPathDialog}>
+                <TerminalSquare />
+                {t('repo-tabs.open-wsl')}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={shellActions.openRemoteRepo}>
               {t('repo-tabs.open-remote')}
             </Button>

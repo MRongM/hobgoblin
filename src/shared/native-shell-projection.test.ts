@@ -81,6 +81,31 @@ describe('native shell projection helpers', () => {
     expect(v.safeParse(NativeShellProjectionSchema, {}).success).toBe(false)
   })
 
+  test('preserves WSL transport in recent repository projections', () => {
+    const projection = v.parse(NativeShellProjectionSchema, {
+      recentRepos: {
+        recentRepos: [
+          {
+            kind: 'remote',
+            id: 'wsl://Ubuntu/root/src/hobgoblin',
+            ref: {
+              id: 'wsl://Ubuntu/root/src/hobgoblin',
+              alias: 'Ubuntu',
+              remotePath: '/root/src/hobgoblin',
+              displayName: 'Ubuntu:hobgoblin',
+              transport: 'wsl',
+            },
+          },
+        ],
+      },
+    })
+
+    expect(projection.recentRepos?.recentRepos[0]).toMatchObject({
+      id: 'wsl://Ubuntu/root/src/hobgoblin',
+      ref: { transport: 'wsl' },
+    })
+  })
+
   test('accepts current design color theme presets in native projection payloads', () => {
     for (const colorTheme of COLOR_THEMES) {
       expect(

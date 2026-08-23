@@ -33,6 +33,7 @@ describe('shortcut definitions', () => {
     for (const id of [
       'app-settings',
       'file-open-local-repo',
+      'file-open-wsl-project',
       'file-clone-repo',
       'file-open-remote-repo',
       'file-close-tab',

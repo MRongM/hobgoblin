@@ -19,16 +19,19 @@ import { repoTabStoreActionsEqual, repoTabStoreActionsFromStore } from '#/web/st
 import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 
 interface RepoTabsProps {
   currentRepoId: string | null
   onOpenRepoPathDialog: () => void
+  onOpenWsl: () => void
   onOpenRemote: () => void
   onClone: () => void
 }
 
-export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, onClone }: RepoTabsProps) {
+export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenWsl, onOpenRemote, onClone }: RepoTabsProps) {
   const t = useT()
+  const supportsWslImport = getInitialBootstrap().hostPlatform === 'win32'
   // Build the summary array inside the selector but compare with our
   // explicit equality fn so re-derivations with identical contents
   // don't trigger a re-render. Zustand v5's primary `useReposStore`
@@ -86,6 +89,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
         open: t('topbar.open'),
         openLocal: t('repo-tabs.open-local'),
         openLocalShortcut: null,
+        openWsl: t('repo-tabs.open-wsl'),
         openRemote: t('repo-tabs.open-remote'),
         openRemoteShortcut: null,
         clone: t('repo-tabs.clone'),
@@ -100,6 +104,7 @@ export function RepoTabs({ currentRepoId, onOpenRepoPathDialog, onOpenRemote, on
       onClose={navigation.closeRepo}
       onReorder={reorderRepos}
       onOpenLocal={handleOpenLocal}
+      onOpenWsl={supportsWslImport ? onOpenWsl : undefined}
       onOpenRemote={onOpenRemote}
       onClone={onClone}
     />

@@ -469,7 +469,7 @@ describe('branch workspace write service', () => {
     })
   })
 
-  test('repairs missing materialization and replaces only a recorded symlink', async () => {
+  test('prunes stale worktree registration before repairing missing materialization', async () => {
     const plan = repairPlanned()
     const source = inMemorySource([plan.manifest])
     const events: string[] = []
@@ -479,6 +479,10 @@ describe('branch workspace write service', () => {
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => {
         events.push('mkdir')
+      }),
+      cleanupWorktree: vi.fn(async () => {
+        events.push('prune')
+        return { ok: true, message: 'pruned' }
       }),
       createWorktree: vi.fn(async () => {
         events.push('worktree')
@@ -497,7 +501,7 @@ describe('branch workspace write service', () => {
       ok: true,
       branchWorkspaceId: plan.branchWorkspaceId,
     })
-    expect(events).toEqual(['mkdir', 'worktree', 'unlink', 'symlink'])
+    expect(events).toEqual(['mkdir', 'prune', 'worktree', 'unlink', 'symlink'])
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(source.manifests[0]?.repositories[0]?.progress).toBe('complete')
     expect(source.manifests[0]?.auxiliaryEntries).toEqual([])
@@ -901,7 +905,7 @@ function repairPlanned(): BranchWorkspacePlan {
         },
       ],
     },
-    repositories: [{ ...plan.repositories[0]!, action: 'create-worktree', satisfied: false }],
+    repositories: [{ ...plan.repositories[0]!, action: 'create-worktree', satisfied: false, pruneBeforeCreate: true }],
     auxiliaryEntries: [
       {
         name: '.env',

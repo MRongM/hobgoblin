@@ -10,9 +10,9 @@
 
 import type { EditorAppAvailability, EditorPref, ResolvedEditorApp } from '#/shared/rpc.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
-import { isVSCodeInstalled, openInVSCode, openRemoteInVSCode } from '#/system/vscode.ts'
-import { isCursorInstalled, openInCursor, openRemoteInCursor } from '#/system/cursor.ts'
-import { isWindsurfInstalled, openInWindsurf, openRemoteInWindsurf } from '#/system/windsurf.ts'
+import { isVSCodeInstalled, openInVSCode, openRemoteInVSCode, openWslInVSCode } from '#/system/vscode.ts'
+import { isCursorInstalled, openInCursor, openRemoteInCursor, openWslInCursor } from '#/system/cursor.ts'
+import { isWindsurfInstalled, openInWindsurf, openRemoteInWindsurf, openWslInWindsurf } from '#/system/windsurf.ts'
 
 export interface EditorBackend {
   /** Whether this editor is available on the current system.
@@ -24,13 +24,29 @@ export interface EditorBackend {
   open: (target: EditorOpenTarget) => Promise<{ ok: boolean; message: string }>
   /** Open a remote SSH workspace in this editor. */
   openRemote?: (alias: string, target: EditorOpenTarget) => Promise<{ ok: boolean; message: string }>
+  openWsl?: (distribution: string, target: EditorOpenTarget) => Promise<{ ok: boolean; message: string }>
 }
 
 /** Concrete editor pref values (excludes 'auto'). */
 const backends: Record<ResolvedEditorApp, EditorBackend> = {
-  vscode: { isInstalled: isVSCodeInstalled, open: openInVSCode, openRemote: openRemoteInVSCode },
-  cursor: { isInstalled: isCursorInstalled, open: openInCursor, openRemote: openRemoteInCursor },
-  windsurf: { isInstalled: isWindsurfInstalled, open: openInWindsurf, openRemote: openRemoteInWindsurf },
+  vscode: {
+    isInstalled: isVSCodeInstalled,
+    open: openInVSCode,
+    openRemote: openRemoteInVSCode,
+    openWsl: openWslInVSCode,
+  },
+  cursor: {
+    isInstalled: isCursorInstalled,
+    open: openInCursor,
+    openRemote: openRemoteInCursor,
+    openWsl: openWslInCursor,
+  },
+  windsurf: {
+    isInstalled: isWindsurfInstalled,
+    open: openInWindsurf,
+    openRemote: openRemoteInWindsurf,
+    openWsl: openWslInWindsurf,
+  },
 }
 
 /** Auto-detection priority — first installed editor wins. */
@@ -68,6 +84,19 @@ export function openRemoteInPreferredEditor(
   const openRemote = backends[resolved].openRemote
   return openRemote
     ? openRemote(alias, target)
+    : Promise.resolve({ ok: false, message: 'error.remote-editor-not-supported' })
+}
+
+export function openWslInPreferredEditor(
+  distribution: string,
+  target: EditorOpenTarget,
+  pref: EditorPref,
+): Promise<{ ok: boolean; message: string }> {
+  const resolved = resolveEditorApp(pref, getEditorAppAvailability())
+  if (!resolved) return Promise.resolve({ ok: false, message: 'error.editor-not-installed' })
+  const openWsl = backends[resolved].openWsl
+  return openWsl
+    ? openWsl(distribution, target)
     : Promise.resolve({ ok: false, message: 'error.remote-editor-not-supported' })
 }
 

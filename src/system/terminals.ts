@@ -47,6 +47,18 @@ export interface TerminalBackend {
 const backends: Record<ResolvedTerminalApp, TerminalBackend> = {
   ghostty: { isInstalled: isGhosttyInstalled, open: openInGhostty, openRemote: openRemoteInGhostty },
   terminal: { isInstalled: () => true, open: openInNativeTerminal, openRemote: openRemoteInNativeTerminal },
+  wsl: {
+    isInstalled: () => isWin32() && isWindowsTerminalAvailable('wsl'),
+    open: (target) => openInSelectedWindowsTerminal(target, 'wsl'),
+  },
+  powershell: {
+    isInstalled: () => isWin32() && isWindowsTerminalAvailable('powershell'),
+    open: (target) => openInSelectedWindowsTerminal(target, 'powershell'),
+  },
+  cmd: {
+    isInstalled: () => isWin32() && isWindowsTerminalAvailable('cmd'),
+    open: (target) => openInSelectedWindowsTerminal(target, 'cmd'),
+  },
 }
 
 /** Auto-detection priority — first installed backend wins. */
@@ -65,6 +77,14 @@ function openInNativeTerminal(target: ExternalLocalTerminalTarget, options?: Ter
   if (isDarwin()) return openInAppleTerminal(target, options)
   if (isWin32()) return openInWindowsTerminal(target.workingDirectory)
   return Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
+}
+
+function openInSelectedWindowsTerminal(
+  target: ExternalLocalTerminalTarget,
+  pref: 'wsl' | 'powershell' | 'cmd',
+): Promise<ExecResult> {
+  if (!isWin32()) return Promise.resolve({ ok: false, message: 'error.terminal-not-installed' })
+  return openInWindowsTerminal(target.workingDirectory, pref)
 }
 
 function openRemoteInNativeTerminal(
@@ -93,17 +113,26 @@ export async function getTerminalAppAvailability(signal?: AbortSignal): Promise<
     return {
       ghostty: backends.ghostty.isInstalled(),
       terminal: await isAppleTerminalInstalled(signal),
+      wsl: false,
+      powershell: false,
+      cmd: false,
     }
   }
   if (isWin32()) {
     return {
       ghostty: false,
       terminal: isWindowsTerminalAvailable(),
+      wsl: backends.wsl.isInstalled(),
+      powershell: backends.powershell.isInstalled(),
+      cmd: backends.cmd.isInstalled(),
     }
   }
   return {
     ghostty: false,
     terminal: false,
+    wsl: false,
+    powershell: false,
+    cmd: false,
   }
 }
 

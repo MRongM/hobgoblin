@@ -780,6 +780,7 @@ export function WorkspaceRepositoryRail({
         }}
         onPreview={branchActions.requestPlan}
         onConfirm={branchActions.confirm}
+        onForceConfirm={branchActions.forceConfirm}
         onRetry={branchActions.retry}
         onReturnToSelection={returnBranchDialogToSelection}
         onCancel={branchActions.cancel}

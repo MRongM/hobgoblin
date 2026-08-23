@@ -4,7 +4,7 @@ import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-
 import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { resolveKnownWorktree } from '#/shared/worktree-guards.ts'
 import { isValidBranch, isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
-import { resolveRemoteTarget } from '#/system/ssh/config.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
@@ -290,7 +290,7 @@ class TerminalCatalog {
     if (!ref) return { ok: false, message: 'error.ssh-config-changed' }
     let resolved
     try {
-      resolved = await resolveRemoteTarget(ref)
+      resolved = await resolveRepositoryRemoteTarget(ref)
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : 'error.ssh-config-changed' }
     }

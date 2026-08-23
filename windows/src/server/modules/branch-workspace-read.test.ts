@@ -353,6 +353,28 @@ describe('branch workspace read model', () => {
     })
   })
 
+  test('treats an exact prunable worktree registration as missing materialization', async () => {
+    const current = manifest()
+    const deps = dependencies([current])
+    const snapshot = repoSnapshot(current.branch, current.repositories[0]!.worktreePath)
+    snapshot.branches[0]!.worktree = {
+      path: current.repositories[0]!.worktreePath,
+      isPrunable: true,
+    }
+    deps.readRepositorySnapshot.mockResolvedValue(snapshot)
+
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+          issues: [{ kind: 'worktree-missing', repositoryName: 'api' }],
+          repositories: [{ repositoryName: 'api', ready: false }],
+        },
+      ],
+    })
+  })
+
   test('marks a Windows and WSL path pair as the same ready member worktree', async () => {
     const current = manifest()
     current.repositories[0] = {

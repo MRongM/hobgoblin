@@ -269,6 +269,32 @@ describe('BranchWorkspaceDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  test('offers force deletion on the removal check screen and invokes its separate action', async () => {
+    const onOpenChange = vi.fn()
+    const onForceConfirm = vi.fn(async () => ({ ok: true as const, branchWorkspaceId: 'branch-1' }))
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: { ...removalPlan(), requiredApprovals: [] },
+      onOpenChange,
+      onForceConfirm,
+    })
+
+    const forceConfirm = document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')
+    expect(forceConfirm?.textContent).toBe('workspace.branch-workspace.force-delete')
+    expect(forceConfirm?.dataset.variant).toBe('destructive')
+    await clickAction('force-confirm')
+
+    expect(onForceConfirm).toHaveBeenCalledWith([])
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('does not offer force deletion outside a removal plan', () => {
+    renderDialog({ plan: approvalPlan() })
+
+    expect(document.querySelector('[data-action="force-confirm"]')).toBeNull()
+  })
+
   test('keeps progress hidden during preview and in non-target lifecycle modes', () => {
     renderDialog({ plan: planWithSteps('create', [{ id: 'directory', kind: 'create-directory', label: 'folder' }]) })
     expect(document.querySelector('[data-branch-workspace-operation-progress]')).toBeNull()
@@ -436,6 +462,74 @@ describe('BranchWorkspaceDialog', () => {
     act(() => selectAll?.click())
     expect(api.checked).toBe(false)
     expect(web.checked).toBe(false)
+  })
+
+  test('batch toggles synchronization for selected eligible repositories through a tri-state header checkbox', async () => {
+    renderDialog({
+      repositories: [
+        {
+          id: '/workspace/api',
+          name: 'api',
+          available: true,
+          branches: ['main'],
+          defaultBranch: 'main',
+          branchDetails: { main: { tracking: 'origin/main' } },
+        },
+        {
+          id: '/workspace/web',
+          name: 'web',
+          available: true,
+          branches: ['trunk'],
+          defaultBranch: 'trunk',
+          branchDetails: { trunk: { tracking: 'origin/trunk' } },
+        },
+        {
+          id: '/workspace/offline',
+          name: 'offline',
+          available: true,
+          branches: ['main'],
+          defaultBranch: 'main',
+        },
+      ],
+    })
+
+    act(() =>
+      document
+        .querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.repositories-select-all"]')
+        ?.click(),
+    )
+    await flushAsyncWork()
+
+    const syncAll = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.sync-before-create-select-all"]',
+    )
+    const apiSync = repositorySyncCheckbox('api')
+    const webSync = repositorySyncCheckbox('web')
+    const offlineSync = repositorySyncCheckbox('offline')
+    expect(syncAll?.checked).toBe(true)
+    expect(syncAll?.indeterminate).toBe(false)
+    expect(apiSync.checked).toBe(true)
+    expect(webSync.checked).toBe(true)
+    expect(offlineSync.checked).toBe(false)
+    expect(offlineSync.disabled).toBe(true)
+
+    act(() => apiSync.click())
+    expect(syncAll?.checked).toBe(false)
+    expect(syncAll?.indeterminate).toBe(true)
+
+    act(() => syncAll?.click())
+    expect(apiSync.checked).toBe(true)
+    expect(webSync.checked).toBe(true)
+
+    act(() => syncAll?.click())
+    expect(apiSync.checked).toBe(false)
+    expect(webSync.checked).toBe(false)
+    expect(offlineSync.checked).toBe(false)
+
+    act(() => repositoryCheckbox('web').click())
+    act(() => syncAll?.click())
+    expect(apiSync.checked).toBe(true)
+    expect(webSync.checked).toBe(false)
   })
 
   test('loads local and remote creation bases and submits the selected exact remote', async () => {
@@ -1564,6 +1658,7 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
         })}
         onPreview={async () => true}
         onConfirm={async () => null}
+        onForceConfirm={async () => null}
         onRetry={async () => null}
         onReturnToSelection={() => {}}
         onCancel={async () => {}}
@@ -1611,6 +1706,14 @@ function repositoryCheckbox(repositoryName: string): HTMLInputElement {
     `[data-branch-workspace-repository-row="${repositoryName}"] input[type="checkbox"]`,
   )
   if (!checkbox) throw new Error(`Missing repository checkbox: ${repositoryName}`)
+  return checkbox
+}
+
+function repositorySyncCheckbox(repositoryName: string): HTMLInputElement {
+  const checkbox = document.querySelector<HTMLInputElement>(
+    `[data-branch-workspace-repository-row="${repositoryName}"] [aria-label="workspace.branch-workspace.sync-before-create-named"]`,
+  )
+  if (!checkbox) throw new Error(`Missing repository synchronization checkbox: ${repositoryName}`)
   return checkbox
 }
 
