@@ -59,42 +59,45 @@ describe('Windows platform package layout', () => {
     expect(script).toContain('release/win-unpacked')
   })
 
-  test('runs a Windows installer and records its exit status before relaunching', () => {
-    const repoRoot = path.resolve(windowsRoot, '..')
-    const updaterPath = path.join(repoRoot, 'scripts', 'install-windows-build.ps1')
-    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'hobgoblin-updater-'))
-    const installerPath = path.join(temporaryRoot, 'fake-installer.cmd')
-    const installedAppPath = path.join(temporaryRoot, 'fake-app.cmd')
-    const logPath = path.join(temporaryRoot, 'update.log')
+  test.runIf(process.platform === 'win32')(
+    'runs a Windows installer and records its exit status before relaunching',
+    () => {
+      const repoRoot = path.resolve(windowsRoot, '..')
+      const updaterPath = path.join(repoRoot, 'scripts', 'install-windows-build.ps1')
+      const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'hobgoblin-updater-'))
+      const installerPath = path.join(temporaryRoot, 'fake-installer.cmd')
+      const installedAppPath = path.join(temporaryRoot, 'fake-app.cmd')
+      const logPath = path.join(temporaryRoot, 'update.log')
 
-    try {
-      writeFileSync(installerPath, '@echo off\r\nexit /b 0\r\n')
-      writeFileSync(installedAppPath, '@echo off\r\nexit /b 0\r\n')
+      try {
+        writeFileSync(installerPath, '@echo off\r\nexit /b 0\r\n')
+        writeFileSync(installedAppPath, '@echo off\r\nexit /b 0\r\n')
 
-      execFileSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          updaterPath,
-          '-InstallerPath',
-          installerPath,
-          '-InstalledAppPath',
-          installedAppPath,
-          '-LogPath',
-          logPath,
-          '-DelaySeconds',
-          '0',
-          '-SkipRelaunch',
-        ],
-        { stdio: 'pipe' },
-      )
+        execFileSync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            updaterPath,
+            '-InstallerPath',
+            installerPath,
+            '-InstalledAppPath',
+            installedAppPath,
+            '-LogPath',
+            logPath,
+            '-DelaySeconds',
+            '0',
+            '-SkipRelaunch',
+          ],
+          { stdio: 'pipe' },
+        )
 
-      expect(readFileSync(logPath, 'utf8')).toContain('exit=0')
-    } finally {
-      rmSync(temporaryRoot, { recursive: true, force: true })
-    }
-  })
+        expect(readFileSync(logPath, 'utf8')).toContain('exit=0')
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true })
+      }
+    },
+  )
 })
