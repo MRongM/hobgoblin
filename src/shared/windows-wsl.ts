@@ -34,7 +34,8 @@ export function resolveUsableWindowsWslExecutable(options: ResolveUsableWindowsW
   let usable: string | null = null
   try {
     const result = spawnSync(executable, ['--list', '--quiet'], {
-      encoding: 'utf8',
+      encoding: 'utf16le',
+      env: { ...env, WSL_UTF8: '0' },
       timeout: 5_000,
       windowsHide: true,
     })

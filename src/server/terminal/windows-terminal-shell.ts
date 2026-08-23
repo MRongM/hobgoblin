@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
 import path from 'node:path'
+import { pathStyle } from '#/shared/path-semantics.ts'
 import { resolveUsableWindowsWslExecutable } from '#/shared/windows-wsl.ts'
 
 export type WindowsTerminalShellKind = 'wsl' | 'powershell-core' | 'windows-powershell' | 'cmd'
@@ -11,6 +12,7 @@ export interface WindowsTerminalShellCandidate {
 }
 
 interface ResolveWindowsTerminalShellOptions {
+  cwd?: string
   env?: NodeJS.ProcessEnv
   fileExists?: (filePath: string) => boolean
 }
@@ -35,8 +37,13 @@ export function resolveWindowsTerminalShellCandidates(
   }
 
   const systemRoot = environmentValue(env, 'SYSTEMROOT') ?? environmentValue(env, 'WINDIR')
-  const wslExecutable = resolveUsableWindowsWslExecutable({ env, fileExists })
-  if (wslExecutable) addCandidate('wsl', wslExecutable, [])
+  const cwdStyle = options.cwd ? pathStyle(options.cwd) : null
+  if (cwdStyle === null || cwdStyle === 'windowsDriveAbsolute') {
+    const wslExecutable = resolveUsableWindowsWslExecutable({ env, fileExists })
+    const wslArgs =
+      cwdStyle === 'windowsDriveAbsolute' && options.cwd ? ['--cd', path.win32.normalize(options.cwd)] : []
+    if (wslExecutable) addCandidate('wsl', wslExecutable, wslArgs)
+  }
 
   for (const programFiles of uniqueEnvironmentValues(env, ['PROGRAMW6432', 'PROGRAMFILES'])) {
     addCandidate('powershell-core', path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'), POWERSHELL_ARGS)

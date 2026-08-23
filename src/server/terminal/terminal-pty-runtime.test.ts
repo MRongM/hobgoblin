@@ -45,6 +45,7 @@ describe('spawnTerminalPtyRuntime', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.runtime.processName()).toBe('pwsh.exe')
+    expect(resolveWindowsShellCandidatesMock).toHaveBeenCalledWith({ cwd: 'C:\\repo' })
     expect(spawnMock).toHaveBeenCalledWith(
       'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
       ['-NoLogo'],

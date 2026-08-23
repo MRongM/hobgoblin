@@ -6,6 +6,8 @@ export async function listWindowsWslDistributions(signal?: AbortSignal): Promise
   if (!executable || signal?.aborted) return []
   try {
     const { stdout } = await execa(executable, ['--list', '--quiet'], {
+      encoding: 'utf16le',
+      env: { ...process.env, WSL_UTF8: '0' },
       timeout: 5_000,
       cancelSignal: signal,
       forceKillAfterDelay: 500,

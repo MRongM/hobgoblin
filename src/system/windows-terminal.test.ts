@@ -44,7 +44,8 @@ describe('windows terminal backend', () => {
       expect.objectContaining({ detached: true, stdio: 'ignore' }),
     )
     expect(mocks.spawnSync).toHaveBeenCalledWith('C:\\Windows\\System32\\wsl.exe', ['--list', '--quiet'], {
-      encoding: 'utf8',
+      encoding: 'utf16le',
+      env: expect.objectContaining({ WSL_UTF8: '0' }),
       timeout: 5_000,
       windowsHide: true,
     })

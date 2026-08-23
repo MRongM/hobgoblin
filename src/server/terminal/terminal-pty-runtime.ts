@@ -80,7 +80,7 @@ function resolveTerminalPtySpawnCandidates(
   }
 
   if (process.platform === 'win32') {
-    return resolveWindowsTerminalShellCandidates().map((candidate) => ({
+    return resolveWindowsTerminalShellCandidates({ cwd: input.cwd }).map((candidate) => ({
       command: candidate.command,
       args: input.args ?? candidate.args,
     }))
