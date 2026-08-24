@@ -159,6 +159,10 @@ export const en = {
   'workspace.branch-workspace.branch-prefix.none': 'No prefix',
   'workspace.branch-workspace.repositories': 'Repository worktrees',
   'workspace.branch-workspace.repositories-select-all': 'Select all available repositories',
+  'workspace.branch-workspace.fetch-all': 'Sync all repositories',
+  'workspace.branch-workspace.fetch-all-success': 'All repositories synced.',
+  'workspace.branch-workspace.fetch-all-incomplete':
+    'Synced {completed} of {total} repositories. You can continue creating the branch workspace.',
   'workspace.branch-workspace.repository-named': 'Include repository {name}',
   'workspace.branch-workspace.base-named': 'Creation base for {name}',
   'workspace.branch-workspace.creation-base-local': 'Local branches',

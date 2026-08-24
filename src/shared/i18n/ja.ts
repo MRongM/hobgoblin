@@ -159,6 +159,10 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.branch-prefix.none': 'プレフィックスなし',
   'workspace.branch-workspace.repositories': 'リポジトリ worktree',
   'workspace.branch-workspace.repositories-select-all': '利用可能なリポジトリをすべて選択',
+  'workspace.branch-workspace.fetch-all': 'すべてのリポジトリを同期',
+  'workspace.branch-workspace.fetch-all-success': 'すべてのリポジトリを同期しました。',
+  'workspace.branch-workspace.fetch-all-incomplete':
+    '{total} 件中 {completed} 件のリポジトリを同期しました。ブランチワークスペースの作成は続行できます。',
   'workspace.branch-workspace.repository-named': 'リポジトリ {name} を含める',
   'workspace.branch-workspace.base-named': '{name} の作成元',
   'workspace.branch-workspace.creation-base-local': 'ローカルブランチ',

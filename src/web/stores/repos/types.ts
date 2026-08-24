@@ -271,7 +271,7 @@ export interface RuntimeCoherentRepoProjectionActions {
   refreshSnapshot: (id: string, options?: { token?: number }) => Promise<void>
   refreshStatus: (id: string, options?: { token?: number }) => Promise<void>
   refreshCoreData: (id: string, options?: { token?: number }) => Promise<void>
-  syncAndRefresh: (id: string, options?: { token?: number }) => Promise<void>
+  syncAndRefresh: (id: string, options?: { token?: number }) => Promise<ExecResult | null>
   setLastResult: (id: string, result: ExecResult, token: number, options?: RepoResultEventOptions) => void
   clearEvents: (id: string, eventIds: number[]) => void
   hydrateSession: (

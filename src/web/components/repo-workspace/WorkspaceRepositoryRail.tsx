@@ -58,6 +58,7 @@ import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
+import { fetchWorkspaceRepositories } from '#/web/workspace-repository-fetch.ts'
 import {
   activateWorkspaceParentTerminalTarget,
   resolveWorkspaceParentTerminalTarget,
@@ -272,6 +273,10 @@ export function WorkspaceRepositoryRail({
         ]
       }),
     [candidateNameById, repos, workspace?.repositoryIds],
+  )
+  const fetchAllRepositories = useCallback(
+    async () => await fetchWorkspaceRepositories(workspaceRootId),
+    [workspaceRootId],
   )
   const refreshWorkspaceMemberCoreData = useCallback(() => {
     const state = useReposStore.getState()
@@ -770,6 +775,7 @@ export function WorkspaceRepositoryRail({
         result={branchActions.result}
         pending={branchActions.pending}
         error={branchActions.error}
+        onFetchAllRepositories={fetchAllRepositories}
         onRefreshAuxiliaryCandidates={branchQuery.refresh}
         onOpenChange={(open) => {
           setBranchDialogOpen(open)

@@ -331,7 +331,7 @@ describe('StatusBar file area control', () => {
 describe('StatusBar repository refresh', () => {
   test('refreshes local branches and status without running remote sync', async () => {
     const refreshCoreData = vi.fn(async () => undefined)
-    const syncAndRefresh = vi.fn(async () => undefined)
+    const syncAndRefresh = vi.fn(async () => null)
     const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
     useReposStore.setState({ refreshCoreData, syncAndRefresh })
 

@@ -152,6 +152,10 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.branch-prefix.none': '접두사 없음',
   'workspace.branch-workspace.repositories': '저장소 작업 트리',
   'workspace.branch-workspace.repositories-select-all': '사용 가능한 모든 저장소 선택',
+  'workspace.branch-workspace.fetch-all': '모든 저장소 동기화',
+  'workspace.branch-workspace.fetch-all-success': '모든 저장소를 동기화했습니다.',
+  'workspace.branch-workspace.fetch-all-incomplete':
+    '저장소 {total}개 중 {completed}개를 동기화했습니다. 브랜치 워크스페이스 생성을 계속할 수 있습니다.',
   'workspace.branch-workspace.repository-named': '저장소 {name} 포함',
   'workspace.branch-workspace.base-named': '{name}의 생성 기준',
   'workspace.branch-workspace.creation-base-local': '로컬 브랜치',

@@ -135,6 +135,7 @@ const branchWorkspaceState = vi.hoisted(() => ({
     progressWorkspace: BranchWorkspaceSnapshot | null
     fixedReduceRepositoryName?: string | null
     onReturnToSelection: () => Promise<void> | void
+    onFetchAllRepositories: () => Promise<unknown>
   },
 }))
 
@@ -329,6 +330,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     fixedReduceRepositoryName,
     onReturnToSelection,
     onRefreshAuxiliaryCandidates,
+    onFetchAllRepositories,
   }: {
     open: boolean
     mode: string
@@ -341,6 +343,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
     fixedReduceRepositoryName?: string | null
     onReturnToSelection: () => Promise<void> | void
     onRefreshAuxiliaryCandidates?: () => Promise<unknown>
+    onFetchAllRepositories: () => Promise<unknown>
   }) => {
     branchWorkspaceState.dialogProps = {
       open,
@@ -350,6 +353,7 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceDialog.tsx', () => ({
       progressWorkspace,
       fixedReduceRepositoryName,
       onReturnToSelection,
+      onFetchAllRepositories,
     }
     branchWorkspaceState.dialogRefresh = onRefreshAuxiliaryCandidates ?? null
     return null
@@ -396,6 +400,7 @@ const originalActions = {
   rescanWorkspace: useReposStore.getState().rescanWorkspace,
   configureWorkspace: useReposStore.getState().configureWorkspace,
   refreshCoreData: useReposStore.getState().refreshCoreData,
+  syncAndRefresh: useReposStore.getState().syncAndRefresh,
 }
 
 let container: HTMLDivElement | null = null
@@ -407,6 +412,7 @@ const selectBranch = vi.fn()
 const setDetailTab = vi.fn()
 const rescanWorkspace = vi.fn(async () => {})
 const refreshCoreData = vi.fn(async () => {})
+const syncAndRefresh = vi.fn(async () => ({ ok: true as const, message: 'fetched' }))
 const configureWorkspace = vi.fn(
   async (_rootId: string, _config: WorkspaceConfig): Promise<{ ok: true } | { ok: false; message: string }> => ({
     ok: true,
@@ -440,6 +446,8 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   refreshCoreData.mockReset()
   refreshCoreData.mockResolvedValue(undefined)
+  syncAndRefresh.mockReset()
+  syncAndRefresh.mockResolvedValue({ ok: true, message: 'fetched' })
   branchWorkspaceState.refresh.mockReset()
   branchWorkspaceState.refresh.mockResolvedValue({
     ok: true,
@@ -567,6 +575,7 @@ beforeEach(() => {
     rescanWorkspace,
     configureWorkspace,
     refreshCoreData,
+    syncAndRefresh,
   })
   container = document.createElement('div')
   document.body.append(container)
@@ -584,6 +593,22 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('syncs every configured repository with its latest instance token', async () => {
+    renderRail()
+
+    const api = useReposStore.getState().repos[API]!
+    const web = useReposStore.getState().repos[WEB]!
+    const fetchAllRepositories = branchWorkspaceState.dialogProps?.onFetchAllRepositories
+    expect(fetchAllRepositories).toBeTypeOf('function')
+    if (!fetchAllRepositories) return
+
+    await fetchAllRepositories()
+
+    expect(syncAndRefresh).toHaveBeenCalledTimes(2)
+    expect(syncAndRefresh).toHaveBeenCalledWith(API, { token: api.instanceToken })
+    expect(syncAndRefresh).toHaveBeenCalledWith(WEB, { token: web.instanceToken })
+  })
+
   test('renders the desktop repository list as a resizable region with the default height', () => {
     renderRail()
 

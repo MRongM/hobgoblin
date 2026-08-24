@@ -9,6 +9,15 @@ import type { BranchWorkspacePlan, BranchWorkspaceSnapshot } from '#/shared/bran
 const mocks = vi.hoisted(() => ({
   getRepositoryFileTree: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastWarning: vi.fn(),
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: mocks.toastSuccess,
+    warning: mocks.toastWarning,
+  },
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
@@ -41,6 +50,8 @@ beforeEach(() => {
     entries: [],
   })
   mocks.getRepositoryRemoteBranches.mockResolvedValue([])
+  mocks.toastSuccess.mockReset()
+  mocks.toastWarning.mockReset()
 })
 
 afterEach(() => {
@@ -52,6 +63,63 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDialog', () => {
+  test('shows fetch all only on the create selection screen', () => {
+    renderDialog({})
+    expect(document.querySelector('[data-action="fetch-all-repositories"]')).not.toBeNull()
+
+    renderDialog({ mode: 'extend' })
+    expect(document.querySelector('[data-action="fetch-all-repositories"]')).toBeNull()
+
+    renderDialog({ mode: 'create', plan: approvalPlan() })
+    expect(document.querySelector('[data-action="fetch-all-repositories"]')).toBeNull()
+  })
+
+  test('keeps the creation form usable while all repositories are fetching', async () => {
+    let finishFetch!: (result: { total: number; succeeded: number; failures: [] }) => void
+    const onFetchAllRepositories = vi.fn(
+      () =>
+        new Promise<{ total: number; succeeded: number; failures: [] }>((resolve) => {
+          finishFetch = resolve
+        }),
+    )
+    renderDialog({ onFetchAllRepositories })
+    act(() => repositoryCheckbox('api').click())
+    await flushAsyncWork()
+
+    const fetchAll = document.querySelector<HTMLButtonElement>('[data-action="fetch-all-repositories"]')
+    act(() => fetchAll?.click())
+
+    expect(fetchAll?.disabled).toBe(true)
+    expect(fetchAll?.querySelector('.lucide-loader-circle')).not.toBeNull()
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+
+    await act(async () => {
+      finishFetch({ total: 2, succeeded: 2, failures: [] })
+      await Promise.resolve()
+    })
+
+    expect(fetchAll?.disabled).toBe(false)
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('workspace.branch-workspace.fetch-all-success')
+    expect(mocks.getRepositoryRemoteBranches).toHaveBeenCalledTimes(2)
+  })
+
+  test('summarizes failed repositories without turning them into a dialog error', async () => {
+    const onFetchAllRepositories = vi.fn(async () => ({
+      total: 2,
+      succeeded: 1,
+      failures: [{ repositoryName: 'api', message: 'offline' }],
+    }))
+    renderDialog({ onFetchAllRepositories })
+
+    await clickAction('fetch-all-repositories')
+
+    expect(mocks.toastWarning).toHaveBeenCalledWith('workspace.branch-workspace.fetch-all-incomplete:1/2', {
+      description: 'api: offline',
+    })
+    expect(document.body.textContent).not.toContain('offline')
+    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(true)
+  })
+
   test('uses the canonical dialog cancel copy', () => {
     renderDialog({})
 
@@ -1656,6 +1724,7 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
           items: [],
           auxiliaryCandidates: [],
         })}
+        onFetchAllRepositories={async () => ({ total: 2, succeeded: 2, failures: [] })}
         onPreview={async () => true}
         onConfirm={async () => null}
         onForceConfirm={async () => null}

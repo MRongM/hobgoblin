@@ -145,6 +145,10 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.branch-prefix.none': '无前缀',
   'workspace.branch-workspace.repositories': '仓库工作树',
   'workspace.branch-workspace.repositories-select-all': '选择全部可用仓库',
+  'workspace.branch-workspace.fetch-all': '同步全部仓库',
+  'workspace.branch-workspace.fetch-all-success': '已同步全部仓库。',
+  'workspace.branch-workspace.fetch-all-incomplete':
+    '已同步 {completed}/{total} 个仓库；失败项不影响继续新增子工作区。',
   'workspace.branch-workspace.repository-named': '包含仓库 {name}',
   'workspace.branch-workspace.base-named': '{name} 的创建来源',
   'workspace.branch-workspace.creation-base-local': '本地分支',

@@ -247,7 +247,7 @@ describe('ProjectChangesPanel', () => {
 
   test('refresh icon refreshes only selected repository status', async () => {
     const refreshStatus = vi.fn(async () => undefined)
-    const syncAndRefresh = vi.fn(async () => undefined)
+    const syncAndRefresh = vi.fn(async () => null)
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],

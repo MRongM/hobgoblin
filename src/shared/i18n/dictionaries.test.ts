@@ -528,6 +528,19 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
   })
 
+  test('localizes branch workspace fetch all feedback in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.fetch-all',
+      'workspace.branch-workspace.fetch-all-success',
+      'workspace.branch-workspace.fetch-all-incomplete',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.fetch-all']).toBe('同步全部仓库')
+  })
+
   test('localizes scheduled status refresh settings in every locale', () => {
     const keys = ['settings.group.status-refresh', 'settings.status-refresh', 'settings.status-refresh-hint'] as const
     for (const [lang, dict] of Object.entries(dicts)) {

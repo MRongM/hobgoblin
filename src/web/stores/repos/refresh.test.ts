@@ -48,7 +48,10 @@ describe('remote fetch timestamps', () => {
       return []
     }
 
-    await useReposStore.getState().syncAndRefresh(REPO_ID, { token: 1 })
+    await expect(useReposStore.getState().syncAndRefresh(REPO_ID, { token: 1 })).resolves.toEqual({
+      ok: true,
+      message: '',
+    })
 
     expect(fetchCount).toBe(0)
     expect(snapshotCount).toBe(1)
@@ -59,7 +62,10 @@ describe('remote fetch timestamps', () => {
     const token = seedRepo([branch('feature/a')])
     const before = Date.now()
 
-    await useReposStore.getState().syncAndRefresh(REPO_ID, { token })
+    await expect(useReposStore.getState().syncAndRefresh(REPO_ID, { token })).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
 
     expect(useReposStore.getState().repos[REPO_ID]?.resources.fetch.loadedAt).toBeGreaterThanOrEqual(before)
   })
@@ -161,7 +167,10 @@ describe('remote fetch timestamps', () => {
       throw new Error('network down')
     }
 
-    await expect(useReposStore.getState().syncAndRefresh(REPO_ID, { token })).resolves.toBeUndefined()
+    await expect(useReposStore.getState().syncAndRefresh(REPO_ID, { token })).resolves.toEqual({
+      ok: false,
+      message: 'network down',
+    })
 
     const repo = useReposStore.getState().repos[REPO_ID]
     expect(repo?.events.at(-1)).toMatchObject({ kind: 'result', result: { ok: false, message: 'network down' } })

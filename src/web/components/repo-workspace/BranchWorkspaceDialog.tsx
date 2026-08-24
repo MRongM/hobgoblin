@@ -46,6 +46,11 @@ import {
   type RepositoryDependencySource,
   type RepositoryDependencyWorktree,
 } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
+import type { BranchWorkspaceRepositoryFetchResult } from '#/web/branch-workspace-repository-fetch.ts'
+import {
+  showWorkspaceRepositoryFetchError,
+  showWorkspaceRepositoryFetchResult,
+} from '#/web/components/repo-workspace/workspace-repository-fetch-feedback.ts'
 
 export interface BranchWorkspaceRepositoryOption {
   id: string
@@ -75,6 +80,7 @@ interface BranchWorkspaceDialogProps {
   pending: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
+  onFetchAllRepositories: () => Promise<BranchWorkspaceRepositoryFetchResult>
   onRefreshAuxiliaryCandidates: () => Promise<BranchWorkspaceReadResult>
   onPreview: (request: BranchWorkspacePlanRequest) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
@@ -104,6 +110,7 @@ export function BranchWorkspaceDialog({
   pending,
   error,
   onOpenChange,
+  onFetchAllRepositories,
   onRefreshAuxiliaryCandidates,
   onPreview,
   onConfirm,
@@ -130,6 +137,7 @@ export function BranchWorkspaceDialog({
   const [auxiliaryChoices, setAuxiliaryChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
   const [auxiliaryRefreshPending, setAuxiliaryRefreshPending] = useState(false)
   const [auxiliaryRefreshError, setAuxiliaryRefreshError] = useState<string | null>(null)
+  const [fetchAllPending, setFetchAllPending] = useState(false)
   const [alsoDeleteBranch, setAlsoDeleteBranch] = useState(false)
   const [alsoDeleteUpstream, setAlsoDeleteUpstream] = useState(false)
   const [approvals, setApprovals] = useState<BranchWorkspaceApproval[]>([])
@@ -290,6 +298,24 @@ export function BranchWorkspaceDialog({
       if (remoteBranchControllers.current[repository.name] === controller) {
         delete remoteBranchControllers.current[repository.name]
       }
+    }
+  }
+
+  const fetchAllRepositories = async () => {
+    if (fetchAllPending) return
+    setFetchAllPending(true)
+    try {
+      const summary = await onFetchAllRepositories()
+      showWorkspaceRepositoryFetchResult(t, summary)
+      void Promise.allSettled(
+        repositories
+          .filter((repository) => repository.available && selectedRepositories[repository.name])
+          .map(loadRemoteBranches),
+      )
+    } catch (fetchError) {
+      showWorkspaceRepositoryFetchError(t, repositories.length, fetchError)
+    } finally {
+      setFetchAllPending(false)
     }
   }
 
@@ -502,9 +528,31 @@ export function BranchWorkspaceDialog({
           if (removalExecutionLocked) event.preventDefault()
         }}
       >
-        <DialogHeader>
-          <DialogTitle>{t(`workspace.branch-workspace.dialog.${mode}.title`)}</DialogTitle>
-          <DialogDescription>{t(`workspace.branch-workspace.dialog.${mode}.description`)}</DialogDescription>
+        <DialogHeader className="pr-8">
+          <div className="flex items-start gap-3">
+            <div className="grid min-w-0 flex-1 gap-2">
+              <DialogTitle>{t(`workspace.branch-workspace.dialog.${mode}.title`)}</DialogTitle>
+              <DialogDescription>{t(`workspace.branch-workspace.dialog.${mode}.description`)}</DialogDescription>
+            </div>
+            {mode === 'create' && !plan ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-action="fetch-all-repositories"
+                aria-label={t('workspace.branch-workspace.fetch-all')}
+                disabled={fetchAllPending || repositories.length === 0}
+                onClick={() => void fetchAllRepositories()}
+              >
+                {fetchAllPending ? (
+                  <LoaderCircle className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw aria-hidden="true" />
+                )}
+                {t('workspace.branch-workspace.fetch-all')}
+              </Button>
+            ) : null}
+          </div>
         </DialogHeader>
 
         {!plan && (mode === 'create' || mode === 'extend') ? (
