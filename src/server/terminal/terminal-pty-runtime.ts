@@ -41,6 +41,7 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
           rows: input.rows,
           cwd: input.cwd,
           env,
+          ...(process.platform === 'win32' ? { useConptyDll: true } : {}),
         })
         const windowsPty = detectWindowsPtyCompatibility(process.platform, os.release())
         const runtime = new NodePtyTerminalRuntime(

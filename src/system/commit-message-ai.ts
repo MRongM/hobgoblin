@@ -30,7 +30,8 @@ interface ProviderCommand {
 const PROVIDER_COMMANDS: Record<CommitMessageProvider, ProviderCommand> = {
   codex: {
     command: 'codex',
-    args: (prompt) => ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', prompt],
+    args: () => ['exec', '--json', '--sandbox', 'read-only', '--skip-git-repo-check', '-'],
+    input: (prompt) => prompt,
     outputMode: 'codex-jsonl',
   },
   claude: {
