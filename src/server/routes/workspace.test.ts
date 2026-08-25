@@ -354,18 +354,22 @@ describe('workspace routes', () => {
       body: JSON.stringify({ rootId: '/workspace', orderedIds: ['third', 'first'] }),
     })
 
-    expect(mocks.planBranchWorkspace).toHaveBeenCalledWith('/workspace', {
-      operation: 'create',
-      branch: 'feature/auth',
-      repositories: [
-        {
-          repositoryName: 'api',
-          creationBase: { kind: 'localBranch', branch: 'main' },
-          syncBeforeCreate: false,
-        },
-      ],
-      auxiliaryEntries: [{ name: 'README.md', mode: 'copy' }],
-    })
+    expect(mocks.planBranchWorkspace).toHaveBeenCalledWith(
+      '/workspace',
+      {
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [{ name: 'README.md', mode: 'copy' }],
+      },
+      expect.any(AbortSignal),
+    )
     expect(mocks.executeBranchWorkspace).toHaveBeenCalledWith('/workspace', {
       planToken: 'sha256:plan',
       approvals: ['outside-root-source', 'worktree-bootstrap'],

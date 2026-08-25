@@ -154,7 +154,7 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
     const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
     const normalized = normalizeBranchWorkspacePlanRequest(body?.request)
     if (!normalized.ok) return c.json(normalized)
-    return c.json(await branchWorkspaceWriteService.plan(rootId, normalized.request))
+    return c.json(await branchWorkspaceWriteService.plan(rootId, normalized.request, c.req.raw.signal))
   })
 
   app.post('/branch-workspaces/execute', async (c) => {

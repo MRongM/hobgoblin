@@ -50,36 +50,132 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDependencyDialog', () => {
-  test('previews copy or symlink choices for missing and occupied targets', async () => {
+  test('shows dependency choices and the reviewed plan together without a next-step action', () => {
+    renderDialog({ mode: 'add', plan: replacementAddPlan() })
+
+    expect(document.querySelector('[data-testid="branch-workspace-dependency-one-step-layout"]')).not.toBeNull()
+    expect(document.querySelector<HTMLElement>('[data-slot="dialog-content"]')?.className).toContain(
+      'grid-rows-[auto_minmax(0,1fr)_auto]',
+    )
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.selection-title')
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.plan-title')
+    expect(document.querySelector('[data-materialization-item="config"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('workspace.branch-workspace.dependency.operation.replace')
+    expect(document.querySelector('[data-action="preview"]')).toBeNull()
+    expect(document.querySelector('[data-action="confirm"]')).not.toBeNull()
+  })
+
+  test('automatically plans copy or symlink choices for missing and occupied targets', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'add', onPreview })
 
     expect(document.querySelector('[data-materialization-item=".env"]')).not.toBeNull()
     expect(document.querySelector('[data-materialization-item="config"]')).not.toBeNull()
     click('[data-materialization-item="config"] [data-materialization-choice="symlink"]')
-    await clickAction('preview')
 
-    expect(onPreview).toHaveBeenCalledWith({
-      operation: 'add',
-      branchWorkspaceId: 'branch-1',
-      entries: [{ name: 'config', mode: 'symlink' }],
-    })
+    await vi.waitFor(() =>
+      expect(onPreview).toHaveBeenLastCalledWith(
+        {
+          operation: 'add',
+          branchWorkspaceId: 'branch-1',
+          entries: [{ name: 'config', mode: 'symlink' }],
+        },
+        expect.any(AbortSignal),
+      ),
+    )
+    expect(document.querySelector('[data-action="preview"]')).toBeNull()
   })
 
-  test('previews checked removals only for present targets', async () => {
+  test('automatically plans checked removals only for present targets', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'remove', onPreview })
 
     expect(document.querySelector('[data-dependency-remove="config"]')).not.toBeNull()
     expect(document.querySelector('[data-dependency-remove=".env"]')).toBeNull()
     click('[data-dependency-remove="config"]')
-    await clickAction('preview')
 
-    expect(onPreview).toHaveBeenCalledWith({
-      operation: 'remove',
-      branchWorkspaceId: 'branch-1',
-      names: ['config'],
+    await vi.waitFor(() =>
+      expect(onPreview).toHaveBeenLastCalledWith(
+        {
+          operation: 'remove',
+          branchWorkspaceId: 'branch-1',
+          names: ['config'],
+        },
+        expect.any(AbortSignal),
+      ),
+    )
+  })
+
+  test('keeps selection editable while planning and locks it only during execution', () => {
+    const { rerender } = renderDialog({ mode: 'add', planning: true, executing: false })
+
+    expect(document.querySelector<HTMLButtonElement>('[data-materialization-choice="copy"]')?.disabled).toBe(false)
+
+    rerender({ mode: 'add', planning: false, executing: true })
+    expect(document.querySelector<HTMLButtonElement>('[data-materialization-choice="copy"]')?.disabled).toBe(true)
+  })
+
+  test('does not submit a dependency plan that belongs to a different selection', () => {
+    renderDialog({
+      mode: 'add',
+      plan: replacementAddPlan(),
+      plannedRequest: {
+        operation: 'add',
+        branchWorkspaceId: 'branch-1',
+        entries: [{ name: 'config', mode: 'symlink' }],
+      },
     })
+
+    expect(document.body.textContent).not.toContain('workspace.branch-workspace.dependency.operation.replace')
+    expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.disabled).toBe(true)
+  })
+
+  test('requires rechecking after partial completion and preserves only unfinished selections', async () => {
+    const onPreview = vi.fn(async () => true)
+    const onRecheck = vi.fn(async () => true)
+    const recheckCandidates = [
+      ...candidates,
+      {
+        name: 'cache',
+        sourcePath: '/workspace/cache',
+        sourceKind: 'directory' as const,
+        targetPath: '/workspace/hobgoblin-feature/cache',
+        targetKind: 'directory' as const,
+        outsideRoot: false,
+      },
+    ]
+    const result = {
+      ok: false as const,
+      message: 'remove failed',
+      operation: 'remove' as const,
+      branchWorkspaceId: 'branch-1',
+      completedNames: ['config'],
+    }
+    const { rerender } = renderDialog({ mode: 'remove', candidates: recheckCandidates, onPreview })
+    click('[data-dependency-remove="config"]')
+    click('[data-dependency-remove="cache"]')
+    await vi.waitFor(() =>
+      expect(onPreview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ names: ['config', 'cache'] }),
+        expect.any(AbortSignal),
+      ),
+    )
+
+    rerender({
+      mode: 'remove',
+      candidates: recheckCandidates,
+      plan: removePlan(),
+      result,
+      error: 'remove failed',
+      onPreview,
+      onRecheck,
+    })
+    expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')).toBeNull()
+    await clickAction('recheck')
+
+    expect(onRecheck).toHaveBeenCalledTimes(1)
+    expect(document.querySelector<HTMLElement>('[data-dependency-remove="config"]')?.dataset.state).toBe('unchecked')
+    expect(document.querySelector<HTMLElement>('[data-dependency-remove="cache"]')?.dataset.state).toBe('checked')
   })
 
   test('requires previewed approvals before confirming an add plan', async () => {
@@ -131,9 +227,7 @@ describe('BranchWorkspaceDependencyDialog', () => {
   })
 })
 
-function renderDialog(
-  overrides: Partial<Parameters<typeof BranchWorkspaceDependencyDialog>[0]> = {},
-) {
+function renderDialog(overrides: Partial<Parameters<typeof BranchWorkspaceDependencyDialog>[0]> = {}) {
   type Props = Parameters<typeof BranchWorkspaceDependencyDialog>[0]
   const base: Props = {
     open: true,
@@ -143,10 +237,13 @@ function renderDialog(
     plan: null,
     result: null,
     pending: false,
+    planning: false,
+    executing: false,
     error: null,
     onOpenChange: vi.fn(),
     onPreview: vi.fn(async () => true),
     onConfirm: vi.fn(async () => null),
+    onRecheck: vi.fn(async () => true),
     onCancel: vi.fn(async () => undefined),
   }
   const render = (next: Partial<Props>) => {

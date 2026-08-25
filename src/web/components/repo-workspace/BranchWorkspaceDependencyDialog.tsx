@@ -23,6 +23,12 @@ import {
 } from '#/web/components/ui/dialog.tsx'
 import { DialogError } from '#/web/components/ui/dialog-error.tsx'
 import { ScrollArea } from '#/web/components/ui/scroll-area.tsx'
+import {
+  OneStepPlanningLayout,
+  OneStepPlanningPlanPane,
+  OneStepPlanningSelectionPane,
+} from '#/web/components/repo-workspace/OneStepPlanningLayout.tsx'
+import { useLatestPlanRequest } from '#/web/hooks/useLatestPlanRequest.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
 interface BranchWorkspaceDependencyDialogProps {
@@ -31,12 +37,17 @@ interface BranchWorkspaceDependencyDialogProps {
   branchWorkspaceId: string
   candidates: readonly BranchWorkspaceDependencyCandidate[]
   plan: BranchWorkspaceDependencyPlan | null
+  plannedRequest?: BranchWorkspaceDependencyPlanRequest | null
   result: BranchWorkspaceDependencyExecuteResult | null
   pending: boolean
+  reading?: boolean
+  planning?: boolean
+  executing?: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
-  onPreview: (request: BranchWorkspaceDependencyPlanRequest) => Promise<unknown>
+  onPreview: (request: BranchWorkspaceDependencyPlanRequest, signal?: AbortSignal) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceDependencyApproval[]) => Promise<BranchWorkspaceDependencyExecuteResult | null>
+  onRecheck?: () => Promise<unknown>
   onCancel: () => Promise<unknown>
 }
 
@@ -46,17 +57,24 @@ export function BranchWorkspaceDependencyDialog({
   branchWorkspaceId,
   candidates,
   plan,
+  plannedRequest,
+  result,
   pending,
+  reading = false,
+  planning = pending,
+  executing = pending,
   error,
   onOpenChange,
   onPreview,
   onConfirm,
+  onRecheck = async () => undefined,
   onCancel,
 }: BranchWorkspaceDependencyDialogProps) {
   const t = useT()
   const [choices, setChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
   const [removeNames, setRemoveNames] = useState<Set<string>>(() => new Set())
   const [approvals, setApprovals] = useState<BranchWorkspaceDependencyApproval[]>([])
+  const [planRevision, setPlanRevision] = useState(0)
   const addable = candidates
   const removable = useMemo(() => candidates.filter((candidate) => candidate.targetKind !== 'missing'), [candidates])
 
@@ -65,10 +83,11 @@ export function BranchWorkspaceDependencyDialog({
     setChoices({})
     setRemoveNames(new Set())
     setApprovals([])
+    setPlanRevision(0)
   }, [branchWorkspaceId, mode, open])
 
   useEffect(() => {
-    if (!plan) setApprovals([])
+    setApprovals([])
   }, [plan?.token])
 
   const request = (): BranchWorkspaceDependencyPlanRequest | null => {
@@ -82,153 +101,220 @@ export function BranchWorkspaceDependencyDialog({
     const names = removable.flatMap((candidate) => (removeNames.has(candidate.name) ? [candidate.name] : []))
     return names.length > 0 ? { operation: 'remove', branchWorkspaceId, names } : null
   }
-  const nextRequest = request()
+  const nextRequest = !executing ? request() : null
+  const requestKey = nextRequest ? JSON.stringify(nextRequest) : null
+  const plannedRequestKey = plannedRequest ? JSON.stringify(plannedRequest) : null
+  const completedNames = result?.ok === false ? (result.completedNames ?? []) : []
+  const recoveryRequired =
+    result?.ok === false &&
+    (completedNames.length > 0 || result.message === 'workspace.branch-workspace.dependency.plan-stale')
+  const autoPlan = useLatestPlanRequest({
+    enabled: open && !reading && !executing && !recoveryRequired,
+    request: nextRequest,
+    requestKey,
+    revision: planRevision,
+    requestPlan: async (next, signal) => (await onPreview(next, signal)) !== false,
+  })
+  const currentPlanReady =
+    plan !== null &&
+    (plannedRequest === undefined ||
+      (autoPlan.status === 'ready' && requestKey !== null && plannedRequestKey === requestKey))
+  const displayedPlan =
+    plan !== null &&
+    (plannedRequest === undefined ||
+      executing ||
+      (autoPlan.status === 'ready' && requestKey !== null && plannedRequestKey === requestKey))
+      ? plan
+      : null
   const requiredApprovalsSatisfied =
-    !plan || plan.requiredApprovals.every((approval) => approvals.includes(approval))
+    !displayedPlan || displayedPlan.requiredApprovals.every((approval) => approvals.includes(approval))
   const replacesTargets =
-    plan?.operation === 'add' && plan.entries.some((entry) => entry.targetKind !== 'missing')
+    displayedPlan?.operation === 'add' && displayedPlan.entries.some((entry) => entry.targetKind !== 'missing')
   const close = () => {
-    if (pending) void onCancel()
+    if (executing) void onCancel()
     onOpenChange(false)
   }
   const confirm = async () => {
+    if (!currentPlanReady || recoveryRequired) return
     const response = await onConfirm(approvals)
     if (response?.ok) onOpenChange(false)
+  }
+  const recheck = async () => {
+    const completed = new Set(completedNames)
+    setChoices((current) => ({
+      ...current,
+      ...Object.fromEntries([...completed].map((name) => [name, 'skip' as const])),
+    }))
+    setRemoveNames((current) => new Set([...current].filter((name) => !completed.has(name))))
+    setApprovals([])
+    await onRecheck()
+    setPlanRevision((current) => current + 1)
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[85vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{t(`workspace.branch-workspace.dependency.${mode}.title`)}</DialogTitle>
           <DialogDescription>{t(`workspace.branch-workspace.dependency.${mode}.description`)}</DialogDescription>
         </DialogHeader>
 
-        {!plan ? (
-          mode === 'add' ? (
-            <MaterializationCandidateList
-              items={addable.map((candidate) => ({
-                id: candidate.name,
-                label: candidate.name,
-                kind: candidate.sourceKind === 'directory' ? 'directory' : 'file',
-                annotation:
-                  candidate.targetKind !== 'missing' || candidate.outsideRoot ? (
-                    <span className="flex shrink-0 items-center gap-1 text-[10px]">
-                      {candidate.targetKind !== 'missing' ? (
-                        <span className="text-destructive">
-                          {t('workspace.branch-workspace.dependency.add.replaces-target')}
-                        </span>
-                      ) : null}
-                      {candidate.outsideRoot ? (
-                        <span className="text-warning">{t('workspace.branch-workspace.outside-root')}</span>
-                      ) : null}
-                    </span>
-                  ) : undefined,
-              }))}
-              choices={choices}
-              onChoiceChange={(name, choice) => setChoices((current) => ({ ...current, [name]: choice }))}
-              headingId="branch-workspace-dependency-add-candidates"
-              label={t('workspace.branch-workspace.dependency.add.available')}
-              description={t('workspace.branch-workspace.dependency.add.available-description')}
-              emptyMessage={t('workspace.branch-workspace.dependency.add.empty')}
-              disabled={pending}
-            />
-          ) : (
-            <DependencyRemovalList
-              candidates={removable}
-              selectedNames={removeNames}
-              disabled={pending}
-              onSelectedChange={(name, selected) =>
-                setRemoveNames((current) => {
-                  const next = new Set(current)
-                  if (selected) next.add(name)
-                  else next.delete(name)
-                  return next
-                })
-              }
-            />
-          )
-        ) : (
-          <section className="grid gap-2 rounded-md border border-border/80 bg-muted/20 p-3">
-            <h3 className="text-xs font-medium">{t('workspace.branch-workspace.dependency.preview-title')}</h3>
-            <div className="grid gap-1">
-              {plan.entries.map((entry) => (
-                <div key={entry.name} className="flex min-w-0 items-center gap-2 text-xs">
-                  {entry.name.includes('.') ? (
-                    <File className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  ) : (
-                    <Folder className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate font-mono" title={entry.targetPath}>
-                    {entry.name}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {t(
-                      `workspace.branch-workspace.dependency.operation.${
-                        plan.operation === 'add' && entry.targetKind !== 'missing' ? 'replace' : plan.operation
-                      }`,
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {plan.requiredApprovals.length > 0 ? (
-              <div className="mt-1 grid gap-2 border-t border-border/70 pt-2">
-                {plan.requiredApprovals.map((approval) => (
-                  <label key={approval} className="flex items-center gap-2 text-xs">
-                    <Checkbox
-                      data-dependency-approval={approval}
-                      checked={approvals.includes(approval)}
-                      disabled={pending}
-                      onCheckedChange={(checked) =>
-                        setApprovals((current) =>
-                          checked === true
-                            ? [...new Set([...current, approval])]
-                            : current.filter((candidate) => candidate !== approval),
-                        )
-                      }
-                    />
-                    {t(`workspace.branch-workspace.dependency.approval.${approval}`)}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-          </section>
-        )}
+        <OneStepPlanningLayout enabled testIdPrefix="branch-workspace-dependency">
+          <OneStepPlanningSelectionPane
+            enabled
+            testIdPrefix="branch-workspace-dependency"
+            title={t('workspace.branch-workspace.one-step.selection-title')}
+          >
+            {mode === 'add' ? (
+              <MaterializationCandidateList
+                items={addable.map((candidate) => ({
+                  id: candidate.name,
+                  label: candidate.name,
+                  kind: candidate.sourceKind === 'directory' ? 'directory' : 'file',
+                  annotation:
+                    candidate.targetKind !== 'missing' || candidate.outsideRoot ? (
+                      <span className="flex shrink-0 items-center gap-1 text-[10px]">
+                        {candidate.targetKind !== 'missing' ? (
+                          <span className="text-destructive">
+                            {t('workspace.branch-workspace.dependency.add.replaces-target')}
+                          </span>
+                        ) : null}
+                        {candidate.outsideRoot ? (
+                          <span className="text-warning">{t('workspace.branch-workspace.outside-root')}</span>
+                        ) : null}
+                      </span>
+                    ) : undefined,
+                }))}
+                choices={choices}
+                onChoiceChange={(name, choice) => setChoices((current) => ({ ...current, [name]: choice }))}
+                headingId="branch-workspace-dependency-add-candidates"
+                label={t('workspace.branch-workspace.dependency.add.available')}
+                description={t('workspace.branch-workspace.dependency.add.available-description')}
+                emptyMessage={t('workspace.branch-workspace.dependency.add.empty')}
+                disabled={executing}
+              />
+            ) : (
+              <DependencyRemovalList
+                candidates={removable}
+                selectedNames={removeNames}
+                disabled={executing}
+                onSelectedChange={(name, selected) =>
+                  setRemoveNames((current) => {
+                    const next = new Set(current)
+                    if (selected) next.add(name)
+                    else next.delete(name)
+                    return next
+                  })
+                }
+              />
+            )}
+          </OneStepPlanningSelectionPane>
 
-        {pending && !plan ? (
-          <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground" role="status">
-            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            {t('workspace.branch-workspace.dependency.planning')}
-          </div>
-        ) : null}
-        {error ? <DialogError>{t(error)}</DialogError> : null}
+          <OneStepPlanningPlanPane
+            enabled
+            testIdPrefix="branch-workspace-dependency"
+            title={t('workspace.branch-workspace.one-step.plan-title')}
+          >
+            {displayedPlan ? (
+              <section className="grid gap-2 rounded-md border border-border/80 bg-muted/20 p-3">
+                <div className="grid gap-1">
+                  {displayedPlan.entries.map((entry) => (
+                    <div key={entry.name} className="flex min-w-0 items-center gap-2 text-xs">
+                      {entry.name.includes('.') ? (
+                        <File className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      ) : (
+                        <Folder className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate font-mono" title={entry.targetPath}>
+                        {entry.name}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {t(
+                          `workspace.branch-workspace.dependency.operation.${
+                            displayedPlan.operation === 'add' && entry.targetKind !== 'missing'
+                              ? 'replace'
+                              : displayedPlan.operation
+                          }`,
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {displayedPlan.requiredApprovals.length > 0 ? (
+                  <div className="mt-1 grid gap-2 border-t border-border/70 pt-2">
+                    {displayedPlan.requiredApprovals.map((approval) => (
+                      <label key={approval} className="flex items-center gap-2 text-xs">
+                        <Checkbox
+                          data-dependency-approval={approval}
+                          checked={approvals.includes(approval)}
+                          disabled={executing}
+                          onCheckedChange={(checked) =>
+                            setApprovals((current) =>
+                              checked === true
+                                ? [...new Set([...current, approval])]
+                                : current.filter((candidate) => candidate !== approval),
+                            )
+                          }
+                        />
+                        {t(`workspace.branch-workspace.dependency.approval.${approval}`)}
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : (
+              <div
+                data-plan-status={reading || planning ? 'planning' : autoPlan.status}
+                className="flex min-h-20 items-center justify-center gap-2 rounded-md border border-border/80 bg-muted/20 p-4 text-xs text-muted-foreground"
+                role="status"
+              >
+                {reading || planning || autoPlan.status === 'planning' ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                ) : null}
+                {t(
+                  reading || planning || autoPlan.status === 'planning'
+                    ? 'workspace.branch-workspace.one-step.planning'
+                    : autoPlan.status === 'error'
+                      ? 'workspace.branch-workspace.one-step.plan-error'
+                      : 'workspace.branch-workspace.one-step.incomplete',
+                )}
+              </div>
+            )}
+            {recoveryRequired ? (
+              <p className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-warning" role="status">
+                {t('workspace.branch-workspace.dependency.recheck-required')}
+              </p>
+            ) : null}
+            {error ? <DialogError>{t(error)}</DialogError> : null}
+          </OneStepPlanningPlanPane>
+        </OneStepPlanningLayout>
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={close}>
             {t('dialog.cancel')}
           </Button>
-          {!plan ? (
+          {recoveryRequired ? (
             <Button
               type="button"
-              data-action="preview"
-              disabled={pending || !nextRequest}
-              onClick={() => nextRequest && void onPreview(nextRequest)}
+              data-action="recheck"
+              disabled={reading || planning || executing}
+              onClick={() => void recheck()}
             >
-              {t('workspace.branch-workspace.preview')}
+              {t('workspace.branch-workspace.dependency.recheck')}
             </Button>
           ) : (
             <Button
               type="button"
               data-action="confirm"
-              variant={plan.operation === 'remove' || replacesTargets ? 'destructive' : 'default'}
-              disabled={pending || !requiredApprovalsSatisfied}
+              variant={displayedPlan?.operation === 'remove' || replacesTargets ? 'destructive' : 'default'}
+              disabled={executing || !currentPlanReady || !requiredApprovalsSatisfied}
               onClick={() => void confirm()}
             >
+              {executing ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : null}
               {t(
                 replacesTargets
                   ? 'workspace.branch-workspace.dependency.add.replace-confirm'
-                  : `workspace.branch-workspace.dependency.${plan.operation}.confirm`,
+                  : `workspace.branch-workspace.dependency.${mode}.confirm`,
               )}
             </Button>
           )}

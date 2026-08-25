@@ -73,8 +73,11 @@ export async function cleanupBranchWorkspaceRegistry(rootId: string): Promise<Br
 export async function planBranchWorkspace(
   rootId: string,
   request: BranchWorkspacePlanRequest,
+  signal?: AbortSignal,
 ): Promise<BranchWorkspacePlanResult> {
-  return await postServerJson('/api/workspace/branch-workspaces/plan', { rootId, request })
+  return signal
+    ? await postServerJson('/api/workspace/branch-workspaces/plan', { rootId, request }, { signal })
+    : await postServerJson('/api/workspace/branch-workspaces/plan', { rootId, request })
 }
 
 export async function executeBranchWorkspace(
@@ -110,8 +113,11 @@ export async function readBranchWorkspaceDependencies(
 export async function planBranchWorkspaceDependencies(
   rootId: string,
   request: BranchWorkspaceDependencyPlanRequest,
+  signal?: AbortSignal,
 ): Promise<BranchWorkspaceDependencyPlanResult> {
-  return await postServerJson('/api/workspace/branch-workspaces/dependencies/plan', { rootId, request })
+  return signal
+    ? await postServerJson('/api/workspace/branch-workspaces/dependencies/plan', { rootId, request }, { signal })
+    : await postServerJson('/api/workspace/branch-workspaces/dependencies/plan', { rootId, request })
 }
 
 export async function executeBranchWorkspaceDependencies(
