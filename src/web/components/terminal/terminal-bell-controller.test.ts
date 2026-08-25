@@ -120,6 +120,10 @@ describe('terminal bell controller', () => {
           outputCompletionMinimumActivitySeconds: 10,
           includeTerminalOutput: false,
           outputTailLength: 400,
+          terminalInputEnabled: false,
+          terminalInputAllowedUserIds: [],
+          terminalInputPollingTimeoutSeconds: 25,
+          terminalInputRuntime: { status: 'stopped' },
         },
       }),
     )
@@ -171,6 +175,10 @@ describe('terminal bell controller', () => {
           outputCompletionMinimumActivitySeconds: 10,
           includeTerminalOutput: true,
           outputTailLength: 3,
+          terminalInputEnabled: false,
+          terminalInputAllowedUserIds: [],
+          terminalInputPollingTimeoutSeconds: 25,
+          terminalInputRuntime: { status: 'stopped' },
         },
       }),
     )
@@ -250,6 +258,10 @@ describe('terminal bell controller', () => {
           outputCompletionMinimumActivitySeconds: 10,
           includeTerminalOutput: false,
           outputTailLength: 400,
+          terminalInputEnabled: false,
+          terminalInputAllowedUserIds: [],
+          terminalInputPollingTimeoutSeconds: 25,
+          terminalInputRuntime: { status: 'stopped' },
         },
       }),
     )

@@ -74,6 +74,9 @@ export async function applyServerTelegramNotificationSettingsWrite(
     outputCompletionMinimumActivitySeconds?: unknown
     includeTerminalOutput?: unknown
     outputTailLength?: unknown
+    terminalInputEnabled?: unknown
+    terminalInputAllowedUserIds?: unknown
+    terminalInputPollingTimeoutSeconds?: unknown
   } | null
   const telegramNotifications = await updateServerTelegramNotificationSettings({
     enabled: input?.enabled === true,
@@ -88,6 +91,20 @@ export async function applyServerTelegramNotificationSettingsWrite(
         : Number.NaN,
     includeTerminalOutput: input?.includeTerminalOutput === true,
     outputTailLength: typeof input?.outputTailLength === 'number' ? input.outputTailLength : Number.NaN,
+    ...(input && Object.prototype.hasOwnProperty.call(input, 'terminalInputEnabled')
+      ? { terminalInputEnabled: input.terminalInputEnabled === true }
+      : {}),
+    ...(input && Object.prototype.hasOwnProperty.call(input, 'terminalInputAllowedUserIds')
+      ? { terminalInputAllowedUserIds: input.terminalInputAllowedUserIds as string[] }
+      : {}),
+    ...(input && Object.prototype.hasOwnProperty.call(input, 'terminalInputPollingTimeoutSeconds')
+      ? {
+          terminalInputPollingTimeoutSeconds:
+            typeof input.terminalInputPollingTimeoutSeconds === 'number'
+              ? input.terminalInputPollingTimeoutSeconds
+              : Number.NaN,
+        }
+      : {}),
   })
   publishSettingsInvalidation(['settings-snapshot'])
   return { ok: true, telegramNotifications }

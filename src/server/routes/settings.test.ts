@@ -85,6 +85,7 @@ describe('settings routes', () => {
   })
 
   test('delegates prefs writes to the settings write-path application layer', async () => {
+    const onTelegramRuntimeConfigChanged = vi.fn(async () => undefined)
     mocks.applyServerSettingsPrefsWrite.mockResolvedValue({
       ok: true,
       settings: { lang: 'ja' },
@@ -92,7 +93,7 @@ describe('settings routes', () => {
     })
 
     const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
-    const app = createSettingsRoutes(createServerSettingsState())
+    const app = createSettingsRoutes(createServerSettingsState(), { onTelegramRuntimeConfigChanged })
     const response = await app.request(
       new Request('http://127.0.0.1:32100/prefs', {
         method: 'POST',
@@ -113,6 +114,7 @@ describe('settings routes', () => {
       { settings: { lang: 'ja' } },
       { acceptLanguage: 'ja-JP,ja;q=0.9,en;q=0.8', signal: expect.any(AbortSignal) },
     )
+    expect(onTelegramRuntimeConfigChanged).toHaveBeenCalledTimes(1)
   })
 
   test('does not expose the removed global shortcut registration route', async () => {
@@ -160,6 +162,7 @@ describe('settings routes', () => {
   })
 
   test('delegates Telegram settings writes without exposing the Bot Token', async () => {
+    const onTelegramRuntimeConfigChanged = vi.fn(async () => undefined)
     mocks.applyServerTelegramNotificationSettingsWrite.mockResolvedValue({
       ok: true,
       telegramNotifications: {
@@ -174,7 +177,7 @@ describe('settings routes', () => {
       },
     })
     const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
-    const app = createSettingsRoutes(createServerSettingsState())
+    const app = createSettingsRoutes(createServerSettingsState(), { onTelegramRuntimeConfigChanged })
     const response = await app.request('http://127.0.0.1:32100/telegram', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -215,6 +218,7 @@ describe('settings routes', () => {
       outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
     })
+    expect(onTelegramRuntimeConfigChanged).toHaveBeenCalledTimes(1)
   })
 
   test('delegates recent-repo writes to the settings write-path application layer', async () => {

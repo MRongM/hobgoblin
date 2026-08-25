@@ -66,11 +66,15 @@ describe('server settings snapshot runtime state', () => {
 
     const state = createServerSettingsState()
     state.globalShortcutRegistered = true
+    state.telegramTerminalInputRuntime = { status: 'retrying', errorCode: 'network-failed' }
 
     const snapshotMod = await import('#/server/modules/settings-snapshot.ts')
     await expect(snapshotMod.getSettingsSnapshot(state)).resolves.toMatchObject({
       globalShortcut: 'Alt+G',
       globalShortcutRegistered: true,
+      telegramNotifications: {
+        terminalInputRuntime: { status: 'retrying', errorCode: 'network-failed' },
+      },
     })
   })
 })

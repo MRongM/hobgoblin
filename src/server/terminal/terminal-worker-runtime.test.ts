@@ -28,6 +28,7 @@ function createTerminalFacadeStub(): TerminalFacade {
       replayTruncated: false,
     })),
     write: vi.fn(() => true),
+    submitTelegramInput: vi.fn(async () => ({ ok: true as const, terminal: { index: 1 } })),
     resize: vi.fn(() => true),
     takeover: vi.fn(() => ({
       ok: true as const,
@@ -116,6 +117,28 @@ describe('terminal worker runtime', () => {
         payload: { closed: ['term_123456789012'], missing: ['term_abcdefghijkl'] },
       },
     ])
+  })
+
+  test('dispatches server-only Telegram input through the terminal facade', async () => {
+    const service = createTerminalFacadeStub()
+    const emitted: TerminalWorkerMessage[] = []
+    const runtime = new TerminalWorkerRuntime({ service, emit: (message) => emitted.push(message), exit: vi.fn() })
+
+    await runtime.handleMessage({
+      type: 'request',
+      requestId: 'req_telegram_input',
+      action: 'telegram-input',
+      clientId: 'server',
+      input: { text: 'continue' },
+    })
+
+    expect(service.submitTelegramInput).toHaveBeenCalledWith({ text: 'continue' })
+    expect(emitted.at(-1)).toEqual({
+      type: 'response',
+      requestId: 'req_telegram_input',
+      ok: true,
+      payload: { ok: true, terminal: { index: 1 } },
+    })
   })
 
   test('dispatches output excerpt requests through the terminal facade', async () => {

@@ -21,6 +21,12 @@ import {
   TELEGRAM_OUTPUT_COMPLETION_MAX_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS,
 } from '#/shared/telegram-notifications.ts'
+import {
+  TELEGRAM_TERMINAL_INPUT_ALLOWED_USER_IDS_MAX,
+  TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MAX_SECONDS,
+  TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MIN_SECONDS,
+  normalizeTelegramTerminalInputAllowedUserIds,
+} from '#/shared/telegram-terminal-input.ts'
 
 const TELEGRAM_ACTIVITY_DURATION_PRESETS = [
   { seconds: 1, label: 'settings.telegram.output-completion-min-activity-low' },
@@ -52,6 +58,15 @@ export function NotificationSettings() {
   const [botTokenConfigured, setBotTokenConfigured] = useState(telegramSettings.botTokenConfigured)
   const [botToken, setBotToken] = useState('')
   const [chatId, setChatId] = useState(telegramSettings.chatId)
+  const [telegramTerminalInputEnabled, setTelegramTerminalInputEnabled] = useState(
+    telegramSettings.terminalInputEnabled,
+  )
+  const [telegramTerminalInputAllowedUserIds, setTelegramTerminalInputAllowedUserIds] = useState(
+    telegramSettings.terminalInputAllowedUserIds.join(', '),
+  )
+  const [telegramTerminalInputPollingTimeoutSeconds, setTelegramTerminalInputPollingTimeoutSeconds] = useState(
+    telegramSettings.terminalInputPollingTimeoutSeconds,
+  )
   const [savingTelegram, setSavingTelegram] = useState(false)
   const [testingTelegram, setTestingTelegram] = useState(false)
   const [telegramSaveFailed, setTelegramSaveFailed] = useState(false)
@@ -66,6 +81,9 @@ export function NotificationSettings() {
     setBotTokenConfigured(telegramSettings.botTokenConfigured)
     setBotToken('')
     setChatId(telegramSettings.chatId)
+    setTelegramTerminalInputEnabled(telegramSettings.terminalInputEnabled)
+    setTelegramTerminalInputAllowedUserIds(telegramSettings.terminalInputAllowedUserIds.join(', '))
+    setTelegramTerminalInputPollingTimeoutSeconds(telegramSettings.terminalInputPollingTimeoutSeconds)
     setTelegramSaveFailed(false)
   }, [
     telegramSettings.bellEnabled,
@@ -76,9 +94,19 @@ export function NotificationSettings() {
     telegramSettings.outputCompletionEnabled,
     telegramSettings.outputCompletionMinimumActivitySeconds,
     telegramSettings.proxyEnabled,
+    telegramSettings.terminalInputAllowedUserIds,
+    telegramSettings.terminalInputEnabled,
+    telegramSettings.terminalInputPollingTimeoutSeconds,
   ])
 
   const normalizedChatId = chatId.trim()
+  const rawTelegramTerminalInputAllowedUserIds = telegramTerminalInputAllowedUserIds.split(/[\s,]+/u).filter(Boolean)
+  const normalizedTelegramTerminalInputAllowedUserIds = normalizeTelegramTerminalInputAllowedUserIds(
+    rawTelegramTerminalInputAllowedUserIds,
+  )
+  const telegramTerminalInputAllowedUserIdsValid =
+    rawTelegramTerminalInputAllowedUserIds.length <= TELEGRAM_TERMINAL_INPUT_ALLOWED_USER_IDS_MAX &&
+    rawTelegramTerminalInputAllowedUserIds.every((value) => /^[1-9]\d{0,19}$/u.test(value))
   const configurationComplete = Boolean((botTokenConfigured || botToken.trim()) && normalizedChatId)
   const telegramChanged =
     telegramEnabled !== telegramSettings.enabled ||
@@ -87,9 +115,20 @@ export function NotificationSettings() {
     telegramOutputCompletionEnabled !== telegramSettings.outputCompletionEnabled ||
     telegramOutputCompletionMinimumActivitySeconds !== telegramSettings.outputCompletionMinimumActivitySeconds ||
     telegramIncludeTerminalScreenImage !== telegramSettings.includeTerminalOutput ||
+    telegramTerminalInputEnabled !== telegramSettings.terminalInputEnabled ||
+    normalizedTelegramTerminalInputAllowedUserIds.join(',') !==
+      telegramSettings.terminalInputAllowedUserIds.join(',') ||
+    telegramTerminalInputPollingTimeoutSeconds !== telegramSettings.terminalInputPollingTimeoutSeconds ||
     normalizedChatId !== telegramSettings.chatId ||
     Boolean(botToken.trim())
-  const telegramConfigurationError = telegramEnabled && !configurationComplete
+  const telegramTerminalInputConfigurationError =
+    telegramTerminalInputEnabled &&
+    (!configurationComplete ||
+      !/^-\d+$/u.test(normalizedChatId) ||
+      !telegramTerminalInputAllowedUserIdsValid ||
+      normalizedTelegramTerminalInputAllowedUserIds.length === 0)
+  const telegramConfigurationError =
+    (telegramEnabled && !configurationComplete) || telegramTerminalInputConfigurationError
 
   const testInAppNotification = (style: (typeof IN_APP_NOTIFICATION_STYLES)[number]) => {
     toast[style](t(`settings.in-app-notifications-test-title.${style}`), {
@@ -136,6 +175,9 @@ export function NotificationSettings() {
       outputCompletionMinimumActivitySeconds: telegramOutputCompletionMinimumActivitySeconds,
       includeTerminalOutput: telegramIncludeTerminalScreenImage,
       outputTailLength: telegramSettings.outputTailLength,
+      terminalInputEnabled: telegramTerminalInputEnabled,
+      terminalInputAllowedUserIds: normalizedTelegramTerminalInputAllowedUserIds,
+      terminalInputPollingTimeoutSeconds: telegramTerminalInputPollingTimeoutSeconds,
     })
     setSavingTelegram(false)
     if (!saved) {
@@ -151,6 +193,9 @@ export function NotificationSettings() {
     setTelegramIncludeTerminalScreenImage(saved.includeTerminalOutput)
     setBotTokenConfigured(saved.botTokenConfigured)
     setChatId(saved.chatId)
+    setTelegramTerminalInputEnabled(saved.terminalInputEnabled)
+    setTelegramTerminalInputAllowedUserIds(saved.terminalInputAllowedUserIds.join(', '))
+    setTelegramTerminalInputPollingTimeoutSeconds(saved.terminalInputPollingTimeoutSeconds)
     toast.success(t('settings.telegram.saved'))
   }
 
@@ -357,6 +402,65 @@ export function NotificationSettings() {
             }
           />
           <SettingsRow
+            controlId="settings-telegram-terminal-input-enabled"
+            label={t('settings.telegram.terminal-input-enabled')}
+            hint={t('settings.telegram.terminal-input-enabled-hint')}
+            control={
+              <Switch
+                id="settings-telegram-terminal-input-enabled"
+                checked={telegramTerminalInputEnabled}
+                onCheckedChange={setTelegramTerminalInputEnabled}
+                aria-label={t('settings.telegram.terminal-input-enabled')}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-terminal-input-user-ids"
+            label={t('settings.telegram.terminal-input-user-ids')}
+            hint={t('settings.telegram.terminal-input-user-ids-hint')}
+            control={
+              <Input
+                id="settings-telegram-terminal-input-user-ids"
+                inputMode="numeric"
+                value={telegramTerminalInputAllowedUserIds}
+                className="h-8 w-60 max-w-full px-2 text-xs"
+                placeholder="123456789, 987654321"
+                onChange={(event) => setTelegramTerminalInputAllowedUserIds(event.currentTarget.value)}
+              />
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-terminal-input-poll-timeout"
+            label={t('settings.telegram.terminal-input-poll-timeout')}
+            hint={t('settings.telegram.terminal-input-poll-timeout-hint')}
+            control={
+              <div className="flex items-center justify-end gap-2">
+                <SettingsNumberInput
+                  id="settings-telegram-terminal-input-poll-timeout"
+                  min={TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MIN_SECONDS}
+                  max={TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MAX_SECONDS}
+                  value={telegramTerminalInputPollingTimeoutSeconds}
+                  onChange={setTelegramTerminalInputPollingTimeoutSeconds}
+                />
+                <span className="text-xs text-muted-foreground">{t('settings.telegram.poll-seconds')}</span>
+              </div>
+            }
+          />
+          <SettingsRow
+            controlId="settings-telegram-terminal-input-status"
+            label={t('settings.telegram.terminal-input-status')}
+            hint={
+              telegramSettings.terminalInputRuntime.errorCode
+                ? t(`settings.telegram.terminal-input-error.${telegramSettings.terminalInputRuntime.errorCode}`)
+                : t('settings.telegram.terminal-input-status-hint')
+            }
+            control={
+              <span className="text-xs text-muted-foreground">
+                {t(`settings.telegram.terminal-input-status.${telegramSettings.terminalInputRuntime.status}`)}
+              </span>
+            }
+          />
+          <SettingsRow
             controlId="settings-telegram-test"
             label={t('settings.telegram.test')}
             hint={t('settings.telegram.test-hint')}
@@ -385,7 +489,11 @@ export function NotificationSettings() {
             role={telegramConfigurationError || telegramSaveFailed ? 'alert' : undefined}
           >
             {telegramConfigurationError
-              ? t('settings.telegram.error.configuration-incomplete')
+              ? t(
+                  telegramTerminalInputConfigurationError
+                    ? 'settings.telegram.error.terminal-input-configuration-incomplete'
+                    : 'settings.telegram.error.configuration-incomplete',
+                )
               : telegramSaveFailed
                 ? t('settings.telegram.error.save-failed')
                 : ''}

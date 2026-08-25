@@ -180,6 +180,30 @@ _Avoid_: Detail focus mode, workspace focus mode
 The specific internal terminal session selected within one branch or worktree terminal area. It is distinct from the selected branch context and from the attachment that currently controls terminal input; a terminal deep link targets this session when it still exists and restores an encoded branch workspace member context when that relationship remains valid.
 _Avoid_: Current terminal, active terminal
 
+**Telegram input target terminal**:
+The runtime-only internal terminal in the main window that most recently received genuine keyboard input focus, while its session remains running and its attachment still controls input. Selection, read-only viewing, and application restart never establish the target; when it is no longer eligible, Telegram input has no target rather than falling back to another terminal.
+_Avoid_: Current terminal, selected terminal, last opened terminal, fallback terminal
+
+**Telegram terminal input sender**:
+A Telegram account whose immutable numeric user ID appears in the explicit terminal-input allowlist. Group membership, administrator status, and mutable username never grant terminal input authority.
+_Avoid_: Authorized group, group administrator, Telegram username, trusted chat member
+
+**Hobgoblin Telegram bot**:
+A Telegram bot identity dedicated exclusively to one Hobgoblin installation for its outbound notifications and inbound terminal input. Its update stream is never shared with another application, poller, or webhook consumer.
+_Avoid_: Shared bot, general-purpose bot, notification-only bot
+
+**Fresh Telegram terminal input**:
+A terminal-input message sent after the Hobgoblin Telegram receiver became ready and received no more than 60 seconds after its Telegram send time. Startup backlog and older messages are expired remote intent: they may receive a rejection response but never become terminal input.
+_Avoid_: Pending command, offline command, delayed terminal input, Telegram command queue
+
+**Telegram terminal input**:
+An explicitly enabled remote-input capability that accepts fresh text addressed to the Hobgoblin Telegram bot by an authorized sender in the configured chat, submits it to the Telegram input target terminal, and replies with the delivery outcome. It is distinct from Telegram notification delivery; terminal-input acknowledgement is part of the capability rather than an independently optional reply.
+_Avoid_: Bot reply, Telegram command, Telegram notification, silent terminal injection
+
+**Telegram terminal input submission**:
+The non-empty, bounded, single-line plain-text body following a leading mention of the Hobgoblin Telegram bot, delivered to the Telegram input target terminal as one user-intent submission followed by Enter. Multiline text, control characters, edited or forwarded messages, media, and reply-only addressing are not submissions.
+_Avoid_: Telegram paste, keystroke stream, multiline command, Telegram attachment
+
 **Unread terminal bell**:
 An attention state attached to one internal terminal after it emits a bell while it is not the visible focused terminal. Selecting that terminal clears the state. It is distinct from any external notification delivery, which may fail without clearing or changing the unread state.
 _Avoid_: Telegram message, system notification, terminal output activity

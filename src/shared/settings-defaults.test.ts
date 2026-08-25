@@ -107,6 +107,10 @@ describe('settings defaults', () => {
       outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: false,
       outputTailLength: 400,
+      terminalInputEnabled: false,
+      terminalInputAllowedUserIds: [],
+      terminalInputPollingTimeoutSeconds: 25,
+      terminalInputRuntime: { status: 'stopped' },
     })
   })
 

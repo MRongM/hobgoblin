@@ -5,7 +5,9 @@ function getTerminalBridge(): RendererTerminalBridge {
   return getRendererBridge().terminal()
 }
 
-function bindTerminalMethod<TKey extends keyof RendererTerminalBridge>(key: TKey): RendererTerminalBridge[TKey] {
+type RequiredTerminalBridgeMethodKey = Exclude<keyof RendererTerminalBridge, 'markTelegramInputTarget'>
+
+function bindTerminalMethod<TKey extends RequiredTerminalBridgeMethodKey>(key: TKey): RendererTerminalBridge[TKey] {
   return ((...args: Parameters<RendererTerminalBridge[TKey]>) => {
     const method = getTerminalBridge()[key] as (
       ...innerArgs: Parameters<RendererTerminalBridge[TKey]>
@@ -28,6 +30,9 @@ export const terminalBridge: RendererTerminalBridge = {
   pruneTerminals: bindTerminalMethod('pruneTerminals'),
   listSessions: bindTerminalMethod('listSessions'),
   getSessionSnapshot: bindTerminalMethod('getSessionSnapshot'),
+  markTelegramInputTarget(input) {
+    return getTerminalBridge().markTelegramInputTarget?.(input) ?? Promise.resolve(false)
+  },
   reorder: bindTerminalMethod('reorder'),
   notifyBell: bindTerminalMethod('notifyBell'),
   sendTestNotification: bindTerminalMethod('sendTestNotification'),

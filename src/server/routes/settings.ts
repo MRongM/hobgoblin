@@ -39,7 +39,7 @@ function readTelegramSettingsErrorCode(error: unknown): string | null {
 
 export function createSettingsRoutes(
   settingsState: ServerSettingsState,
-  options: { revokeAllWebSessions?: () => void } = {},
+  options: { revokeAllWebSessions?: () => void; onTelegramRuntimeConfigChanged?: () => void | Promise<void> } = {},
 ) {
   const app = new Hono()
   app.get('/', async (c) => c.json(await getSettingsSnapshot(settingsState)))
@@ -60,12 +60,12 @@ export function createSettingsRoutes(
   })
   app.post('/prefs', async (c) => {
     const body = await c.req.json().catch(() => null)
-    return c.json(
-      await applyServerSettingsPrefsWrite(body, {
-        acceptLanguage: c.req.header('accept-language'),
-        signal: c.req.raw.signal,
-      }),
-    )
+    const result = await applyServerSettingsPrefsWrite(body, {
+      acceptLanguage: c.req.header('accept-language'),
+      signal: c.req.raw.signal,
+    })
+    await options.onTelegramRuntimeConfigChanged?.()
+    return c.json(result)
   })
   app.post('/web-access', async (c) => {
     const body = await c.req.json().catch(() => null)
@@ -84,7 +84,9 @@ export function createSettingsRoutes(
   app.post('/telegram', async (c) => {
     const body = await c.req.json().catch(() => null)
     try {
-      return c.json(await applyServerTelegramNotificationSettingsWrite(body))
+      const result = await applyServerTelegramNotificationSettingsWrite(body)
+      await options.onTelegramRuntimeConfigChanged?.()
+      return c.json(result)
     } catch (error) {
       const code = readTelegramSettingsErrorCode(error)
       if (!code) throw error

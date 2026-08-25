@@ -23,6 +23,7 @@ import type {
   TerminalTakeoverResult,
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
+import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 import type {
   ServerTerminalHostDiagnostics,
   ServerTerminalHost,
@@ -192,6 +193,10 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
 
   getScreenSnapshot(input: TerminalScreenSnapshotInput): Promise<TerminalScreenSnapshot | null> {
     return this.request('screen-snapshot', 'server', input)
+  }
+
+  submitTelegramInput(text: string): Promise<TelegramTerminalInputSubmissionResult> {
+    return this.request('telegram-input', 'server', { text })
   }
 
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void {

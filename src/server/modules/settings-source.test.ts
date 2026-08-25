@@ -31,6 +31,9 @@ function telegramSettingsUpdate(overrides: Record<string, unknown> = {}) {
     outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
     ...overrides,
   }
 }
@@ -191,6 +194,89 @@ test('defaults missing Telegram completion activity duration to ten seconds', as
   })
 })
 
+test('defaults missing Telegram terminal input settings to disabled with a 25 second poll', async () => {
+  useTempServerSettingsDir()
+  writeSettingsFile({})
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(mod.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
+    terminalInputRuntime: { status: 'stopped' },
+  })
+})
+
+test('normalizes and persists Telegram terminal input settings', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings(
+      telegramSettingsUpdate({
+        botToken: '123456:test-token',
+        chatId: '-1001234567890',
+        terminalInputEnabled: true,
+        terminalInputAllowedUserIds: [' 123 ', '456', '123'],
+        terminalInputPollingTimeoutSeconds: 30,
+      }),
+    ),
+  ).resolves.toMatchObject({
+    terminalInputEnabled: true,
+    terminalInputAllowedUserIds: ['123', '456'],
+    terminalInputPollingTimeoutSeconds: 30,
+  })
+
+  mod.resetServerSettingsSourceForTests()
+  vi.resetModules()
+  const reloaded = await import('#/server/modules/settings-source.ts')
+  await expect(reloaded.getServerTelegramNotificationSettings()).resolves.toMatchObject({
+    terminalInputEnabled: true,
+    terminalInputAllowedUserIds: ['123', '456'],
+    terminalInputPollingTimeoutSeconds: 30,
+  })
+})
+
+test.each([
+  { terminalInputAllowedUserIds: ['invalid'], terminalInputPollingTimeoutSeconds: 25 },
+  { terminalInputAllowedUserIds: ['123'], terminalInputPollingTimeoutSeconds: 4 },
+  { terminalInputAllowedUserIds: ['123'], terminalInputPollingTimeoutSeconds: 51 },
+])('rejects invalid Telegram terminal input settings %#', async (overrides) => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings(telegramSettingsUpdate(overrides)),
+  ).rejects.toMatchObject({ code: 'invalid-input' })
+})
+
+test('requires token, group Chat ID, and an allowlist before enabling Telegram terminal input', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings(
+      telegramSettingsUpdate({ terminalInputEnabled: true, terminalInputAllowedUserIds: ['123'] }),
+    ),
+  ).rejects.toMatchObject({ code: 'configuration-incomplete' })
+})
+
+test('requires a numeric group Chat ID for Telegram terminal input', async () => {
+  useTempServerSettingsDir()
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  await expect(
+    mod.updateServerTelegramNotificationSettings(
+      telegramSettingsUpdate({
+        botToken: '123456:test-token',
+        chatId: '@valid_channel',
+        terminalInputEnabled: true,
+        terminalInputAllowedUserIds: ['123'],
+      }),
+    ),
+  ).rejects.toMatchObject({ code: 'configuration-incomplete' })
+})
+
 test('defaults a missing Telegram proxy preference on and persists explicit opt-out', async () => {
   useTempServerSettingsDir()
   writeSettingsFile({})
@@ -269,6 +355,10 @@ test('keeps Telegram Bot Token server-only and retains it on a blank update', as
     outputCompletionMinimumActivitySeconds: 30,
     includeTerminalOutput: true,
     outputTailLength: 4096,
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
+    terminalInputRuntime: { status: 'stopped' },
   })
 
   expect(JSON.stringify(await mod.getServerTelegramNotificationSettings())).not.toContain('test-token-value')
@@ -313,6 +403,10 @@ test('does not enable Telegram notifications without a Bot Token and Chat ID', a
     outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
+    terminalInputRuntime: { status: 'stopped' },
   })
 })
 
@@ -388,6 +482,10 @@ test('tracks a saved Bot Token independently from the Chat ID while disabled', a
     outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 200,
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
+    terminalInputRuntime: { status: 'stopped' },
   })
   expect((await mod.getServerTelegramNotificationConfig()).botToken).toBe('123456:test-token')
 })
@@ -430,6 +528,10 @@ test('normalizes missing and invalid persisted Telegram notification settings', 
     outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
+    terminalInputRuntime: { status: 'stopped' },
   })
   expect(JSON.stringify(await mod.getServerSettingsPrefs())).not.toContain('telegramBotToken')
 })
@@ -453,6 +555,10 @@ test('migrates legacy Telegram settings to bell-only delivery', async () => {
     outputCompletionMinimumActivitySeconds: 10,
     includeTerminalOutput: false,
     outputTailLength: 400,
+    terminalInputEnabled: false,
+    terminalInputAllowedUserIds: [],
+    terminalInputPollingTimeoutSeconds: 25,
+    terminalInputRuntime: { status: 'stopped' },
   })
 })
 

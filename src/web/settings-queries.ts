@@ -17,6 +17,7 @@ import {
   TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
 } from '#/shared/telegram-notifications.ts'
+import { TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS } from '#/shared/telegram-terminal-input.ts'
 
 function initialSettingsSnapshot(): SettingsSnapshot | undefined {
   const initialSettings = getInitialBootstrap().initialSettings
@@ -50,6 +51,10 @@ function initialSettingsSnapshot(): SettingsSnapshot | undefined {
       outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
       includeTerminalOutput: false,
       outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+      terminalInputEnabled: false,
+      terminalInputAllowedUserIds: [],
+      terminalInputPollingTimeoutSeconds: TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS,
+      terminalInputRuntime: { status: 'stopped' },
     },
   }
 }

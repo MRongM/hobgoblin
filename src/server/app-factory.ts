@@ -33,6 +33,8 @@ export interface ServerAppOptions {
   startedAt: number
   internalSecret: string
   terminalHost: ServerTerminalHost
+  settingsState?: ReturnType<typeof createServerSettingsState>
+  onTelegramRuntimeConfigChanged?: () => void | Promise<void>
 }
 
 const WEB_DIST_DIR = path.resolve(import.meta.dirname, '../../dist/web')
@@ -114,7 +116,7 @@ function noStoreHtml(c: Context, html: string): Response {
 }
 
 export function createApp(options: ServerAppOptions): Hono {
-  const settingsState = createServerSettingsState()
+  const settingsState = options.settingsState ?? createServerSettingsState()
   const webAccessAuth = createWebAccessAuth({ readCredentials: getServerWebAccessCredentials })
   const terminalClientId = deriveServerClientId(options.internalSecret)
   const capabilityMiddleware = createInternalAuthMiddleware(options.internalSecret, {
@@ -144,7 +146,13 @@ export function createApp(options: ServerAppOptions): Hono {
   app.use('/api/repo/*', capabilityMiddleware)
   app.use('/api/workspace/*', capabilityMiddleware)
   app.use('/api/port-forwarding/*', capabilityMiddleware)
-  app.route('/api/settings', createSettingsRoutes(settingsState, { revokeAllWebSessions: webAccessAuth.revokeAll }))
+  app.route(
+    '/api/settings',
+    createSettingsRoutes(settingsState, {
+      revokeAllWebSessions: webAccessAuth.revokeAll,
+      onTelegramRuntimeConfigChanged: options.onTelegramRuntimeConfigChanged,
+    }),
+  )
   app.route(
     '/api/telegram-notifications',
     createTelegramNotificationRoutes({

@@ -160,6 +160,7 @@ export interface TerminalSessionContextValue {
   scrollToBottom: (key: string) => void
   pageTmux: (key: string, direction: TerminalTmuxPageDirection) => void
   focusTerminal: (key: string) => void
+  markTelegramInputTarget?: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   scrollByTouch: (key: string, input: TerminalTouchScrollInput) => void
   beginMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => boolean

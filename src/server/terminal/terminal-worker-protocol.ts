@@ -23,6 +23,7 @@ import type {
   TerminalTakeoverResult,
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
+import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 
 export interface TerminalWorkerRequestInputs {
   attach: TerminalAttachInput
@@ -39,6 +40,7 @@ export interface TerminalWorkerRequestInputs {
   'session-snapshot': TerminalSessionSnapshotInput
   'output-excerpt': TerminalOutputExcerptInput
   'screen-snapshot': TerminalScreenSnapshotInput
+  'telegram-input': { text: string }
   reorder: TerminalReorderInput
 }
 
@@ -57,6 +59,7 @@ export interface TerminalWorkerResponseOutputs {
   'session-snapshot': TerminalSessionSnapshot | null
   'output-excerpt': TerminalOutputExcerpt | null
   'screen-snapshot': TerminalScreenSnapshot | null
+  'telegram-input': TelegramTerminalInputSubmissionResult
   reorder: TerminalMutationResult
 }
 

@@ -88,6 +88,14 @@ import {
   type TelegramNotificationSettingsUpdateInput,
 } from '#/shared/telegram-notifications.ts'
 import {
+  TELEGRAM_TERMINAL_INPUT_ALLOWED_USER_IDS_MAX,
+  TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS,
+  TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MAX_SECONDS,
+  TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MIN_SECONDS,
+  normalizeTelegramTerminalInputAllowedUserIds,
+  normalizeTelegramTerminalInputPollTimeoutSeconds,
+} from '#/shared/telegram-terminal-input.ts'
+import {
   createDefaultTerminalCustomButtons,
   isTerminalCustomButtonPresetId,
 } from '#/shared/terminal-custom-button-presets.ts'
@@ -135,6 +143,9 @@ interface ServerSettingsData {
   telegramOutputTailLength: number
   telegramBotToken: string
   telegramChatId: string
+  telegramTerminalInputEnabled: boolean
+  telegramTerminalInputAllowedUserIds: string[]
+  telegramTerminalInputPollingTimeoutSeconds: number
   session: SessionState
   recentRepos: RepoSessionEntry[]
   repoSettings: RepoSettingsEntry[]
@@ -372,6 +383,14 @@ function telegramNotificationSettingsFromData(data: ServerSettingsData): Telegra
     outputCompletionMinimumActivitySeconds: data.telegramOutputCompletionMinimumActivitySeconds,
     includeTerminalOutput: data.telegramIncludeTerminalOutput,
     outputTailLength: data.telegramOutputTailLength,
+    terminalInputEnabled:
+      data.telegramTerminalInputEnabled &&
+      botTokenConfigured &&
+      Boolean(data.telegramChatId) &&
+      data.telegramTerminalInputAllowedUserIds.length > 0,
+    terminalInputAllowedUserIds: [...data.telegramTerminalInputAllowedUserIds],
+    terminalInputPollingTimeoutSeconds: data.telegramTerminalInputPollingTimeoutSeconds,
+    terminalInputRuntime: { status: 'stopped' },
   }
 }
 
@@ -733,6 +752,17 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       telegramOutputTailLength: normalizeTelegramOutputTailLength(parsed.telegramOutputTailLength),
       telegramBotToken,
       telegramChatId,
+      telegramTerminalInputEnabled:
+        parsed.telegramTerminalInputEnabled === true &&
+        Boolean(telegramBotToken && telegramChatId) &&
+        /^-\d+$/u.test(telegramChatId) &&
+        normalizeTelegramTerminalInputAllowedUserIds(parsed.telegramTerminalInputAllowedUserIds).length > 0,
+      telegramTerminalInputAllowedUserIds: normalizeTelegramTerminalInputAllowedUserIds(
+        parsed.telegramTerminalInputAllowedUserIds,
+      ),
+      telegramTerminalInputPollingTimeoutSeconds: normalizeTelegramTerminalInputPollTimeoutSeconds(
+        parsed.telegramTerminalInputPollingTimeoutSeconds,
+      ),
       session: normalizeSession(parsed.session),
       recentRepos: normalizeRecentRepos(parsed.recentRepos),
       repoSettings: normalizeRepoSettings(parsed.repoSettings),
@@ -765,6 +795,9 @@ async function loadServerSettings(): Promise<ServerSettingsData> {
       telegramOutputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
       telegramBotToken: '',
       telegramChatId: '',
+      telegramTerminalInputEnabled: false,
+      telegramTerminalInputAllowedUserIds: [],
+      telegramTerminalInputPollingTimeoutSeconds: TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS,
       session: defaultSession(),
       recentRepos: [],
       repoSettings: [],
@@ -822,6 +855,40 @@ export async function updateServerTelegramNotificationSettings(
   if (input.enabled && (!botToken || !chatId)) {
     throw new TelegramNotificationSettingsError('configuration-incomplete')
   }
+  const rawAllowedUserIds = input.terminalInputAllowedUserIds
+  if (
+    rawAllowedUserIds !== undefined &&
+    (!Array.isArray(rawAllowedUserIds) ||
+      rawAllowedUserIds.length > TELEGRAM_TERMINAL_INPUT_ALLOWED_USER_IDS_MAX ||
+      rawAllowedUserIds.some(
+        (value) => typeof value !== 'string' || normalizeTelegramTerminalInputAllowedUserIds([value]).length !== 1,
+      ))
+  ) {
+    throw new TelegramNotificationSettingsError('invalid-input')
+  }
+  const terminalInputAllowedUserIds =
+    rawAllowedUserIds === undefined
+      ? data.telegramTerminalInputAllowedUserIds
+      : normalizeTelegramTerminalInputAllowedUserIds(rawAllowedUserIds)
+  const terminalInputPollingTimeoutSeconds =
+    input.terminalInputPollingTimeoutSeconds === undefined
+      ? data.telegramTerminalInputPollingTimeoutSeconds
+      : input.terminalInputPollingTimeoutSeconds
+  if (
+    !Number.isInteger(terminalInputPollingTimeoutSeconds) ||
+    terminalInputPollingTimeoutSeconds < TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MIN_SECONDS ||
+    terminalInputPollingTimeoutSeconds > TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_MAX_SECONDS
+  ) {
+    throw new TelegramNotificationSettingsError('invalid-input')
+  }
+  const terminalInputEnabled =
+    input.terminalInputEnabled === undefined ? data.telegramTerminalInputEnabled : input.terminalInputEnabled === true
+  if (
+    terminalInputEnabled &&
+    (!botToken || !/^-\d+$/u.test(chatId) || terminalInputAllowedUserIds.length === 0)
+  ) {
+    throw new TelegramNotificationSettingsError('configuration-incomplete')
+  }
   if (
     !Number.isInteger(input.outputCompletionMinimumActivitySeconds) ||
     input.outputCompletionMinimumActivitySeconds < TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS ||
@@ -842,6 +909,9 @@ export async function updateServerTelegramNotificationSettings(
   data.telegramOutputTailLength = input.outputTailLength
   data.telegramBotToken = botToken
   data.telegramChatId = chatId
+  data.telegramTerminalInputEnabled = terminalInputEnabled
+  data.telegramTerminalInputAllowedUserIds = terminalInputAllowedUserIds
+  data.telegramTerminalInputPollingTimeoutSeconds = terminalInputPollingTimeoutSeconds
   await writeServerSettingsFile(data)
   return telegramNotificationSettingsFromData(data)
 }

@@ -76,6 +76,10 @@ function defaultRpcResult(path: string, input?: unknown) {
         outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: false,
         outputTailLength: 400,
+        terminalInputEnabled: false,
+        terminalInputAllowedUserIds: [],
+        terminalInputPollingTimeoutSeconds: 25,
+        terminalInputRuntime: { status: 'stopped' },
       },
     }
   }
@@ -186,6 +190,9 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
       includeTerminalOutput?: boolean
       outputCompletionMinimumActivitySeconds?: number
       outputTailLength?: number
+      terminalInputEnabled?: boolean
+      terminalInputAllowedUserIds?: string[]
+      terminalInputPollingTimeoutSeconds?: number
     }
     result = {
       ok: true,
@@ -199,6 +206,10 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
         outputCompletionMinimumActivitySeconds: body.outputCompletionMinimumActivitySeconds ?? 10,
         includeTerminalOutput: body.includeTerminalOutput === true,
         outputTailLength: body.outputTailLength ?? 400,
+        terminalInputEnabled: body.terminalInputEnabled === true,
+        terminalInputAllowedUserIds: body.terminalInputAllowedUserIds ?? [],
+        terminalInputPollingTimeoutSeconds: body.terminalInputPollingTimeoutSeconds ?? 25,
+        terminalInputRuntime: { status: 'stopped' },
       },
     }
   } else if (url.pathname === '/api/telegram-notifications/test') {
@@ -505,8 +516,12 @@ describe('SettingsSurface', () => {
 
     const tokenInput = document.getElementById('settings-telegram-bot-token')
     const chatIdInput = document.getElementById('settings-telegram-chat-id')
+    const userIdsInput = document.getElementById('settings-telegram-terminal-input-user-ids')
+    const pollingTimeoutInput = document.getElementById('settings-telegram-terminal-input-poll-timeout')
     if (!(tokenInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Bot Token input')
     if (!(chatIdInput instanceof HTMLInputElement)) throw new Error('Missing Telegram Chat ID input')
+    if (!(userIdsInput instanceof HTMLInputElement)) throw new Error('Missing Telegram user IDs input')
+    if (!(pollingTimeoutInput instanceof HTMLInputElement)) throw new Error('Missing Telegram poll timeout input')
     expect(tokenInput.type).toBe('password')
     expect(tokenInput.value).toBe('')
     expect(document.body.textContent).toContain('settings.telegram.master-off-hint')
@@ -514,6 +529,11 @@ describe('SettingsSurface', () => {
     expect(switchById('settings-telegram-bell-enabled').getAttribute('data-state')).toBe('checked')
     expect(switchById('settings-telegram-output-completion-enabled').getAttribute('data-state')).toBe('unchecked')
     expect(switchById('settings-telegram-include-terminal-screen-image').getAttribute('data-state')).toBe('unchecked')
+    expect(switchById('settings-telegram-terminal-input-enabled').getAttribute('data-state')).toBe('unchecked')
+    expect(pollingTimeoutInput.value).toBe('25')
+    expect(pollingTimeoutInput.min).toBe('5')
+    expect(pollingTimeoutInput.max).toBe('50')
+    expect(document.body.textContent).toContain('settings.telegram.terminal-input-status.stopped')
     expect(document.getElementById('settings-telegram-output-tail-length')).toBeNull()
     expect(document.body.textContent).not.toContain('settings.telegram.output-tail-length')
 
@@ -522,8 +542,11 @@ describe('SettingsSurface', () => {
       switchById('settings-telegram-proxy-enabled').click()
       switchById('settings-telegram-output-completion-enabled').click()
       switchById('settings-telegram-include-terminal-screen-image').click()
+      switchById('settings-telegram-terminal-input-enabled').click()
       setInputValue(tokenInput, '123456:test-token')
       setInputValue(chatIdInput, '-100123')
+      setInputValue(userIdsInput, '123, 456')
+      setInputValue(pollingTimeoutInput, '30')
       await Promise.resolve()
     })
     await act(async () => {
@@ -548,6 +571,9 @@ describe('SettingsSurface', () => {
       outputCompletionMinimumActivitySeconds: 10,
       includeTerminalOutput: true,
       outputTailLength: 400,
+      terminalInputEnabled: true,
+      terminalInputAllowedUserIds: ['123', '456'],
+      terminalInputPollingTimeoutSeconds: 30,
     })
     expect((document.getElementById('settings-telegram-bot-token') as HTMLInputElement).value).toBe('')
 

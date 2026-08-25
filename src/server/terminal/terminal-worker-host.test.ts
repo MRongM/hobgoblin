@@ -70,6 +70,28 @@ describe('worker-backed terminal host', () => {
     })
   })
 
+  test('routes Telegram input through the server-only worker action', async () => {
+    const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
+    const promise = host.submitTelegramInput('continue')
+
+    const request = worker.sent[0]
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'telegram-input',
+      clientId: 'server',
+      input: { text: 'continue' },
+    })
+    if (!request || request.type !== 'request') return
+    worker.emit('message', {
+      type: 'response',
+      requestId: request.requestId,
+      ok: true,
+      payload: { ok: true, terminal: { index: 1 } },
+    } satisfies TerminalWorkerMessage)
+
+    await expect(promise).resolves.toEqual({ ok: true, terminal: { index: 1 } })
+  })
+
   test('routes output excerpt requests through the worker', async () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
     const input = { sessionId: 'term_123456789012', maxCharacters: 400 }

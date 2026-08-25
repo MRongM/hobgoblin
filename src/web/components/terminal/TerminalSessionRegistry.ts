@@ -553,6 +553,12 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.focus()
   }
 
+  markTelegramInputTarget = (key: string): void => {
+    const sessionId = this.sessions.get(key)?.currentSessionId()
+    if (!sessionId) return
+    void terminalBridge.markTelegramInputTarget?.({ sessionId }).catch(() => {})
+  }
+
   focusSelectedTerminalForWorktree = (worktreeTerminalKey: string): boolean => {
     const preferredKey = this.preferredSelectedKeyByWorktree.get(worktreeTerminalKey) ?? null
     const selectedKey = this.resolveSelectedTerminalKey(worktreeTerminalKey, preferredKey)

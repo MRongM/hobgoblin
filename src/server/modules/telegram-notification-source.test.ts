@@ -4,10 +4,14 @@ import { PassThrough } from 'node:stream'
 import { describe, expect, test } from 'vitest'
 import { ProxyAgent } from 'proxy-agent'
 import {
+  getTelegramBotIdentity,
+  getTelegramChat,
+  getTelegramUpdates,
+  getTelegramWebhookInfo,
   sendTelegramMessage,
   sendTelegramPhoto,
   telegramProxyUrlFromPrefs,
-} from '#/server/modules/telegram-notification-source.ts'
+} from '#/server/modules/telegram-bot-api-source.ts'
 
 interface RequestFixture {
   request: (options: RequestOptions, callback: (response: IncomingMessage) => void) => ClientRequest
@@ -88,6 +92,28 @@ describe('sendTelegramMessage', () => {
     expect(fixture.timeoutMs).toBe(15_000)
   })
 
+  test('supports safe reply parameters and forum topic preservation', async () => {
+    const fixture = createRequestFixture()
+
+    await sendTelegramMessage(
+      {
+        botToken: 'token',
+        chatId: '-100123',
+        text: 'sent',
+        replyToMessageId: 7,
+        messageThreadId: 9,
+      },
+      { request: fixture.request },
+    )
+
+    expect(JSON.parse(fixture.body)).toEqual({
+      chat_id: '-100123',
+      text: 'sent',
+      reply_parameters: { message_id: 7 },
+      message_thread_id: 9,
+    })
+  })
+
   test.each([
     [401, 'authentication-failed'],
     [400, 'target-rejected'],
@@ -128,6 +154,72 @@ describe('sendTelegramMessage', () => {
       agent.destroy()
     },
   )
+})
+
+describe('Telegram Bot API reads', () => {
+  test('reads bot identity, webhook state, and configured group metadata', async () => {
+    const identityFixture = createRequestFixture({
+      responseBody: JSON.stringify({ ok: true, result: { id: 1, is_bot: true, username: 'hobgoblin_bot' } }),
+    })
+    await expect(getTelegramBotIdentity({ botToken: 'token' }, { request: identityFixture.request })).resolves.toEqual({
+      ok: true,
+      result: { id: 1, username: 'hobgoblin_bot' },
+    })
+
+    const webhookFixture = createRequestFixture({
+      responseBody: JSON.stringify({ ok: true, result: { url: '' } }),
+    })
+    await expect(getTelegramWebhookInfo({ botToken: 'token' }, { request: webhookFixture.request })).resolves.toEqual({
+      ok: true,
+      result: { url: '' },
+    })
+
+    const chatFixture = createRequestFixture({
+      responseBody: JSON.stringify({ ok: true, result: { id: -100123, type: 'supergroup' } }),
+    })
+    await expect(
+      getTelegramChat({ botToken: 'token', chatId: '-100123' }, { request: chatFixture.request }),
+    ).resolves.toEqual({ ok: true, result: { id: '-100123', type: 'supergroup' } })
+  })
+
+  test('rejects a getMe result that is not a bot', async () => {
+    const fixture = createRequestFixture({
+      responseBody: JSON.stringify({ ok: true, result: { id: 1, is_bot: false, username: 'person' } }),
+    })
+
+    await expect(getTelegramBotIdentity({ botToken: 'token' }, { request: fixture.request })).resolves.toEqual({
+      ok: false,
+      error: { code: 'telegram-rejected' },
+    })
+  })
+
+  test('long polls with one derived timeout and bounded message updates', async () => {
+    const fixture = createRequestFixture({
+      responseBody: JSON.stringify({ ok: true, result: [{ update_id: 42, message: { text: 'test' } }] }),
+    })
+
+    await expect(
+      getTelegramUpdates({ botToken: 'token', offset: 42, timeoutSeconds: 25 }, { request: fixture.request }),
+    ).resolves.toEqual({ ok: true, result: [{ update_id: 42, message: { text: 'test' } }] })
+
+    expect(JSON.parse(fixture.body)).toEqual({
+      offset: 42,
+      timeout: 25,
+      allowed_updates: ['message'],
+    })
+    expect(fixture.timeoutMs).toBe(35_000)
+  })
+
+  test('exposes Telegram retry_after without leaking response details', async () => {
+    const fixture = createRequestFixture({
+      statusCode: 429,
+      responseBody: JSON.stringify({ ok: false, error_code: 429, parameters: { retry_after: 8 } }),
+    })
+
+    await expect(
+      getTelegramUpdates({ botToken: 'token', timeoutSeconds: 25 }, { request: fixture.request }),
+    ).resolves.toEqual({ ok: false, error: { code: 'rate-limited', retryAfterSeconds: 8 } })
+  })
 })
 
 describe('sendTelegramPhoto', () => {
@@ -191,12 +283,8 @@ describe('sendTelegramPhoto', () => {
 
 describe('telegramProxyUrlFromPrefs', () => {
   test('returns the shared supported proxy URL independently of the Git proxy switch', () => {
-    expect(
-      telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: 'http://proxy:7890' }),
-    ).toBe('http://proxy:7890')
+    expect(telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: 'http://proxy:7890' })).toBe('http://proxy:7890')
     expect(telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: '' })).toBeUndefined()
-    expect(
-      telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: 'socks5://127.0.0.1:1080' }),
-    ).toBe('socks5://127.0.0.1:1080')
+    expect(telegramProxyUrlFromPrefs({ gitNetworkProxyUrl: 'socks5://127.0.0.1:1080' })).toBe('socks5://127.0.0.1:1080')
   })
 })

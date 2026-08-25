@@ -43,6 +43,7 @@ import {
   TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
   TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
 } from '#/shared/telegram-notifications.ts'
+import { TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS } from '#/shared/telegram-terminal-input.ts'
 import { createDefaultTerminalCustomButtons } from '#/shared/terminal-custom-button-presets.ts'
 
 export const DEFAULT_FETCH_INTERVAL_SEC = 120
@@ -146,6 +147,10 @@ export function defaultSettingsSnapshot(overrides: Partial<SettingsSnapshot> = {
       outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
       includeTerminalOutput: false,
       outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+      terminalInputEnabled: false,
+      terminalInputAllowedUserIds: [],
+      terminalInputPollingTimeoutSeconds: TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS,
+      terminalInputRuntime: { status: 'stopped' },
     },
   }
 }

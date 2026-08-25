@@ -93,6 +93,7 @@ const terminalHostStub = {
     output: 'server screen output',
     sequence: 42,
   })),
+  submitTelegramInput: vi.fn(async () => ({ ok: false as const, code: 'no-target' as const })),
   handleRealtimeMessage: vi.fn(),
   shutdown: vi.fn(),
 } satisfies ServerTerminalHost
@@ -108,7 +109,7 @@ vi.mock('#/server/modules/settings-source.ts', () => ({
   getServerTelegramNotificationConfig: mocks.getServerTelegramNotificationConfig,
 }))
 
-vi.mock('#/server/modules/telegram-notification-source.ts', () => ({
+vi.mock('#/server/modules/telegram-bot-api-source.ts', () => ({
   sendTelegramMessage: mocks.sendTelegramMessage,
   sendTelegramPhoto: mocks.sendTelegramPhoto,
   telegramProxyUrlFromPrefs: mocks.telegramProxyUrlFromPrefs,

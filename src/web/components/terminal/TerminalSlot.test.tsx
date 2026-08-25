@@ -133,6 +133,52 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('marks a desktop controlling terminal as the Telegram target on emulator focus', async () => {
+    const markTelegramInputTarget = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      markTelegramInputTarget,
+      isTerminalFocusTarget: vi.fn(() => true),
+    })
+    const host = container.querySelector('.goblin-terminal-slot__host')
+
+    await act(async () => host?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })))
+
+    expect(markTelegramInputTarget).toHaveBeenCalledWith('terminal-1')
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  test('does not mark a viewer or Mobile Web terminal as the Telegram target', async () => {
+    const viewerMark = vi.fn()
+    const viewer = await renderTerminalSlotFixture('viewer', {
+      markTelegramInputTarget: viewerMark,
+      isTerminalFocusTarget: vi.fn(() => true),
+    })
+    await act(async () =>
+      viewer.container
+        .querySelector('.goblin-terminal-slot__host')
+        ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })),
+    )
+    expect(viewerMark).not.toHaveBeenCalled()
+    await act(async () => viewer.root.unmount())
+    viewer.container.remove()
+
+    mobileDetectionMocks.isMobileDevice = true
+    const mobileMark = vi.fn()
+    const mobile = await renderTerminalSlotFixture('controller', {
+      markTelegramInputTarget: mobileMark,
+      isTerminalFocusTarget: vi.fn(() => true),
+    })
+    await act(async () =>
+      mobile.container
+        .querySelector('.goblin-terminal-slot__host')
+        ?.dispatchEvent(new FocusEvent('focusin', { bubbles: true })),
+    )
+    expect(mobileMark).not.toHaveBeenCalled()
+    await act(async () => mobile.root.unmount())
+    mobile.container.remove()
+  })
+
   test('does not show a loading status while terminal creation is pending without a registered session', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')

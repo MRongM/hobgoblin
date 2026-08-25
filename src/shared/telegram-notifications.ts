@@ -2,6 +2,8 @@ export const TELEGRAM_BOT_TOKEN_MAX_LENGTH = 256
 export const TELEGRAM_CHAT_ID_MAX_LENGTH = 128
 export const TELEGRAM_CONTEXT_TEXT_MAX_LENGTH = 300
 export const TELEGRAM_OUTPUT_TAIL_MIN_LENGTH = 1
+import type { TelegramTerminalInputRuntimeSnapshot } from '#/shared/telegram-terminal-input.ts'
+
 export const TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH = 400
 export const TELEGRAM_OUTPUT_TAIL_MAX_LENGTH = 4096
 export const TELEGRAM_OUTPUT_COMPLETION_MIN_ACTIVITY_SECONDS = 1
@@ -24,6 +26,10 @@ export interface TelegramNotificationSettingsSnapshot {
   outputCompletionMinimumActivitySeconds: number
   includeTerminalOutput: boolean
   outputTailLength: number
+  terminalInputEnabled: boolean
+  terminalInputAllowedUserIds: string[]
+  terminalInputPollingTimeoutSeconds: number
+  terminalInputRuntime: TelegramTerminalInputRuntimeSnapshot
 }
 
 export interface TelegramNotificationSettingsUpdateInput {
@@ -36,6 +42,9 @@ export interface TelegramNotificationSettingsUpdateInput {
   outputCompletionMinimumActivitySeconds: number
   includeTerminalOutput: boolean
   outputTailLength: number
+  terminalInputEnabled?: boolean
+  terminalInputAllowedUserIds?: string[]
+  terminalInputPollingTimeoutSeconds?: number
 }
 
 export interface TelegramBellNotificationContext {

@@ -21,6 +21,7 @@ import type {
   TerminalTakeoverResult,
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
+import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 
 type MaybePromise<T> = T | Promise<T>
 
@@ -77,6 +78,7 @@ export interface ServerTerminalHost {
   ): MaybePromise<TerminalSessionSnapshot | null>
   getOutputExcerpt(input: TerminalOutputExcerptInput): MaybePromise<TerminalOutputExcerpt | null>
   getScreenSnapshot(input: TerminalScreenSnapshotInput): MaybePromise<TerminalScreenSnapshot | null>
+  submitTelegramInput(text: string): MaybePromise<TelegramTerminalInputSubmissionResult>
   /** Handle an incoming realtime message from a client socket. */
   handleRealtimeMessage(clientId: string, attachmentId: string, socket: ServerTerminalSocket, message: string): void
   shutdown(): void
