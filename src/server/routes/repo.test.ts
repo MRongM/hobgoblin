@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cleanupRepositoryWorktree: vi.fn(),
+  alignRepositoryWorktreeToRemote: vi.fn(),
+  buildRepositoryRemoteAlignmentPreview: vi.fn(),
   checkoutWorktreeBranch: vi.fn(),
   createRepositoryWorktree: vi.fn(),
   createRepositoryFileTreeFile: vi.fn(),
@@ -45,6 +47,8 @@ vi.mock('#/server/modules/repo-read-paths.ts', () => ({
 }))
 
 vi.mock('#/server/modules/repo-write-paths.ts', () => ({
+  alignRepositoryWorktreeToRemote: mocks.alignRepositoryWorktreeToRemote,
+  buildRepositoryRemoteAlignmentPreview: mocks.buildRepositoryRemoteAlignmentPreview,
   abortCloneOperation: vi.fn(),
   abortRepositoryOperation: vi.fn(),
   checkoutRepositoryBranch: vi.fn(),
@@ -131,6 +135,17 @@ describe('repo routes', () => {
       files: [],
     })
     mocks.discardRepositoryChanges.mockResolvedValue({ ok: true, message: '' })
+    mocks.alignRepositoryWorktreeToRemote.mockResolvedValue({ ok: true, message: 'aligned' })
+    mocks.buildRepositoryRemoteAlignmentPreview.mockResolvedValue({
+      ok: true,
+      token: 'sha256:alignment-preview',
+      repoId: '/repo',
+      branch: 'feature/a',
+      worktreePath: '/repo-feature',
+      upstream: 'origin/feature/a',
+      ahead: 2,
+      changeCount: 1,
+    })
     mocks.createRepositoryFileTreeFile.mockResolvedValue({ ok: true, message: '' })
     mocks.openRepositoryEditor.mockResolvedValue({ ok: true, message: '/repo/src/app.ts' })
     mocks.readRepositoryFileTreeBinaryFile.mockResolvedValue({
@@ -838,6 +853,58 @@ describe('repo routes', () => {
       ['src/app.ts', 'docs'],
       expect.any(AbortSignal),
       'client_123',
+    )
+  })
+
+  test('routes destructive remote alignment with the exact branch and worktree identity', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/align-remote', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoId: '/repo',
+        branch: 'feature/a',
+        worktreePath: '/repo-feature',
+        previewToken: 'sha256:alignment-preview',
+        sourceToken: 'client_123',
+      }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'aligned' })
+    expect(mocks.alignRepositoryWorktreeToRemote).toHaveBeenCalledWith(
+      '/repo',
+      'feature/a',
+      '/repo-feature',
+      expect.any(AbortSignal),
+      'client_123',
+      { previewToken: 'sha256:alignment-preview' },
+    )
+  })
+
+  test('routes remote alignment preview before destructive confirmation', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/align-remote-preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', branch: 'feature/a', worktreePath: '/repo-feature' }),
+    })
+
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      token: 'sha256:alignment-preview',
+      upstream: 'origin/feature/a',
+      ahead: 2,
+      changeCount: 1,
+    })
+    expect(mocks.buildRepositoryRemoteAlignmentPreview).toHaveBeenCalledWith(
+      '/repo',
+      'feature/a',
+      '/repo-feature',
+      expect.any(AbortSignal),
     )
   })
 

@@ -12,7 +12,7 @@ export interface BranchActionScheduleDecision {
 }
 
 export function isNetworkBranchActionKind(kind: RepoBranchActionKind): boolean {
-  return kind === 'pull' || kind === 'push'
+  return kind === 'pull' || kind === 'push' || kind === 'alignRemote'
 }
 
 export function evaluateBranchActionSchedule(input: BranchActionScheduleInput): BranchActionScheduleDecision {

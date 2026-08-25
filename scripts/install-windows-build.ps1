@@ -25,6 +25,41 @@ if ($logDirectory) {
 Start-Sleep -Seconds $DelaySeconds
 
 try {
+  $installedAppFullPath = [IO.Path]::GetFullPath($InstalledAppPath)
+  $installedProcessName = [IO.Path]::GetFileNameWithoutExtension($InstalledAppPath)
+  function Get-InstalledAppProcess {
+    @(
+      Get-Process -Name $installedProcessName -ErrorAction SilentlyContinue |
+        Where-Object {
+          try {
+            $_.Path -and [string]::Equals(
+              [IO.Path]::GetFullPath($_.Path),
+              $installedAppFullPath,
+              [StringComparison]::OrdinalIgnoreCase
+            )
+          }
+          catch {
+            $false
+          }
+        }
+    )
+  }
+
+  $runningApp = @(Get-InstalledAppProcess)
+  if ($runningApp.Count -gt 0) {
+    foreach ($process in $runningApp) {
+      $null = $process.CloseMainWindow()
+    }
+    $closeDeadline = [DateTime]::UtcNow.AddSeconds(10)
+    do {
+      Start-Sleep -Milliseconds 250
+      $runningApp = @(Get-InstalledAppProcess)
+    } while ($runningApp.Count -gt 0 -and [DateTime]::UtcNow -lt $closeDeadline)
+    if ($runningApp.Count -gt 0) {
+      $runningApp | Stop-Process -Force -ErrorAction Stop
+    }
+  }
+
   $installer = Start-Process -FilePath $InstallerPath -ArgumentList '/S' -Wait -PassThru
   $message = "$(Get-Date -Format o) exit=$($installer.ExitCode)"
   Set-Content -LiteralPath $LogPath -Value $message -Encoding UTF8

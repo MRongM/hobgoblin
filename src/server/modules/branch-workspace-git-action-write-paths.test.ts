@@ -53,6 +53,29 @@ function discardPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitAction
   }
 }
 
+function alignRemotePlan(repositoryNames = ['api', 'web'], ready = true): BranchWorkspaceGitActionPlan {
+  return {
+    kind: 'batch-align-remote',
+    token: 'sha256:align-remote',
+    rootId: ROOT,
+    branchWorkspaceId: 'ws-1',
+    ready,
+    members: repositoryNames.map((repositoryName) => ({
+      repositoryName,
+      repoId: `${ROOT}/${repositoryName}`,
+      targetBranch: 'feature/a',
+      targetWorktreePath: `${ROOT}/goblin-feature-a/${repositoryName}`,
+      targetHead: `local-${repositoryName}`,
+      upstream: ready ? `origin/feature/${repositoryName}` : null,
+      ahead: 1,
+      changeCount: 2,
+      ready,
+      ...(!ready ? { message: 'workspace.branch-workspace.git-action.target-upstream-required' } : {}),
+      fingerprint: `sha256:${repositoryName}`,
+    })),
+  }
+}
+
 function mergeOutPlan(repositoryNames = ['api', 'web']): BranchWorkspaceGitActionPlan {
   return {
     kind: 'batch-merge-out',
@@ -926,6 +949,150 @@ describe('createBranchWorkspaceGitActionWriteService', () => {
       message: 'cancelled',
     })
     expect(discard).toHaveBeenCalledTimes(1)
+  })
+
+  test('fully aligns every member in order while isolating failures', async () => {
+    const plan = alignRemotePlan(['api', 'web'])
+    const alignRemote = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, message: 'offline' })
+      .mockResolvedValueOnce({ ok: true, message: 'aligned' })
+    const publishRepoInvalidation = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      alignRemote,
+      publishRepoInvalidation,
+    })
+    await service.plan(ROOT, { kind: 'batch-align-remote', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toMatchObject({
+      ok: false,
+      members: [
+        { repositoryName: 'api', phase: 'failed', step: 'align', message: 'offline' },
+        { repositoryName: 'web', phase: 'succeeded' },
+      ],
+    })
+    expect(alignRemote.mock.calls.map((call) => call.slice(0, 3))).toEqual([
+      ['/workspace/api', 'feature/a', '/workspace/goblin-feature-a/api'],
+      ['/workspace/web', 'feature/a', '/workspace/goblin-feature-a/web'],
+    ])
+    expect(alignRemote.mock.calls.every((call) => call.at(-1)?.publishInvalidation === false)).toBe(true)
+    expect(alignRemote.mock.calls.map((call) => call.at(-1)?.expectedFingerprint)).toEqual(
+      plan.members.map((member) => member.fingerprint),
+    )
+    expect(publishRepoInvalidation.mock.calls.map((call) => call[0])).toEqual(['/workspace/api', '/workspace/web'])
+  })
+
+  test('requires a fresh plan after a remote alignment may have changed a repository', async () => {
+    const plan = alignRemotePlan(['api'])
+    const alignRemote = vi.fn(async () => ({
+      ok: false as const,
+      message: 'error.align-remote-clean-incomplete',
+      repoChanged: true,
+    }))
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      alignRemote,
+    })
+    await service.plan(ROOT, { kind: 'batch-align-remote', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toMatchObject({
+      ok: false,
+      retryable: false,
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          message: 'error.align-remote-clean-incomplete',
+        },
+      ],
+    })
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.plan-expired',
+    })
+    expect(alignRemote).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not let cancellation hide a partially changed remote alignment', async () => {
+    const plan = alignRemotePlan(['api', 'web'])
+    let service: ReturnType<typeof createBranchWorkspaceGitActionWriteService>
+    const alignRemote = vi.fn(async () => {
+      service.abort(ROOT)
+      return {
+        ok: false as const,
+        message: 'error.align-remote-clean-incomplete',
+        repoChanged: true,
+      }
+    })
+    service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      alignRemote,
+    })
+    await service.plan(ROOT, { kind: 'batch-align-remote', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toMatchObject({
+      ok: false,
+      retryable: false,
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          message: 'error.align-remote-clean-incomplete',
+        },
+        { repositoryName: 'web', phase: 'not-started' },
+      ],
+    })
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.plan-expired',
+    })
+    expect(alignRemote).toHaveBeenCalledTimes(1)
+  })
+
+  test('finishes the active remote alignment unit before cancellation stops the next member', async () => {
+    const plan = alignRemotePlan(['api', 'web'])
+    let service: ReturnType<typeof createBranchWorkspaceGitActionWriteService>
+    const alignRemote = vi.fn(async () => {
+      service.abort(ROOT)
+      return { ok: true as const, message: 'aligned' }
+    })
+    service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      alignRemote,
+    })
+    await service.plan(ROOT, { kind: 'batch-align-remote', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toMatchObject({
+      ok: false,
+      message: 'cancelled',
+      members: [
+        { repositoryName: 'api', phase: 'succeeded' },
+        { repositoryName: 'web', phase: 'not-started' },
+      ],
+    })
+    expect(alignRemote).toHaveBeenCalledTimes(1)
+  })
+
+  test('refuses a batch remote alignment when any member lacks an upstream', async () => {
+    const plan = alignRemotePlan(['api'], false)
+    const alignRemote = vi.fn()
+    const service = createBranchWorkspaceGitActionWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      validatePlan: vi.fn(async () => ({ ok: true as const, plan })),
+      alignRemote,
+    })
+    await service.plan(ROOT, { kind: 'batch-align-remote', branchWorkspaceId: 'ws-1' })
+
+    await expect(service.execute(ROOT, { kind: 'batch-align-remote', planToken: plan.token })).resolves.toEqual({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.target-upstream-required',
+    })
+    expect(alignRemote).not.toHaveBeenCalled()
   })
 
   test('merges selected sources into member targets in manifest order without temporary worktrees', async () => {

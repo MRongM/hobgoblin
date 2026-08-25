@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
+import { repositoryPlanFingerprint } from '#/server/modules/repository-status-plan.ts'
 
 const mocks = vi.hoisted(() => ({
   checkGitAvailable: vi.fn(),
@@ -47,6 +48,9 @@ const mocks = vi.hoisted(() => ({
   getRepoRoot: vi.fn(),
   getRemoteInfo: vi.fn(),
   getRemoteSnapshot: vi.fn(),
+  getRemotePatch: vi.fn(),
+  getRemoteWorktreeContentState: vi.fn(),
+  getRemoteWorktreeStatusEntries: vi.fn(),
   getRemoteTags: vi.fn(),
   getLocalRemoteTrackingBranchInfo: vi.fn(),
   getSshRemoteTrackingBranchInfo: vi.fn(),
@@ -55,6 +59,8 @@ const mocks = vi.hoisted(() => ({
   getUpstream: vi.fn(),
   getWorktreeCommitMessageContext: vi.fn(),
   getWorktreePatch: vi.fn(),
+  getWorktreeContentState: vi.fn(),
+  getWorktreeStatusEntries: vi.fn(),
   getWorktrees: vi.fn(),
   isAncestor: vi.fn(),
   fetchAll: vi.fn(),
@@ -105,6 +111,8 @@ const mocks = vi.hoisted(() => ({
   setBranchUpstream: vi.fn(),
   setRemoteBranchUpstream: vi.fn(),
   assertBranchWorkspaceFileMutationAllowed: vi.fn(),
+  alignWorktreeToRemoteRef: vi.fn(),
+  alignRemoteWorktreeToRemoteRef: vi.fn(),
   testRemoteRepository: vi.fn(),
 }))
 
@@ -144,6 +152,7 @@ vi.mock('#/system/git/commit.ts', () => ({
 }))
 
 vi.mock('#/system/git/reset.ts', () => ({
+  alignWorktreeToRemoteRef: mocks.alignWorktreeToRemoteRef,
   discardChangesForPaths: mocks.discardChangesForPaths,
   resetHardToCurrentHead: mocks.resetHardToCurrentHead,
 }))
@@ -155,6 +164,10 @@ vi.mock('#/system/git/history.ts', () => ({
 
 vi.mock('#/system/git/patch.ts', () => ({
   getWorktreePatch: mocks.getWorktreePatch,
+}))
+
+vi.mock('#/system/git/worktree-content-state.ts', () => ({
+  getWorktreeContentState: mocks.getWorktreeContentState,
 }))
 
 vi.mock('#/system/git/commit-message-context.ts', () => ({
@@ -201,6 +214,7 @@ vi.mock('#/system/git/remote-refs.ts', () => ({
 
 vi.mock('#/system/git/status.ts', () => ({
   getWorkingStatus: vi.fn(),
+  getWorktreeStatusEntries: mocks.getWorktreeStatusEntries,
 }))
 
 vi.mock('#/system/git/worktrees.ts', () => ({
@@ -253,6 +267,7 @@ vi.mock('#/system/terminals.ts', () => ({
 }))
 
 vi.mock('#/system/ssh/git.ts', () => ({
+  alignRemoteWorktreeToRemoteRef: mocks.alignRemoteWorktreeToRemoteRef,
   checkoutRemoteBranch: mocks.checkoutRemoteBranch,
   checkoutRemoteTrackingBranch: mocks.checkoutRemoteTrackingBranch,
   commitRemoteChanges: mocks.commitRemoteChanges,
@@ -273,13 +288,15 @@ vi.mock('#/system/ssh/git.ts', () => ({
   getRemoteBrowserUrl: mocks.getRemoteBrowserUrl,
   getRemoteCommitDetail: mocks.getRemoteCommitDetail,
   getRemoteHistory: mocks.getRemoteHistory,
-  getRemotePatch: vi.fn(),
+  getRemotePatch: mocks.getRemotePatch,
+  getRemoteWorktreeContentState: mocks.getRemoteWorktreeContentState,
   getRemoteTags: mocks.getRemoteTags,
   getRemoteTrackingBranchInfo: mocks.getSshRemoteTrackingBranchInfo,
   getRemoteTrackingBranches: mocks.getRemoteTrackingBranches,
   getRemoteWorktrees: mocks.getRemoteWorktrees,
   getRemoteSnapshot: mocks.getRemoteSnapshot,
   getRemoteStatus: vi.fn(),
+  getRemoteWorktreeStatusEntries: mocks.getRemoteWorktreeStatusEntries,
   pullRemoteBranch: mocks.pullRemoteBranch,
   pushRemoteBranch: mocks.pushRemoteBranch,
   pushRemoteWorktreeHeadToRemoteBranch: mocks.pushRemoteWorktreeHeadToRemoteBranch,
@@ -318,6 +335,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.runServerCancellable.mockImplementation(async (_cwd, _kind, task) => await task(new AbortController().signal))
   mocks.assertBranchWorkspaceFileMutationAllowed.mockResolvedValue({ ok: true })
+  mocks.alignWorktreeToRemoteRef.mockResolvedValue({ ok: true, message: 'aligned local' })
+  mocks.alignRemoteWorktreeToRemoteRef.mockResolvedValue({ ok: true, message: 'aligned remote' })
   mocks.checkGitAvailable.mockResolvedValue({ ok: true, message: '' })
   mocks.fsStat.mockResolvedValue({ isDirectory: () => true })
   mocks.fsAccess.mockResolvedValue(undefined)
@@ -373,6 +392,10 @@ beforeEach(() => {
   mocks.fetchRemoteRepositoryByName.mockResolvedValue({ ok: true, message: 'fetched exact remote' })
   mocks.getLocalRemoteTrackingBranchInfo.mockResolvedValue([])
   mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([])
+  mocks.getRemoteWorktreeStatusEntries.mockResolvedValue([])
+  mocks.getRemotePatch.mockResolvedValue({ ok: true, message: '' })
+  mocks.getRemoteWorktreeContentState.mockResolvedValue({ indexHash: '3'.repeat(40), worktreeTree: '4'.repeat(40) })
+  mocks.getWorktreeContentState.mockResolvedValue({ indexHash: '3'.repeat(40), worktreeTree: '4'.repeat(40) })
   mocks.createWorktree.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteRemoteBranch.mockResolvedValue({ ok: true, message: 'ok' })
   mocks.deleteLocalRemoteServerBranch.mockResolvedValue({ ok: true, message: 'deleted local remote' })
@@ -531,6 +554,47 @@ function repoSnapshot(branch = 'main'): RepoSnapshot {
   }
 }
 
+function alignedWorktreeSnapshot(options?: { tracking?: string; trackingGone?: boolean; path?: string }): RepoSnapshot {
+  const head = '1'.repeat(40)
+  return {
+    branches: [
+      {
+        name: 'feature/a',
+        isCurrent: false,
+        tracking: options?.tracking ?? 'origin/feature/a',
+        trackingGone: options?.trackingGone ?? false,
+        ahead: 2,
+        behind: 1,
+        lastCommitHash: head,
+        lastCommitMessage: 'local work',
+        lastCommitDate: '2026-08-25T00:00:00.000Z',
+        lastCommitAuthor: 'dev',
+        worktree: { path: options?.path ?? '/srv/repo-feature', head },
+      },
+    ],
+    current: 'main',
+  }
+}
+
+const REMOTE_ALIGNMENT_CONTENT_STATE = {
+  indexHash: '3'.repeat(40),
+  worktreeTree: '4'.repeat(40),
+}
+
+function remoteAlignmentFingerprint(contentState = REMOTE_ALIGNMENT_CONTENT_STATE): string {
+  return repositoryPlanFingerprint({
+    head: '1'.repeat(40),
+    status: [],
+    contentState,
+    upstream: 'origin/feature/a',
+    trackingGone: false,
+  })
+}
+
+function remoteAlignmentOptions(contentState = REMOTE_ALIGNMENT_CONTENT_STATE) {
+  return { expectedFingerprint: remoteAlignmentFingerprint(contentState) }
+}
+
 describe('getRepositorySnapshot', () => {
   test('reads git state directly without publishing invalidation', async () => {
     mocks.getWorktrees.mockResolvedValueOnce([{ path: '/tmp/repo', branch: 'fresh', isBare: false, isPrimary: true }])
@@ -568,6 +632,27 @@ describe('getRepositorySnapshot', () => {
     expect(mocks.getRemoteInfo).not.toHaveBeenCalled()
   })
 
+  test('reads independent snapshot sections concurrently after resolving worktrees', async () => {
+    let activeReads = 0
+    let maxActiveReads = 0
+    const delayed = async <T>(value: T) => {
+      activeReads += 1
+      maxActiveReads = Math.max(maxActiveReads, activeReads)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      activeReads -= 1
+      return value
+    }
+    const expected = repoSnapshot('main')
+    mocks.getWorktrees.mockResolvedValueOnce([{ path: '/tmp/repo', branch: 'main', isBare: false, isPrimary: true }])
+    mocks.getBranches.mockImplementationOnce(async () => await delayed(expected.branches))
+    mocks.getCurrentBranch.mockImplementationOnce(async () => await delayed(expected.current))
+    mocks.getRemoteInfo.mockImplementationOnce(async () => await delayed(expected.remote))
+
+    const { getRepositorySnapshot } = await import('#/server/modules/repo-read-paths.ts')
+    await expect(getRepositorySnapshot('/tmp/repo')).resolves.toEqual(expected)
+    expect(maxActiveReads).toBe(3)
+  })
+
   test('fails local git snapshots when the authoritative worktree list is empty', async () => {
     mocks.getWorktrees.mockResolvedValueOnce([])
 
@@ -576,6 +661,18 @@ describe('getRepositorySnapshot', () => {
     await expect(getRepositorySnapshot('/tmp/repo')).rejects.toThrow('error.failed-read-repo')
     expect(mocks.getBranches).not.toHaveBeenCalled()
     expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+})
+
+describe('repository targeted status read paths', () => {
+  test('reads only the requested local worktree status entries', async () => {
+    mocks.getWorktreeStatusEntries.mockResolvedValueOnce([{ x: ' ', y: 'M', path: 'src/app.ts' }])
+    const { getRepositoryWorktreeStatusEntries } = await import('#/server/modules/repo-read-paths.ts')
+
+    await expect(getRepositoryWorktreeStatusEntries('/tmp/repo', '/tmp/repo-feature')).resolves.toEqual([
+      { x: ' ', y: 'M', path: 'src/app.ts' },
+    ])
+    expect(mocks.getWorktreeStatusEntries).toHaveBeenCalledWith('/tmp/repo-feature', { signal: undefined })
   })
 })
 
@@ -2131,6 +2228,228 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
+  test('alignRepositoryWorktreeToRemote fetches, revalidates, then destructively aligns the exact worktree', async () => {
+    const snapshot = alignedWorktreeSnapshot()
+    mocks.getRemoteSnapshot.mockResolvedValue(snapshot)
+    const remoteHead = '2'.repeat(40)
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: remoteHead }])
+    const { alignRepositoryWorktreeToRemote, buildRepositoryRemoteAlignmentPreview } = await import(
+      '#/server/modules/repo-write-paths.ts'
+    )
+
+    const preview = await buildRepositoryRemoteAlignmentPreview(
+      'ssh-config://prod/srv/repo',
+      'feature/a',
+      '/srv/repo-feature',
+    )
+    expect(preview).toMatchObject({
+      ok: true,
+      token: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+      upstream: 'origin/feature/a',
+      ahead: 2,
+      changeCount: 0,
+    })
+    if (!preview.ok) return
+    const result = await alignRepositoryWorktreeToRemote(
+      'ssh-config://prod/srv/repo',
+      'feature/a',
+      '/srv/repo-feature',
+      undefined,
+      undefined,
+      { previewToken: preview.token },
+    )
+
+    expect(result).toEqual({ ok: true, message: 'aligned remote' })
+    expect(mocks.fetchRemoteRepositoryByName).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      'origin',
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(mocks.getSshRemoteTrackingBranchInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(mocks.alignRemoteWorktreeToRemoteRef).toHaveBeenCalledWith(
+      expect.objectContaining({ alias: 'prod', remotePath: '/srv/repo' }),
+      '/srv/repo-feature',
+      expect.objectContaining({
+        branch: 'feature/a',
+        expectedHead: '1'.repeat(40),
+        remoteRef: 'origin/feature/a',
+        remoteHead,
+        expectedFingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        expectedContentState: REMOTE_ALIGNMENT_CONTENT_STATE,
+      }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(mocks.fetchRemoteRepositoryByName.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.alignRemoteWorktreeToRemoteRef.mock.invocationCallOrder[0]!,
+    )
+  }, 15_000)
+
+  test('rejects an ordinary alignment when worktree content changes after server preview', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
+    mocks.getRemoteWorktreeContentState
+      .mockResolvedValueOnce(REMOTE_ALIGNMENT_CONTENT_STATE)
+      .mockResolvedValueOnce({ indexHash: '5'.repeat(40), worktreeTree: '6'.repeat(40) })
+    const { alignRepositoryWorktreeToRemote, buildRepositoryRemoteAlignmentPreview } = await import(
+      '#/server/modules/repo-write-paths.ts'
+    )
+    const preview = await buildRepositoryRemoteAlignmentPreview(
+      'ssh-config://prod/srv/repo',
+      'feature/a',
+      '/srv/repo-feature',
+    )
+    expect(preview.ok).toBe(true)
+    if (!preview.ok) return
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        { previewToken: preview.token },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
+
+    expect(mocks.fetchRemoteRepositoryByName).not.toHaveBeenCalled()
+    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
+  })
+
+  test('alignRepositoryWorktreeToRemote rejects a missing upstream before fetching', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot({ tracking: '', trackingGone: true }))
+    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        { previewToken: 'sha256:missing-upstream-preview' },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.upstream-required' })
+
+    expect(mocks.fetchRemoteRepositoryByName).not.toHaveBeenCalled()
+    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
+  })
+
+  test('alignRepositoryWorktreeToRemote stops when the worktree identity changes after fetch', async () => {
+    mocks.getRemoteSnapshot
+      .mockResolvedValueOnce(alignedWorktreeSnapshot())
+      .mockResolvedValueOnce(alignedWorktreeSnapshot({ path: '/srv/other-worktree' }))
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
+    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        remoteAlignmentOptions(),
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
+
+    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
+      repoId: 'ssh-config://prod/srv/repo',
+      query: 'repo-snapshot',
+    })
+  })
+
+  test('alignRepositoryWorktreeToRemote stops when confirmed worktree content changes after fetch', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
+    mocks.getRemoteWorktreeContentState
+      .mockResolvedValueOnce(REMOTE_ALIGNMENT_CONTENT_STATE)
+      .mockResolvedValueOnce({ indexHash: '5'.repeat(40), worktreeTree: '6'.repeat(40) })
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
+    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        remoteAlignmentOptions(),
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
+
+    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledTimes(1)
+  })
+
+  test('propagates a final primitive repository-change rejection and invalidates the snapshot', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
+    mocks.alignRemoteWorktreeToRemoteRef.mockResolvedValueOnce({
+      ok: false,
+      message: 'error.repository-changed',
+      repoChanged: false,
+    })
+    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        remoteAlignmentOptions(),
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.repository-changed', repoChanged: false })
+
+    expect(mocks.alignRemoteWorktreeToRemoteRef).toHaveBeenCalledTimes(1)
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledTimes(1)
+  })
+
+  test('alignRepositoryWorktreeToRemote rejects an expired batch fingerprint before fetch', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
+    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        { expectedFingerprint: `sha256:${'f'.repeat(64)}` },
+      ),
+    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
+
+    expect(mocks.fetchRemoteRepositoryByName).not.toHaveBeenCalled()
+    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
+    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
+  })
+
+  test('alignRepositoryWorktreeToRemote invalidates snapshots when the destructive attempt fails', async () => {
+    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
+    mocks.alignRemoteWorktreeToRemoteRef.mockResolvedValueOnce({ ok: false, message: 'fatal: reset failed' })
+    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        'ssh-config://prod/srv/repo',
+        'feature/a',
+        '/srv/repo-feature',
+        undefined,
+        undefined,
+        remoteAlignmentOptions(),
+      ),
+    ).resolves.toEqual({ ok: false, message: 'fatal: reset failed' })
+
+    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledTimes(1)
+  })
+
   test('file tree write failures do not publish snapshot invalidation', async () => {
     mocks.renameLocalFileTreeEntry.mockResolvedValueOnce({ ok: false, message: 'error.file-exists' })
     const { renameRepositoryFileTreeEntry } = await import('#/server/modules/repo-write-paths.ts')
@@ -2749,6 +3068,57 @@ describe('repo mutation invalidation publishing', () => {
       worktreePath: '/srv/repo-stale',
       signal: undefined,
     })
+  })
+
+  test('local backend binds destructive alignment to the confirmed worktree fingerprint', async () => {
+    const expectedHead = '1'.repeat(40)
+    const remoteHead = '2'.repeat(40)
+    const entries = [{ x: ' ', y: 'M', path: 'src/app.ts' }]
+    const contentState = { indexHash: '3'.repeat(40), worktreeTree: '4'.repeat(40) }
+    const target = {
+      branch: 'feature/a',
+      expectedHead,
+      remoteRef: 'origin/feature/a',
+      remoteHead,
+      expectedFingerprint: repositoryPlanFingerprint({
+        head: expectedHead,
+        status: entries,
+        contentState,
+        upstream: 'origin/feature/a',
+        trackingGone: false,
+      }),
+      expectedContentState: contentState,
+    }
+    const { resolveRepoBackend } = await import('#/server/modules/repo-backend.ts')
+    const backend = await resolveRepoBackend('/tmp/repo')
+
+    await expect(backend.alignToRemoteRef('/tmp/repo-feature', target)).resolves.toEqual({
+      ok: true,
+      message: 'aligned local',
+    })
+
+    expect(mocks.alignWorktreeToRemoteRef).toHaveBeenCalledWith('/tmp/repo-feature', target, undefined)
+  })
+
+  test('local backend propagates the primitive final content guard', async () => {
+    const target = {
+      branch: 'feature/a',
+      expectedHead: '1'.repeat(40),
+      remoteRef: 'origin/feature/a',
+      remoteHead: '2'.repeat(40),
+      expectedFingerprint: `sha256:${'f'.repeat(64)}`,
+      expectedContentState: { indexHash: '3'.repeat(40), worktreeTree: '4'.repeat(40) },
+    }
+    mocks.alignWorktreeToRemoteRef.mockResolvedValueOnce({ ok: false, message: 'error.repository-changed' })
+    const { resolveRepoBackend } = await import('#/server/modules/repo-backend.ts')
+    const backend = await resolveRepoBackend('/tmp/repo')
+
+    await expect(backend.alignToRemoteRef('/tmp/repo-feature', target)).resolves.toEqual({
+      ok: false,
+      message: 'error.repository-changed',
+    })
+
+    expect(mocks.alignWorktreeToRemoteRef).toHaveBeenCalledWith('/tmp/repo-feature', target, undefined)
   })
 
   test('commitRepositoryChanges commits local worktrees through the local backend and publishes invalidation', async () => {

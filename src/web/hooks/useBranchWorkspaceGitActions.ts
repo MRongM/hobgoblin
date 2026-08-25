@@ -135,6 +135,11 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     return await execute({ kind: 'batch-discard', planToken: plan.token })
   }, [execute, plan])
 
+  const executeBatchAlignRemote = useCallback(async () => {
+    if (!plan || plan.kind !== 'batch-align-remote') return null
+    return await execute({ kind: 'batch-align-remote', planToken: plan.token })
+  }, [execute, plan])
+
   const executeBatchSetUpstream = useCallback(
     async (upstreams: BranchWorkspaceBatchSetUpstreamInput[]) => {
       if (!plan || plan.kind !== 'batch-set-upstream') return null
@@ -189,12 +194,14 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
     executeBatchCommit,
     executeBatchCommitAndPush,
     executeBatchDiscard,
+    executeBatchAlignRemote,
     executeBatchSetUpstream,
     executeBatchMergeIn,
     executeBatchMergeOut,
     executeSync,
     retryBatchCommit: executeBatchCommit,
     retryBatchDiscard: executeBatchDiscard,
+    retryBatchAlignRemote: executeBatchAlignRemote,
     retryBatchSetUpstream: executeBatchSetUpstream,
     retryBatchMergeIn: executeBatchMergeIn,
     retryBatchMergeOut: executeBatchMergeOut,

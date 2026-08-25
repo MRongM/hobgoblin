@@ -5,6 +5,7 @@ export type RepoBranchAction =
   | { kind: 'checkout'; branch: string }
   | { kind: 'pull'; branch: string; worktreePath?: string }
   | { kind: 'push'; branch: string }
+  | { kind: 'alignRemote'; branch: string; worktreePath: string; previewToken: string }
   | { kind: 'createWorktree'; input: CreateWorktreeInput; worktreeBootstrap: WorktreeBootstrapDecision }
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; localBranch: string; remoteRef: string }

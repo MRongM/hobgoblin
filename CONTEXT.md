@@ -483,6 +483,10 @@ _Avoid_: AI commit handoff, shared commit message, automatic commit
 An application-coordinated destructive action that binds every dirty repository member's exact staged, unstaged, and untracked change paths to a reviewed plan, then discards those paths sequentially after one explicit confirmation. A repository-member failure does not block later members, completed discards are never rolled back, and changed member plans must be reviewed again.
 _Avoid_: Batch reset, workspace reset, atomic discard
 
+**Complete remote alignment**:
+An explicit destructive Git action for a checked-out ordinary worktree or branch workspace member worktree that requires a valid non-gone upstream and a second confirmation. It fetches only that upstream remote, revalidates the exact branch, worktree path, upstream, and fetched remote-tracking ref, then resets the worktree branch to the upstream and removes staged, unstaged, and untracked content while preserving ignored files. A branch workspace root applies the same validated action to every member through the batch Git plan, progress, cancellation, failure-isolation, and retry model; any member without a valid upstream blocks the initial batch execution.
+_Avoid_: Pull, force pull, reset current HEAD, delete ignored files, atomic workspace reset
+
 **Branch workspace batch AI commit-and-push**:
 An explicit, per-open opt-in mode of branch workspace batch commit that hides manual message and submit controls, generates one repository-specific message for every dirty member with the selected AI provider, commits only after every generation succeeds, then obtains a fresh batch-push plan and pushes only after every commit succeeds. A failed stage prevents the next stage, while repository-member failures inside a Git stage are accumulated without blocking its remaining members. It preserves completed Git writes without rollback and never becomes a saved preference or background automation.
 _Avoid_: Atomic workspace transaction, shared commit message, persisted automatic commit

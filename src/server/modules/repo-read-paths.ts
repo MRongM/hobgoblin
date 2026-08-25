@@ -10,10 +10,7 @@ import {
 } from '#/system/commit-message-ai.ts'
 import { readLocalFileTreeTextFile } from '#/system/file-tree/local.ts'
 import { readLocalFileTreeBinaryFile } from '#/system/file-tree/local.ts'
-import {
-  readRemoteFileTreeBinaryFile,
-  readRemoteFileTreeTextFile,
-} from '#/system/ssh/git.ts'
+import { readRemoteFileTreeBinaryFile, readRemoteFileTreeTextFile } from '#/system/ssh/git.ts'
 import {
   isCommitMessageProvider,
   type CommitMessageGenerationResult,
@@ -29,8 +26,10 @@ import {
   type CommitDetail,
   type CommitHistoryEntry,
   type ExecResult,
+  type StatusEntry,
   type WorktreeInfo,
   type WorktreeStatus,
+  type WorktreeContentState,
 } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
 import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
@@ -55,6 +54,29 @@ export async function getRepositoryWorktrees(cwd: string, signal?: AbortSignal):
 
 export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
   return signal?.aborted ? [] : await runWithRepoBackend(cwd, async (backend) => await backend.getStatus(signal))
+}
+
+export async function getRepositoryWorktreeStatusEntries(
+  cwd: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<StatusEntry[] | null> {
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => {
+        if (!backend.getWorktreeStatusEntries) return null
+        return await backend.getWorktreeStatusEntries(worktreePath, signal)
+      })
+}
+
+export async function getRepositoryWorktreeContentState(
+  cwd: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<WorktreeContentState | null> {
+  return signal?.aborted
+    ? null
+    : await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeContentState(worktreePath, signal))
 }
 
 export async function getRepositoryRemoteBranchInfo(

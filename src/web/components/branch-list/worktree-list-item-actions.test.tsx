@@ -46,6 +46,7 @@ function actionGroups(): BranchActionItemGroups {
       action('removeWorktree', { destructive: true }),
       action('cleanupWorktree', { destructive: true }),
       action('deleteBranch', { destructive: true }),
+      action('alignRemote', { destructive: true }),
       action('resetHard', { destructive: true }),
     ],
     dialogs: null,
@@ -81,14 +82,14 @@ describe('projectWorktreeListItemActions', () => {
         'copyPatch',
       ],
       ['createTag'],
-      ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'resetHard'],
+      ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'alignRemote', 'resetHard'],
     ])
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
     expect(projection.contextMenu.editor.disabled).toBe(false)
     expect(projection.contextMenu.internalTerminal.disabled).toBe(false)
     expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
     expect(projection.contextMenu.restoreTmuxTerminals.disabled).toBe(false)
-    expect(projection.contextMenu.actions?.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
+    expect(projection.contextMenu.actions?.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
   })
 
   test('keeps tmux creation and detached recovery as distinct actions', () => {
@@ -131,7 +132,7 @@ describe('projectWorktreeListItemActions', () => {
         'copyPatch',
       ],
       ['createTag'],
-      ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'deleteBranch', 'resetHard'],
+      ['closeAllTerminals', 'removeWorktree', 'cleanupWorktree', 'deleteBranch', 'alignRemote', 'resetHard'],
     ])
   })
 
@@ -156,9 +157,9 @@ describe('projectWorktreeListItemActions', () => {
         'copyPatch',
       ],
       ['createTag'],
-      ['closeAllTerminals', 'resetHard'],
+      ['closeAllTerminals', 'alignRemote', 'resetHard'],
     ])
-    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
   })
 
@@ -174,7 +175,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.disabled).toBe(true)
     expect(projection.internalTerminal?.disabled).toBe(true)
     expect(projection.contextMenu.externalTerminal.disabled).toBe(true)
-    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync'])
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
     expect(projection.contextMenu.actions.every((item) => item.disabled)).toBe(true)
   })
 })

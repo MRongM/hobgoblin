@@ -146,6 +146,29 @@ describe('branch workspace Git action inputs', () => {
     })
   })
 
+  test('normalizes batch remote alignment without accepting client-selected refs or members', () => {
+    expect(
+      normalizeBranchWorkspaceGitActionPlanRequest({
+        kind: 'batch-align-remote',
+        branchWorkspaceId: ' branch-1 ',
+      }),
+    ).toEqual({
+      ok: true,
+      request: { kind: 'batch-align-remote', branchWorkspaceId: 'branch-1' },
+    })
+    expect(
+      normalizeBranchWorkspaceGitActionExecuteInput({
+        kind: 'batch-align-remote',
+        planToken: ' sha256:plan ',
+        remoteRef: 'attacker/branch',
+        repositoryNames: ['api'],
+      }),
+    ).toEqual({
+      ok: true,
+      input: { kind: 'batch-align-remote', planToken: 'sha256:plan' },
+    })
+  })
+
   test('normalizes legacy local mappings into explicit selections for both merge directions', () => {
     for (const mode of ['merge', 'pull-merge-push'] as const) {
       expect(
@@ -319,6 +342,7 @@ describe('branch workspace Git action inputs', () => {
     {},
     { kind: 'batch-commit', planToken: '', messages: [] },
     { kind: 'batch-discard', planToken: '' },
+    { kind: 'batch-align-remote', planToken: '' },
     {
       kind: 'batch-commit',
       planToken: 'sha256:plan',

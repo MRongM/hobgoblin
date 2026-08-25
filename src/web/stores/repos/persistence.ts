@@ -42,6 +42,7 @@ const RepoEventActionSchema = v.union([
   v.object({ kind: v.literal('checkout'), branch: v.string(), worktreePath: v.optional(v.string()) }),
   v.object({ kind: v.literal('pull'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('push'), branch: v.string(), worktreePath: v.optional(v.string()) }),
+  v.object({ kind: v.literal('alignRemote'), branch: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('commit'), branch: v.string(), message: v.string(), worktreePath: v.string() }),
   v.object({ kind: v.literal('merge'), branch: v.string(), sourceBranch: v.string(), worktreePath: v.string() }),
   v.object({
@@ -56,7 +57,12 @@ const RepoEventActionSchema = v.union([
   v.object({ kind: v.literal('setBranchUpstream'), branch: v.string(), remoteRef: v.nullable(v.string()) }),
   v.object({ kind: v.literal('deleteBranch'), branch: v.string() }),
   v.object({ kind: v.literal('cleanupWorktree'), branch: v.string(), worktreePath: v.string() }),
-  v.object({ kind: v.literal('removeWorktree'), branch: v.string(), worktreePath: v.string(), alsoDeleteBranch: v.boolean() }),
+  v.object({
+    kind: v.literal('removeWorktree'),
+    branch: v.string(),
+    worktreePath: v.string(),
+    alsoDeleteBranch: v.boolean(),
+  }),
 ])
 
 const RestorableRepoSnapshotSchema = v.object({
@@ -102,10 +108,7 @@ function normalizeCachedExplorerTab(tab: unknown): ExplorerTab {
   }
 }
 
-function normalizeCachedExplorerTabByBranch(
-  raw: unknown,
-  legacyTab: unknown,
-): Record<string, ExplorerTab> {
+function normalizeCachedExplorerTabByBranch(raw: unknown, legacyTab: unknown): Record<string, ExplorerTab> {
   const result: Record<string, ExplorerTab> = {}
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
@@ -120,7 +123,7 @@ function normalizeCachedExplorerTabByBranch(
   // Migrate legacy per-repo `explorerTab` into the fallback slot only when the
   // map doesn't already carry one, so that once a user starts using per-branch
   // tabs the fallback stops overriding it.
-  if (!(('' in result)) && legacyTab !== undefined) {
+  if (!('' in result) && legacyTab !== undefined) {
     const migrated = normalizeCachedExplorerTab(legacyTab)
     if (migrated !== 'files' || legacyTab === 'files') result[''] = migrated
   }
@@ -203,7 +206,9 @@ export function normalizeRestorableRepoCache(value: unknown): Record<string, Res
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const entries = Object.entries(value as Record<string, unknown>)
     .map(([id, raw]) => [id, normalizeRestorableRepoSnapshotEntry(raw)] as const)
-    .filter((entry): entry is readonly [string, RestorableRepoSnapshot] => entry[1] !== null && !isExpired(entry[1].savedAt))
+    .filter(
+      (entry): entry is readonly [string, RestorableRepoSnapshot] => entry[1] !== null && !isExpired(entry[1].savedAt),
+    )
   return trimRepoCache(Object.fromEntries(entries))
 }
 

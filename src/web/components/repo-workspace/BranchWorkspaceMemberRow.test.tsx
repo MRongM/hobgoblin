@@ -80,6 +80,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
       branchAction('closeAllTerminals', undefined, false, { menuOnly: true, destructive: true }),
       branchAction('removeWorktree', undefined, false, { destructive: true }),
       branchAction('deleteBranch', undefined, false, { destructive: true }),
+      branchAction('alignRemote', undefined, false, { destructive: true }),
       branchAction('resetHard', undefined, false, { destructive: true }),
     ],
     dialogs: 'member-dialogs',
@@ -272,6 +273,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'copyPatch',
       'createTag',
       'closeAllTerminals',
+      'alignRemote',
       'resetHard',
       'cleanupTmuxSessions',
     ])
@@ -353,6 +355,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'copyPatch',
       'createTag',
       'closeAllTerminals',
+      'alignRemote',
       'resetHard',
     ])
     expect(menuItems.every((entry) => entry.hasAttribute('data-disabled'))).toBe(true)
@@ -460,6 +463,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'terminal.restore-directory-tmux',
       'createWorktree',
       'sync',
+      'alignRemote',
       'terminal.close-all',
       'tmux.cleanup.action',
     ])

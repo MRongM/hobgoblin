@@ -204,6 +204,47 @@ describe('remote git helpers', () => {
     expect(run.mock.calls.map(([command]) => command.type).sort()).toEqual(['gitSnapshot', 'gitWorktreeList'])
   })
 
+  test('reads status entries directly from one requested remote worktree', async () => {
+    const run = vi.fn(async () => okRemoteResult(' M src/app.ts\0?? scratch/new.txt\0'))
+    const readEntries = (remoteGitOperations as Record<string, unknown>).getRemoteWorktreeStatusEntries
+
+    expect(readEntries).toBeTypeOf('function')
+    await expect(
+      (readEntries as (target: typeof TARGET, worktreePath: string, options: { run: unknown }) => Promise<unknown>)(
+        TARGET,
+        '/srv/repo-feature',
+        { run },
+      ),
+    ).resolves.toEqual([
+      { x: ' ', y: 'M', path: 'src/app.ts' },
+      { x: '?', y: '?', path: 'scratch/new.txt' },
+    ])
+    expect(run).toHaveBeenCalledOnce()
+    expect(run).toHaveBeenCalledWith({ type: 'gitStatus', path: '/srv/repo-feature' }, TARGET, { signal: undefined })
+  })
+
+  test('reads and validates a remote worktree content state', async () => {
+    const indexHash = '1'.repeat(40)
+    const worktreeTree = '2'.repeat(40)
+    const run = vi.fn(async () => okRemoteResult(`${indexHash}\n${worktreeTree}`))
+    const readContentState = (remoteGitOperations as Record<string, unknown>).getRemoteWorktreeContentState
+
+    expect(readContentState).toBeTypeOf('function')
+    await expect(
+      (
+        readContentState as (
+          target: typeof TARGET,
+          worktreePath: string,
+          options: { run: unknown },
+        ) => Promise<unknown>
+      )(TARGET, '/srv/repo-feature', { run }),
+    ).resolves.toEqual({ indexHash, worktreeTree })
+    expect(run).toHaveBeenCalledWith({ type: 'gitWorktreeContentState', path: '/srv/repo-feature' }, TARGET, {
+      signal: undefined,
+      timeoutMs: 90_000,
+    })
+  })
+
   test('projects recorded creation sources from remote snapshots', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       switch (command.type) {
@@ -1370,6 +1411,138 @@ describe('remote git helpers', () => {
     const result = await resetRemoteHard(TARGET, 'relative/repo', { run: run as any })
 
     expect(result).toEqual({ ok: false, message: 'error.invalid-path' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  test('aligns a known remote worktree to a validated remote ref', async () => {
+    const alignRemoteWorktreeToRemoteRef = Reflect.get(remoteGitOperations, 'alignRemoteWorktreeToRemoteRef') as unknown
+    expect(alignRemoteWorktreeToRemoteRef).toBeTypeOf('function')
+    if (typeof alignRemoteWorktreeToRemoteRef !== 'function') return
+    const signal = new AbortController().signal
+    const alignment = {
+      branch: 'main',
+      expectedHead: '1'.repeat(40),
+      remoteRef: 'origin/main',
+      remoteHead: '2'.repeat(40),
+      expectedFingerprint: `sha256:${'3'.repeat(64)}`,
+      expectedContentState: { indexHash: '4'.repeat(40), worktreeTree: '5'.repeat(40) },
+    }
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'gitWorktreeList') {
+        return okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+      }
+      if (command.type === 'gitAlignToRemote') return okRemoteResult('HEAD is now at a11ce remote')
+      return okRemoteResult('')
+    })
+
+    const result = await alignRemoteWorktreeToRemoteRef(TARGET, '/srv/repo', alignment, { signal, run })
+
+    expect(result).toEqual({ ok: true, message: 'HEAD is now at a11ce remote' })
+    expect(run).toHaveBeenCalledWith(
+      {
+        type: 'gitAlignToRemote',
+        path: '/srv/repo',
+        branch: alignment.branch,
+        expectedHead: alignment.expectedHead,
+        remoteRef: alignment.remoteRef,
+        remoteHead: alignment.remoteHead,
+        expectedIndexHash: alignment.expectedContentState.indexHash,
+        expectedWorktreeTree: alignment.expectedContentState.worktreeTree,
+      },
+      TARGET,
+      { signal: undefined, timeoutMs: 180_000 },
+    )
+  })
+
+  test('marks a remote clean failure after reset as requiring a fresh confirmation', async () => {
+    const alignment = {
+      branch: 'main',
+      expectedHead: '1'.repeat(40),
+      remoteRef: 'origin/main',
+      remoteHead: '2'.repeat(40),
+      expectedFingerprint: `sha256:${'3'.repeat(64)}`,
+      expectedContentState: { indexHash: '4'.repeat(40), worktreeTree: '5'.repeat(40) },
+    }
+    const run = vi.fn(async (command: { type: string }) =>
+      command.type === 'gitWorktreeList'
+        ? okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        : {
+            ok: false as const,
+            stdout: 'HEAD is now at remote',
+            stderr: 'error.align-remote-clean-incomplete',
+            message: 'error.align-remote-clean-incomplete',
+          },
+    )
+
+    await expect(
+      remoteGitOperations.alignRemoteWorktreeToRemoteRef(TARGET, '/srv/repo', alignment, { run }),
+    ).resolves.toEqual({
+      ok: false,
+      message: 'error.align-remote-clean-incomplete',
+      repoChanged: true,
+    })
+  })
+
+  test('conservatively marks an SSH timeout after dispatch as possibly repository-changing', async () => {
+    const alignment = {
+      branch: 'main',
+      expectedHead: '1'.repeat(40),
+      remoteRef: 'origin/main',
+      remoteHead: '2'.repeat(40),
+      expectedFingerprint: `sha256:${'3'.repeat(64)}`,
+      expectedContentState: { indexHash: '4'.repeat(40), worktreeTree: '5'.repeat(40) },
+    }
+    const run = vi.fn(async (command: { type: string }) =>
+      command.type === 'gitWorktreeList'
+        ? okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        : {
+            ok: false as const,
+            stdout: '',
+            stderr: '',
+            message: 'timeout',
+            timedOut: true,
+          },
+    )
+
+    await expect(
+      remoteGitOperations.alignRemoteWorktreeToRemoteRef(TARGET, '/srv/repo', alignment, { run }),
+    ).resolves.toEqual({ ok: false, message: 'timeout', repoChanged: true })
+  })
+
+  test('keeps an explicit pre-mutation remote guard rejection retry-safe', async () => {
+    const alignment = {
+      branch: 'main',
+      expectedHead: '1'.repeat(40),
+      remoteRef: 'origin/main',
+      remoteHead: '2'.repeat(40),
+      expectedFingerprint: `sha256:${'3'.repeat(64)}`,
+      expectedContentState: { indexHash: '4'.repeat(40), worktreeTree: '5'.repeat(40) },
+    }
+    const run = vi.fn(async (command: { type: string }) =>
+      command.type === 'gitWorktreeList'
+        ? okRemoteResult('worktree /srv/repo\nHEAD f00ba4\nbranch refs/heads/main\n')
+        : {
+            ok: false as const,
+            stdout: '',
+            stderr: 'error.repository-changed',
+            message: 'error.repository-changed',
+          },
+    )
+
+    await expect(
+      remoteGitOperations.alignRemoteWorktreeToRemoteRef(TARGET, '/srv/repo', alignment, { run }),
+    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
+  })
+
+  test('rejects invalid remote alignment refs before running remote commands', async () => {
+    const alignRemoteWorktreeToRemoteRef = Reflect.get(remoteGitOperations, 'alignRemoteWorktreeToRemoteRef') as unknown
+    expect(alignRemoteWorktreeToRemoteRef).toBeTypeOf('function')
+    if (typeof alignRemoteWorktreeToRemoteRef !== 'function') return
+    const run = vi.fn()
+
+    const result = await alignRemoteWorktreeToRemoteRef(TARGET, '/srv/repo', '--hard', { run })
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-arguments' })
     expect(run).not.toHaveBeenCalled()
   })
 

@@ -165,28 +165,80 @@ electron_version="${electron_version#\~}"
 electron_archive_name="electron-v$electron_version-win32-$arch.zip"
 electron_archive="$electron_cache_directory/$electron_archive_name"
 electron_partial_archive="$electron_archive.partial"
+electron_checksum_manifest="$electron_cache_directory/SHASUMS256-v$electron_version.txt"
+electron_partial_checksum_manifest="$electron_checksum_manifest.partial"
 electron_mirror="${ELECTRON_MIRROR%/}"
 electron_version_root="$electron_mirror/v$electron_version"
-expected_electron_sha="$({
-  curl --fail --silent --show-error --location "$electron_version_root/SHASUMS256.txt"
-} | awk -v archive="$electron_archive_name" '$2 == "*" archive || $2 == archive { print $1; exit }')"
-if [[ ! "$expected_electron_sha" =~ ^[a-f0-9]{64}$ ]]; then
-  echo "Error: could not resolve the Electron checksum for $electron_archive_name." >&2
-  exit 1
+
+resolve_electron_sha() {
+  awk -v archive="$electron_archive_name" '$2 == "*" archive || $2 == archive { print $1; exit }' "$1"
+}
+
+download_electron_checksum_manifest() {
+  echo "Downloading Electron checksum manifest for $electron_version..."
+  curl \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --retry 3 \
+    --output "$electron_partial_checksum_manifest" \
+    "$electron_version_root/SHASUMS256.txt"
+  expected_electron_sha="$(resolve_electron_sha "$electron_partial_checksum_manifest")"
+  if [[ ! "$expected_electron_sha" =~ ^[a-f0-9]{64}$ ]]; then
+    rm -f -- "$electron_partial_checksum_manifest"
+    echo "Error: could not resolve the Electron checksum for $electron_archive_name." >&2
+    exit 1
+  fi
+  mv -f -- "$electron_partial_checksum_manifest" "$electron_checksum_manifest"
+  checksum_manifest_from_cache=0
+}
+
+refresh_cached_electron_checksum_manifest() {
+  if ((checksum_manifest_from_cache == 0)); then
+    return 1
+  fi
+  echo 'Cached Electron checksum did not match an archive; refreshing the manifest once...'
+  rm -f -- "$electron_checksum_manifest"
+  download_electron_checksum_manifest
+}
+
+electron_archive_matches_checksum() {
+  local candidate_archive="$1"
+  local actual_electron_sha
+  actual_electron_sha="$(sha256sum "$candidate_archive" | awk '{ print $1 }')"
+  if [[ "$actual_electron_sha" == "$expected_electron_sha" ]]; then
+    return 0
+  fi
+  refresh_cached_electron_checksum_manifest && [[ "$actual_electron_sha" == "$expected_electron_sha" ]]
+}
+
+expected_electron_sha=''
+checksum_manifest_from_cache=0
+if [[ -f "$electron_checksum_manifest" ]]; then
+  expected_electron_sha="$(resolve_electron_sha "$electron_checksum_manifest")"
+  if [[ "$expected_electron_sha" =~ ^[a-f0-9]{64}$ ]]; then
+    checksum_manifest_from_cache=1
+    echo "Using cached Electron checksum manifest: $electron_checksum_manifest"
+  else
+    rm -f -- "$electron_checksum_manifest"
+    expected_electron_sha=''
+  fi
+fi
+if [[ -z "$expected_electron_sha" ]]; then
+  download_electron_checksum_manifest
 fi
 
 electron_cache_ready=0
 if [[ -f "$electron_archive" ]]; then
-  actual_electron_sha="$(sha256sum "$electron_archive" | awk '{ print $1 }')"
-  if [[ "$actual_electron_sha" == "$expected_electron_sha" ]]; then
+  if electron_archive_matches_checksum "$electron_archive"; then
     electron_cache_ready=1
   else
     rm -f -- "$electron_archive"
   fi
 fi
 if ((electron_cache_ready == 0)) && [[ -f "$electron_partial_archive" ]]; then
-  actual_electron_sha="$(sha256sum "$electron_partial_archive" | awk '{ print $1 }')"
-  if [[ "$actual_electron_sha" == "$expected_electron_sha" ]]; then
+  if electron_archive_matches_checksum "$electron_partial_archive"; then
     mv -f -- "$electron_partial_archive" "$electron_archive"
     electron_cache_ready=1
   fi
@@ -197,8 +249,7 @@ if ((electron_cache_ready == 0)); then
   if [[ -n "$windows_local_app_data" ]]; then
     system_electron_cache="$(wslpath -u "$windows_local_app_data")/electron/Cache"
     while IFS= read -r candidate_archive; do
-      actual_electron_sha="$(sha256sum "$candidate_archive" | awk '{ print $1 }')"
-      if [[ "$actual_electron_sha" == "$expected_electron_sha" ]]; then
+      if electron_archive_matches_checksum "$candidate_archive"; then
         cp -- "$candidate_archive" "$electron_archive"
         electron_cache_ready=1
         break
@@ -215,8 +266,7 @@ if ((electron_cache_ready == 0)); then
     --continue-at - \
     --output "$electron_partial_archive" \
     "$electron_version_root/$electron_archive_name"
-  actual_electron_sha="$(sha256sum "$electron_partial_archive" | awk '{ print $1 }')"
-  if [[ "$actual_electron_sha" != "$expected_electron_sha" ]]; then
+  if ! electron_archive_matches_checksum "$electron_partial_archive"; then
     rm -f -- "$electron_partial_archive"
     echo "Error: Electron checksum mismatch for $electron_archive_name." >&2
     exit 1

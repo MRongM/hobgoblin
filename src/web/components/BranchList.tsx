@@ -25,7 +25,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderTree, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
+import { FolderTree, GitCommitHorizontal, GitCompareArrows, RotateCcw } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -42,6 +42,14 @@ import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
+import {
+  WorkspaceListItemMenu,
+  type WorkspaceListItemAction,
+} from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { discardRepositoryChanges } from '#/web/repo-client.ts'
+import type { StatusEntry } from '#/shared/git-types.ts'
+import { statusEntryPaths } from '#/shared/git-status.ts'
 
 interface Props {
   repoId: string
@@ -223,8 +231,12 @@ export function BranchList({
             <DetachedWorktreeRow
               key={worktree.path}
               worktree={worktree}
+              repoId={repo.id}
+              repoInstanceToken={repo.instanceToken}
               repoRoot={repoRoot}
               remoteTarget={repo.remote.target}
+              statusEntries={repo.data.status.find((status) => status.path === worktree.path)?.entries ?? null}
+              showActions={showActions}
             />
           ))}
         </>
@@ -295,14 +307,24 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
 
 function DetachedWorktreeRow({
   worktree,
+  repoId,
+  repoInstanceToken,
   repoRoot,
   remoteTarget,
+  statusEntries,
+  showActions,
 }: {
   worktree: RepoWorktreeState
+  repoId: string
+  repoInstanceToken: number
   repoRoot: string
   remoteTarget?: RemoteRepoTarget
+  statusEntries: StatusEntry[] | null
+  showActions: boolean
 }) {
   const t = useT()
+  const setLastResult = useReposStore((state) => state.setLastResult)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
   const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot)
   const head = worktree.head ? worktree.head.slice(0, 12) : t('branches.detached-head')
   const dirty = worktree.isDirty || (worktree.changeCount ?? 0) > 0
@@ -312,13 +334,28 @@ function DetachedWorktreeRow({
   const title = [t('branches.detached-worktree'), worktree.head ?? null, displayPath, dirty ? dirtyLabel : null]
     .filter(Boolean)
     .join(', ')
+  const discardPaths = statusEntries ? statusEntryPaths(statusEntries) : []
+  const discardAction: WorkspaceListItemAction = {
+    id: 'discardDetachedWorktreeChanges',
+    label: t('action.reset-hard'),
+    title: discardPaths.length > 0 ? undefined : t('workspace.branch-workspace.dirty-state-unknown'),
+    disabled: discardPaths.length === 0,
+    destructive: true,
+    icon: <RotateCcw aria-hidden="true" />,
+    onSelect: () => setDiscardConfirmOpen(true),
+  }
 
   return (
     <li
       title={title}
-      className="relative mx-1.5 grid min-h-9 grid-cols-1 items-stretch rounded-[var(--goblin-brand-radius-md,var(--radius-md))] text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
+      className="group relative mx-1.5 grid min-h-9 grid-cols-1 items-stretch rounded-[var(--goblin-brand-radius-md,var(--radius-md))] text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
     >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-2.5 py-1.5">
+      <div
+        className={cn(
+          'pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-2.5 py-1.5',
+          dirty && showActions && 'pr-9',
+        )}
+      >
         <span className="flex w-4 shrink-0 items-center justify-center">
           <GitCommitHorizontal size={14} className={dirty ? 'text-attention' : 'text-muted-foreground'} />
         </span>
@@ -347,6 +384,24 @@ function DetachedWorktreeRow({
           <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>
         </span>
       </div>
+      {dirty && showActions ? (
+        <div className="absolute inset-y-0 right-2 z-20 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+          <WorkspaceListItemMenu label={t('action.menu')} groups={[[discardAction]]} />
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        title={t('action.confirm-reset-hard-title')}
+        message={t('action.confirm-discard-detached-worktree-body')}
+        confirmLabel={t('action.confirm-reset-hard-confirm')}
+        destructive
+        onCancel={() => setDiscardConfirmOpen(false)}
+        onConfirm={async () => {
+          const result = await discardRepositoryChanges(repoId, worktree.path, discardPaths)
+          setLastResult(repoId, result, repoInstanceToken)
+          setDiscardConfirmOpen(false)
+        }}
+      />
     </li>
   )
 }
