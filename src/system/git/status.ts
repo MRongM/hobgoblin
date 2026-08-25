@@ -1,9 +1,21 @@
 import { git } from '#/system/git/helper.ts'
 import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
 import { mapWithConcurrency } from '#/system/git/concurrency.ts'
-import type { WorktreeStatus } from '#/shared/git-types.ts'
+import type { StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
 
 const WORKTREE_STATUS_CONCURRENCY = 16
+
+export async function getWorktreeStatusEntries(
+  cwd: string,
+  options?: { signal?: AbortSignal },
+): Promise<StatusEntry[] | null> {
+  try {
+    const output = await git(cwd, ['status', '--porcelain', '-z'], { signal: options?.signal })
+    return options?.signal?.aborted ? null : parseStatus(output)
+  } catch {
+    return null
+  }
+}
 
 /** Status for the Status tab — grouped by worktree so multi-worktree
  *  setups see *all* dirty changes, not just the main worktree's. The
@@ -34,9 +46,8 @@ export async function getWorkingStatus(cwd: string, options?: { signal?: AbortSi
         // escaped and double-quoted (e.g. `"file name.txt"`), which the LF
         // parser leaves as literal quotes in the output. -z gives us the
         // raw bytes and uses NUL between entries.
-        const output = await git(wt.path, ['status', '--porcelain', '-z'], { signal: options?.signal })
-        if (options?.signal?.aborted) return null
-        const entries = parseStatus(output)
+        const entries = await getWorktreeStatusEntries(wt.path, options)
+        if (!entries) return null
         return {
           path: wt.path,
           branch: wt.branch,

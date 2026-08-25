@@ -10,6 +10,7 @@ import { isRemoteTrackingRef, isSafeRemoteName } from '#/shared/worktree-create.
 export type BranchWorkspaceGitActionKind =
   | 'batch-commit'
   | 'batch-discard'
+  | 'batch-align-remote'
   | 'batch-merge-in'
   | 'batch-merge-out'
   | 'batch-set-upstream'
@@ -19,6 +20,7 @@ export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
 export type BranchWorkspaceGitActionStep =
   | 'commit'
   | 'discard'
+  | 'align'
   | 'prepare'
   | 'pull'
   | 'fetch'
@@ -45,6 +47,20 @@ export interface BranchWorkspaceBatchDiscardMemberPlan {
   targetWorktreePath: string
   paths: string[]
   changeCount: number
+  fingerprint: string
+}
+
+export interface BranchWorkspaceBatchAlignRemoteMemberPlan {
+  repositoryName: string
+  repoId: string
+  targetBranch: string
+  targetWorktreePath: string
+  targetHead: string
+  upstream: string | null
+  ahead: number
+  changeCount: number
+  ready: boolean
+  message?: string
   fingerprint: string
 }
 
@@ -133,6 +149,12 @@ export interface BranchWorkspaceBatchDiscardPlan extends BranchWorkspaceGitActio
   members: BranchWorkspaceBatchDiscardMemberPlan[]
 }
 
+export interface BranchWorkspaceBatchAlignRemotePlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'batch-align-remote'
+  members: BranchWorkspaceBatchAlignRemoteMemberPlan[]
+  ready: boolean
+}
+
 export interface BranchWorkspaceBatchMergeInPlan extends BranchWorkspaceGitActionPlanBase {
   kind: 'batch-merge-in'
   members: BranchWorkspaceBatchMergeInMemberPlan[]
@@ -158,6 +180,7 @@ export interface BranchWorkspaceBatchSetUpstreamPlan extends BranchWorkspaceGitA
 export type BranchWorkspaceGitActionPlan =
   | BranchWorkspaceBatchCommitPlan
   | BranchWorkspaceBatchDiscardPlan
+  | BranchWorkspaceBatchAlignRemotePlan
   | BranchWorkspaceBatchMergeInPlan
   | BranchWorkspaceBatchMergeOutPlan
   | BranchWorkspaceBatchSetUpstreamPlan
@@ -214,6 +237,10 @@ export type BranchWorkspaceGitActionExecuteInput =
       planToken: string
     }
   | {
+      kind: 'batch-align-remote'
+      planToken: string
+    }
+  | {
       kind: 'batch-merge-in'
       planToken: string
       mode: BranchWorkspaceMergeMode
@@ -262,6 +289,8 @@ export interface BranchWorkspaceGitActionResult {
   branchWorkspaceId: string
   members: BranchWorkspaceGitActionMemberResult[]
   message?: string
+  /** False means repository state changed and a fresh reviewed plan is required. */
+  retryable?: boolean
 }
 
 export function normalizeBranchWorkspaceGitActionPlanRequest(
@@ -273,6 +302,7 @@ export function normalizeBranchWorkspaceGitActionPlanRequest(
     !branchWorkspaceId ||
     (input?.kind !== 'batch-commit' &&
       input?.kind !== 'batch-discard' &&
+      input?.kind !== 'batch-align-remote' &&
       input?.kind !== 'batch-merge-in' &&
       input?.kind !== 'batch-merge-out' &&
       input?.kind !== 'batch-set-upstream' &&
@@ -293,6 +323,9 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
 
   if (input?.kind === 'batch-discard') {
     return { ok: true, input: { kind: 'batch-discard', planToken } }
+  }
+  if (input?.kind === 'batch-align-remote') {
+    return { ok: true, input: { kind: 'batch-align-remote', planToken } }
   }
 
   if (input?.kind === 'batch-merge-in') {

@@ -87,6 +87,7 @@ export type RemoteCommandKind =
   | { type: 'gitWorktreeList'; path: string }
   | { type: 'gitWorktreePrune'; path: string }
   | { type: 'gitStatus'; path: string }
+  | { type: 'gitWorktreeContentState'; path: string }
   | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
   | { type: 'gitCommitMetadata'; path: string; commit: string }
   | { type: 'gitCommitNameStatus'; path: string; commit: string }
@@ -101,6 +102,16 @@ export type RemoteCommandKind =
   | { type: 'gitCommitAll'; path: string; message: string }
   | { type: 'gitMerge'; path: string; branch: string }
   | { type: 'gitResetHard'; path: string }
+  | {
+      type: 'gitAlignToRemote'
+      path: string
+      branch: string
+      expectedHead: string
+      remoteRef: string
+      remoteHead: string
+      expectedIndexHash: string
+      expectedWorktreeTree: string
+    }
   | { type: 'gitDiscardChanges'; path: string; paths: string[] }
   | { type: 'gitBranchCreate'; path: string; branch: string; baseBranch: string }
   | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
@@ -558,6 +569,12 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} worktree prune --expire now`
     case 'gitStatus':
       return `git -C ${shellQuote(command.path)} status --porcelain -z`
+    case 'gitWorktreeContentState': {
+      const repo = shellQuote(command.path)
+      return [...remoteWorktreeContentStateStatements(repo), `printf '%s\\n%s\\n' "$index_hash" "$worktree_tree"`].join(
+        ' && ',
+      )
+    }
     case 'gitHistory': {
       const limit = Math.max(1, Math.min(200, Math.floor(command.limit ?? 100)))
       const skip = Math.max(0, Math.floor(command.skip ?? 0))
@@ -603,6 +620,27 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} merge -- ${shellQuote(command.branch)}`
     case 'gitResetHard':
       return `git -C ${shellQuote(command.path)} reset --hard`
+    case 'gitAlignToRemote': {
+      const repo = shellQuote(command.path)
+      const guard = [
+        ...remoteWorktreeContentStateStatements(repo).map((statement, index) =>
+          index === 0 ? `{ ${statement}` : statement,
+        ),
+        `current_branch=$(git -C ${repo} symbolic-ref --quiet --short HEAD)`,
+        `current_head=$(git -C ${repo} rev-parse --verify 'HEAD^{commit}')`,
+        `remote_head=$(git -C ${repo} rev-parse --verify ${shellQuote(`${command.remoteRef}^{commit}`)})`,
+        `upstream=$(git -C ${repo} rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')`,
+        `[ "$current_branch" = ${shellQuote(command.branch)} ]`,
+        `[ "$current_head" = ${shellQuote(command.expectedHead)} ]`,
+        `[ "$remote_head" = ${shellQuote(command.remoteHead)} ]`,
+        `[ "$upstream" = ${shellQuote(command.remoteRef)} ]`,
+        `[ "$index_hash" = ${shellQuote(command.expectedIndexHash)} ]`,
+        `[ "$worktree_tree" = ${shellQuote(command.expectedWorktreeTree)} ]; }`,
+      ].join(' && ')
+      const changed = `{ printf '%s\\n' 'error.repository-changed' >&2; exit 1; }`
+      const cleanFailed = `{ printf '%s\\n' 'error.align-remote-clean-incomplete' >&2; exit 1; }`
+      return `${guard} || ${changed}; git -C ${repo} reset --hard ${shellQuote(command.remoteHead)} && { git -C ${repo} clean -fd || ${cleanFailed}; }`
+    }
     case 'gitDiscardChanges':
       return remoteDiscardChangesScript(command)
     case 'gitBranchCreate':
@@ -702,6 +740,21 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function remoteWorktreeContentStateStatements(repo: string): string[] {
+  return [
+    'tmp_dir=$(mktemp -d)',
+    'tmp_index="$tmp_dir/index"',
+    'tmp_entries="$tmp_dir/entries"',
+    `trap 'rm -rf -- "$tmp_dir"' EXIT HUP INT TERM`,
+    `git_dir=$(git -C ${repo} rev-parse --absolute-git-dir)`,
+    `if [ -f "$git_dir/index" ]; then cp -- "$git_dir/index" "$tmp_index"; else rm -f -- "$tmp_index" && GIT_INDEX_FILE="$tmp_index" git -C ${repo} read-tree --empty; fi`,
+    `GIT_INDEX_FILE="$tmp_index" git -C ${repo} ls-files --stage -z > "$tmp_entries"`,
+    `index_hash=$(git -C ${repo} hash-object -- "$tmp_entries")`,
+    `GIT_INDEX_FILE="$tmp_index" git -C ${repo} add -A -- .`,
+    `worktree_tree=$(GIT_INDEX_FILE="$tmp_index" git -C ${repo} write-tree)`,
+  ]
 }
 
 function tmuxListFunctionScript(): string[] {

@@ -28,6 +28,7 @@ import type { CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
 import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import {
+  alignRepositoryWorktreeToRemote,
   checkoutRepositoryBranch,
   cleanupRepositoryWorktree,
   createRepositoryBranch,
@@ -46,6 +47,7 @@ const BRANCH_ACTION_REASON_BY_KIND: Record<RepoBranchActionKind, RepoBranchActio
   checkout: 'branch:checkout',
   pull: 'branch:pull',
   push: 'branch:push',
+  alignRemote: 'branch:alignRemote',
   createWorktree: 'branch:createWorktree',
   createBranch: 'branch:createBranch',
   trackRemoteBranch: 'branch:trackRemoteBranch',
@@ -54,11 +56,12 @@ const BRANCH_ACTION_REASON_BY_KIND: Record<RepoBranchActionKind, RepoBranchActio
   cleanupWorktree: 'branch:cleanupWorktree',
   removeWorktree: 'branch:removeWorktree',
 }
-type NetworkRepoBranchAction = Extract<RepoBranchAction, { kind: 'pull' | 'push' }>
-type NetworkFetchReason = Extract<RepoOperationReason, 'pull' | 'push'>
+type NetworkRepoBranchAction = Extract<RepoBranchAction, { kind: 'pull' | 'push' | 'alignRemote' }>
+type NetworkFetchReason = Extract<RepoOperationReason, 'pull' | 'push' | 'network'>
 const NETWORK_FETCH_REASON_BY_KIND: Record<NetworkRepoBranchAction['kind'], NetworkFetchReason> = {
   pull: 'pull',
   push: 'push',
+  alignRemote: 'network',
 }
 
 function createWorktreeEventBranch(input: CreateWorktreeInput): string {
@@ -89,6 +92,7 @@ function branchActionOperationTarget(action: RepoBranchAction): string | null {
     case 'checkout':
     case 'pull':
     case 'push':
+    case 'alignRemote':
     case 'deleteBranch':
     case 'setBranchUpstream':
       return action.branch
@@ -113,6 +117,9 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
     case 'pull':
       return { kind: action.kind, branch: action.branch, worktreePath: action.worktreePath ?? '' }
     case 'push':
+      return { kind: action.kind, branch: action.branch }
+    case 'alignRemote':
+      return { kind: action.kind, branch: action.branch, worktreePath: action.worktreePath }
     case 'deleteBranch':
       return { kind: action.kind, branch: action.branch }
     case 'cleanupWorktree':
@@ -254,6 +261,15 @@ function runBranchActionRpc(
       return pullRepositoryBranch(repoId, action.branch, action.worktreePath, signal, sourceToken)
     case 'push':
       return pushRepositoryBranch(repoId, action.branch, signal, sourceToken)
+    case 'alignRemote':
+      return alignRepositoryWorktreeToRemote(
+        repoId,
+        action.branch,
+        action.worktreePath,
+        signal,
+        sourceToken,
+        action.previewToken,
+      )
     case 'createWorktree':
       return createRepositoryWorktree(repoId, action.input, action.worktreeBootstrap, signal, sourceToken)
     case 'createBranch':

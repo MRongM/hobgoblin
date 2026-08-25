@@ -57,6 +57,16 @@ describe('Windows platform package layout', () => {
     expect(script).toContain('--proxy')
     expect(script).toContain('system_electron_cache')
     expect(script).toContain('release/win-unpacked')
+    expect(script.match(/run build:web/g)).toHaveLength(1)
+    expect(script).toContain('SHASUMS256-v$electron_version.txt')
+    expect(script).toContain('Using cached Electron checksum manifest')
+    expect(script).toContain('refresh_cached_electron_checksum_manifest')
+    expect(script).toContain('checksum_manifest_from_cache')
+
+    const updater = readFileSync(path.join(repoRoot, 'scripts', 'install-windows-build.ps1'), 'utf8')
+    expect(updater).toContain('CloseMainWindow')
+    expect(updater).toContain('Stop-Process -Force')
+    expect(updater).toContain('[StringComparison]::OrdinalIgnoreCase')
   })
 
   test.runIf(process.platform === 'win32')(
@@ -99,5 +109,6 @@ describe('Windows platform package layout', () => {
         rmSync(temporaryRoot, { recursive: true, force: true })
       }
     },
+    15_000,
   )
 })

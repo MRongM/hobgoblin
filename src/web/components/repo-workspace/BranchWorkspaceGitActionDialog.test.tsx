@@ -62,6 +62,29 @@ function discardPlan(dirty = true): Extract<BranchWorkspaceGitActionPlan, { kind
   }
 }
 
+function alignRemotePlan(ready = true): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-align-remote' }> {
+  return {
+    kind: 'batch-align-remote',
+    token: 'sha256:align-remote',
+    rootId: '/workspace',
+    branchWorkspaceId: 'ws-1',
+    ready,
+    members: ['api', 'web'].map((repositoryName) => ({
+      repositoryName,
+      repoId: `/workspace/${repositoryName}`,
+      targetBranch: 'feature/a',
+      targetWorktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
+      targetHead: `local-${repositoryName}`,
+      upstream: ready ? `origin/feature/${repositoryName}` : null,
+      ahead: 2,
+      changeCount: repositoryName === 'api' ? 3 : 0,
+      ready,
+      ...(!ready ? { message: 'workspace.branch-workspace.git-action.target-upstream-required' } : {}),
+      fingerprint: `sha256:${repositoryName}`,
+    })),
+  }
+}
+
 function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitActionPlan {
   return {
     kind,
@@ -285,6 +308,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
   test.each([
     ['batch-commit', batchPlan],
     ['batch-discard', discardPlan()],
+    ['batch-align-remote', alignRemotePlan()],
     ['batch-set-upstream', upstreamPlan()],
     ['pull', syncPlan('pull')],
     ['push', syncPlan('push')],
@@ -352,6 +376,69 @@ describe('BranchWorkspaceGitActionPanel', () => {
     render({ kind: 'batch-discard', plan: discardPlan(false) })
 
     expect(document.querySelector<HTMLButtonElement>('[data-action="batch-discard"]')?.disabled).toBe(true)
+  })
+
+  test('requires a destructive confirmation before fully aligning every member', async () => {
+    const plan = alignRemotePlan()
+    const onBatchAlignRemote = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'batch-align-remote' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    render({ kind: 'batch-align-remote', plan, onBatchAlignRemote })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-align-remote"]')
+    expect(document.body.textContent).toContain('feature/a')
+    expect(document.body.textContent).toContain('origin/feature/api')
+    expect(action?.getAttribute('data-variant')).toBe('destructive')
+
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+
+    expect(onBatchAlignRemote).toHaveBeenCalledTimes(1)
+  })
+
+  test('closes for a fresh review instead of retrying a partially changed remote alignment plan', async () => {
+    const plan = alignRemotePlan()
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-align-remote',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'workspace.branch-workspace.git-action.members-failed',
+      retryable: false,
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'align',
+          message: 'error.align-remote-clean-incomplete',
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        { repositoryName: 'web', phase: 'succeeded' },
+      ],
+    }
+    const onBatchAlignRemote = vi.fn(async () => result)
+    const onOpenChange = vi.fn()
+    render({
+      kind: 'batch-align-remote',
+      plan,
+      result,
+      error: result.message,
+      onBatchAlignRemote,
+      onOpenChange,
+    })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-align-remote"]')
+    expect(action?.textContent).toContain('workspace.branch-workspace.git-action.review-again')
+    await act(async () => action?.click())
+
+    expect(onBatchAlignRemote).not.toHaveBeenCalled()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   test('keeps each batch upstream member candidates and search query isolated', async () => {
@@ -1454,6 +1541,7 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         onBatchCommit={async () => null}
         onBatchCommitAndPush={async () => null}
         onBatchDiscard={async () => null}
+        onBatchAlignRemote={async () => null}
         onBatchSetUpstream={async () => null}
         onBatchMergeIn={async () => null}
         onBatchMergeOut={async () => null}

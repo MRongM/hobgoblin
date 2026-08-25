@@ -42,21 +42,25 @@ import {
   getRemoteTrackingBranchInfo as getLocalRemoteTrackingBranchInfo,
   getRemoteTrackingBranches as getLocalRemoteTrackingBranches,
 } from '#/system/git/remote-refs.ts'
-import { getWorkingStatus } from '#/system/git/status.ts'
+import { getWorkingStatus, getWorktreeStatusEntries } from '#/system/git/status.ts'
 import { createWorktree, getWorktrees, pruneWorktrees, removeWorktree } from '#/system/git/worktrees.ts'
 import { getWorktreePatch } from '#/system/git/patch.ts'
+import { getWorktreeContentState } from '#/system/git/worktree-content-state.ts'
 import { bootstrapWorktreeSelectionsAfterCreate } from '#/system/git/worktree-bootstrap.ts'
 import { getWorktreeCommitMessageContext, type CommitMessageContext } from '#/system/git/commit-message-context.ts'
 import { commitAllChanges } from '#/system/git/commit.ts'
 import { mergeBranch } from '#/system/git/merge.ts'
-import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
+import { alignWorktreeToRemoteRef, discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
 import {
   type BranchSnapshotInfo,
   type CommitDetail,
   type CommitHistoryEntry,
   type ExecResult,
+  type RemoteAlignmentTarget,
+  type StatusEntry,
   type WorktreeInfo,
   type WorktreeStatus,
+  type WorktreeContentState,
 } from '#/shared/git-types.ts'
 import {
   isProtectedRemoteBranchRef,
@@ -91,12 +95,15 @@ import {
   getRemotePatch,
   getRemoteSnapshot,
   getRemoteStatus,
+  getRemoteWorktreeStatusEntries,
+  getRemoteWorktreeContentState,
   getRemoteWorktrees,
   getLocalTags as getRemoteLocalTags,
   getRemoteTags as getSshRemoteTags,
   getRemoteTrackingBranchInfo as getSshRemoteTrackingBranchInfo,
   getRemoteTrackingBranches as getSshRemoteTrackingBranches,
   mergeRemoteBranch,
+  alignRemoteWorktreeToRemoteRef,
   pullRemoteBranch,
   pushRemoteBranch,
   pushRemoteWorktreeHeadToRemoteBranch,
@@ -144,6 +151,8 @@ export interface RepoBackend {
   getSnapshot(signal?: AbortSignal, options?: RepoSnapshotOptions): Promise<RepoSnapshot | null>
   getWorktrees(signal?: AbortSignal): Promise<WorktreeInfo[]>
   getStatus(signal?: AbortSignal): Promise<WorktreeStatus[]>
+  getWorktreeStatusEntries?(worktreePath: string, signal?: AbortSignal): Promise<StatusEntry[] | null>
+  getWorktreeContentState(worktreePath: string, signal?: AbortSignal): Promise<WorktreeContentState | null>
   getHistory(
     branch: string,
     input: { limit: number; skip: number },
@@ -180,6 +189,7 @@ export interface RepoBackend {
   commitAll(worktreePath: string, message: string, signal?: AbortSignal): Promise<ExecResult>
   merge(worktreePath: string, branch: string, signal?: AbortSignal): Promise<ExecResult>
   resetHard(worktreePath: string, signal?: AbortSignal): Promise<ExecResult>
+  alignToRemoteRef(worktreePath: string, target: RemoteAlignmentTarget, signal?: AbortSignal): Promise<ExecResult>
   discardChanges(worktreePath: string, paths: string[], signal?: AbortSignal): Promise<ExecResult>
   createBranch(branch: string, baseBranch: string, signal?: AbortSignal): Promise<ExecResult>
   trackRemoteBranch(localBranch: string, remoteRef: string, signal?: AbortSignal): Promise<ExecResult>
@@ -388,11 +398,11 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         })
         if (signal?.aborted) return null
         if (worktrees.length === 0) throw new Error('error.failed-read-repo')
-        const branches = await getBranches(repoId, worktrees, { signal })
-        if (signal?.aborted) return null
-        const current = await getCurrentBranch(repoId, { signal })
-        if (signal?.aborted) return null
-        const remote = options?.includeRemote === false ? undefined : await getRemoteInfo(repoId, signal)
+        const [branches, current, remote] = await Promise.all([
+          getBranches(repoId, worktrees, { signal }),
+          getCurrentBranch(repoId, { signal }),
+          options?.includeRemote === false ? Promise.resolve(undefined) : getRemoteInfo(repoId, signal),
+        ])
         if (signal?.aborted) return null
         return { branches, current, ...(remote ? { remote } : {}) }
       } catch (err) {
@@ -410,6 +420,14 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (!available.ok) throw new Error(available.message)
       const status = await getWorkingStatus(repoId, { signal })
       return signal?.aborted ? [] : status
+    },
+    async getWorktreeStatusEntries(worktreePath, signal) {
+      if (!isValidCwd(worktreePath)) return null
+      return await getWorktreeStatusEntries(worktreePath, { signal })
+    },
+    async getWorktreeContentState(worktreePath, signal) {
+      if (!isValidCwd(worktreePath)) return null
+      return await getWorktreeContentState(worktreePath, signal)
     },
     async getHistory(branch, input, signal) {
       if (!isValidCwd(repoId)) return []
@@ -486,6 +504,12 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     async resetHard(worktreePath, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
       return await resetHardToCurrentHead(worktreePath, signal)
+    },
+    async alignToRemoteRef(worktreePath, target, signal) {
+      if (!isValidCwd(worktreePath) || !parseRemoteBranchRef(target.remoteRef)) {
+        return { ok: false, message: 'error.invalid-arguments' }
+      }
+      return await alignWorktreeToRemoteRef(worktreePath, target, signal)
     },
     async discardChanges(worktreePath, paths, signal) {
       if (!isValidCwd(worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
@@ -707,6 +731,12 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
       const status = await getRemoteStatus(target, { signal })
       return signal?.aborted ? [] : status
     },
+    async getWorktreeStatusEntries(worktreePath, signal) {
+      return await getRemoteWorktreeStatusEntries(target, worktreePath, { signal })
+    },
+    async getWorktreeContentState(worktreePath, signal) {
+      return await getRemoteWorktreeContentState(target, worktreePath, { signal })
+    },
     async getHistory(branch, input, signal) {
       return await getRemoteHistory(target, branch, input, { signal })
     },
@@ -774,6 +804,9 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
     },
     async resetHard(worktreePath, signal) {
       return await resetRemoteHard(target, worktreePath, { signal })
+    },
+    async alignToRemoteRef(worktreePath, alignment, signal) {
+      return await alignRemoteWorktreeToRemoteRef(target, worktreePath, alignment, { signal })
     },
     async discardChanges(worktreePath, paths, signal) {
       return await discardRemoteChangesForPaths(target, worktreePath, paths, { signal })

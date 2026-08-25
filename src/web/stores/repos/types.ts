@@ -28,6 +28,7 @@ export type RepoEventAction =
   | { kind: 'checkout'; branch: string; worktreePath?: string }
   | { kind: 'pull'; branch: string; worktreePath?: string }
   | { kind: 'push'; branch: string; worktreePath?: string }
+  | { kind: 'alignRemote'; branch: string; worktreePath: string }
   | { kind: 'commit'; branch: string; message: string; worktreePath: string }
   | { kind: 'merge'; branch: string; sourceBranch: string; worktreePath: string }
   | { kind: 'mergeOut'; branch: string; destinationBranch: string; worktreePath: string }

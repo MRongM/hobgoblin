@@ -277,6 +277,12 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-discard': '変更を一括破棄',
   'workspace.branch-workspace.git-action.batch-discard-description':
     '変更のあるすべてのメンバー worktree で、ステージ済み、未ステージ、未追跡の変更を確認後にリポジトリ順で破棄します。未追跡のファイルとフォルダーは Git から復元できません。',
+  'workspace.branch-workspace.git-action.batch-align-remote': 'リモートに完全同期',
+  'workspace.branch-workspace.git-action.batch-align-remote-description':
+    '破壊的操作です。各 upstream を取得し、ステージ済み・未ステージ・未追跡の変更とローカルのみのコミットを破棄します。無視されたファイルは保持します。',
+  'workspace.branch-workspace.git-action.batch-align-remote-confirm': '全メンバーを完全同期',
+  'workspace.branch-workspace.git-action.review-again': '再確認',
+  'workspace.branch-workspace.git-action.align-remote-impact': 'ローカル {commits} コミット · {changes} 件の変更',
   'workspace.branch-workspace.git-action.pull': '一括プル',
   'workspace.branch-workspace.git-action.pull-description':
     '各対象ブランチをアップストリームからリポジトリ順に fast-forward でプルします。',
@@ -335,6 +341,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.phase.not-started': '未開始',
   'workspace.branch-workspace.git-action.step.commit': 'コミット中',
   'workspace.branch-workspace.git-action.step.discard': '破棄中',
+  'workspace.branch-workspace.git-action.step.align': 'リモートに同期中',
   'workspace.branch-workspace.git-action.step.prepare': '準備中',
   'workspace.branch-workspace.git-action.step.pull': 'プル中',
   'workspace.branch-workspace.git-action.step.fetch': 'リモートブランチを取得中',
@@ -343,6 +350,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.step.cleanup': 'クリーンアップ中',
   'workspace.branch-workspace.git-action.step.upstream': 'アップストリームを更新中',
   'workspace.branch-workspace.git-action.failure-step.commit': 'コミット',
+  'workspace.branch-workspace.git-action.failure-step.align': 'リモート完全同期',
   'workspace.branch-workspace.git-action.failure-step.discard': '破棄',
   'workspace.branch-workspace.git-action.failure-step.prepare': '準備',
   'workspace.branch-workspace.git-action.failure-step.pull': 'プル',
@@ -1057,9 +1065,21 @@ export const ja: Record<DictKey, string> = {
   'action.commit-replace-message-body': 'コミット欄の現在の内容を置き換えます。',
   'action.commit-replace-message-confirm': '置き換え',
   'action.reset-hard': '未コミットの変更を破棄',
+  'action.align-remote': 'リモートに完全同期',
+  'action.align-remote-title': 'ローカル状態を破棄して {upstream} に一致させる',
+  'action.align-remote-upstream-required': '有効な upstream が必要です',
+  'action.align-remote-loading': 'リモートに同期中…',
+  'action.align-remote-queued': 'リモート同期を待機中…',
+  'action.confirm-align-remote-title': 'リモートに完全同期しますか？',
+  'action.confirm-align-remote-body':
+    'upstream を取得し、ステージ済み・未ステージ・未追跡の変更とローカルのみのコミットを削除します。無視されたファイルは保持します。この操作は元に戻せません。',
+  'action.confirm-align-remote-impact': '{branch} → {upstream} · ローカル {commits} コミット · {changes} 件の変更',
+  'action.confirm-align-remote-confirm': '完全同期',
   'action.confirm-reset-hard-title': '未コミットの変更を破棄しますか？',
   'action.confirm-reset-hard-body':
     'git reset --hard を実行し、このワークツリーの未コミットの変更をすべて破棄します。この操作は取り消せません。',
+  'action.confirm-discard-detached-worktree-body':
+    'この分離ワークツリーで現在検出されているステージ済み、未ステージ、未追跡の変更を破棄します。未追跡のファイルとフォルダーは Git から復元できません。',
   'action.confirm-reset-hard-confirm': '破棄',
   'changes.selection-toggle': '選択',
   'changes.selection-toggle-title': '選択チェックボックスを表示',
@@ -1275,6 +1295,11 @@ export const ja: Record<DictKey, string> = {
   'error.cannot-delete-checked-out-branch': 'ワークツリーでチェックアウト済みのブランチは削除できません',
   'error.branch-not-fully-merged': 'ブランチに固有コミットがあるため、Git が安全な削除を拒否しました',
   'error.worktree-not-found-for-branch': 'このブランチのワークツリーが見つかりません',
+  'error.worktree-not-found': 'チェックアウト済みワークツリーが見つかりません。',
+  'error.upstream-required': '有効な upstream ブランチが必要です。',
+  'error.repository-changed': 'ブランチ、ワークツリー、upstream、またはローカル変更が更新されました。確認して再試行してください。',
+  'error.align-remote-clean-incomplete':
+    'ブランチは同期されましたが、一部の未追跡ファイルを削除できませんでした。現在の状態を再確認してください。',
   'error.cannot-remove-main-worktree': 'メインのワークツリーは削除できません',
   'error.cannot-remove-dirty-worktree': 'ワークツリーに未コミットの変更があります — 先にコミットまたは破棄してください',
   'error.cannot-remove-locked-worktree': 'ワークツリーがロックされています — 先にロックを解除してください',

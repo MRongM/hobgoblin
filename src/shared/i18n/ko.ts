@@ -270,6 +270,12 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.batch-discard': '변경 사항 일괄 삭제',
   'workspace.branch-workspace.git-action.batch-discard-description':
     '변경된 모든 멤버 워크트리의 스테이징됨, 스테이징되지 않음, 추적되지 않음 변경 사항을 검토한 뒤 저장소 순서대로 삭제합니다. 추적되지 않은 파일과 폴더는 Git에서 복구할 수 없습니다.',
+  'workspace.branch-workspace.git-action.batch-align-remote': '원격과 완전히 동기화',
+  'workspace.branch-workspace.git-action.batch-align-remote-description':
+    '파괴적 작업입니다. 각 upstream을 가져온 뒤 스테이징됨, 스테이징되지 않음, 추적되지 않음 변경과 로컬 전용 커밋을 삭제합니다. 무시된 파일은 유지합니다.',
+  'workspace.branch-workspace.git-action.batch-align-remote-confirm': '모든 멤버 완전히 동기화',
+  'workspace.branch-workspace.git-action.review-again': '다시 검토',
+  'workspace.branch-workspace.git-action.align-remote-impact': '로컬 커밋 {commits}개 · 변경 {changes}개',
   'workspace.branch-workspace.git-action.pull': '일괄 가져오기',
   'workspace.branch-workspace.git-action.pull-description':
     '각 대상 브랜치를 업스트림에서 저장소 순서대로 fast-forward 가져옵니다.',
@@ -328,6 +334,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.phase.not-started': '시작 안 함',
   'workspace.branch-workspace.git-action.step.commit': '커밋 중',
   'workspace.branch-workspace.git-action.step.discard': '변경 사항 삭제 중',
+  'workspace.branch-workspace.git-action.step.align': '원격과 동기화 중',
   'workspace.branch-workspace.git-action.step.prepare': '준비 중',
   'workspace.branch-workspace.git-action.step.pull': '가져오는 중',
   'workspace.branch-workspace.git-action.step.fetch': '원격 브랜치 가져오는 중',
@@ -336,6 +343,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.step.cleanup': '정리 중',
   'workspace.branch-workspace.git-action.step.upstream': '업스트림 업데이트 중',
   'workspace.branch-workspace.git-action.failure-step.commit': '커밋',
+  'workspace.branch-workspace.git-action.failure-step.align': '원격 완전 동기화',
   'workspace.branch-workspace.git-action.failure-step.discard': '변경 사항 삭제',
   'workspace.branch-workspace.git-action.failure-step.prepare': '준비',
   'workspace.branch-workspace.git-action.failure-step.pull': '풀',
@@ -1039,9 +1047,21 @@ export const ko: Record<DictKey, string> = {
   'action.commit-replace-message-body': '커밋 입력란의 현재 내용을 바꿉니다.',
   'action.commit-replace-message-confirm': '바꾸기',
   'action.reset-hard': '커밋하지 않은 변경사항 버리기',
+  'action.align-remote': '원격과 완전히 동기화',
+  'action.align-remote-title': '로컬 상태를 버리고 {upstream}에 맞추기',
+  'action.align-remote-upstream-required': '유효한 upstream이 필요합니다',
+  'action.align-remote-loading': '원격과 동기화 중…',
+  'action.align-remote-queued': '원격 동기화 대기 중…',
+  'action.confirm-align-remote-title': '원격과 완전히 동기화할까요?',
+  'action.confirm-align-remote-body':
+    'upstream을 가져온 뒤 스테이징됨, 스테이징되지 않음, 추적되지 않음 변경과 로컬 전용 커밋을 삭제합니다. 무시된 파일은 유지합니다. 이 작업은 취소할 수 없습니다.',
+  'action.confirm-align-remote-impact': '{branch} → {upstream} · 로컬 커밋 {commits}개 · 변경 {changes}개',
+  'action.confirm-align-remote-confirm': '완전히 동기화',
   'action.confirm-reset-hard-title': '커밋하지 않은 변경사항을 버릴까요?',
   'action.confirm-reset-hard-body':
     'git reset --hard를 실행하여 이 워크트리의 커밋하지 않은 모든 변경사항을 버립니다. 이 작업은 취소할 수 없습니다.',
+  'action.confirm-discard-detached-worktree-body':
+    '이 분리된 워크트리에서 현재 감지된 스테이징, 미스테이징 및 추적되지 않은 변경사항을 버립니다. 추적되지 않은 파일과 폴더는 Git에서 복구할 수 없습니다.',
   'action.confirm-reset-hard-confirm': '버리기',
   'changes.selection-toggle': '선택',
   'changes.selection-toggle-title': '선택 체크박스 표시',
@@ -1254,6 +1274,11 @@ export const ko: Record<DictKey, string> = {
   'error.cannot-delete-checked-out-branch': '워크트리에서 체크아웃된 브랜치는 삭제할 수 없습니다',
   'error.branch-not-fully-merged': '브랜치에 고유 커밋이 있어 Git 이 안전 삭제를 거부했습니다',
   'error.worktree-not-found-for-branch': '브랜치에 해당하는 워크트리를 찾을 수 없습니다',
+  'error.worktree-not-found': '체크아웃된 워크트리를 찾을 수 없습니다.',
+  'error.upstream-required': '유효한 upstream 브랜치가 필요합니다.',
+  'error.repository-changed': '브랜치, 워크트리, upstream 또는 로컬 변경 사항이 바뀌었습니다. 확인 후 다시 시도하세요.',
+  'error.align-remote-clean-incomplete':
+    '브랜치는 동기화되었지만 일부 추적되지 않은 파일을 제거하지 못했습니다. 현재 상태를 다시 검토하세요.',
   'error.cannot-remove-main-worktree': '메인 워크트리는 제거할 수 없습니다',
   'error.cannot-remove-dirty-worktree': '워크트리에 커밋되지 않은 변경 사항이 있습니다 — 먼저 커밋하거나 되돌리세요',
   'error.cannot-remove-locked-worktree': '워크트리가 잠겨 있습니다 — 먼저 잠금을 해제하세요',

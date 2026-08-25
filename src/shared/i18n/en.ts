@@ -280,6 +280,12 @@ export const en = {
   'workspace.branch-workspace.git-action.batch-discard': 'Batch discard changes',
   'workspace.branch-workspace.git-action.batch-discard-description':
     'Review and discard every staged, unstaged, and untracked change in changed member worktrees, in repository order. Untracked files and folders cannot be restored from Git.',
+  'workspace.branch-workspace.git-action.batch-align-remote': 'Fully align with remote',
+  'workspace.branch-workspace.git-action.batch-align-remote-description':
+    'Destructive: fetch each upstream, discard staged, unstaged, and untracked changes, and remove local-only commits. Ignored files are preserved.',
+  'workspace.branch-workspace.git-action.batch-align-remote-confirm': 'Fully align all members',
+  'workspace.branch-workspace.git-action.review-again': 'Review again',
+  'workspace.branch-workspace.git-action.align-remote-impact': '{commits} local commits · {changes} changes',
   'workspace.branch-workspace.git-action.pull': 'Batch pull',
   'workspace.branch-workspace.git-action.pull-description':
     'Fast-forward pull each target branch from its upstream in repository order.',
@@ -338,6 +344,7 @@ export const en = {
   'workspace.branch-workspace.git-action.phase.not-started': 'not started',
   'workspace.branch-workspace.git-action.step.commit': 'committing',
   'workspace.branch-workspace.git-action.step.discard': 'discarding',
+  'workspace.branch-workspace.git-action.step.align': 'aligning with remote',
   'workspace.branch-workspace.git-action.step.prepare': 'preparing',
   'workspace.branch-workspace.git-action.step.pull': 'pulling',
   'workspace.branch-workspace.git-action.step.fetch': 'fetching',
@@ -347,6 +354,7 @@ export const en = {
   'workspace.branch-workspace.git-action.step.upstream': 'updating upstream',
   'workspace.branch-workspace.git-action.failure-step.commit': 'Commit',
   'workspace.branch-workspace.git-action.failure-step.discard': 'Discard',
+  'workspace.branch-workspace.git-action.failure-step.align': 'Remote alignment',
   'workspace.branch-workspace.git-action.failure-step.prepare': 'Preparation',
   'workspace.branch-workspace.git-action.failure-step.pull': 'Pull',
   'workspace.branch-workspace.git-action.failure-step.fetch': 'Fetch',
@@ -1053,9 +1061,21 @@ export const en = {
   'action.commit-replace-message-body': 'This will replace the message currently in the commit box.',
   'action.commit-replace-message-confirm': 'Replace',
   'action.reset-hard': 'Discard uncommitted changes',
+  'action.align-remote': 'Fully align with remote',
+  'action.align-remote-title': 'Discard local state and match {upstream}',
+  'action.align-remote-upstream-required': 'A valid upstream is required',
+  'action.align-remote-loading': 'Aligning with remote…',
+  'action.align-remote-queued': 'Remote alignment queued…',
+  'action.confirm-align-remote-title': 'Fully align with remote?',
+  'action.confirm-align-remote-body':
+    'This fetches the upstream, deletes staged, unstaged, and untracked changes, and removes local-only commits. Ignored files are preserved. This cannot be undone.',
+  'action.confirm-align-remote-impact': '{branch} → {upstream} · {commits} local commits · {changes} changes',
+  'action.confirm-align-remote-confirm': 'Fully align',
   'action.confirm-reset-hard-title': 'Discard uncommitted changes?',
   'action.confirm-reset-hard-body':
     'This will run git reset --hard, discarding all uncommitted changes in this worktree. This cannot be undone.',
+  'action.confirm-discard-detached-worktree-body':
+    'This discards the currently detected staged, unstaged, and untracked changes in this detached worktree. Untracked files and folders cannot be recovered from Git.',
   'action.confirm-reset-hard-confirm': 'Discard',
   'changes.selection-toggle': 'Select',
   'changes.selection-toggle-title': 'Show selection checkboxes',
@@ -1268,6 +1288,11 @@ export const en = {
   'error.cannot-delete-checked-out-branch': 'Cannot delete a branch checked out in a worktree',
   'error.branch-not-fully-merged': 'Branch has unique commits — Git refused the safe delete',
   'error.worktree-not-found-for-branch': 'Worktree not found for branch',
+  'error.worktree-not-found': 'The checked-out worktree was not found.',
+  'error.upstream-required': 'A valid upstream branch is required.',
+  'error.repository-changed': 'The branch, worktree, upstream, or local content changed. Review it and try again.',
+  'error.align-remote-clean-incomplete':
+    'The branch was aligned, but some untracked files could not be removed. Review the current state before trying again.',
   'error.cannot-remove-main-worktree': 'Cannot remove the main worktree',
   'error.cannot-remove-dirty-worktree': 'Worktree has uncommitted changes — commit or discard them first',
   'error.cannot-remove-locked-worktree': 'Worktree is locked — unlock it before removing',

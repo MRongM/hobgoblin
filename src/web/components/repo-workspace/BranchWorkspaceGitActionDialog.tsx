@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, GitMerge, LoaderCircle, RotateCcw, SendHorizontal, Sparkles } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  GitMerge,
+  LoaderCircle,
+  RefreshCw,
+  RotateCcw,
+  SendHorizontal,
+  Sparkles,
+} from 'lucide-react'
 import type { CommitMessageProvider, CommitMessageProviderAvailability } from '#/shared/commit-message-ai.ts'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
@@ -7,6 +16,7 @@ import type {
   BranchWorkspaceBatchSetUpstreamInput,
   BranchWorkspaceBatchCommitPlan,
   BranchWorkspaceBatchDiscardPlan,
+  BranchWorkspaceBatchAlignRemotePlan,
   BranchWorkspaceBatchSetUpstreamPlan,
   BranchWorkspaceCommitMessageInput,
   BranchWorkspaceGitActionKind,
@@ -70,6 +80,7 @@ interface BranchWorkspaceGitActionPanelProps {
     messages: BranchWorkspaceCommitMessageInput[],
   ) => Promise<BranchWorkspaceGitActionResult | null>
   onBatchDiscard: () => Promise<BranchWorkspaceGitActionResult | null>
+  onBatchAlignRemote: () => Promise<BranchWorkspaceGitActionResult | null>
   onBatchSetUpstream: (
     upstreams: BranchWorkspaceBatchSetUpstreamInput[],
   ) => Promise<BranchWorkspaceGitActionResult | null>
@@ -106,6 +117,7 @@ export function BranchWorkspaceGitActionPanel({
   onBatchCommit,
   onBatchCommitAndPush,
   onBatchDiscard,
+  onBatchAlignRemote,
   onBatchSetUpstream,
   onBatchMergeIn,
   onBatchMergeOut,
@@ -331,23 +343,31 @@ export function BranchWorkspaceGitActionPanel({
             activeOperation,
             result,
           })
-        : plan.kind === 'batch-set-upstream'
+        : plan.kind === 'batch-align-remote'
           ? projectBranchWorkspaceBatchProgress({
               members: plan.members,
-              selectedRepositoryNames: selectedUpstreamRepositories,
-              stepsFor: () => ['upstream'],
+              selectedRepositoryNames: plan.members.map((member) => member.repositoryName),
+              stepsFor: () => ['align'],
               activeOperation,
               result,
             })
-          : plan.kind === 'pull' || plan.kind === 'push'
+          : plan.kind === 'batch-set-upstream'
             ? projectBranchWorkspaceBatchProgress({
                 members: plan.members,
-                selectedRepositoryNames: selectedSyncRepositories,
-                stepsFor: () => [plan.kind === 'pull' ? 'pull' : 'push'],
+                selectedRepositoryNames: selectedUpstreamRepositories,
+                stepsFor: () => ['upstream'],
                 activeOperation,
                 result,
               })
-            : null
+            : plan.kind === 'pull' || plan.kind === 'push'
+              ? projectBranchWorkspaceBatchProgress({
+                  members: plan.members,
+                  selectedRepositoryNames: selectedSyncRepositories,
+                  stepsFor: () => [plan.kind === 'pull' ? 'pull' : 'push'],
+                  activeOperation,
+                  result,
+                })
+              : null
     : null
 
   return (
@@ -399,6 +419,8 @@ export function BranchWorkspaceGitActionPanel({
           />
         ) : plan.kind === 'batch-discard' ? (
           <BatchDiscardContent plan={plan} result={result} activeOperation={activeOperation} />
+        ) : plan.kind === 'batch-align-remote' ? (
+          <BatchAlignRemoteContent plan={plan} result={result} activeOperation={activeOperation} />
         ) : plan.kind === 'batch-set-upstream' ? (
           <BatchSetUpstreamContent
             plan={plan}
@@ -492,6 +514,26 @@ export function BranchWorkspaceGitActionPanel({
                   result && !result.ok
                     ? 'workspace.branch-workspace.retry'
                     : 'workspace.branch-workspace.git-action.batch-discard',
+                )}
+              </Button>
+            ) : null}
+            {plan?.kind === 'batch-align-remote' ? (
+              <Button
+                type="button"
+                variant="destructive"
+                data-action="batch-align-remote"
+                disabled={pending || !plan.ready}
+                onClick={() =>
+                  result && !result.ok && result.retryable === false ? close() : void runAndClose(onBatchAlignRemote)
+                }
+              >
+                <RefreshCw className="size-4" aria-hidden="true" />
+                {t(
+                  result && !result.ok
+                    ? result.retryable === false
+                      ? 'workspace.branch-workspace.git-action.review-again'
+                      : 'workspace.branch-workspace.retry'
+                    : 'workspace.branch-workspace.git-action.batch-align-remote-confirm',
                 )}
               </Button>
             ) : null}
@@ -1420,6 +1462,50 @@ function BatchDiscardContent({
                   : member.paths.length > 0
                     ? t('workspace.branch-workspace.git-action.change-count', { count: member.changeCount })
                     : t('workspace.branch-workspace.git-action.clean-skipped')}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function BatchAlignRemoteContent({
+  plan,
+  result,
+  activeOperation,
+}: {
+  plan: BranchWorkspaceBatchAlignRemotePlan
+  result: BranchWorkspaceGitActionResult | null
+  activeOperation: BranchWorkspaceActiveOperation | null
+}) {
+  const t = useT()
+  return (
+    <div className="overflow-hidden rounded-md border border-danger/40">
+      {plan.members.map((member, index) => {
+        const memberResult = result?.members.find((candidate) => candidate.repositoryName === member.repositoryName)
+        const activeStep = branchWorkspaceActiveMemberStep(activeOperation, member.repositoryName)
+        return (
+          <div
+            key={member.repositoryName}
+            className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1.5fr)_8rem] items-center gap-2 border-b border-separator/60 px-3 py-2.5 text-xs last:border-b-0"
+          >
+            <span className="font-mono text-[10px] text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
+            <span className="truncate font-medium">{member.repositoryName}</span>
+            <span className="truncate font-mono text-[10px] text-muted-foreground">
+              {member.targetBranch} → {member.upstream ?? '-'}
+            </span>
+            <span className={cn('text-[10px] text-muted-foreground', !member.ready && 'text-danger')}>
+              {activeStep
+                ? t(`workspace.branch-workspace.git-action.step.${activeStep}`)
+                : memberResult
+                  ? t(`workspace.branch-workspace.git-action.phase.${memberResult.phase}`)
+                  : member.ready
+                    ? t('workspace.branch-workspace.git-action.align-remote-impact', {
+                        commits: member.ahead,
+                        changes: member.changeCount,
+                      })
+                    : t(member.message ?? 'workspace.branch-workspace.git-action.target-upstream-required')}
             </span>
           </div>
         )

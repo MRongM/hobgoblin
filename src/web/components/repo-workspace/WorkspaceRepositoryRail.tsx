@@ -482,6 +482,7 @@ export function WorkspaceRepositoryRail({
         onBatchCommit={branchGitActions.executeBatchCommit}
         onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
         onBatchDiscard={branchGitActions.executeBatchDiscard}
+        onBatchAlignRemote={branchGitActions.executeBatchAlignRemote}
         onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
         onBatchMergeIn={branchGitActions.executeBatchMergeIn}
         onBatchMergeOut={branchGitActions.executeBatchMergeOut}

@@ -20,6 +20,8 @@ import {
 import {
   abortCloneOperation,
   abortRepositoryOperation,
+  alignRepositoryWorktreeToRemote,
+  buildRepositoryRemoteAlignmentPreview,
   checkoutRepositoryBranch,
   checkoutWorktreeBranch,
   cleanupRepositoryWorktree,
@@ -776,6 +778,37 @@ export function createRepoRoutes() {
         () => resetRepositoryHard(repoId, worktreePath, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'reset-hard',
+      ),
+    )
+  })
+  app.post('/align-remote', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    const sourceToken = typeof body?.sourceToken === 'string' ? body.sourceToken : undefined
+    const previewToken = typeof body?.previewToken === 'string' ? body.previewToken : undefined
+    return c.json(
+      await jsonOr(
+        () =>
+          alignRepositoryWorktreeToRemote(repoId, branch, worktreePath, c.req.raw.signal, sourceToken, {
+            previewToken,
+          }),
+        { ok: false, message: 'error.failed-read-repo' },
+        'align-remote',
+      ),
+    )
+  })
+  app.post('/align-remote-preview', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const worktreePath = typeof body?.worktreePath === 'string' ? body.worktreePath : ''
+    return c.json(
+      await jsonOr(
+        () => buildRepositoryRemoteAlignmentPreview(repoId, branch, worktreePath, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'align-remote-preview',
       ),
     )
   })

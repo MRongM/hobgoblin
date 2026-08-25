@@ -26,6 +26,7 @@ import {
 import { resolvePrunableWorktree } from '#/shared/worktree-guards.ts'
 import {
   isProtectedRemoteBranchRef,
+  parseRemoteBranchRef,
   parseRemoteBranchInput,
   parseRemoteTrackingBranchInfo,
   type RemoteTrackingBranchInfo,
@@ -58,8 +59,11 @@ import {
   type ExecResult,
   type GitRemoteInfo,
   type RepoRemoteInfo,
+  type RemoteAlignmentTarget,
+  type StatusEntry,
   type WorktreeInfo,
   type WorktreeStatus,
+  type WorktreeContentState,
 } from '#/shared/git-types.ts'
 import {
   compactWorktreeBootstrapPaths,
@@ -215,6 +219,42 @@ export async function getRemoteStatus(
     options.signal,
   )
   return statuses.filter((status): status is WorktreeStatus => status !== null)
+}
+
+export async function getRemoteWorktreeStatusEntries(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<StatusEntry[] | null> {
+  if (!isValidRemotePath(worktreePath)) return null
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitStatus', path: worktreePath }, target, { signal: options.signal })
+  return !result.ok || options.signal?.aborted ? null : parseStatus(result.stdout)
+}
+
+export async function getRemoteWorktreeContentState(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<WorktreeContentState | null> {
+  if (!isValidRemotePath(worktreePath)) return null
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const result = await run({ type: 'gitWorktreeContentState', path: worktreePath }, target, {
+    signal: options.signal,
+    timeoutMs: REMOTE_PATCH_TIMEOUT_MS,
+  })
+  if (!result.ok || options.signal?.aborted) return null
+  const [indexHash, worktreeTree, ...rest] = result.stdout.split('\n')
+  if (
+    rest.some(Boolean) ||
+    !indexHash ||
+    !worktreeTree ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(indexHash) ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(worktreeTree)
+  ) {
+    return null
+  }
+  return { indexHash: indexHash.toLowerCase(), worktreeTree: worktreeTree.toLowerCase() }
 }
 
 export async function getRemoteHistory(
@@ -923,6 +963,62 @@ export async function resetRemoteHard(
     timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
   })
   return remoteExecResult(result)
+}
+
+export async function alignRemoteWorktreeToRemoteRef(
+  target: RemoteRepoTarget,
+  worktreePath: string,
+  alignment: RemoteAlignmentTarget,
+  options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
+): Promise<ExecResult> {
+  if (
+    !alignment.branch ||
+    /[\0\r\n]/.test(alignment.branch) ||
+    !parseRemoteBranchRef(alignment.remoteRef) ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.expectedHead) ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.remoteHead) ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.expectedContentState.indexHash) ||
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.expectedContentState.worktreeTree)
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (!isValidRemotePath(worktreePath)) return { ok: false, message: 'error.invalid-path' }
+  const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
+  const known = await resolveKnownRemoteWorktree(target, worktreePath, { signal: options.signal, run })
+  if ('ok' in known) return known
+  if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
+  const result = await run(
+    {
+      type: 'gitAlignToRemote',
+      path: known.path,
+      branch: alignment.branch,
+      expectedHead: alignment.expectedHead,
+      remoteRef: alignment.remoteRef,
+      remoteHead: alignment.remoteHead,
+      expectedIndexHash: alignment.expectedContentState.indexHash,
+      expectedWorktreeTree: alignment.expectedContentState.worktreeTree,
+    },
+    target,
+    {
+      signal: undefined,
+      timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS,
+    },
+  )
+  const execResult = remoteExecResult(result)
+  if (execResult.ok) return execResult
+  if (remoteFailureHasExactMarker(result, 'error.repository-changed')) {
+    return { ok: false, message: 'error.repository-changed' }
+  }
+  return remoteFailureHasExactMarker(result, 'error.align-remote-clean-incomplete')
+    ? { ok: false, message: 'error.align-remote-clean-incomplete', repoChanged: true }
+    : { ...execResult, repoChanged: true }
+}
+
+function remoteFailureHasExactMarker(result: RemoteCommandResult, marker: string): boolean {
+  return (
+    result.message?.trim() === marker ||
+    result.stderr.split(/\r?\n/u).some((line) => line.trim() === marker)
+  )
 }
 
 export async function discardRemoteChangesForPaths(

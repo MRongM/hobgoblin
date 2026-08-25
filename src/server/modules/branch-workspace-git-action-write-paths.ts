@@ -7,6 +7,7 @@ import {
 import { branchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { publishBranchWorkspaceOperationUpdate } from '#/server/modules/invalidation-broker.ts'
 import {
+  alignRepositoryWorktreeToRemote,
   commitRepositoryChanges,
   createRepositoryWorktree,
   discardRepositoryChanges,
@@ -52,6 +53,7 @@ import {
 interface PendingAction {
   plan: BranchWorkspaceGitActionPlan
   completed: Set<string>
+  requiresReplan?: boolean
   mergeProgress: Map<string, 'pulled' | 'fetched' | 'verified' | 'merged' | 'pushed'>
   mergeTemporaryWorktrees: Map<string, string>
   mergeExecution?:
@@ -116,6 +118,7 @@ export interface BranchWorkspaceGitActionWriteDependencies {
   validatePlan?: typeof validateBranchWorkspaceGitActionPlan
   commit?: typeof commitRepositoryChanges
   discard?: typeof discardRepositoryChanges
+  alignRemote?: typeof alignRepositoryWorktreeToRemote
   pull?: typeof pullRepositoryBranch
   merge?: typeof mergeRepositoryBranch
   push?: typeof pushRepositoryBranch
@@ -151,6 +154,7 @@ export function createBranchWorkspaceGitActionWriteService(
   const validatePlan = dependencies.validatePlan ?? validateBranchWorkspaceGitActionPlan
   const commit = dependencies.commit ?? commitRepositoryChanges
   const discard = dependencies.discard ?? discardRepositoryChanges
+  const alignRemote = dependencies.alignRemote ?? alignRepositoryWorktreeToRemote
   const pull = dependencies.pull ?? pullRepositoryBranch
   const merge = dependencies.merge ?? mergeRepositoryBranch
   const push = dependencies.push ?? pushRepositoryBranch
@@ -189,11 +193,17 @@ export function createBranchWorkspaceGitActionWriteService(
       if (!state || state.plan.token !== input.planToken || state.plan.kind !== input.kind) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.plan-expired' }
       }
+      if (state.requiresReplan) {
+        return { ok: false, message: 'workspace.branch-workspace.git-action.plan-expired' }
+      }
       if (active.has(normalizedRootId)) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.operation-active' }
       }
       if (input.kind === 'batch-commit' && !validBatchMessages(state.plan, input)) {
         return { ok: false, message: 'error.invalid-arguments' }
+      }
+      if (input.kind === 'batch-align-remote' && state.plan.kind === input.kind && !state.plan.ready) {
+        return { ok: false, message: 'workspace.branch-workspace.git-action.target-upstream-required' }
       }
       const mergeInSelection =
         input.kind === 'batch-merge-in' ? selectedBatchMergeInMembers(state.plan, input.sources) : null
@@ -336,6 +346,9 @@ export function createBranchWorkspaceGitActionWriteService(
         }
         if (input.kind === 'batch-discard') {
           return await executeBatchDiscard(state, controller.signal, discard, executionContext)
+        }
+        if (input.kind === 'batch-align-remote') {
+          return await executeBatchAlignRemote(state, controller.signal, alignRemote, executionContext)
         }
         if (input.kind === 'batch-merge-in') {
           const execution = state.mergeExecution
@@ -733,6 +746,47 @@ async function executeBatchDiscard(
     publishActiveOperation(context)
   }
   return executionResult(state.plan, state.completed, failures)
+}
+
+async function executeBatchAlignRemote(
+  state: PendingAction,
+  signal: AbortSignal,
+  alignRemote: typeof alignRepositoryWorktreeToRemote,
+  context: ActionExecutionContext,
+): Promise<BranchWorkspaceGitActionResult> {
+  if (state.plan.kind !== 'batch-align-remote') {
+    return failureResult(state.plan, state.completed, 'error.invalid-arguments')
+  }
+  const failures: BranchWorkspaceGitActionMemberFailures = new Map()
+  let retryable = true
+  for (let index = 0; index < state.plan.members.length; index += 1) {
+    const member = state.plan.members[index]!
+    if (state.completed.has(member.repositoryName)) continue
+    if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+    updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'align')
+    publishActiveOperation(context)
+    context.touchedRepoIds.add(member.repoId)
+    const result = await attemptMemberOperation(() =>
+      alignRemote(member.repoId, member.targetBranch, member.targetWorktreePath, signal, undefined, {
+        ...DEFER_REPOSITORY_INVALIDATION,
+        expectedFingerprint: member.fingerprint,
+      }),
+    )
+    if (!result.ok) {
+      recordActionFailure(failures, member.repositoryName, 'align', result, member.targetWorktreePath)
+      if (result.repoChanged) {
+        retryable = false
+        state.requiresReplan = true
+        if (signal.aborted) return executionResult(state.plan, state.completed, failures, new Set(), false)
+      }
+      if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+      continue
+    }
+    state.completed.add(member.repositoryName)
+    updateActive(context.active.get(context.rootId), index + 1, state.completed.size)
+    publishActiveOperation(context)
+  }
+  return executionResult(state.plan, state.completed, failures, new Set(), retryable)
 }
 
 async function executeBatchMergeIn(
@@ -1583,6 +1637,7 @@ function executionResult(
   completed: ReadonlySet<string>,
   failures: ReadonlyMap<string, BranchWorkspaceGitActionMemberResult>,
   satisfied: ReadonlySet<string> = new Set(),
+  retryable = true,
 ): BranchWorkspaceGitActionResult {
   if (failures.size === 0) return successResult(plan, completed, satisfied)
   return {
@@ -1591,6 +1646,7 @@ function executionResult(
     planToken: plan.token,
     branchWorkspaceId: plan.branchWorkspaceId,
     message: 'workspace.branch-workspace.git-action.members-failed',
+    ...(retryable ? {} : { retryable: false }),
     members: plan.members.map((member) => {
       const failure = failures.get(member.repositoryName)
       if (failure) return failure

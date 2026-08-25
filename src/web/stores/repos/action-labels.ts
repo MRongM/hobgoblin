@@ -9,6 +9,7 @@ const BRANCH_ACTION_LOADING_LABEL_KEYS: Record<RepoBranchActionKind, string> = {
   checkout: 'action.checkout-loading',
   pull: 'action.pull-loading',
   push: 'action.push-loading',
+  alignRemote: 'action.align-remote-loading',
   createWorktree: 'action.create-worktree-creating-title',
   createBranch: 'action.create-branch-loading',
   trackRemoteBranch: 'action.pull-remote-branch-loading',
@@ -22,6 +23,7 @@ const BRANCH_ACTION_QUEUED_LABEL_KEYS: Record<RepoBranchActionKind, string> = {
   checkout: 'action.checkout-queued',
   pull: 'action.pull-queued',
   push: 'action.push-queued',
+  alignRemote: 'action.align-remote-queued',
   createWorktree: 'action.create-worktree-queued-title',
   createBranch: 'action.create-branch-queued',
   trackRemoteBranch: 'action.pull-remote-branch-queued',
@@ -67,6 +69,7 @@ export function repoEventActionSuccessLabel(action: RepoEventAction | undefined)
     case 'checkout':
     case 'pull':
     case 'push':
+    case 'alignRemote':
     case 'commit':
     case 'merge':
     case 'mergeOut':

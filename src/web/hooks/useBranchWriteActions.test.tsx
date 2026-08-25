@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { useBranchWriteActions } from '#/web/hooks/useBranchWriteActions.tsx'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const mocks = vi.hoisted(() => ({
   checkoutBranchInWorktree: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getCommitMessageProviders: vi.fn(),
   generateRepositoryCommitMessage: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
+  getRepositoryRemoteAlignmentPreview: vi.fn(),
   mergeRepositoryBranch: vi.fn(),
   getRepositoryBranchMergeOutPlan: vi.fn(),
   mergeRepositoryBranchOut: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock('#/web/repo-client.ts', () => ({
   getCommitMessageProviders: mocks.getCommitMessageProviders,
   generateRepositoryCommitMessage: mocks.generateRepositoryCommitMessage,
   getRepositoryRemoteBranches: mocks.getRepositoryRemoteBranches,
+  getRepositoryRemoteAlignmentPreview: mocks.getRepositoryRemoteAlignmentPreview,
   mergeRepositoryBranch: mocks.mergeRepositoryBranch,
   getRepositoryBranchMergeOutPlan: mocks.getRepositoryBranchMergeOutPlan,
   mergeRepositoryBranchOut: mocks.mergeRepositoryBranchOut,
@@ -68,6 +71,16 @@ describe('useBranchWriteActions', () => {
     resetReposStore()
     vi.clearAllMocks()
     mocks.getRepositoryRemoteBranches.mockResolvedValue([])
+    mocks.getRepositoryRemoteAlignmentPreview.mockResolvedValue({
+      ok: true,
+      token: 'sha256:alignment-preview',
+      repoId: REPO_ID,
+      branch: 'feature/current',
+      worktreePath: '/tmp/repo-feature',
+      upstream: 'origin/feature/current',
+      ahead: 2,
+      changeCount: 1,
+    })
     mocks.getRepositoryBranchMergeOutPlan.mockResolvedValue({
       ok: true,
       plan: {
@@ -143,6 +156,47 @@ describe('useBranchWriteActions', () => {
 
     expect(toastMock.info).not.toHaveBeenCalled()
     expect(draftMocks.openDraft).toHaveBeenCalledWith(REPO_ID, '/tmp/repo-feature')
+  })
+
+  test('requires a second confirmation before fully aligning a checked-out branch to its upstream', async () => {
+    const branch = createRepoBranch('feature/current', {
+      tracking: 'origin/feature/current',
+      ahead: 2,
+      worktree: { path: '/tmp/repo-feature' },
+    })
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [branch],
+      currentBranch: 'feature/current',
+      status: [{ path: '/tmp/repo-feature', isMain: false, entries: [{ path: 'README.md', x: ' ', y: 'M' }] }],
+    })
+    const runBranchAction = vi
+      .spyOn(useReposStore.getState(), 'runBranchAction')
+      .mockResolvedValue({ ok: true, message: 'aligned' })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(<BranchWriteActionsHarness repo={repo} onPush={vi.fn()} onReady={(value) => (actions = value)} />)
+    })
+
+    await act(async () => {
+      actions?.destructiveItems.find((item) => item.id === 'alignRemote')?.onSelect()
+    })
+
+    expect(document.body.textContent).toContain('action.confirm-align-remote-title')
+    expect(runBranchAction).not.toHaveBeenCalled()
+    clickButtonByText('action.confirm-align-remote-confirm')
+    await flush()
+    expect(runBranchAction).toHaveBeenCalledWith(
+      REPO_ID,
+      {
+        kind: 'alignRemote',
+        branch: 'feature/current',
+        worktreePath: '/tmp/repo-feature',
+        previewToken: 'sha256:alignment-preview',
+      },
+      { token: repo.instanceToken },
+    )
   })
 
   test('wires pull, merge and push from the branch write merge dialog', async () => {

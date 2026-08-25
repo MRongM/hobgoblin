@@ -600,6 +600,7 @@ describe('useBranchActionItems', () => {
     expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'removeWorktree',
       'deleteBranch',
+      'alignRemote',
       'resetHard',
     ])
 
@@ -623,6 +624,7 @@ describe('useBranchActionItems', () => {
     expect(disabledById.get('remote')).toBe(true)
     expect(disabledById.get('removeWorktree')).toBe(true)
     expect(disabledById.get('deleteBranch')).toBe(false)
+    expect(disabledById.get('alignRemote')).toBe(true)
     expect(disabledById.get('resetHard')).toBe(true)
   })
 
@@ -667,7 +669,12 @@ describe('useBranchActionItems', () => {
     const groups = await renderItemGroups(useItems, repo, branch)
     const destructiveItems = groups.destructiveItems.filter((item) => item.visible)
 
-    expect(destructiveItems.map((item) => item.id)).toEqual(['removeWorktree', 'deleteBranch', 'resetHard'])
+    expect(destructiveItems.map((item) => item.id)).toEqual([
+      'removeWorktree',
+      'deleteBranch',
+      'alignRemote',
+      'resetHard',
+    ])
     expect(destructiveItems.find((item) => item.id === 'removeWorktree')?.disabled).toBe(true)
     expect(destructiveItems.find((item) => item.id === 'deleteBranch')?.disabled).toBe(true)
     expect(destructiveItems.find((item) => item.id === 'resetHard')?.disabled).toBe(false)
@@ -714,6 +721,7 @@ describe('useBranchActionItems', () => {
     expect(groups.destructiveItems.filter((item) => item.visible).map((item) => item.id)).toEqual([
       'removeWorktree',
       'deleteBranch',
+      'alignRemote',
       'resetHard',
     ])
     expect(groups.destructiveItems.find((item) => item.id === 'removeWorktree')?.label).toBe('action.remove-worktree')
@@ -771,6 +779,7 @@ describe('useBranchActionItems', () => {
       'closeAllTerminals',
       'removeWorktree',
       'deleteBranch',
+      'alignRemote',
       'resetHard',
     ])
     expect(closeAllTerminals?.label).toBe('terminal.close-all')

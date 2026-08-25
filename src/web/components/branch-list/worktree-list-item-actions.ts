@@ -46,8 +46,8 @@ export function projectWorktreeListItemActions(
     ? groups.destructiveItems.filter((item) => !destructiveExclusions.has(item.id))
     : groups.destructiveItems
   const contextActions = hasWorktree
-    ? groups.mainItems
-        .filter((item) => item.id === 'createWorktree' || item.id === 'sync')
+    ? [...groups.mainItems, ...groups.destructiveItems]
+        .filter((item) => item.id === 'createWorktree' || item.id === 'sync' || item.id === 'alignRemote')
         .map((item) => branchListItemAction(item, forceDisabled))
     : []
 

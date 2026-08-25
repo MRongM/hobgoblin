@@ -17,6 +17,8 @@ export interface GitOptions {
   signal?: AbortSignal
   /** Extra environment variables for this git child process only. */
   env?: Record<string, string>
+  /** Optional stdin text for commands such as `git hash-object --stdin`. */
+  stdin?: string
 }
 
 export interface GitNetworkOptions {
@@ -107,6 +109,7 @@ export function git(cwd: string, args: string[], opts?: GitOptions): Promise<str
     forceKillAfterDelay: 500,
     // Some repos can produce large outputs (log, for-each-ref). 10MB headroom.
     maxBuffer: 10 * 1024 * 1024,
+    input: opts?.stdin,
   }).then(({ stdout }) => stdout.trimEnd())
 }
 

@@ -27,6 +27,7 @@ export type BranchActionItemId =
   | 'mergeOut'
   | 'commit'
   | 'resetHard'
+  | 'alignRemote'
 
 export interface BranchActionRepo {
   id: RepoState['id']
@@ -51,6 +52,8 @@ export function branchActionItemIdFromKind(kind: RepoBranchActionKind): BranchAc
       return 'pull'
     case 'push':
       return 'push'
+    case 'alignRemote':
+      return 'alignRemote'
     case 'createBranch':
       return 'createBranch'
     case 'trackRemoteBranch':

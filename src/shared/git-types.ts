@@ -129,6 +129,21 @@ export interface ExecResult {
   worktreeBootstrap?: WorktreeBootstrapSummary
 }
 
+/** Immutable state captured immediately before a destructive remote alignment. */
+export interface RemoteAlignmentTarget {
+  branch: string
+  expectedHead: string
+  remoteRef: string
+  remoteHead: string
+  expectedFingerprint: string
+  expectedContentState: WorktreeContentState
+}
+
+export interface WorktreeContentState {
+  indexHash: string
+  worktreeTree: string
+}
+
 /** Branch names we treat as protected — direct push/delete/etc. require
  *  extra confirmation, and "delete branch" is forbidden outright. Shared
  *  between main (server-side enforcement in IPC handlers) and renderer
