@@ -1654,8 +1654,10 @@ describe('TerminalSlot', () => {
             closeRepo: vi.fn(),
             cycleRepo: vi.fn(),
             selectRepoBranch: vi.fn(),
+            selectRepoDetachedWorktree: vi.fn(),
             showRepoDetailTab: vi.fn(),
             showRepoBranchDetailTab,
+            showRepoDetachedWorktreeDetailTab: vi.fn(),
             openSettings: vi.fn(),
           }}
         >
@@ -1876,8 +1878,10 @@ describe('TerminalSlot', () => {
             closeRepo: vi.fn(),
             cycleRepo: vi.fn(),
             selectRepoBranch: vi.fn(),
+            selectRepoDetachedWorktree: vi.fn(),
             showRepoDetailTab: vi.fn(),
             showRepoBranchDetailTab,
+            showRepoDetachedWorktreeDetailTab: vi.fn(),
             openSettings: vi.fn(),
           }}
         >
@@ -1943,8 +1947,10 @@ describe('TerminalSlot', () => {
             closeRepo: vi.fn(),
             cycleRepo: vi.fn(),
             selectRepoBranch: vi.fn(),
+            selectRepoDetachedWorktree: vi.fn(),
             showRepoDetailTab,
             showRepoBranchDetailTab,
+            showRepoDetachedWorktreeDetailTab: vi.fn(),
             openSettings: vi.fn(),
           }}
         >
@@ -2018,8 +2024,10 @@ describe('TerminalSlot', () => {
             closeRepo: vi.fn(),
             cycleRepo: vi.fn(),
             selectRepoBranch: vi.fn(),
+            selectRepoDetachedWorktree: vi.fn(),
             showRepoDetailTab: vi.fn(),
             showRepoBranchDetailTab,
+            showRepoDetachedWorktreeDetailTab: vi.fn(),
             openSettings: vi.fn(),
           }}
         >
@@ -2941,8 +2949,10 @@ async function renderCrossProjectCycleFixture(role: 'controller' | 'viewer', mob
           closeRepo: vi.fn(),
           cycleRepo: vi.fn(),
           selectRepoBranch: vi.fn(),
+          selectRepoDetachedWorktree: vi.fn(),
           showRepoDetailTab: vi.fn(),
           showRepoBranchDetailTab,
+          showRepoDetachedWorktreeDetailTab: vi.fn(),
           openSettings: vi.fn(),
         }}
       >

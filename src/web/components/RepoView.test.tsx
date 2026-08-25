@@ -98,6 +98,33 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
       )}
     </div>
   ),
+  WorktreeTerminalPanel: ({
+    repoId,
+    worktreePath,
+    terminalLabel,
+    compactFocusPresentation,
+    onShowCompactOverview,
+  }: {
+    repoId: string
+    worktreePath: string
+    terminalLabel: string
+    compactFocusPresentation?: boolean
+    onShowCompactOverview?: () => void
+  }) => (
+    <div
+      data-testid="worktree-terminal-panel"
+      data-repo-id={repoId}
+      data-worktree-path={worktreePath}
+      data-terminal-label={terminalLabel}
+      data-compact-focus-presentation={String(compactFocusPresentation)}
+    >
+      {onShowCompactOverview && (
+        <button type="button" data-testid="show-detached-overview" onClick={onShowCompactOverview}>
+          show overview
+        </button>
+      )}
+    </div>
+  ),
 }))
 
 vi.mock('#/web/branch-workspace-queries.ts', () => ({
@@ -296,6 +323,33 @@ afterEach(() => {
 })
 
 describe('RepoView', () => {
+  test('renders the selected detached worktree terminal context in compact detail', () => {
+    const detachedPath = '/tmp/detached-worktree'
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: detachedPath,
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        [detachedPath]: {
+          path: detachedPath,
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+    })
+
+    renderRepoView()
+
+    const detail = container?.querySelector('[data-testid="worktree-terminal-panel"]')
+    expect(detail?.getAttribute('data-worktree-path')).toBe(detachedPath)
+    expect(detail?.getAttribute('data-terminal-label')).toBe('HEAD@abcdef123456')
+    expect(detail?.getAttribute('data-compact-focus-presentation')).toBe('true')
+    expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+  })
+
   test('renders only detail for a compact Git repository with a selected worktree', () => {
     seedRepoWithSelectedWorktree()
 
@@ -1369,8 +1423,10 @@ function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWi
     closeRepo: () => {},
     cycleRepo: () => {},
     selectRepoBranch: () => {},
+    selectRepoDetachedWorktree: () => {},
     showRepoDetailTab: () => {},
     showRepoBranchDetailTab: () => {},
+    showRepoDetachedWorktreeDetailTab: () => {},
     openSettings: () => {},
   }
   return Object.assign(base, overrides)

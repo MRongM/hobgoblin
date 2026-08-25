@@ -11,6 +11,7 @@ describe('createMainWindowNavigationActions', () => {
       closeRepo: vi.fn(),
       cycleActive: vi.fn(),
       selectBranch: vi.fn(),
+      selectDetachedWorktree: vi.fn(),
       setDetailTab: vi.fn(),
     })
 
@@ -29,6 +30,7 @@ describe('createMainWindowNavigationActions', () => {
       closeRepo: vi.fn(),
       cycleActive: vi.fn(),
       selectBranch,
+      selectDetachedWorktree: vi.fn(),
       setDetailTab,
       onOpenSettings: vi.fn(),
     })
@@ -40,6 +42,27 @@ describe('createMainWindowNavigationActions', () => {
     expect(setDetailTab).toHaveBeenCalledWith('/tmp/repo-b', 'terminal')
   })
 
+  test('mutates store directly for detached worktree detail navigation', () => {
+    const setActive = vi.fn()
+    const selectDetachedWorktree = vi.fn()
+    const setDetailTab = vi.fn()
+    const actions = createMainWindowNavigationActions({
+      activeId: '/tmp/repo-a',
+      setActive,
+      closeRepo: vi.fn(),
+      cycleActive: vi.fn(),
+      selectBranch: vi.fn(),
+      selectDetachedWorktree,
+      setDetailTab,
+    })
+
+    actions.showRepoDetachedWorktreeDetailTab('/tmp/repo-b', '/tmp/worktree', 'terminal')
+
+    expect(setActive).toHaveBeenCalledWith('/tmp/repo-b')
+    expect(selectDetachedWorktree).toHaveBeenCalledWith('/tmp/repo-b', '/tmp/worktree')
+    expect(setDetailTab).toHaveBeenCalledWith('/tmp/repo-b', 'terminal')
+  })
+
   test('cycles repos through the store action', () => {
     const cycleActive = vi.fn()
     const actions = createMainWindowNavigationActions({
@@ -48,6 +71,7 @@ describe('createMainWindowNavigationActions', () => {
       closeRepo: vi.fn(),
       cycleActive,
       selectBranch: vi.fn(),
+      selectDetachedWorktree: vi.fn(),
       setDetailTab: vi.fn(),
     })
 
@@ -64,6 +88,7 @@ describe('createMainWindowNavigationActions', () => {
       closeRepo,
       cycleActive: vi.fn(),
       selectBranch: vi.fn(),
+      selectDetachedWorktree: vi.fn(),
       setDetailTab: vi.fn(),
     })
 

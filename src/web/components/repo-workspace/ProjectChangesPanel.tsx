@@ -25,8 +25,7 @@ import { resourceBusy } from '#/web/stores/repos/resources.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
-
-type ProjectChangesBranch = NonNullable<SelectedBranchDetailPresentation['branch']>
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 function changedFilePaths(status: SelectedBranchDetailPresentation['selectedStatus']): string[] {
   return status.flatMap((worktree) => worktree.entries.map((entry) => entry.path))
@@ -126,6 +125,7 @@ export function ProjectChangesPanel({
             },
             ui: {
               selectedBranch: repo.ui.selectedBranch,
+              selectedDetachedWorktreePath: repo.ui.selectedDetachedWorktreePath,
               detailTab: repo.ui.detailTab,
             },
             resources: {
@@ -155,7 +155,11 @@ export function ProjectChangesPanel({
       ? getBranchDetailPresentation(repo, target)
       : getSelectedBranchDetailPresentation(repo)
     : null
-  const selectedStatus = detail?.selectedStatus ?? []
+  const selectedContext = repo && !target ? selectedRepoWorktree(repo) : null
+  const worktreePath = target
+    ? (detail?.branch?.worktree?.path ?? null)
+    : (selectedContext?.worktreePath ?? detail?.branch?.worktree?.path ?? null)
+  const selectedStatus = worktreePath ? (repo?.data.status.filter((status) => status.path === worktreePath) ?? []) : []
   const currentChangedFiles = useMemo(() => changedFilePaths(selectedStatus), [selectedStatus])
   const currentChangedDirectories = useMemo(() => changedDirectoryPaths(currentChangedFiles), [currentChangedFiles])
   const currentChangedDirectorySet = useMemo(() => new Set(currentChangedDirectories), [currentChangedDirectories])
@@ -173,20 +177,18 @@ export function ProjectChangesPanel({
 
   if (!repo) return null
 
-  if (!detail?.branch) {
+  if (!detail || !worktreePath) {
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
   }
+  const selectedWorktreePath = worktreePath
 
-  const branch = detail.branch
-  const hasChanges = detail.selectedStatus.some((worktree) => worktree.entries.length > 0)
+  const hasChanges = selectedStatus.some((worktree) => worktree.entries.length > 0)
   const handleSelectionEnabledChange = (enabled: boolean) => {
     setSelectionEnabled(enabled)
     if (!enabled) setSelectedTargets(new Set())
   }
   async function handleOpenPathInEditor(target: FilePathTarget) {
-    const worktreePath = branch.worktree?.path
-    if (!worktreePath) return
-    const result = await openWorktreeEditorTarget(repoId, worktreePath, target)
+    const result = await openWorktreeEditorTarget(repoId, selectedWorktreePath, target)
     if (!result.ok) toast.error(t(result.message))
   }
 
@@ -208,8 +210,8 @@ export function ProjectChangesPanel({
       />
       <ProjectChangesContent
         repo={repo}
-        branch={branch}
-        selectedStatus={detail.selectedStatus}
+        worktreePath={selectedWorktreePath}
+        selectedStatus={selectedStatus}
         statusLoading={detail.loading.status}
         statusError={detail.errors.status}
         statusStale={detail.stale.status}
@@ -229,10 +231,8 @@ export function ProjectChangesPanel({
         destructive
         onCancel={() => setConfirmDiscardOpen(false)}
         onConfirm={async () => {
-          const worktreePath = detail.branch?.worktree?.path
-          if (!worktreePath) return
           const paths = Array.from(selectedTargets)
-          const result = await discardRepositoryChanges(repo.id, worktreePath, paths)
+          const result = await discardRepositoryChanges(repo.id, selectedWorktreePath, paths)
           useReposStore.getState().setLastResult(repo.id, result, repo.instanceToken)
           if (result.ok) setSelectedTargets(new Set())
           setConfirmDiscardOpen(false)
@@ -331,7 +331,7 @@ function ProjectChangesActionBar({
 
 function ProjectChangesContent({
   repo,
-  branch,
+  worktreePath,
   selectedStatus,
   statusLoading,
   statusError,
@@ -345,7 +345,7 @@ function ProjectChangesContent({
   onOpenPathInEditor,
 }: {
   repo: Pick<BranchDetailRepo, 'data'>
-  branch: ProjectChangesBranch
+  worktreePath: string
   selectedStatus: SelectedBranchDetailPresentation['selectedStatus']
   statusLoading: boolean
   statusError: string | null
@@ -361,17 +361,8 @@ function ProjectChangesContent({
   const t = useT()
   const totalEntries = selectedStatus.reduce((n, wt) => n + wt.entries.length, 0)
 
-  if (branch.worktree?.path && statusLoading && !repo.data.statusLoaded) return <StatusListSkeleton rows={8} />
-  if (branch.worktree?.path && !repo.data.statusLoaded && statusError) return <EmptyState title={t(statusError)} />
-  if (!branch.worktree?.path) {
-    return (
-      <EmptyState
-        icon={<FolderTree size={16} />}
-        title={t('status.no-worktree-title')}
-        body={t('status.no-worktree-body')}
-      />
-    )
-  }
+  if (worktreePath && statusLoading && !repo.data.statusLoaded) return <StatusListSkeleton rows={8} />
+  if (worktreePath && !repo.data.statusLoaded && statusError) return <EmptyState title={t(statusError)} />
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

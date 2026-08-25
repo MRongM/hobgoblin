@@ -36,8 +36,8 @@ export type RepoEventAction =
   | { kind: 'trackRemoteBranch'; branch: string; remoteRef: string }
   | { kind: 'setBranchUpstream'; branch: string; remoteRef: string | null }
   | { kind: 'deleteBranch'; branch: string }
-  | { kind: 'cleanupWorktree'; branch: string; worktreePath: string }
-  | { kind: 'removeWorktree'; branch: string; worktreePath: string; alsoDeleteBranch: boolean }
+  | { kind: 'cleanupWorktree'; branch?: string; worktreePath: string }
+  | { kind: 'removeWorktree'; branch?: string; worktreePath: string; alsoDeleteBranch: boolean }
 
 export interface RepoResultEventOptions {
   action?: RepoEventAction
@@ -74,6 +74,10 @@ export interface RepoWorktreeState {
 
 export interface RepoUiState {
   selectedBranch: string | null
+  /** Renderer-local exact path for a selected detached-HEAD worktree.
+   *  It is mutually exclusive with selectedBranch and intentionally not
+   *  included in the restorable repo snapshot. */
+  selectedDetachedWorktreePath: string | null
   detailTab: DetailTab
   /** Per-branch explorer tab state. Each branch remembers its own last-viewed
    *  tab; switching branches restores that branch's tab. Absent branches fall
@@ -268,6 +272,7 @@ export interface RuntimeCoherentRepoProjectionActions {
     options?: { affectVisibleWorkspace?: boolean },
   ) => void
   selectBranch: (id: string, branch: string) => void
+  selectDetachedWorktree: (id: string, worktreePath: string) => void
   refreshSnapshot: (id: string, options?: { token?: number }) => Promise<void>
   refreshStatus: (id: string, options?: { token?: number }) => Promise<void>
   refreshCoreData: (id: string, options?: { token?: number }) => Promise<void>

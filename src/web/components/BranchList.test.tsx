@@ -26,6 +26,7 @@ const dndState = vi.hoisted(() => ({
 }))
 const navigationState = vi.hoisted(() => ({
   selectRepoBranch: vi.fn(),
+  selectRepoDetachedWorktree: vi.fn(),
   showRepoDetailTab: vi.fn(),
 }))
 const branchWorkspaceQueryState = vi.hoisted(() => ({
@@ -60,8 +61,18 @@ vi.mock('#/web/branch-workspace-queries.ts', () => ({
 vi.mock('#/web/main-window-navigation.tsx', () => ({
   useMainWindowNavigation: () => ({
     selectRepoBranch: navigationState.selectRepoBranch,
+    selectRepoDetachedWorktree: navigationState.selectRepoDetachedWorktree,
     showRepoDetailTab: navigationState.showRepoDetailTab,
   }),
+}))
+
+vi.mock('#/web/components/ConfirmDialog.tsx', () => ({
+  ConfirmDialog: ({ open, confirmLabel, onConfirm }: { open: boolean; confirmLabel: string; onConfirm: () => void }) =>
+    open ? (
+      <button type="button" data-testid="confirm-detached-worktree-action" onClick={onConfirm}>
+        {confirmLabel}
+      </button>
+    ) : null,
 }))
 
 vi.mock('#/web/components/ui/scroll-area.tsx', () => ({
@@ -144,6 +155,7 @@ beforeEach(() => {
   dndState.lastDragEnd = null
   dndState.sensorCount = 0
   navigationState.selectRepoBranch.mockReset()
+  navigationState.selectRepoDetachedWorktree.mockReset()
   navigationState.showRepoDetailTab.mockReset()
   branchWorkspaceQueryState.data = undefined
   branchWorkspaceQueryState.rootId = ''
@@ -503,6 +515,106 @@ describe('BranchList worktree drag ordering', () => {
     expect(dirtyBadge?.getAttribute('title')).toBe('3 个改动')
     expect(badgeIcon?.classList.contains('lucide-git-compare-arrows')).toBe(true)
     expect(badgeIcon?.classList.contains('lucide-folder-tree')).toBe(false)
+  })
+
+  test('selects an authoritative detached worktree as a repository context', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        '/tmp/detached-worktree': {
+          path: '/tmp/detached-worktree',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+    })
+    const onBranchSelected = vi.fn()
+
+    renderList({ onBranchSelected })
+    const detachedRow = Array.from(container?.querySelectorAll('li') ?? []).find((row) =>
+      row.textContent?.includes('1234567890ab'),
+    )
+    act(() => detachedRow?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')?.click())
+
+    expect(navigationState.selectRepoDetachedWorktree).toHaveBeenCalledWith(REPO_ID, '/tmp/detached-worktree')
+    expect(onBranchSelected).toHaveBeenCalledTimes(1)
+  })
+
+  test.each([
+    [false, 'action.remove-worktree', 'removeWorktree'],
+    [true, 'action.cleanup-invalid-worktree', 'cleanupWorktree'],
+  ] as const)('runs the exact-path detached worktree action when prunable is %s', async (isPrunable, label, kind) => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        '/tmp/detached-worktree': {
+          path: '/tmp/detached-worktree',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+          isPrunable,
+        },
+      },
+    })
+    const runBranchAction = vi.fn(async () => ({ ok: true, message: 'ok' }))
+    useReposStore.setState({ runBranchAction })
+
+    renderList({ showActions: true })
+    act(() => document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)?.click())
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>('[data-testid="confirm-detached-worktree-action"]')?.click()
+    })
+
+    expect(runBranchAction).toHaveBeenCalledWith(
+      REPO_ID,
+      kind === 'removeWorktree'
+        ? {
+            kind,
+            worktreePath: '/tmp/detached-worktree',
+            alsoDeleteBranch: false,
+            forceRemoveWorktree: false,
+          }
+        : { kind, worktreePath: '/tmp/detached-worktree' },
+      { token: expect.any(Number) },
+    )
+  })
+
+  test('keeps a locked detached worktree browseable but disables its destructive action', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        '/tmp/detached-worktree': {
+          path: '/tmp/detached-worktree',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+          isLocked: true,
+        },
+      },
+    })
+
+    renderList({ showActions: true })
+
+    const row = Array.from(container?.querySelectorAll('li') ?? []).find((candidate) =>
+      candidate.textContent?.includes('1234567890ab'),
+    )
+    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')?.disabled).toBe(false)
+    expect(
+      document.body.querySelector<HTMLButtonElement>('button[aria-label="action.remove-worktree"]')?.disabled,
+    ).toBe(true)
   })
 
   test('keeps the detached dirty badge icon-only when the exact count is unavailable', () => {

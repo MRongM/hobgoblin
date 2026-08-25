@@ -211,7 +211,7 @@ export interface RepoBackend {
   ): Promise<ExecResult>
   removeWorktree(
     input: {
-      branch: string
+      branch?: string
       worktreePath: string
       alsoDeleteBranch: boolean
       forceRemoveWorktree?: boolean
@@ -564,13 +564,15 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
     },
     async removeWorktree(input, signal) {
       if (!isValidCwd(repoId)) return { ok: false, message: 'error.invalid-arguments' }
+      if (input.alsoDeleteBranch && !input.branch) return { ok: false, message: 'error.invalid-arguments' }
+      const branch = input.branch
       const worktrees = await getWorktrees(repoId, {
         ...(input.skipWorktreeStatus ? { includeStatus: false } : {}),
         signal,
       })
       const removable = resolveRemovableWorktree(
         worktrees,
-        input.alsoDeleteBranch ? input.branch : undefined,
+        input.alsoDeleteBranch ? branch : undefined,
         input.worktreePath,
         repoId,
       )
@@ -582,7 +584,7 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       if (invalid) return invalid
       if (input.alsoDeleteBranch) {
         const validation = await validateBranchDeletion(
-          input.branch,
+          branch!,
           { force: input.forceDeleteBranch, notMergedMessage: 'error.cannot-remove-unpushed-worktree' },
           signal,
           removable.target.path,
@@ -590,7 +592,7 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
         if (validation) return validation
       }
       const upstreamPreparation = input.alsoDeleteBranch
-        ? await prepareUpstreamDeletion(input.branch, input.alsoDeleteUpstream === true, signal)
+        ? await prepareUpstreamDeletion(branch!, input.alsoDeleteUpstream === true, signal)
         : { upstream: null }
       if ('ok' in upstreamPreparation) return upstreamPreparation
       const removed = await removeWorktree(repoId, removable.target.path, {
@@ -599,7 +601,7 @@ function createLocalRepoBackend(repoId: string): RepoBackend {
       })
       if (!removed.ok || !input.alsoDeleteBranch) return removed
       return await deleteBranchAfterValidation(
-        input.branch,
+        branch!,
         { force: input.forceDeleteBranch, alsoDeleteUpstream: input.alsoDeleteUpstream },
         signal,
         upstreamPreparation,
@@ -854,8 +856,10 @@ async function createRemoteRepoBackend(repoId: string): Promise<RepoBackend> {
       return await deletePreparedUpstream(preparation, deleted, signal)
     },
     async removeWorktree(input, signal) {
+      if (input.alsoDeleteBranch && !input.branch) return { ok: false, message: 'error.invalid-arguments' }
+      const branch = input.branch
       const preparation = input.alsoDeleteBranch
-        ? await prepareUpstreamDeletion(input.branch, input.alsoDeleteUpstream === true, signal)
+        ? await prepareUpstreamDeletion(branch!, input.alsoDeleteUpstream === true, signal)
         : { upstream: null }
       if ('ok' in preparation) return preparation
       const removed = await removeRemoteWorktree(target, { ...input, signal })

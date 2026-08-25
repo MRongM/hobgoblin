@@ -533,6 +533,7 @@ export function seedRepoState(options: {
   branchSnapshots?: BranchSnapshotInfo[]
   currentBranch?: string
   selectedBranch?: string | null
+  selectedDetachedWorktreePath?: string | null
   branchViewMode?: never
   detailTab?: DetailTab
   explorerTab?: ExplorerTab
@@ -567,6 +568,7 @@ export function seedRepoState(options: {
     ui: {
       ...base.ui,
       selectedBranch: options.selectedBranch ?? base.ui.selectedBranch,
+      selectedDetachedWorktreePath: options.selectedDetachedWorktreePath ?? base.ui.selectedDetachedWorktreePath,
       detailTab: options.detailTab ?? base.ui.detailTab,
       explorerTabByBranch: options.explorerTab
         ? { [options.selectedBranch ?? '']: options.explorerTab }

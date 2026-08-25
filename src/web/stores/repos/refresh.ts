@@ -7,7 +7,11 @@ import { applyStatusToWorktreeStates } from '#/web/stores/repos/worktree-state.t
 import { runCoreDataRefreshWorkflow, runSnapshotSuccessWorkflow } from '#/web/stores/repos/refresh-workflows.ts'
 import { reprobeWorkspaceCapability } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
-import { applySnapshotToRepoProjection, resolveActionToken } from '#/web/stores/repos/refresh-state.ts'
+import {
+  applySnapshotToRepoProjection,
+  reconcileRepoWorktreeSelectionAfterStatus,
+  resolveActionToken,
+} from '#/web/stores/repos/refresh-state.ts'
 import { createRefreshSyncHelpers } from '#/web/stores/repos/refresh-sync.ts'
 import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
 import { finishResourceError, startResource } from '#/web/stores/repos/resources.ts'
@@ -95,6 +99,7 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
           r.data.status = status
           r.data.statusLoaded = true
           r.data.worktreesByPath = applyStatusToWorktreeStates(r.data.worktreesByPath, status)
+          reconcileRepoWorktreeSelectionAfterStatus(r)
         },
         onSuccess: (_status, ctx) => {
           const repoAfterStatus = get().repos[id]

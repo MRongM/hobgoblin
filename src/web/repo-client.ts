@@ -228,7 +228,7 @@ export async function pushRepositoryLocalTag(
 export async function removeRepositoryWorktree(
   cwd: string,
   options: {
-    branch: string
+    branch?: string
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean

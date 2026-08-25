@@ -8,6 +8,7 @@ import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 type ProjectExternalOpenActionId = 'editor' | 'externalTerminal' | 'remote'
 
@@ -34,7 +35,7 @@ export function resolveProjectExternalOpenTarget(repo: RepoState | null | undefi
   const plainWorkspacePath = repoPlainWorkspacePath(repo)
   if (plainWorkspacePath) return plainWorkspacePath
   if (!repo || repo.isGitRepo === false) return null
-  return repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)?.worktree?.path ?? null
+  return selectedRepoWorktree(repo)?.worktreePath ?? null
 }
 
 export function useProjectExternalOpenActions(projectId: string): ProjectExternalOpenActions {

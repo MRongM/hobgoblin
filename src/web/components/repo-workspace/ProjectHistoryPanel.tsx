@@ -25,6 +25,7 @@ import {
   commitFileStatusTone,
   formatHistoryDate,
 } from '#/web/components/repo-workspace/history-graph.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 const HISTORY_PAGE_SIZE = 100
 
@@ -201,9 +202,12 @@ function useProjectHistoryView(repoId: string): HistoryView {
     useReposStore,
     (state) => {
       const repo = state.repos[repoId]
-      const branchName = repo?.ui.selectedBranch ?? null
-      const branch = repo?.data.branches.find((entry) => entry.name === branchName)
-      return { branchName, worktreePath: branch?.worktree?.path ?? null }
+      if (!repo) return { branchName: null, worktreePath: null }
+      const context = selectedRepoWorktree(repo)
+      return {
+        branchName: context?.historyRef ?? null,
+        worktreePath: context?.worktreePath ?? null,
+      }
     },
     (a, b) => a.branchName === b.branchName && a.worktreePath === b.worktreePath,
   )

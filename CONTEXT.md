@@ -461,6 +461,10 @@ _Avoid_: Dependency synchronization, dependency registry, member lifecycle actio
 A linked branch worktree that is not a member of a workspace worktree. It is changed only through that repository's ordinary worktree actions.
 _Avoid_: Orphan worktree, detached worktree
 
+**Detached-HEAD worktree**:
+A non-primary, non-bare Git worktree whose HEAD points directly to a commit instead of a local branch. Hobgoblin classifies it from authoritative Git worktree state regardless of who created it or whether its path lies inside or outside the repository project directory.
+_Avoid_: Project-external worktree, externally created worktree, repository-only worktree
+
 **Branch workspace operation**:
 A server-coordinated creation, extension, reduction, repair, or removal of one branch workspace. Independent repository-member creation pipelines run with bounded concurrency while preserving per-member progress and manifest-order failure selection; destructive reduction and ordinary removal remain sequential. Completed work is never rolled back, and this cross-repository orchestration is not exposed as a separate batch concept.
 Creation succeeds only after final reconciliation observes the resulting branch workspace as ready; the successful result carries that observed state, while later reads continue to detect external drift. If the final remote read fails after the foreground UI has independently observed the workspace as ready with every planned step complete, the creation modal closes; all other failures remain visible and retryable. Whole-branch-workspace removal remains available from ready, incomplete, and drifted lifecycles, derives its managed scope from the durable manifest, and retains all destructive approvals and non-bypassable worktree safety boundaries.

@@ -46,6 +46,29 @@ describe('resolveProjectInternalTerminalBase', () => {
 
     expect(resolveProjectInternalTerminalBase(repo)).toBeNull()
   })
+
+  test('resolves a selected detached worktree without inventing a branch', () => {
+    const repo = createRepo('/repo', (draft) => {
+      draft.data.branches = [createRepoBranch('main', { worktree: { path: '/repo' } })]
+      draft.data.worktreesByPath = {
+        '/repo': { path: '/repo', branch: 'main', isMain: true },
+        '/worktrees/detached': {
+          path: '/worktrees/detached',
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+        },
+      }
+      draft.ui.selectedBranch = null
+      draft.ui.selectedDetachedWorktreePath = '/worktrees/detached'
+    })
+
+    expect(resolveProjectInternalTerminalBase(repo)).toEqual({
+      repoRoot: '/repo',
+      branch: 'HEAD@abcdef123456',
+      worktreePath: '/worktrees/detached',
+    })
+  })
 })
 
 describe('useProjectInternalTerminalAction', () => {
@@ -102,6 +125,41 @@ describe('useProjectInternalTerminalAction', () => {
         worktreePath: '/worktrees/demo',
       },
       'tmux-if-available',
+    )
+  })
+
+  test('activates a detached worktree terminal surface before creating its terminal', async () => {
+    const repo = createRepo('/repo', (draft) => {
+      draft.data.branches = [createRepoBranch('main', { worktree: { path: '/repo' } })]
+      draft.data.worktreesByPath = {
+        '/repo': { path: '/repo', branch: 'main', isMain: true },
+        '/worktrees/detached': {
+          path: '/worktrees/detached',
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+        },
+      }
+      draft.ui.selectedBranch = null
+      draft.ui.selectedDetachedWorktreePath = '/worktrees/detached'
+    })
+    seedProject(repo)
+    const action = await renderAction(repo.id)
+
+    await act(async () => await action().onSelect())
+
+    expect(navigation.showRepoDetachedWorktreeDetailTab).toHaveBeenCalledWith(
+      repo.id,
+      '/worktrees/detached',
+      'terminal',
+    )
+    expect(createTerminal).toHaveBeenCalledWith(
+      {
+        repoRoot: repo.id,
+        branch: 'HEAD@abcdef123456',
+        worktreePath: '/worktrees/detached',
+      },
+      'native',
     )
   })
 
@@ -235,8 +293,10 @@ function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWi
     closeRepo: vi.fn(),
     cycleRepo: vi.fn(),
     selectRepoBranch: vi.fn(),
+    selectRepoDetachedWorktree: vi.fn(),
     showRepoDetailTab: vi.fn(),
     showRepoBranchDetailTab: vi.fn(),
+    showRepoDetachedWorktreeDetailTab: vi.fn(),
     openSettings: vi.fn(),
     ...overrides,
   }

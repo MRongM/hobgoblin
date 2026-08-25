@@ -142,6 +142,48 @@ describe('workspace commands', () => {
     })
   })
 
+  test('terminal primary action creates a terminal for the selected detached worktree', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: WORKTREE_PATH,
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        [WORKTREE_PATH]: {
+          path: WORKTREE_PATH,
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+      detailTab: 'status',
+    })
+    const createTerminal = vi.fn(async () => 'terminal-1')
+    setTerminalSessionCommandBridge({
+      worktreeSnapshot: () => ({
+        worktreeTerminalKey: `${REPO_ID}\0${WORKTREE_PATH}`,
+        selectedDescriptor: null,
+        sessions: [],
+        count: 0,
+      }),
+      createTerminal,
+      selectTerminal: vi.fn(),
+      waitForInputReady: vi.fn(async () => true),
+      writeInput: vi.fn(),
+    })
+    const navigation = navigationWith()
+    const setDetailCollapsed = vi.fn((collapsed: boolean) => useReposStore.getState().setDetailCollapsed(collapsed))
+
+    await runTerminalPrimaryActionCommand({ repoId: REPO_ID, navigation, setDetailCollapsed })
+
+    expect(createTerminal).toHaveBeenCalledWith({
+      repoRoot: REPO_ID,
+      branch: 'HEAD@1234567890ab',
+      worktreePath: WORKTREE_PATH,
+    })
+  })
+
   test('terminal primary action does not create a duplicate terminal when one already exists', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -298,6 +340,43 @@ describe('workspace commands', () => {
     expect(repo?.ui.detailTab).toBe('terminal')
     expect(useReposStore.getState().detailCollapsed).toBe(false)
     expect(selectTerminal).toHaveBeenCalledWith(`${REPO_ID}\0${WORKTREE_PATH}`, 'session-key-2')
+  })
+
+  test('terminal deep link restores the exact detached worktree context', () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: 'main',
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        [WORKTREE_PATH]: {
+          path: WORKTREE_PATH,
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+      detailTab: 'status',
+    })
+    const navigation = navigationWith()
+
+    expect(
+      runTerminalDeepLinkCommand({
+        target: {
+          repoId: REPO_ID,
+          worktreePath: WORKTREE_PATH,
+          branch: 'HEAD@1234567890ab',
+          terminalId: 'terminal-1',
+        },
+        navigation,
+        setDetailCollapsed: useReposStore.getState().setDetailCollapsed,
+      }),
+    ).toBe(true)
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo?.ui.selectedBranch).toBeNull()
+    expect(repo?.ui.selectedDetachedWorktreePath).toBe(WORKTREE_PATH)
+    expect(repo?.ui.detailTab).toBe('terminal')
   })
 
   test('restores a valid branch workspace member scope without activating the repository as a project', () => {
@@ -505,6 +584,11 @@ function navigationWith(): MainWindowNavigationActions {
     closeRepo: () => {},
     cycleRepo: () => {},
     selectRepoBranch: () => {},
+    selectRepoDetachedWorktree: (repoId, worktreePath) => {
+      const state = useReposStore.getState()
+      state.setActive(repoId)
+      state.selectDetachedWorktree(repoId, worktreePath)
+    },
     showRepoDetailTab: (repoId, tab) => {
       const state = useReposStore.getState()
       state.setActive(repoId)
@@ -514,6 +598,12 @@ function navigationWith(): MainWindowNavigationActions {
       const state = useReposStore.getState()
       state.setActive(repoId)
       state.selectBranch(repoId, branch)
+      state.setDetailTab(repoId, tab)
+    },
+    showRepoDetachedWorktreeDetailTab: (repoId, worktreePath, tab) => {
+      const state = useReposStore.getState()
+      state.setActive(repoId)
+      state.selectDetachedWorktree(repoId, worktreePath)
       state.setDetailTab(repoId, tab)
     },
     openSettings: () => {},

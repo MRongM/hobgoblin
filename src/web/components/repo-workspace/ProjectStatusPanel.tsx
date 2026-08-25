@@ -1,4 +1,5 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { FolderGit2, FolderOpen, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
 import { EmptyState, ScrollPane, Toolbar } from '#/web/components/Layout.tsx'
 import { CopyButton } from '#/web/components/CopyButton.tsx'
 import { BranchStatus, branchStatusClipboardText } from '#/web/components/branch-detail/BranchStatus.tsx'
@@ -10,6 +11,10 @@ import {
 } from '#/web/components/branch-detail/model.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
+import { MonoValue, StatusChip, StatusRow, StatusRows } from '#/web/components/branch-detail/status-ui.tsx'
+import type { RepoWorktreeState } from '#/web/stores/repos/types.ts'
+import { lastPathSegment } from '#/web/lib/paths.ts'
 
 interface ProjectStatusPanelProps {
   repoId: string
@@ -34,6 +39,7 @@ function projectStatusRepoEqual(a: ProjectStatusRepo | undefined, b: ProjectStat
       a.data.statusLoaded === b.data.statusLoaded &&
       a.data.worktreesByPath === b.data.worktreesByPath &&
       a.ui.selectedBranch === b.ui.selectedBranch &&
+      a.ui.selectedDetachedWorktreePath === b.ui.selectedDetachedWorktreePath &&
       a.ui.detailTab === b.ui.detailTab &&
       a.resources.status === b.resources.status &&
       a.operations.branchAction === b.operations.branchAction &&
@@ -68,6 +74,7 @@ export function ProjectStatusPanel({ repoId, target }: ProjectStatusPanelProps) 
             },
             ui: {
               selectedBranch: repo.ui.selectedBranch,
+              selectedDetachedWorktreePath: repo.ui.selectedDetachedWorktreePath,
               detailTab: repo.ui.detailTab,
             },
             resources: {
@@ -94,6 +101,19 @@ export function ProjectStatusPanel({ repoId, target }: ProjectStatusPanelProps) 
 
   if (!repo) return null
 
+  const selectedContext = target ? null : selectedRepoWorktree(repo)
+  if (selectedContext?.kind === 'detached') {
+    const copyAllValue = detachedStatusClipboardText(selectedContext.worktree, repo.name, t)
+    return (
+      <section className="flex min-h-0 flex-1 flex-col bg-pane">
+        <ProjectStatusToolbar copyAllValue={copyAllValue} />
+        <ScrollPane>
+          <DetachedWorktreeStatus worktree={selectedContext.worktree} repoName={repo.name} />
+        </ScrollPane>
+      </section>
+    )
+  }
+
   const detail = target ? getBranchDetailPresentation(repo, target) : getSelectedBranchDetailPresentation(repo)
   if (!detail.branch) {
     return <EmptyState title={t(repo.data.branches.length === 0 ? 'branches.empty' : 'branches.filter-empty')} />
@@ -108,6 +128,77 @@ export function ProjectStatusPanel({ repoId, target }: ProjectStatusPanelProps) 
         <BranchStatus detail={detail} repoName={repo.name} repoId={repo.id} density="compact" />
       </ScrollPane>
     </section>
+  )
+}
+
+function detachedStatusClipboardText(
+  worktree: RepoWorktreeState,
+  repoName: string,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return [
+    [t('branch-status.signal.folder'), lastPathSegment(worktree.path) || worktree.path],
+    [t('branch-status.signal.project'), repoName],
+    [t('branch-status.signal.branch'), t('branches.detached-worktree')],
+    [t('branch-status.signal.worktree'), worktree.path],
+    [t('branch-status.signal.commit-hash'), worktree.head ?? '—'],
+  ]
+    .map(([label, value]) => `${label}: ${value}`)
+    .join('\n')
+}
+
+function DetachedWorktreeStatus({ worktree, repoName }: { worktree: RepoWorktreeState; repoName: string }) {
+  const t = useT()
+  const changeCount = worktree.changeCount ?? 0
+  const dirty = worktree.isDirty === true || changeCount > 0
+  return (
+    <StatusRows density="compact">
+      <StatusRow
+        icon={<FolderOpen size={14} />}
+        label={t('branch-status.signal.folder')}
+        value={lastPathSegment(worktree.path) || worktree.path}
+        valueLayout="fill"
+      />
+      <StatusRow
+        icon={<FolderGit2 size={14} />}
+        label={t('branch-status.signal.project')}
+        value={repoName}
+        valueLayout="fill"
+        tone="brand"
+      />
+      <StatusRow
+        icon={<GitCommitHorizontal size={14} />}
+        label={t('branch-status.signal.branch')}
+        value={<StatusChip>{t('branches.detached-worktree')}</StatusChip>}
+        valueLayout="chips"
+      />
+      <StatusRow
+        icon={<GitCompareArrows size={14} />}
+        label={t('branch-status.signal.worktree')}
+        value={
+          <MonoValue title={worktree.path} truncate>
+            {worktree.path}
+          </MonoValue>
+        }
+        after={
+          dirty ? (
+            <StatusChip tone="attention">{t('branch-status.worktree-dirty', { n: changeCount })}</StatusChip>
+          ) : undefined
+        }
+        valueLayout="fill"
+        tone={dirty ? 'attention' : 'brand'}
+      />
+      <StatusRow
+        icon={<GitCommitHorizontal size={14} />}
+        label={t('branch-status.signal.commit-hash')}
+        value={
+          <MonoValue title={worktree.head} truncate>
+            {worktree.head ?? '—'}
+          </MonoValue>
+        }
+        valueLayout="fill"
+      />
+    </StatusRows>
   )
 }
 

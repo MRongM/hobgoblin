@@ -449,6 +449,29 @@ describe('repo routes', () => {
     )
   })
 
+  test('omits branch when routing detached worktree removal', async () => {
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const app = createRepoRoutes()
+
+    const response = await app.request('http://localhost/remove-worktree', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        cwd: '/repo',
+        worktreePath: '/repo-detached',
+        alsoDeleteBranch: false,
+      }),
+    })
+
+    await expect(response.json()).resolves.toEqual({ ok: true, message: 'removed' })
+    const input = mocks.removeRepositoryWorktree.mock.calls.at(-1)?.[1]
+    expect(input).toMatchObject({
+      worktreePath: '/repo-detached',
+      alsoDeleteBranch: false,
+    })
+    expect(Object.hasOwn(input ?? {}, 'branch')).toBe(false)
+  })
+
   test('serves repository history with normalized body values', async () => {
     const { createRepoRoutes } = await import('#/server/routes/repo.ts')
     const app = createRepoRoutes()

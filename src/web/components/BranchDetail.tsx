@@ -56,6 +56,7 @@ export function BranchDetail({
             },
             ui: {
               selectedBranch: repo.ui.selectedBranch,
+              selectedDetachedWorktreePath: repo.ui.selectedDetachedWorktreePath,
               detailTab: repo.ui.detailTab,
             },
             resources: {

@@ -68,6 +68,11 @@ beforeEach(() => {
       state.setActive(repoId)
       state.selectBranch(repoId, branch)
     },
+    selectRepoDetachedWorktree: (repoId, worktreePath) => {
+      const state = useReposStore.getState()
+      state.setActive(repoId)
+      state.selectDetachedWorktree(repoId, worktreePath)
+    },
     showRepoDetailTab: (repoId, tab) => {
       const state = useReposStore.getState()
       state.setActive(repoId)
@@ -78,6 +83,12 @@ beforeEach(() => {
       const state = useReposStore.getState()
       state.setActive(repoId)
       state.selectBranch(repoId, branch)
+      state.setDetailTab(repoId, tab)
+    },
+    showRepoDetachedWorktreeDetailTab: (repoId, worktreePath, tab) => {
+      const state = useReposStore.getState()
+      state.setActive(repoId)
+      state.selectDetachedWorktree(repoId, worktreePath)
       state.setDetailTab(repoId, tab)
     },
     openSettings: () => {},
@@ -190,6 +201,42 @@ describe('useRendererEffectIntentRouter', () => {
     expect(state.repos[repo.id]?.ui.detailTab).toBe('terminal')
     expect(state.selectedTerminalByWorktree).toMatchObject({
       [worktreeTerminalKey(repo.id, '/tmp/repo-feature')]: key,
+    })
+  })
+
+  test('terminal bell clicks restore the emitting detached worktree context', async () => {
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      detailTab: 'status',
+      branchSnapshots: [createBranchSnapshot('main', { isCurrent: true, worktree: { path: '/tmp/repo-main' } })],
+      worktreesByPath: {
+        '/tmp/repo-main': { path: '/tmp/repo-main', branch: 'main', isMain: true },
+        '/tmp/repo-detached': {
+          path: '/tmp/repo-detached',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+    })
+    currentRepoId = repo.id
+    const key = '/tmp/repo\0/tmp/repo-detached\0terminal-2'
+
+    await renderHookHost()
+
+    await act(async () => {
+      for (const listener of intentListeners) listener({ type: 'terminal-bell-click', repoRoot: repo.id, key })
+      await Promise.resolve()
+    })
+
+    const state = useReposStore.getState()
+    expect(state.repos[repo.id]?.ui.selectedBranch).toBeNull()
+    expect(state.repos[repo.id]?.ui.selectedDetachedWorktreePath).toBe('/tmp/repo-detached')
+    expect(state.repos[repo.id]?.ui.detailTab).toBe('terminal')
+    expect(state.selectedTerminalByWorktree).toMatchObject({
+      [worktreeTerminalKey(repo.id, '/tmp/repo-detached')]: key,
     })
   })
 

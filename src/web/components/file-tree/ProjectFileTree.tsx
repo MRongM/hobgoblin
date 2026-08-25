@@ -103,6 +103,7 @@ import { useRuntimeFileAreaSettings } from '#/web/runtime-settings-file-area.ts'
 import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 const ROOT_DIR = ''
 
@@ -1302,12 +1303,12 @@ function useProjectFileTreeView(repoId: string, folderContext?: ProjectFileTreeC
       if (plainWorkspacePath) {
         return { exists: true, isGitRepo: false, branch: null, worktreePath: plainWorkspacePath, status: [] }
       }
-      const selected = repo.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
+      const selected = selectedRepoWorktree(repo)
       return {
         exists: true,
         isGitRepo: repo.isGitRepo,
-        branch: selected?.name ?? null,
-        worktreePath: selected?.worktree?.path ?? null,
+        branch: selected?.branch?.name ?? null,
+        worktreePath: selected?.worktreePath ?? null,
         status: repo.data.status,
       }
     },

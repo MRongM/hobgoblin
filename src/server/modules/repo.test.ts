@@ -2521,7 +2521,6 @@ describe('repo mutation invalidation publishing', () => {
     const { removeRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
 
     const result = await removeRepositoryWorktree('/tmp/repo', {
-      branch: 'feature/a',
       worktreePath: '/tmp/repo-worktree',
       alsoDeleteBranch: false,
       forceRemoveWorktree: true,
@@ -2533,6 +2532,20 @@ describe('repo mutation invalidation publishing', () => {
       force: true,
       signal: undefined,
     })
+    expect(mocks.deleteBranch).not.toHaveBeenCalled()
+  })
+
+  test('removeRepositoryWorktree rejects branch deletion without a branch before reading worktrees', async () => {
+    const { removeRepositoryWorktree } = await import('#/server/modules/repo-write-paths.ts')
+
+    const result = await removeRepositoryWorktree('/tmp/repo', {
+      worktreePath: '/tmp/repo-worktree',
+      alsoDeleteBranch: true,
+    })
+
+    expect(result).toEqual({ ok: false, message: 'error.invalid-arguments' })
+    expect(mocks.getWorktrees).not.toHaveBeenCalled()
+    expect(mocks.removeWorktree).not.toHaveBeenCalled()
     expect(mocks.deleteBranch).not.toHaveBeenCalled()
   })
 

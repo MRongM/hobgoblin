@@ -7,7 +7,7 @@ import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { writeInternalFileTreeClipboard } from '#/web/components/file-tree/clipboard.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { GOBLIN_FILE_PATHS_MIME, type RepoFileTreeResult } from '#/shared/file-tree.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 
@@ -220,6 +220,33 @@ describe('ProjectFileTree', () => {
     expect(container?.textContent).toContain('README.md')
     expect(fileTreeRoot().className).toContain('project-file-area-tone')
     expect(fileTreeRoot().style.getPropertyValue('--goblin-file-tree-font-size')).toBe('15px')
+  })
+
+  test('loads the selected detached worktree root by exact path', async () => {
+    seedRepoState({
+      id: '/repo',
+      branches: [createRepoBranch('main', { worktree: { path: '/repo' } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: '/worktrees/detached',
+      worktreesByPath: {
+        '/repo': { path: '/repo', branch: 'main', isMain: true },
+        '/worktrees/detached': {
+          path: '/worktrees/detached',
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+    })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    expect(getRepositoryFileTree).toHaveBeenCalledWith(
+      '/repo',
+      '/worktrees/detached',
+      '/worktrees/detached',
+      expect.any(AbortSignal),
+    )
   })
 
   test('exposes the themed file-tree content scroller hook', async () => {

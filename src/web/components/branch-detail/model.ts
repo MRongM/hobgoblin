@@ -12,7 +12,7 @@ export interface BranchDetailTarget {
 
 export interface BranchDetailRepo extends BranchActionRepo {
   data: BranchActionRepo['data'] & Pick<RepoState['data'], 'branches' | 'statusLoaded'>
-  ui: Pick<RepoState['ui'], 'selectedBranch' | 'detailTab'>
+  ui: Pick<RepoState['ui'], 'selectedBranch' | 'selectedDetachedWorktreePath' | 'detailTab'>
   resources: Pick<RepoState['resources'], 'status'>
   remote: BranchActionRepo['remote'] & Pick<RepoState['remote'], 'target'>
 }
@@ -31,6 +31,7 @@ export function branchDetailRepoEqual(a: BranchDetailRepo | undefined, b: Branch
       a.data.statusLoaded === b.data.statusLoaded &&
       a.data.worktreesByPath === b.data.worktreesByPath &&
       a.ui.selectedBranch === b.ui.selectedBranch &&
+      a.ui.selectedDetachedWorktreePath === b.ui.selectedDetachedWorktreePath &&
       a.ui.detailTab === b.ui.detailTab &&
       a.resources.status === b.resources.status &&
       a.operations.branchAction === b.operations.branchAction &&

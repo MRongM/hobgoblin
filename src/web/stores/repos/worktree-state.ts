@@ -59,7 +59,7 @@ export function applyStatusToWorktreeStates(
   previous: Record<string, RepoWorktreeState>,
   status: WorktreeStatus[],
 ): Record<string, RepoWorktreeState> {
-  const next = { ...previous }
+  const next = Object.fromEntries(Object.entries(previous).filter(([, worktree]) => worktree.isDetached !== true))
   for (const wt of status) {
     const prev = previous[wt.path]
     const changeCount = wt.entries.length

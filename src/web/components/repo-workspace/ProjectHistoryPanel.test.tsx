@@ -123,6 +123,36 @@ afterEach(() => {
 })
 
 describe('ProjectHistoryPanel', () => {
+  test('loads selected detached worktree history from its HEAD ref', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: '/tmp/detached-worktree',
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        '/tmp/detached-worktree': {
+          path: '/tmp/detached-worktree',
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+    })
+
+    await act(async () => {
+      root!.render(<ProjectHistoryPanel repoId={REPO_ID} onRevealPath={vi.fn()} />)
+    })
+    await act(async () => {})
+
+    expect(mocks.getRepositoryHistory).toHaveBeenCalledWith(
+      REPO_ID,
+      'abcdef1234567890',
+      { limit: 100, skip: 0 },
+      expect.any(AbortSignal),
+    )
+  })
+
   test('loads an explicit member worktree history without changing the selected branch', async () => {
     const memberWorktreePath = '/tmp/workspace/hobgoblin-feature-auth/api'
     const repo = seedRepoState({

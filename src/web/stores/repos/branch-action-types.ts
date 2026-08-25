@@ -10,10 +10,10 @@ export type RepoBranchAction =
   | { kind: 'trackRemoteBranch'; localBranch: string; remoteRef: string }
   | { kind: 'setBranchUpstream'; branch: string; remoteRef: string | null }
   | { kind: 'deleteBranch'; branch: string; force?: boolean; alsoDeleteUpstream?: boolean }
-  | { kind: 'cleanupWorktree'; branch: string; worktreePath: string }
+  | { kind: 'cleanupWorktree'; branch?: string; worktreePath: string }
   | {
       kind: 'removeWorktree'
-      branch: string
+      branch?: string
       worktreePath: string
       alsoDeleteBranch: boolean
       forceRemoveWorktree?: boolean

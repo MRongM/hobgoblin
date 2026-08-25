@@ -30,12 +30,18 @@ import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 import type { BranchWorkspaceReadResult, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import type { WorkspaceActiveContext } from '#/shared/rpc.ts'
+import {
+  isSelectableDetachedWorktree,
+  selectedRepoWorktree,
+  selectedWorktreeTabKey,
+} from '#/web/stores/repos/worktree-selection.ts'
 function branchHasWorktree(repo: RepoState, branchName: string | null): boolean {
   return !!branchName && repo.data.branches.some((branch) => branch.name === branchName && !!branch.worktree?.path)
 }
 
 function detailTabForSelection(repo: RepoState, tab: DetailTab, selectedBranch = repo.ui.selectedBranch): DetailTab {
   if (repo.isGitRepo === false && tab === 'terminal') return 'terminal'
+  if (repo.ui.selectedDetachedWorktreePath && selectedRepoWorktree(repo)) return detailTabForWorktree(tab, true)
   return detailTabForWorktree(tab, branchHasWorktree(repo, selectedBranch))
 }
 
@@ -108,7 +114,10 @@ type RestorableWorkspaceSelectionActions = Pick<
 
 type LocalWorkspaceSelectionActions = Pick<ReposStore, 'setBranchSearchQuery'>
 
-type RuntimeCoherentSelectionActions = Pick<ReposStore, 'setDetailTab' | 'dismissExitedTerminalDetail' | 'selectBranch'>
+type RuntimeCoherentSelectionActions = Pick<
+  ReposStore,
+  'setDetailTab' | 'dismissExitedTerminalDetail' | 'selectBranch' | 'selectDetachedWorktree'
+>
 
 type RepoMutationSelectionActions = Pick<ReposStore, 'checkoutSelectedInRepo' | 'checkoutSelected'>
 
@@ -399,7 +408,7 @@ function createRestorableWorkspaceSelectionActions(set: ReposSet, get: ReposGet)
         // matches the pre-migration behavior where an implicit 'files'
         // was already the value.
         if (explorerTabForRepoSelection(repo) === tab) return state
-        const key = repo.ui.selectedBranch ?? ''
+        const key = selectedWorktreeTabKey(repo)
         changed = true
         token = repo.instanceToken
         return replaceRepoState(state, repo, (draft) => {
@@ -584,16 +593,32 @@ function createRuntimeCoherentSelectionActions(set: ReposSet, get: ReposGet): Ru
         const repo = s.repos[id]
         if (!repo) return s
         if (!repo.data.branches.some((b) => b.name === branch)) return s
-        if (repo.ui.selectedBranch === branch) return s
+        if (repo.ui.selectedBranch === branch && repo.ui.selectedDetachedWorktreePath === null) return s
         changed = true
         token = repo.instanceToken
         return replaceRepoState(s, repo, (r) => {
           r.ui.selectedBranch = branch
+          r.ui.selectedDetachedWorktreePath = null
           r.ui.detailTab = detailTabForSelection(repo, r.ui.detailTab, branch)
         })
       })
       const repo = get().repos[id]
       if (changed && token !== undefined && repo) persistRestorableRepoSnapshot(set, repo, token)
+    },
+
+    selectDetachedWorktree(id: string, worktreePath: string) {
+      set((s) => {
+        const repo = s.repos[id]
+        if (!repo) return s
+        const worktree = repo.data.worktreesByPath[worktreePath]
+        if (!isSelectableDetachedWorktree(worktree)) return s
+        if (repo.ui.selectedBranch === null && repo.ui.selectedDetachedWorktreePath === worktree.path) return s
+        return replaceRepoState(s, repo, (r) => {
+          r.ui.selectedBranch = null
+          r.ui.selectedDetachedWorktreePath = worktree.path
+          r.ui.detailTab = detailTabForWorktree(r.ui.detailTab, true)
+        })
+      })
     },
   }
 }

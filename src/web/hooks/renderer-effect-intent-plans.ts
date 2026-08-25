@@ -4,6 +4,7 @@ import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 import type { LangPref, ThemePref } from '#/shared/settings.ts'
+import { isSelectableDetachedWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 type WorkspaceRendererIntent = Extract<
   RendererEffectIntent,
@@ -26,7 +27,7 @@ export type TerminalBellIntentPlan =
   | {
       kind: 'show-worktree-terminal'
       repoId: string
-      branch: string
+      target: { kind: 'branch'; branch: string } | { kind: 'detached'; worktreePath: string }
       key: string
       worktreeTerminalKey: string
     }
@@ -81,7 +82,17 @@ export function createTerminalBellIntentPlan(
       return {
         kind: 'show-worktree-terminal',
         repoId: repo.id,
-        branch: branch.name,
+        target: { kind: 'branch', branch: branch.name },
+        key: event.key,
+        worktreeTerminalKey: worktreeTerminalKey(parsedKey.repoRoot, parsedKey.worktreePath),
+      }
+    }
+    const detachedWorktree = repo.data.worktreesByPath[parsedKey.worktreePath]
+    if (isSelectableDetachedWorktree(detachedWorktree)) {
+      return {
+        kind: 'show-worktree-terminal',
+        repoId: repo.id,
+        target: { kind: 'detached', worktreePath: detachedWorktree.path },
         key: event.key,
         worktreeTerminalKey: worktreeTerminalKey(parsedKey.repoRoot, parsedKey.worktreePath),
       }

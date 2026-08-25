@@ -90,10 +90,11 @@ function branchActionOperationTarget(action: RepoBranchAction): string | null {
     case 'pull':
     case 'push':
     case 'deleteBranch':
-    case 'cleanupWorktree':
-    case 'removeWorktree':
     case 'setBranchUpstream':
       return action.branch
+    case 'cleanupWorktree':
+    case 'removeWorktree':
+      return action.branch ?? action.worktreePath
     case 'createWorktree':
       return createWorktreeEventBranch(action.input)
     case 'createBranch':
@@ -115,7 +116,11 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
     case 'deleteBranch':
       return { kind: action.kind, branch: action.branch }
     case 'cleanupWorktree':
-      return { kind: action.kind, branch: action.branch, worktreePath: action.worktreePath }
+      return {
+        kind: action.kind,
+        ...(action.branch ? { branch: action.branch } : {}),
+        worktreePath: action.worktreePath,
+      }
     case 'createBranch':
       return { kind: action.kind, branch: action.branch, baseBranch: action.baseBranch }
     case 'trackRemoteBranch':
@@ -131,7 +136,7 @@ function branchActionEventAction(action: RepoBranchAction): RepoEventAction {
     case 'removeWorktree':
       return {
         kind: action.kind,
-        branch: action.branch,
+        ...(action.branch ? { branch: action.branch } : {}),
         worktreePath: action.worktreePath,
         alsoDeleteBranch: action.alsoDeleteBranch,
       }
@@ -271,7 +276,7 @@ function runBranchActionRpc(
       return removeRepositoryWorktree(
         repoId,
         {
-          branch: action.branch,
+          ...(action.branch ? { branch: action.branch } : {}),
           worktreePath: action.worktreePath,
           alsoDeleteBranch: action.alsoDeleteBranch,
           forceRemoveWorktree: action.forceRemoveWorktree,

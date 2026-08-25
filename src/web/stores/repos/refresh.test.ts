@@ -19,8 +19,49 @@ function updateRepoForTest(mutator: (repo: TestRepo) => void) {
 }
 
 describe('remote fetch timestamps', () => {
+  test('retains a detached selection through snapshot/status refresh and falls back after removal', async () => {
+    const main = branch('main', undefined, { worktree: { path: REPO_ID, isPrimary: true } })
+    const detachedPath = '/tmp/detached-worktree'
+    const token = seedRepoState({
+      id: REPO_ID,
+      branchSnapshots: [main],
+      currentBranch: 'main',
+      selectedBranch: null,
+      status: [
+        { path: REPO_ID, branch: 'main', isMain: true, entries: [] },
+        { path: detachedPath, head: 'abc1234', isMain: false, entries: [] },
+      ],
+      statusLoaded: true,
+      instanceToken: 1,
+    }).instanceToken
+    updateRepoForTest((repo) => {
+      repo.ui.selectedBranch = null
+      repo.ui.selectedDetachedWorktreePath = detachedPath
+    })
+    rpcHandlers['repo.snapshot'] = async () => ({ branches: [main], current: 'main' })
+    rpcHandlers['repo.status'] = async () => [
+      { path: REPO_ID, branch: 'main', isMain: true, entries: [] },
+      { path: detachedPath, head: 'abc1234', isMain: false, entries: [] },
+    ]
+
+    await useReposStore.getState().refreshCoreData(REPO_ID, { token })
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui).toMatchObject({
+      selectedBranch: null,
+      selectedDetachedWorktreePath: detachedPath,
+    })
+
+    rpcHandlers['repo.status'] = async () => [{ path: REPO_ID, branch: 'main', isMain: true, entries: [] }]
+    await useReposStore.getState().refreshCoreData(REPO_ID, { token })
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui).toMatchObject({
+      selectedBranch: 'main',
+      selectedDetachedWorktreePath: null,
+    })
+  })
+
   test('manual refresh skips repo.fetch for local-only repositories and refreshes local state', async () => {
-    seedRepoState({
+    const token = seedRepoState({
       id: REPO_ID,
       branchSnapshots: [branch('feature/a')],
       remote: {
@@ -31,7 +72,7 @@ describe('remote fetch timestamps', () => {
         remoteDetails: [],
         remoteProviders: {},
       },
-    })
+    }).instanceToken
     let fetchCount = 0
     let snapshotCount = 0
     let statusCount = 0
@@ -48,7 +89,7 @@ describe('remote fetch timestamps', () => {
       return []
     }
 
-    await expect(useReposStore.getState().syncAndRefresh(REPO_ID, { token: 1 })).resolves.toEqual({
+    await expect(useReposStore.getState().syncAndRefresh(REPO_ID, { token })).resolves.toEqual({
       ok: true,
       message: '',
     })

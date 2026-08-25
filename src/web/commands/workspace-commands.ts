@@ -15,6 +15,7 @@ import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
+import { isSelectableDetachedWorktree, selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 interface ShowDetailTabCommandOptions {
   repoId: string | null
@@ -110,6 +111,7 @@ export function runTerminalDeepLinkCommand({
     repo.data.branches.find(
       (candidate) => candidate.name === target.branch && candidate.worktree?.path === target.worktreePath,
     ) ?? repo.data.branches.find((candidate) => candidate.worktree?.path === target.worktreePath)
+  const detachedWorktree = repo.data.worktreesByPath[target.worktreePath]
 
   const restoredMember = target.branchWorkspaceScope ? restoreBranchWorkspaceMemberScope(target) : false
   if (target.branchWorkspaceScope && !restoredMember) onBranchWorkspaceScopeFallback?.()
@@ -124,7 +126,9 @@ export function runTerminalDeepLinkCommand({
       restoredMember.repositoryName,
     )
   } else if (branch) navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
-  else navigation.showRepoDetailTab(repo.id, 'terminal')
+  else if (isSelectableDetachedWorktree(detachedWorktree)) {
+    navigation.showRepoDetachedWorktreeDetailTab(repo.id, detachedWorktree.path, 'terminal')
+  } else navigation.showRepoDetailTab(repo.id, 'terminal')
   setDetailCollapsed(false)
 
   const bridge = terminalSessions ?? readTerminalSessionCommandBridge()
@@ -191,13 +195,12 @@ function selectedTerminalBase(repoId: string): TerminalSessionBase | null {
       worktreePath: plainWorkspacePath,
     }
   }
-  if (!repo?.ui.selectedBranch) return null
-  const branch = repo.data.branches.find((candidate) => candidate.name === repo.ui.selectedBranch)
-  const worktreePath = branch?.worktree?.path
-  if (!worktreePath) return null
+  if (!repo) return null
+  const selectedWorktree = selectedRepoWorktree(repo)
+  if (!selectedWorktree) return null
   return {
     repoRoot: repo.id,
-    branch: branch.name,
-    worktreePath,
+    branch: selectedWorktree.terminalLabel,
+    worktreePath: selectedWorktree.worktreePath,
   }
 }

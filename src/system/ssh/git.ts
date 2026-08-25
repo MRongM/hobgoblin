@@ -1106,7 +1106,7 @@ export async function getRemoteTags(
 export async function removeRemoteWorktree(
   target: RemoteRepoTarget,
   input: {
-    branch: string
+    branch?: string
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
@@ -1116,6 +1116,7 @@ export async function removeRemoteWorktree(
     run?: RemoteGitRunner
   },
 ): Promise<ExecResult> {
+  if (input.alsoDeleteBranch && !input.branch) return { ok: false, message: 'error.invalid-arguments' }
   const run: RemoteGitRunner = input.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
   const listResult = await run({ type: 'gitWorktreeList', path: target.remotePath }, target, { signal: input.signal })
   if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
@@ -1149,14 +1150,14 @@ export async function removeRemoteWorktree(
     const currentBranch = await getRemoteCurrentBranch(target, { signal: input.signal, run })
     const mergeFacts = shouldForceDeleteBranch
       ? { mergedToCurrent: false, mergedToUpstream: false }
-      : await getRemoteBranchMergeFacts(target, input.branch, {
+      : await getRemoteBranchMergeFacts(target, input.branch!, {
           signal: input.signal,
           run,
           currentBranch,
         })
     if (input.signal?.aborted) return { ok: false, message: 'cancelled' }
     const validation = validateBranchDeletionPolicy({
-      branch: input.branch,
+      branch: input.branch!,
       currentBranch,
       isCheckedOutElsewhere: worktrees.some(
         (worktree) => worktree.branch === input.branch && worktree.path !== resolved.path,
@@ -1184,7 +1185,7 @@ export async function removeRemoteWorktree(
   if (!input.alsoDeleteBranch) return remoteExecResult(removeResult)
 
   const deleteResult = await run(
-    { type: 'gitBranchDelete', path: target.remotePath, branch: input.branch, force: shouldForceDeleteBranch },
+    { type: 'gitBranchDelete', path: target.remotePath, branch: input.branch!, force: shouldForceDeleteBranch },
     target,
     { signal: input.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
   )

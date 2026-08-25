@@ -29,11 +29,12 @@ export function useMainWindowShellState({
   const closeRepoCandidateName = useReposStore((s) =>
     closeRepoCandidateId ? (s.repos[closeRepoCandidateId]?.name ?? closeRepoCandidateId) : '',
   )
-  const { setActive, activateProject, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
-    useReposStore,
-    mainWindowNavigationStoreActionsFromStore,
-    mainWindowNavigationStoreActionsEqual,
-  )
+  const { setActive, activateProject, closeRepo, cycleActive, selectBranch, selectDetachedWorktree, setDetailTab } =
+    useStoreWithEqualityFn(
+      useReposStore,
+      mainWindowNavigationStoreActionsFromStore,
+      mainWindowNavigationStoreActionsEqual,
+    )
   const overlays = useAppOverlays()
   const workspaceBehavior = repoWorkspaceBehavior(workspaceLayout, detailCollapsed, detailFocusMode)
   const visibleRepoId = activeId
@@ -76,10 +77,21 @@ export function useMainWindowShellState({
         closeRepo: requestCloseRepo,
         cycleActive,
         selectBranch,
+        selectDetachedWorktree,
         setDetailTab,
         onOpenSettings: openSettings,
       }),
-    [activeId, activateProject, cycleActive, openSettings, requestCloseRepo, selectBranch, setActive, setDetailTab],
+    [
+      activeId,
+      activateProject,
+      cycleActive,
+      openSettings,
+      requestCloseRepo,
+      selectBranch,
+      selectDetachedWorktree,
+      setActive,
+      setDetailTab,
+    ],
   )
   const closeRepoConfirmation = useMemo(
     () => ({

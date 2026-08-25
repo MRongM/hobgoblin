@@ -273,6 +273,42 @@ describe('runBranchAction', () => {
     })
   })
 
+  test.each([
+    ['cleanupWorktree', { kind: 'cleanupWorktree', worktreePath: '/tmp/gbl-detached-worktree' }],
+    [
+      'removeWorktree',
+      {
+        kind: 'removeWorktree',
+        worktreePath: '/tmp/gbl-detached-worktree',
+        alsoDeleteBranch: false,
+      },
+    ],
+  ] satisfies Array<[string, RepoBranchAction]>)(
+    'does not synthesize a branch for detached %s actions',
+    async (kind, action) => {
+      let actionInput: Record<string, unknown> | null = null
+      installGoblinTestBridge({
+        [`repo.${kind}`]: async (input: Record<string, unknown>) => {
+          actionInput = input
+          return { ok: true, message: 'ok' }
+        },
+        'repo.snapshot': async () => ({ branches: [createBranchSnapshot('feature/a')], current: 'feature/a' }),
+        'repo.status': async () => [],
+      })
+
+      await useReposStore.getState().runBranchAction(REPO_ID, action)
+
+      expect(actionInput).toMatchObject({
+        cwd: REPO_ID,
+        worktreePath: '/tmp/gbl-detached-worktree',
+      })
+      expect(Object.hasOwn(actionInput ?? {}, 'branch')).toBe(false)
+      const event = useReposStore.getState().repos[REPO_ID]?.events.at(-1)
+      expect(event?.kind).toBe('result')
+      expect(event?.kind === 'result' ? Object.hasOwn(event.action ?? {}, 'branch') : true).toBe(false)
+    },
+  )
+
   test('forwards worktree force independently from branch force', async () => {
     let removeInput: Record<string, unknown> | null = null
     installGoblinTestBridge({
@@ -796,11 +832,13 @@ describe('runBranchAction', () => {
       'repo.status': async () => [],
     })
 
-    await useReposStore.getState().runBranchAction(
-      REPO_ID,
-      { kind: 'setBranchUpstream', branch: 'feature/a', remoteRef } as unknown as RepoBranchAction,
-      { token: 1 },
-    )
+    await useReposStore
+      .getState()
+      .runBranchAction(
+        REPO_ID,
+        { kind: 'setBranchUpstream', branch: 'feature/a', remoteRef } as unknown as RepoBranchAction,
+        { token: 1 },
+      )
 
     expect(request).toMatchObject({ cwd: REPO_ID, branch: 'feature/a', remoteRef })
     expect(useReposStore.getState().repos[REPO_ID]?.events.at(-1)).toMatchObject({

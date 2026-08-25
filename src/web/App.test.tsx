@@ -101,8 +101,10 @@ vi.mock('#/web/main-window-navigation.tsx', () => ({
     closeRepo: vi.fn(),
     cycleRepo: vi.fn(),
     selectRepoBranch: vi.fn(),
+    selectRepoDetachedWorktree: vi.fn(),
     showRepoDetailTab: vi.fn(),
     showRepoBranchDetailTab: vi.fn(),
+    showRepoDetachedWorktreeDetailTab: vi.fn(),
     openSettings: vi.fn(),
   }),
 }))
@@ -522,8 +524,10 @@ function shellStateWith(
       closeRepo: vi.fn(),
       cycleRepo: vi.fn(),
       selectRepoBranch: vi.fn(),
+      selectRepoDetachedWorktree: vi.fn(),
       showRepoDetailTab: vi.fn(),
       showRepoBranchDetailTab: vi.fn(),
+      showRepoDetachedWorktreeDetailTab: vi.fn(),
       openSettings: vi.fn(),
     },
   }

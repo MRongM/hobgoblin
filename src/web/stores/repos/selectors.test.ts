@@ -301,11 +301,13 @@ describe('repo selectors', () => {
       runtimeCoherentRepoNavigationStoreActionsFromStore({
         closeRepo: fnA as never,
         selectBranch: fnA as never,
+        selectDetachedWorktree: fnA as never,
         setDetailTab: fnA as never,
       }),
     ).toEqual({
       closeRepo: fnA,
       selectBranch: fnA,
+      selectDetachedWorktree: fnA,
       setDetailTab: fnA,
     })
     expect(
@@ -313,12 +315,14 @@ describe('repo selectors', () => {
         ensureWorkspaceOpen: fnA as never,
         closeRepo: fnA as never,
         selectBranch: fnA as never,
+        selectDetachedWorktree: fnA as never,
         setDetailTab: fnA as never,
       }),
     ).toEqual({
       ensureWorkspaceOpen: fnA,
       closeRepo: fnA,
       selectBranch: fnA,
+      selectDetachedWorktree: fnA,
       setDetailTab: fnA,
     })
     expect(
@@ -329,6 +333,7 @@ describe('repo selectors', () => {
           closeRepo: fnA,
           cycleActive: fnA,
           selectBranch: fnA,
+          selectDetachedWorktree: fnA,
           setDetailTab: fnA,
         }),
         mainWindowNavigationStoreActionsFromStore({
@@ -337,6 +342,7 @@ describe('repo selectors', () => {
           closeRepo: fnA,
           cycleActive: fnA,
           selectBranch: fnA,
+          selectDetachedWorktree: fnA,
           setDetailTab: fnA,
         }),
       ),

@@ -22,6 +22,7 @@ import { useDetachFileArea } from '#/web/hooks/useDetachFileArea.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 export interface FileTreeRevealRequest {
   id: number
@@ -61,8 +62,8 @@ export function RepoWorktreeExplorer({
   const supportsPorts = isSshRepoId(repoId)
   const activeVisibleTab = activeTab === 'ports' && !supportsPorts ? 'files' : activeTab
   const repo = useReposStore((state) => state.repos[repoId])
-  const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
-  const hasWorktree = !!selected?.worktree?.path
+  const selected = repo ? selectedRepoWorktree(repo) : null
+  const hasWorktree = selected !== null
   const sessionEntry = repo?.remote.target ? remoteRepoSessionEntry(repo.remote.target) : localRepoSessionEntry(repoId)
   const detach = useDetachFileArea(
     {

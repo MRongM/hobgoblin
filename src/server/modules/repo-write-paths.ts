@@ -675,7 +675,7 @@ export async function pushRepositoryLocalTag(
 export async function removeRepositoryWorktree(
   cwd: string,
   input: {
-    branch: string
+    branch?: string
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
@@ -687,6 +687,7 @@ export async function removeRepositoryWorktree(
   sourceToken?: string,
   options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
+  if (input.alsoDeleteBranch && !input.branch) return { ok: false, message: 'error.invalid-arguments' }
   return await runWithRepoBackend(cwd, async (backend) => {
     return await publishSnapshotInvalidationAfterMutation(
       cwd,

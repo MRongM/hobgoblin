@@ -119,7 +119,7 @@ export function createRepoRoutes() {
   app.post('/history', async (c) => {
     const body = await c.req.json().catch(() => null)
     const repoId = typeof body?.repoId === 'string' ? body.repoId : ''
-    const branch = typeof body?.branch === 'string' ? body.branch : ''
+    const branch = typeof body?.branch === 'string' ? body.branch : undefined
     const limit = boundedInt(body?.limit, 100, 1, 200)
     const skip = boundedInt(body?.skip, 0, 0, Number.MAX_SAFE_INTEGER)
     return c.json(
@@ -613,7 +613,14 @@ export function createRepoRoutes() {
         () =>
           removeRepositoryWorktree(
             cwd,
-            { branch, worktreePath, alsoDeleteBranch, forceRemoveWorktree, forceDeleteBranch, alsoDeleteUpstream },
+            {
+              ...(branch ? { branch } : {}),
+              worktreePath,
+              alsoDeleteBranch,
+              forceRemoveWorktree,
+              forceDeleteBranch,
+              alsoDeleteUpstream,
+            },
             c.req.raw.signal,
             sourceToken,
           ),

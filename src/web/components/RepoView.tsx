@@ -19,6 +19,8 @@ import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { BranchWorkspacePane } from '#/web/components/repo-workspace/BranchWorkspacePane.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
+import { WorktreeTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
 
 interface Props {
   repoId: string
@@ -110,21 +112,17 @@ export function RepoView({ repoId }: Props) {
   const detailPaneSize = view.detailPaneSizes[layout]
   const isPlainWorkspace = repoIsPlainWorkspace(repo)
   const repoUnavailable = repo?.availability.phase === 'unavailable'
-  const selectedBranch = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch)
+  const selectedWorktree = repo ? selectedRepoWorktree(repo) : null
+  const detachedWorktree = selectedWorktree?.kind === 'detached' ? selectedWorktree : null
   const desktopTerminalFocusMode =
     uiMode !== 'compact' &&
     view.detailFocusMode &&
     !!repo &&
     !repoUnavailable &&
-    (isPlainWorkspace || !!selectedBranch?.worktree?.path)
+    (isPlainWorkspace || !!selectedWorktree)
 
   useEffect(() => {
-    if (
-      !desktopTerminalFocusMode ||
-      isPlainWorkspace ||
-      view.branchWorkspaceId ||
-      repo?.ui.detailTab === 'terminal'
-    ) {
+    if (!desktopTerminalFocusMode || isPlainWorkspace || view.branchWorkspaceId || repo?.ui.detailTab === 'terminal') {
       return
     }
     setDetailTab(repoId, 'terminal')
@@ -205,7 +203,7 @@ export function RepoView({ repoId }: Props) {
   }
 
   const terminalFocusMode = desktopTerminalFocusMode
-  const compactDetailAvailable = !!selectedBranch?.worktree?.path
+  const compactDetailAvailable = !!selectedWorktree
   const effectiveCompactSurface: CompactWorkspaceSurface =
     compactSurface === 'detail' && !compactDetailAvailable ? 'scope' : compactSurface
 
@@ -228,6 +226,15 @@ export function RepoView({ repoId }: Props) {
               onShowCompactFiles={showCompactFiles}
               onBranchSelected={showCompactDetail}
             />
+          ) : detachedWorktree ? (
+            <WorktreeTerminalPanel
+              repoId={repoId}
+              layout={layout}
+              worktreePath={detachedWorktree.worktreePath}
+              terminalLabel={detachedWorktree.terminalLabel}
+              compactFocusPresentation
+              onShowCompactOverview={showCompactScope}
+            />
           ) : (
             <BranchDetail
               repoId={repoId}
@@ -247,6 +254,15 @@ export function RepoView({ repoId }: Props) {
     <RepoWorkspacePane>
       {repoUnavailable ? (
         <UnavailableRepoView repo={repo} />
+      ) : detachedWorktree ? (
+        <WorktreeTerminalPanel
+          repoId={repoId}
+          layout={layout}
+          worktreePath={detachedWorktree.worktreePath}
+          terminalLabel={detachedWorktree.terminalLabel}
+          focusMode={terminalFocusMode}
+          onExitTerminalFocus={() => setDetailFocusMode(false)}
+        />
       ) : (
         <BranchDetail
           repoId={repoId}
