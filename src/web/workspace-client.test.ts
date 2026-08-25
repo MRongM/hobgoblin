@@ -141,6 +141,7 @@ describe('workspace client', () => {
 
   test('posts typed branch workspace plan, execute, abort, and reorder requests', async () => {
     mocks.postServerJson.mockResolvedValue({ ok: true })
+    const controller = new AbortController()
     const request = {
       operation: 'create' as const,
       branch: 'feature/auth',
@@ -154,7 +155,7 @@ describe('workspace client', () => {
       auxiliaryEntries: [{ name: 'README.md', mode: 'copy' as const }],
     }
 
-    await planBranchWorkspace('/workspace', request)
+    await planBranchWorkspace('/workspace', request, controller.signal)
     await executeBranchWorkspace('/workspace', {
       planToken: 'sha256:plan',
       approvals: ['outside-root-source'],
@@ -162,10 +163,12 @@ describe('workspace client', () => {
     await abortBranchWorkspace('/workspace')
     await reorderBranchWorkspaces('/workspace', ['third', 'first'])
 
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(1, '/api/workspace/branch-workspaces/plan', {
-      rootId: '/workspace',
-      request,
-    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(
+      1,
+      '/api/workspace/branch-workspaces/plan',
+      { rootId: '/workspace', request },
+      { signal: controller.signal },
+    )
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/execute', {
       rootId: '/workspace',
       planToken: 'sha256:plan',
@@ -220,7 +223,7 @@ describe('workspace client', () => {
     }
 
     await readBranchWorkspaceDependencies('/workspace', 'branch-1', controller.signal)
-    await planBranchWorkspaceDependencies('/workspace', request)
+    await planBranchWorkspaceDependencies('/workspace', request, controller.signal)
     await executeBranchWorkspaceDependencies('/workspace', input)
     await abortBranchWorkspaceDependencies('/workspace')
 
@@ -230,10 +233,12 @@ describe('workspace client', () => {
       { rootId: '/workspace', branchWorkspaceId: 'branch-1' },
       { signal: controller.signal },
     )
-    expect(mocks.postServerJson).toHaveBeenNthCalledWith(2, '/api/workspace/branch-workspaces/dependencies/plan', {
-      rootId: '/workspace',
-      request,
-    })
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(
+      2,
+      '/api/workspace/branch-workspaces/dependencies/plan',
+      { rootId: '/workspace', request },
+      { signal: controller.signal },
+    )
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/dependencies/execute', {
       rootId: '/workspace',
       input,

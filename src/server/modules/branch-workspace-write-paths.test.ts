@@ -142,8 +142,10 @@ describe('branch workspace write service', () => {
       auxiliaryCandidates: [],
     }))
     const publishInvalidation = vi.fn()
+    const buildPlan = vi.fn(async () => ({ ok: true as const, plan }))
+    const controller = new AbortController()
     const service = createBranchWorkspaceWriteService({
-      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      buildPlan,
       readManifests: source.readManifests,
       updateManifests: source.updateManifests,
       createDirectory: vi.fn(async () => undefined),
@@ -151,15 +153,19 @@ describe('branch workspace write service', () => {
       readSnapshot,
       publishInvalidation,
     })
-    await service.plan(ROOT, {
-      operation: 'create',
-      branch: 'feature/auth',
-      repositories: [
-        { repositoryName: 'api', baseBranch: 'main' },
-        { repositoryName: 'web', baseBranch: 'develop' },
-      ],
-      auxiliaryEntries: [],
-    })
+    await service.plan(
+      ROOT,
+      {
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          { repositoryName: 'api', baseBranch: 'main' },
+          { repositoryName: 'web', baseBranch: 'develop' },
+        ],
+        auxiliaryEntries: [],
+      },
+      controller.signal,
+    )
 
     const result = await service.execute(ROOT, {
       planToken: plan.token,
@@ -168,6 +174,7 @@ describe('branch workspace write service', () => {
     })
 
     expect(readSnapshot).toHaveBeenCalledWith(ROOT, expect.any(AbortSignal))
+    expect(buildPlan).toHaveBeenNthCalledWith(1, ROOT, expect.any(Object), undefined, controller.signal)
     expect(publishInvalidation).toHaveBeenCalledWith(ROOT, 'workspace_create_1')
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(result).toEqual({ ok: true, branchWorkspaceId: plan.branchWorkspaceId, snapshot })

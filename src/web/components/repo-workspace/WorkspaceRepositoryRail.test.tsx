@@ -184,9 +184,13 @@ const branchGitPanelState = vi.hoisted(() => ({
 
 const branchDependencyState = vi.hoisted(() => ({
   candidates: [],
+  request: null,
   plan: null,
   result: null,
   pending: false,
+  reading: false,
+  planning: false,
+  executing: false,
   error: null as string | null,
   read: vi.fn(async () => ({ ok: true, candidates: [] })),
   requestPlan: vi.fn(async () => true),
@@ -200,6 +204,7 @@ const branchDependencyDialogState = vi.hoisted(() => ({
     open: boolean
     mode: 'add' | 'remove'
     branchWorkspaceId: string
+    onRecheck?: () => Promise<unknown>
   },
 }))
 
@@ -505,6 +510,9 @@ beforeEach(() => {
   branchDependencyState.cancel.mockResolvedValue(undefined)
   branchDependencyState.reset.mockReset()
   branchDependencyState.pending = false
+  branchDependencyState.reading = false
+  branchDependencyState.planning = false
+  branchDependencyState.executing = false
   branchDependencyState.error = null
   branchDependencyDialogState.props = null
   branchWorkspaceListState.props = null
@@ -1616,6 +1624,9 @@ describe('WorkspaceRepositoryRail', () => {
       mode: 'remove',
       branchWorkspaceId: item.id,
     })
+
+    await act(async () => branchDependencyDialogState.props?.onRecheck?.())
+    expect(branchDependencyState.read).toHaveBeenLastCalledWith(item.id)
   })
 
   test('passes the latest operation snapshot separately from the stable dialog workspace', async () => {

@@ -68,7 +68,7 @@ export interface BranchWorkspaceWriteDependencies {
 }
 
 export interface BranchWorkspaceWriteService {
-  plan(rootId: string, request: unknown): Promise<BranchWorkspacePlanResult>
+  plan(rootId: string, request: unknown, signal?: AbortSignal): Promise<BranchWorkspacePlanResult>
   execute(rootId: string, input: BranchWorkspaceExecuteInput): Promise<BranchWorkspaceExecuteResult>
   abort(rootId: string): boolean
   reorder(rootId: string, orderedIds: string[]): Promise<BranchWorkspaceReorderResult>
@@ -124,11 +124,11 @@ export function createBranchWorkspaceWriteService(
   }
 
   return {
-    async plan(rootId, request) {
+    async plan(rootId, request, signal) {
       if (activeByRoot.has(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.operation-in-progress' }
       }
-      const result = await buildPlan(rootId, request, dependencies.planDependencies)
+      const result = await buildPlan(rootId, request, dependencies.planDependencies, signal)
       if (result.ok) {
         pendingByRoot.set(rootId, {
           plan: result.plan,

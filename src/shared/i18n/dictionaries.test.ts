@@ -37,6 +37,17 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.preview']).toBe('다음')
   })
 
+  test('localizes branch workspace repository dependency disclosure actions', () => {
+    expect(en['workspace.branch-workspace.repository-dependencies-collapse']).toBe('Collapse selected dependencies')
+    expect(en['workspace.branch-workspace.repository-dependencies-expand']).toBe('Expand to edit')
+    expect(zh['workspace.branch-workspace.repository-dependencies-collapse']).toBe('收起已选依赖')
+    expect(zh['workspace.branch-workspace.repository-dependencies-expand']).toBe('展开修改')
+    expect(ja['workspace.branch-workspace.repository-dependencies-collapse']).toBe('選択した依存関係を折りたたむ')
+    expect(ja['workspace.branch-workspace.repository-dependencies-expand']).toBe('展開して編集')
+    expect(ko['workspace.branch-workspace.repository-dependencies-collapse']).toBe('선택한 종속성 접기')
+    expect(ko['workspace.branch-workspace.repository-dependencies-expand']).toBe('펼쳐서 수정')
+  })
+
   test('preserves official classic theme names in every dictionary', () => {
     const expected = {
       'settings.theme-preset.catppuccin': 'Catppuccin',
@@ -592,12 +603,10 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.dependency.remove.available-description',
       'workspace.branch-workspace.dependency.remove.empty',
       'workspace.branch-workspace.dependency.remove.confirm',
-      'workspace.branch-workspace.dependency.preview-title',
       'workspace.branch-workspace.dependency.operation.add',
       'workspace.branch-workspace.dependency.operation.replace',
       'workspace.branch-workspace.dependency.operation.remove',
       'workspace.branch-workspace.dependency.approval.outside-root-source',
-      'workspace.branch-workspace.dependency.planning',
       'workspace.branch-workspace.dependency.not-ready',
       'workspace.branch-workspace.dependency.read-failed',
       'workspace.branch-workspace.dependency.target-exists',
@@ -608,6 +617,8 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.dependency.plan-stale',
       'workspace.branch-workspace.dependency.plan-failed',
       'workspace.branch-workspace.dependency.execute-failed',
+      'workspace.branch-workspace.dependency.recheck',
+      'workspace.branch-workspace.dependency.recheck-required',
     ] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
@@ -615,6 +626,21 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['workspace.branch-workspace.dependency.add.action']).toBe('添加依赖项')
     expect(zh['workspace.branch-workspace.dependency.remove.action']).toBe('移除依赖项')
+  })
+
+  test('includes one-step planning dialog copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.one-step.incomplete',
+      'workspace.branch-workspace.one-step.planning',
+      'workspace.branch-workspace.one-step.plan-error',
+      'workspace.branch-workspace.one-step.selection-title',
+      'workspace.branch-workspace.one-step.plan-title',
+      'workspace.branch-workspace.one-step.modify-selection',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
   })
 
   test('includes transient one-time dependency warning copy in every locale', () => {
