@@ -99,6 +99,7 @@ const xtermMocks = vi.hoisted(() => {
     screenElement: HTMLDivElement | null = null
     textarea: HTMLTextAreaElement | undefined = undefined
     selectionText = ''
+    hasSelection = vi.fn(() => this.selectionText.length > 0)
     getSelection = vi.fn(() => this.selectionText)
     clearSelection = vi.fn(() => {
       this.selectionText = ''
@@ -1266,6 +1267,119 @@ describe('ManagedTerminalSession', () => {
     await flushUntil(() => session.snapshot().phase === 'open')
 
     expect(xtermMocks.terminals[0]!.options.windowsPty).toEqual(windowsPty)
+  })
+
+  test('leaves Windows Ctrl+C to native copy only while terminal text is selected', async () => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      const term = xtermMocks.terminals[0]!
+      expect(term.customKeyEventHandler).toBeTypeOf('function')
+
+      term.selectionText = 'copy me'
+      const copyEvent = new KeyboardEvent('keydown', {
+        key: 'c',
+        code: 'KeyC',
+        ctrlKey: true,
+        cancelable: true,
+      })
+      expect(term.customKeyEventHandler?.(copyEvent)).toBe(false)
+      expect(copyEvent.defaultPrevented).toBe(false)
+
+      term.selectionText = ''
+      const interruptEvent = new KeyboardEvent('keydown', {
+        key: 'c',
+        code: 'KeyC',
+        ctrlKey: true,
+        cancelable: true,
+      })
+      expect(term.customKeyEventHandler?.(interruptEvent)).toBe(true)
+      expect(interruptEvent.defaultPrevented).toBe(false)
+    } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
+  })
+
+  test('leaves Windows Ctrl+V to native terminal paste', async () => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: 'Win32' })
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      const term = xtermMocks.terminals[0]!
+      expect(term.customKeyEventHandler).toBeTypeOf('function')
+
+      const pasteEvent = new KeyboardEvent('keydown', {
+        key: 'v',
+        code: 'KeyV',
+        ctrlKey: true,
+        cancelable: true,
+      })
+      expect(term.customKeyEventHandler?.(pasteEvent)).toBe(false)
+      expect(pasteEvent.defaultPrevented).toBe(false)
+    } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
+  })
+
+  test.each([
+    { label: 'macOS Ctrl+C', platform: 'MacIntel', key: 'c', code: 'KeyC', shiftKey: false, selection: 'copy me' },
+    { label: 'macOS Ctrl+V', platform: 'MacIntel', key: 'v', code: 'KeyV', shiftKey: false, selection: '' },
+    {
+      label: 'Linux Ctrl+C',
+      platform: 'Linux x86_64',
+      key: 'c',
+      code: 'KeyC',
+      shiftKey: false,
+      selection: 'copy me',
+    },
+    { label: 'Linux Ctrl+V', platform: 'Linux x86_64', key: 'v', code: 'KeyV', shiftKey: false, selection: '' },
+    { label: 'Windows Ctrl+Shift+C', platform: 'Win32', key: 'c', code: 'KeyC', shiftKey: true, selection: 'copy me' },
+    { label: 'Windows Ctrl+Shift+V', platform: 'Win32', key: 'v', code: 'KeyV', shiftKey: true, selection: '' },
+  ])('keeps $label in the existing xterm key path', async ({ platform, key, code, shiftKey, selection }) => {
+    const savedPlatform = navigator.platform
+    Object.defineProperty(window.navigator, 'platform', { configurable: true, value: platform })
+    try {
+      const host = document.createElement('div')
+      document.body.appendChild(host)
+      const session = new ManagedTerminalSession(descriptor, vi.fn())
+      hydrateManagedSession(session)
+
+      session.attach(host)
+      await flushTerminalStart()
+      await flushUntil(() => session.snapshot().phase === 'open')
+
+      const term = xtermMocks.terminals[0]!
+      term.selectionText = selection
+      const event = new KeyboardEvent('keydown', {
+        key,
+        code,
+        ctrlKey: true,
+        shiftKey,
+        cancelable: true,
+      })
+
+      expect(term.customKeyEventHandler?.(event)).toBe(true)
+      expect(event.defaultPrevented).toBe(false)
+    } finally {
+      Object.defineProperty(window.navigator, 'platform', { configurable: true, value: savedPlatform })
+    }
   })
 
   test('handles mac option arrows with VS Code-like terminal input', async () => {
