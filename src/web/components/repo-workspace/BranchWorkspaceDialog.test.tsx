@@ -63,6 +63,75 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDialog', () => {
+  test('presents create as a compact constructive operation console', () => {
+    renderDialog({})
+
+    const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+    const header = document.querySelector<HTMLElement>('[data-branch-workspace-operation-header]')
+    const layout = document.querySelector<HTMLElement>('[data-testid="branch-workspace-one-step-layout"]')
+
+    expect(content?.className).toContain('max-h-[85vh]')
+    expect(content?.className).toContain('sm:max-w-5xl')
+    expect(header?.dataset.tone).toBe('constructive')
+    expect(header?.querySelector('.lucide-folder-plus')).not.toBeNull()
+    expect(layout?.dataset.presentation).toBe('operation-console')
+    expect(layout?.dataset.tone).toBe('constructive')
+    expect(document.querySelector('[data-one-step-planning-step="01"]')).not.toBeNull()
+    expect(document.querySelector('[data-one-step-planning-step="02"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.selection-description.create')
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.plan-description.create')
+  })
+
+  test('presents removal as a destructive operation console with one primary destructive action', () => {
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      progressWorkspace: existingWorkspace(),
+      plan: removalPlan(),
+      pending: true,
+      executing: true,
+    })
+
+    const header = document.querySelector<HTMLElement>('[data-branch-workspace-operation-header]')
+    expect(header?.dataset.tone).toBe('destructive')
+    expect(header?.querySelector('.lucide-trash-2')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-delete-scope]')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-delete-scope] .lucide-shield-alert')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-target-summary]')?.className).toContain(
+      'border-danger-border',
+    )
+    expect(document.querySelector('[data-action="force-confirm"]')?.getAttribute('data-variant')).toBe(
+      'destructive-soft',
+    )
+    expect(document.querySelector('[data-action="confirm"]')?.getAttribute('data-variant')).toBe('destructive')
+  })
+
+  test('renders a constructive incomplete plan placeholder', () => {
+    renderDialog({})
+
+    const placeholder = document.querySelector<HTMLElement>('[data-plan-status="incomplete"]')
+    expect(placeholder?.dataset.operationTone).toBe('constructive')
+    expect(placeholder?.querySelector('.lucide-clipboard-list')).not.toBeNull()
+  })
+
+  test('renders a destructive planning placeholder', () => {
+    const onPreview = vi.fn(() => new Promise<boolean>(() => undefined))
+    renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
+
+    const placeholder = document.querySelector<HTMLElement>('[data-plan-status="planning"]')
+    expect(placeholder?.dataset.operationTone).toBe('destructive')
+    expect(placeholder?.querySelector('.lucide-loader-circle')).not.toBeNull()
+  })
+
+  test('keeps extend on the plain presentation', () => {
+    renderDialog({ mode: 'extend', workspace: existingWorkspace() })
+
+    expect(
+      document.querySelector<HTMLElement>('[data-testid="branch-workspace-one-step-layout"]')?.dataset.presentation,
+    ).toBe('plain')
+    expect(document.querySelector('[data-branch-workspace-operation-header]')).toBeNull()
+  })
+
   test('shows lifecycle selection and its reviewed plan together without a next-step action', () => {
     renderDialog({
       mode: 'extend',
@@ -455,11 +524,12 @@ describe('BranchWorkspaceDialog', () => {
       plan: { ...removalPlan(), requiredApprovals: [] },
       onOpenChange,
       onForceConfirm,
+      onPreview: () => new Promise<boolean>(() => undefined),
     })
 
     const forceConfirm = document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')
     expect(forceConfirm?.textContent).toBe('workspace.branch-workspace.force-delete')
-    expect(forceConfirm?.dataset.variant).toBe('destructive')
+    expect(forceConfirm?.dataset.variant).toBe('destructive-soft')
     await clickAction('force-confirm')
 
     expect(onForceConfirm).toHaveBeenCalledWith([])
@@ -1613,6 +1683,7 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({
       mode: 'remove',
       workspace: existingWorkspace(),
+      onPreview: () => new Promise<boolean>(() => undefined),
       plan: planWithSteps('remove', [
         { id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' },
         { id: 'branch:api', kind: 'delete-local-branch', label: 'feature/auth', repositoryName: 'api' },
@@ -1634,7 +1705,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(group?.textContent).toContain('workspace.branch-workspace.step.upstream-branch')
     expect(group?.textContent).toContain('origin/feature/auth')
     expect(group?.querySelector('.lucide-arrow-right')).not.toBeNull()
-    expect(document.querySelector('[data-branch-workspace-plan-step="remove-worktree"]')?.textContent).toBe('api')
+    expect(document.querySelector('[data-branch-workspace-plan-step="remove-worktree"]')?.textContent).toContain('api')
   })
 
   test('renders local-only branch cleanup without an upstream rail', () => {
@@ -1668,6 +1739,9 @@ describe('BranchWorkspaceDialog', () => {
     expect(directory?.className).toContain('font-semibold')
     expect(repository?.className).not.toContain('text-success')
     expect(repository?.className).not.toContain('text-danger')
+    expect(
+      Array.from(document.querySelectorAll('[data-branch-workspace-plan-sequence]')).map((item) => item.textContent),
+    ).toEqual(['01', '02'])
   })
 
   test('shows the effective creation source and synchronization intent in the preview', () => {

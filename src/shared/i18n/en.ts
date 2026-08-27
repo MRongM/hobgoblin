@@ -263,6 +263,14 @@ export const en = {
   'workspace.branch-workspace.one-step.plan-error': 'The operation plan could not be updated.',
   'workspace.branch-workspace.one-step.selection-title': 'Selection and configuration',
   'workspace.branch-workspace.one-step.plan-title': 'Operation plan',
+  'workspace.branch-workspace.one-step.selection-description.create':
+    'Name the branch workspace and choose its member worktrees.',
+  'workspace.branch-workspace.one-step.selection-description.remove':
+    'Choose whether eligible local and upstream branches are deleted too.',
+  'workspace.branch-workspace.one-step.plan-description.create':
+    'This list updates automatically with the configuration.',
+  'workspace.branch-workspace.one-step.plan-description.remove':
+    'Confirmation deletes the workspace using this exact list.',
   'workspace.branch-workspace.one-step.modify-selection': 'Modify selection',
   'workspace.branch-workspace.progress.create': 'Creating branch workspace…',
   'workspace.branch-workspace.progress.remove': 'Deleting branch workspace…',

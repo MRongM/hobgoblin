@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Check, Circle, FolderKanban, LoaderCircle, RefreshCw, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  Circle,
+  ClipboardList,
+  FolderKanban,
+  FolderPlus,
+  LoaderCircle,
+  RefreshCw,
+  ShieldAlert,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type {
   BranchWorkspaceApproval,
   BranchWorkspaceAuxiliaryCandidate,
@@ -156,6 +169,16 @@ export function BranchWorkspaceDialog({
   const dialogStateKey = open ? JSON.stringify([mode, workspace?.id ?? null, fixedReduceRepositoryName]) : null
   const [initializedDialogStateKey, setInitializedDialogStateKey] = useState<string | null>(null)
   const oneStep = mode === 'create' || mode === 'extend' || mode === 'reduce' || mode === 'remove'
+  const operationConsole = mode === 'create' || mode === 'remove'
+  const operationTone = mode === 'remove' ? 'destructive' : 'constructive'
+  const selectionDescriptionKey =
+    mode === 'remove'
+      ? 'workspace.branch-workspace.one-step.selection-description.remove'
+      : 'workspace.branch-workspace.one-step.selection-description.create'
+  const planDescriptionKey =
+    mode === 'remove'
+      ? 'workspace.branch-workspace.one-step.plan-description.remove'
+      : 'workspace.branch-workspace.one-step.plan-description.create'
   const selectionLocked = oneStep ? executing || result !== null : pending
 
   const fixedRepositories = useMemo(
@@ -606,11 +629,36 @@ export function BranchWorkspaceDialog({
           if (removalExecutionLocked) event.preventDefault()
         }}
       >
-        <DialogHeader className="pr-8">
+        <DialogHeader
+          data-branch-workspace-operation-header={operationConsole ? '' : undefined}
+          data-tone={operationConsole ? operationTone : undefined}
+          className={cn(
+            'pr-8',
+            operationConsole && '-mx-4 -mt-4 rounded-t-lg border-b px-4 py-3.5 pr-12',
+            operationConsole && operationTone === 'constructive' && 'border-success-border/70 bg-success-surface/50',
+            operationConsole && operationTone === 'destructive' && 'border-danger-border/70 bg-danger-surface/50',
+          )}
+        >
           <div className="flex items-start gap-3">
+            {operationConsole ? (
+              <div
+                className={cn(
+                  'flex size-9 shrink-0 items-center justify-center rounded-md border bg-card/80 shadow-xs',
+                  operationTone === 'constructive' && 'border-success-border text-success',
+                  operationTone === 'destructive' && 'border-danger-border text-danger',
+                )}
+                aria-hidden="true"
+              >
+                {mode === 'create' ? <FolderPlus className="size-4" /> : <Trash2 className="size-4" />}
+              </div>
+            ) : null}
             <div className="grid min-w-0 flex-1 gap-2">
-              <DialogTitle>{t(`workspace.branch-workspace.dialog.${mode}.title`)}</DialogTitle>
-              <DialogDescription>{t(`workspace.branch-workspace.dialog.${mode}.description`)}</DialogDescription>
+              <DialogTitle className={cn(operationConsole && 'text-base')}>
+                {t(`workspace.branch-workspace.dialog.${mode}.title`)}
+              </DialogTitle>
+              <DialogDescription className={cn(operationConsole && 'text-xs leading-relaxed')}>
+                {t(`workspace.branch-workspace.dialog.${mode}.description`)}
+              </DialogDescription>
             </div>
             {mode === 'create' && (oneStep || !plan) ? (
               <Button
@@ -633,11 +681,20 @@ export function BranchWorkspaceDialog({
           </div>
         </DialogHeader>
 
-        <OneStepPlanningLayout enabled={oneStep} testIdPrefix="branch-workspace">
+        <OneStepPlanningLayout
+          enabled={oneStep}
+          testIdPrefix="branch-workspace"
+          presentation={operationConsole ? 'operation-console' : 'plain'}
+          tone={operationTone}
+        >
           <OneStepPlanningSelectionPane
             enabled={oneStep}
             testIdPrefix="branch-workspace"
             title={t('workspace.branch-workspace.one-step.selection-title')}
+            description={operationConsole ? t(selectionDescriptionKey) : undefined}
+            presentation={operationConsole ? 'operation-console' : 'plain'}
+            tone={operationTone}
+            step={operationConsole ? '01' : undefined}
           >
             {oneStep && (mode === 'create' || mode === 'extend') ? (
               <div className="grid gap-4">
@@ -1088,31 +1145,44 @@ export function BranchWorkspaceDialog({
             ) : null}
 
             {oneStep && mode === 'remove' ? (
-              <div className="grid gap-2 rounded-md border border-danger-border bg-danger-surface p-3 text-xs">
-                <p>{t('workspace.branch-workspace.delete-warning')}</p>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    aria-label={t('workspace.branch-workspace.delete-local-branch')}
-                    checked={alsoDeleteBranch}
-                    disabled={selectionLocked}
-                    onChange={(event) => {
-                      setAlsoDeleteBranch(event.target.checked)
-                      if (!event.target.checked) setAlsoDeleteUpstream(false)
-                    }}
-                  />
-                  {t('workspace.branch-workspace.delete-local-branch')}
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    aria-label={t('workspace.branch-workspace.delete-upstream-branch')}
-                    checked={alsoDeleteUpstream}
-                    disabled={selectionLocked || !alsoDeleteBranch}
-                    onChange={(event) => setAlsoDeleteUpstream(event.target.checked)}
-                  />
-                  {t('workspace.branch-workspace.delete-upstream-branch')}
-                </label>
+              <div
+                data-branch-workspace-delete-scope
+                className="overflow-hidden rounded-md border border-danger-border bg-card text-xs"
+              >
+                <div className="flex items-start gap-2 border-b border-danger-border/60 bg-danger-surface p-3">
+                  <ShieldAlert className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden="true" />
+                  <p className="leading-relaxed">{t('workspace.branch-workspace.delete-warning')}</p>
+                </div>
+                <div className="grid divide-y divide-danger-border/50">
+                  <label className="flex items-center gap-2 px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      aria-label={t('workspace.branch-workspace.delete-local-branch')}
+                      checked={alsoDeleteBranch}
+                      disabled={selectionLocked}
+                      onChange={(event) => {
+                        setAlsoDeleteBranch(event.target.checked)
+                        if (!event.target.checked) setAlsoDeleteUpstream(false)
+                      }}
+                    />
+                    {t('workspace.branch-workspace.delete-local-branch')}
+                  </label>
+                  <label
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2.5',
+                      (selectionLocked || !alsoDeleteBranch) && 'opacity-60',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={t('workspace.branch-workspace.delete-upstream-branch')}
+                      checked={alsoDeleteUpstream}
+                      disabled={selectionLocked || !alsoDeleteBranch}
+                      onChange={(event) => setAlsoDeleteUpstream(event.target.checked)}
+                    />
+                    {t('workspace.branch-workspace.delete-upstream-branch')}
+                  </label>
+                </div>
               </div>
             ) : null}
           </OneStepPlanningSelectionPane>
@@ -1120,8 +1190,17 @@ export function BranchWorkspaceDialog({
             enabled={oneStep}
             testIdPrefix="branch-workspace"
             title={t('workspace.branch-workspace.one-step.plan-title')}
+            description={operationConsole ? t(planDescriptionKey) : undefined}
+            presentation={operationConsole ? 'operation-console' : 'plain'}
+            tone={operationTone}
+            step={operationConsole ? '02' : undefined}
           >
-            {workspace ? <WorkspaceSummary workspace={workspace} /> : null}
+            {workspace ? (
+              <WorkspaceSummary
+                workspace={workspace}
+                tone={operationConsole && mode === 'remove' ? 'destructive' : 'neutral'}
+              />
+            ) : null}
             {displayedPlan ? (
               <div className="grid gap-3">
                 {operationProgress ? (
@@ -1149,13 +1228,13 @@ export function BranchWorkspaceDialog({
                     </span>
                   </div>
                 ) : null}
-                <div className="rounded-md border border-separator">
+                <div className="overflow-hidden rounded-md border border-separator bg-card">
                   {displayedPlan.steps.length === 0 ? (
                     <p className="p-3 text-xs text-muted-foreground">
                       {t('workspace.branch-workspace.no-pending-steps')}
                     </p>
                   ) : (
-                    groupBranchCleanupSteps(displayedPlan.steps).map((item) => {
+                    groupBranchCleanupSteps(displayedPlan.steps).map((item, itemIndex) => {
                       if (item.kind === 'branch-group') {
                         return (
                           <div
@@ -1163,11 +1242,12 @@ export function BranchWorkspaceDialog({
                             data-branch-workspace-branch-group={item.repositoryName}
                             role="group"
                             aria-label={item.repositoryName}
-                            className="border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
+                            className="flex items-start gap-2 border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
                           >
+                            {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
                             <div
                               className={cn(
-                                'grid gap-2',
+                                'grid min-w-0 flex-1 gap-2',
                                 item.steps.length > 1 &&
                                   'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center',
                               )}
@@ -1220,7 +1300,8 @@ export function BranchWorkspaceDialog({
                               'bg-danger-surface font-semibold text-danger',
                           )}
                         >
-                          <div className="grid min-w-0 gap-0.5">
+                          {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
+                          <div className="grid min-w-0 flex-1 gap-0.5">
                             <span>{step.label}</span>
                             {creationRepository ? (
                               <>
@@ -1262,22 +1343,26 @@ export function BranchWorkspaceDialog({
                 ) : null}
               </div>
             ) : oneStep ? (
-              <div
-                data-plan-status={autoPlan.status}
-                className="flex min-h-20 items-center justify-center gap-2 rounded-md border border-separator bg-muted/20 p-4 text-xs text-muted-foreground"
-                role="status"
-              >
-                {autoPlan.status === 'planning' ? (
-                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                ) : null}
-                {t(
-                  autoPlan.status === 'planning'
-                    ? 'workspace.branch-workspace.one-step.planning'
-                    : autoPlan.status === 'error'
-                      ? 'workspace.branch-workspace.one-step.plan-error'
-                      : 'workspace.branch-workspace.one-step.incomplete',
-                )}
-              </div>
+              operationConsole ? (
+                <BranchWorkspacePlanPlaceholder status={autoPlan.status} tone={operationTone} />
+              ) : (
+                <div
+                  data-plan-status={autoPlan.status}
+                  className="flex min-h-20 items-center justify-center gap-2 rounded-md border border-separator bg-muted/20 p-4 text-xs text-muted-foreground"
+                  role="status"
+                >
+                  {autoPlan.status === 'planning' ? (
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                  ) : null}
+                  {t(
+                    autoPlan.status === 'planning'
+                      ? 'workspace.branch-workspace.one-step.planning'
+                      : autoPlan.status === 'error'
+                        ? 'workspace.branch-workspace.one-step.plan-error'
+                        : 'workspace.branch-workspace.one-step.incomplete',
+                  )}
+                </div>
+              )
             ) : pending ? (
               <div className="flex min-h-20 items-center justify-center gap-2 text-xs text-muted-foreground">
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -1293,7 +1378,12 @@ export function BranchWorkspaceDialog({
           </OneStepPlanningPlanPane>
         </OneStepPlanningLayout>
 
-        <DialogFooter>
+        <DialogFooter
+          className={cn(
+            operationConsole &&
+              '-mx-4 -mb-4 border-t bg-muted/10 px-4 py-3 [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto',
+          )}
+        >
           {mode === 'repair' ? (
             <Button
               type="button"
@@ -1326,7 +1416,7 @@ export function BranchWorkspaceDialog({
             <Button
               type="button"
               data-action="force-confirm"
-              variant="destructive"
+              variant={operationConsole ? 'destructive-soft' : 'destructive'}
               title={t('workspace.branch-workspace.force-delete-description')}
               disabled={operationPending || !currentPlanReady || !requiredApprovalsSatisfied}
               onClick={() => void run(onForceConfirm)}
@@ -1344,6 +1434,12 @@ export function BranchWorkspaceDialog({
             >
               {operationProgress && operationPending && result === null ? (
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : operationConsole ? (
+                mode === 'create' ? (
+                  <FolderPlus className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                )
               ) : null}
               {t(`workspace.branch-workspace.dialog.${mode}.confirm`)}
             </Button>
@@ -1483,6 +1579,60 @@ function BranchWorkspaceRepositoryDependencyPreview({ repository }: { repository
   )
 }
 
+function BranchWorkspacePlanPlaceholder({
+  status,
+  tone,
+}: {
+  status: 'incomplete' | 'planning' | 'ready' | 'error'
+  tone: 'constructive' | 'destructive'
+}) {
+  const t = useT()
+  const icon =
+    status === 'planning' ? (
+      <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+    ) : status === 'error' ? (
+      <AlertTriangle className="size-4 shrink-0 text-danger" aria-hidden="true" />
+    ) : (
+      <ClipboardList className="size-4 shrink-0" aria-hidden="true" />
+    )
+  return (
+    <div
+      data-plan-status={status}
+      data-operation-tone={tone}
+      className={cn(
+        'flex min-h-20 items-start gap-2 rounded-md border p-3 text-xs',
+        status === 'error'
+          ? 'border-danger-border bg-danger-surface text-danger'
+          : 'border-separator bg-muted/20 text-muted-foreground',
+      )}
+      role="status"
+    >
+      {icon}
+      <span className="leading-relaxed">
+        {t(
+          status === 'planning'
+            ? 'workspace.branch-workspace.one-step.planning'
+            : status === 'error'
+              ? 'workspace.branch-workspace.one-step.plan-error'
+              : 'workspace.branch-workspace.one-step.incomplete',
+        )}
+      </span>
+    </div>
+  )
+}
+
+function BranchWorkspacePlanSequence({ index }: { index: number }) {
+  return (
+    <span
+      data-branch-workspace-plan-sequence={index + 1}
+      aria-hidden="true"
+      className="w-5 shrink-0 pt-0.5 font-mono text-[9px] font-medium tabular-nums text-muted-foreground"
+    >
+      {String(index + 1).padStart(2, '0')}
+    </span>
+  )
+}
+
 function PlanStepProgressStatus({ status }: { status: BranchWorkspaceStepProgressStatus }) {
   const t = useT()
   const icon =
@@ -1563,15 +1713,29 @@ function localBranchMatchesQuery(branch: string, query: string): boolean {
   return remoteRefMatchesQuery(branch, query)
 }
 
-function WorkspaceSummary({ workspace }: { workspace: BranchWorkspaceSnapshot }) {
+function WorkspaceSummary({
+  workspace,
+  tone = 'neutral',
+}: {
+  workspace: BranchWorkspaceSnapshot
+  tone?: 'neutral' | 'destructive'
+}) {
   const t = useT()
   return (
-    <div className="grid gap-1 rounded-md border border-separator bg-muted/20 p-3 text-xs">
+    <div
+      data-branch-workspace-target-summary
+      className={cn(
+        'grid gap-1 rounded-md border bg-muted/20 p-3 text-xs',
+        tone === 'destructive' ? 'border-danger-border' : 'border-separator',
+      )}
+    >
       <div className="flex items-center gap-2 font-medium">
         <FolderKanban className="size-4" aria-hidden="true" />
         <span>{workspace.branch}</span>
       </div>
-      <span className="font-mono text-[10px] text-muted-foreground">{workspace.path}</span>
+      <span className="break-all font-mono text-[10px] text-muted-foreground" title={workspace.path}>
+        {workspace.path}
+      </span>
       {workspace.issues.map((issue, index) => (
         <span key={`${issue.kind}-${index}`} className="text-warning">
           {t(issue.message ?? `workspace.branch-workspace.issue.${issue.kind}`)}
