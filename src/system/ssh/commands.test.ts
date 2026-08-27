@@ -1044,32 +1044,15 @@ describe('remote command scripts', () => {
   })
 
   test('renders remote alignment as reset followed by non-ignored clean', () => {
-    const expectedHead = '1'.repeat(40)
     const remoteHead = '2'.repeat(40)
     const invocation = buildRemoteCommandInvocation(TARGET, {
       type: 'gitAlignToRemote',
       path: "/srv/repo-feature/user's-work",
       branch: "user's-work",
-      expectedHead,
       remoteRef: "origin/user's-work",
       remoteHead,
-      expectedIndexHash: '3'.repeat(40),
-      expectedWorktreeTree: '4'.repeat(40),
     })
 
-    expect(invocation.script).toContain(
-      "current_branch=$(git -C '/srv/repo-feature/user'\\''s-work' symbolic-ref --quiet --short HEAD)",
-    )
-    expect(invocation.script).toContain(
-      `current_head=$(git -C '/srv/repo-feature/user'\\''s-work' rev-parse --verify 'HEAD^{commit}')`,
-    )
-    expect(invocation.script).toContain("rev-parse --verify 'origin/user'\\''s-work^{commit}'")
-    expect(invocation.script).toContain("rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'")
-    expect(invocation.script).toContain(`ls-files --stage -z > "$tmp_entries"`)
-    expect(invocation.script).toContain(`index_hash=$(git -C`)
-    expect(invocation.script).toContain(`[ "$index_hash" = '${'3'.repeat(40)}' ]`)
-    expect(invocation.script).toContain(`[ "$worktree_tree" = '${'4'.repeat(40)}' ]`)
-    expect(invocation.script).toContain("printf '%s\\n' 'error.repository-changed' >&2")
     expect(invocation.script).toContain("printf '%s\\n' 'error.align-remote-clean-incomplete' >&2")
     expect(invocation.script).toContain(
       `git -C '/srv/repo-feature/user'\\''s-work' reset --hard '${remoteHead}' && { git -C '/srv/repo-feature/user'\\''s-work' clean -fd`,
@@ -1077,7 +1060,7 @@ describe('remote command scripts', () => {
     expect(invocation.script).not.toContain("reset --hard 'origin/user'\\''s-work'")
   })
 
-  testPosix('remote alignment rejects stale content and then removes non-ignored changes', async () => {
+  testPosix('remote alignment discards last-second changes and removes non-ignored files', async () => {
     const dir = path.join(os.tmpdir(), `hobgoblin-align-command-${Date.now()}-${process.pid}`)
     tempDirs.push(dir)
     await execa('git', ['init', dir])
@@ -1121,46 +1104,17 @@ describe('remote command scripts', () => {
     writeFileSync(path.join(dir, 'untracked.txt'), 'remove me\n')
     writeFileSync(path.join(dir, 'ignored.txt'), 'preserve me\n')
 
-    const contentInvocation = buildRemoteCommandInvocation(TARGET, { type: 'gitWorktreeContentState', path: dir })
-    const [expectedIndexHash, expectedWorktreeTree] = (
-      await execa('sh', ['-c', contentInvocation.script])
-    ).stdout.split('\n')
-    expect(expectedIndexHash).toMatch(/^[0-9a-f]{40}$/)
-    expect(expectedWorktreeTree).toMatch(/^[0-9a-f]{40}$/)
     const alignment = () =>
       buildRemoteCommandInvocation(TARGET, {
         type: 'gitAlignToRemote',
         path: dir,
         branch: 'feature/test',
-        expectedHead,
         remoteRef: 'origin/feature/test',
         remoteHead,
-        expectedIndexHash: expectedIndexHash!,
-        expectedWorktreeTree: expectedWorktreeTree!,
       })
 
     writeFileSync(path.join(dir, 'tracked.txt'), 'last-second change\n')
-    await expect(execa('sh', ['-c', alignment().script])).rejects.toMatchObject({
-      stderr: expect.stringContaining('error.repository-changed'),
-    })
-    await expect(execa('git', ['-C', dir, 'rev-parse', 'HEAD'])).resolves.toMatchObject({ stdout: expectedHead })
-
-    const [currentIndexHash, currentWorktreeTree] = (
-      await execa('sh', ['-c', contentInvocation.script])
-    ).stdout.split('\n')
-    const result = await execa('sh', [
-      '-c',
-      buildRemoteCommandInvocation(TARGET, {
-        type: 'gitAlignToRemote',
-        path: dir,
-        branch: 'feature/test',
-        expectedHead,
-        remoteRef: 'origin/feature/test',
-        remoteHead,
-        expectedIndexHash: currentIndexHash!,
-        expectedWorktreeTree: currentWorktreeTree!,
-      }).script,
-    ])
+    const result = await execa('sh', ['-c', alignment().script])
 
     expect(result.stdout).toContain('HEAD is now at')
     expect((await execa('git', ['-C', dir, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(remoteHead)

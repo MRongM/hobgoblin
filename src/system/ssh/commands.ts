@@ -106,11 +106,8 @@ export type RemoteCommandKind =
       type: 'gitAlignToRemote'
       path: string
       branch: string
-      expectedHead: string
       remoteRef: string
       remoteHead: string
-      expectedIndexHash: string
-      expectedWorktreeTree: string
     }
   | { type: 'gitDiscardChanges'; path: string; paths: string[] }
   | { type: 'gitBranchCreate'; path: string; branch: string; baseBranch: string }
@@ -622,24 +619,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} reset --hard`
     case 'gitAlignToRemote': {
       const repo = shellQuote(command.path)
-      const guard = [
-        ...remoteWorktreeContentStateStatements(repo).map((statement, index) =>
-          index === 0 ? `{ ${statement}` : statement,
-        ),
-        `current_branch=$(git -C ${repo} symbolic-ref --quiet --short HEAD)`,
-        `current_head=$(git -C ${repo} rev-parse --verify 'HEAD^{commit}')`,
-        `remote_head=$(git -C ${repo} rev-parse --verify ${shellQuote(`${command.remoteRef}^{commit}`)})`,
-        `upstream=$(git -C ${repo} rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')`,
-        `[ "$current_branch" = ${shellQuote(command.branch)} ]`,
-        `[ "$current_head" = ${shellQuote(command.expectedHead)} ]`,
-        `[ "$remote_head" = ${shellQuote(command.remoteHead)} ]`,
-        `[ "$upstream" = ${shellQuote(command.remoteRef)} ]`,
-        `[ "$index_hash" = ${shellQuote(command.expectedIndexHash)} ]`,
-        `[ "$worktree_tree" = ${shellQuote(command.expectedWorktreeTree)} ]; }`,
-      ].join(' && ')
-      const changed = `{ printf '%s\\n' 'error.repository-changed' >&2; exit 1; }`
       const cleanFailed = `{ printf '%s\\n' 'error.align-remote-clean-incomplete' >&2; exit 1; }`
-      return `${guard} || ${changed}; git -C ${repo} reset --hard ${shellQuote(command.remoteHead)} && { git -C ${repo} clean -fd || ${cleanFailed}; }`
+      return `git -C ${repo} reset --hard ${shellQuote(command.remoteHead)} && { git -C ${repo} clean -fd || ${cleanFailed}; }`
     }
     case 'gitDiscardChanges':
       return remoteDiscardChangesScript(command)

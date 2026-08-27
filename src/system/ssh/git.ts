@@ -975,10 +975,7 @@ export async function alignRemoteWorktreeToRemoteRef(
     !alignment.branch ||
     /[\0\r\n]/.test(alignment.branch) ||
     !parseRemoteBranchRef(alignment.remoteRef) ||
-    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.expectedHead) ||
-    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.remoteHead) ||
-    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.expectedContentState.indexHash) ||
-    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.expectedContentState.worktreeTree)
+    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(alignment.remoteHead)
   ) {
     return { ok: false, message: 'error.invalid-arguments' }
   }
@@ -992,11 +989,8 @@ export async function alignRemoteWorktreeToRemoteRef(
       type: 'gitAlignToRemote',
       path: known.path,
       branch: alignment.branch,
-      expectedHead: alignment.expectedHead,
       remoteRef: alignment.remoteRef,
       remoteHead: alignment.remoteHead,
-      expectedIndexHash: alignment.expectedContentState.indexHash,
-      expectedWorktreeTree: alignment.expectedContentState.worktreeTree,
     },
     target,
     {

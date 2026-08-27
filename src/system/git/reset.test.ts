@@ -65,16 +65,12 @@ describe('alignWorktreeToRemoteRef', () => {
     getWorktreeContentStateMock.mockResolvedValue(target.expectedContentState)
   })
 
-  test('revalidates branch, local head, and remote head before resetting to the captured oid', async () => {
+  test('resets directly to the confirmed remote oid and removes non-ignored files', async () => {
     const alignWorktreeToRemoteRef = Reflect.get(resetOperations, 'alignWorktreeToRemoteRef') as unknown
     expect(alignWorktreeToRemoteRef).toBeTypeOf('function')
     if (typeof alignWorktreeToRemoteRef !== 'function') return
     const signal = new AbortController().signal
     gitResultWithOptionsMock
-      .mockResolvedValueOnce({ ok: true, message: 'main' })
-      .mockResolvedValueOnce({ ok: true, message: target.expectedHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteRef })
       .mockResolvedValueOnce({ ok: true, message: 'HEAD is now aligned' })
       .mockResolvedValueOnce({ ok: true, message: '' })
 
@@ -84,59 +80,32 @@ describe('alignWorktreeToRemoteRef', () => {
     expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
       1,
       '/repo/worktree',
-      { signal },
-      'symbolic-ref',
-      '--quiet',
-      '--short',
-      'HEAD',
+      { signal: undefined },
+      'reset',
+      '--hard',
+      target.remoteHead,
     )
+    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(2, '/repo/worktree', { signal: undefined }, 'clean', '-fd')
+  })
+
+  test('forces the confirmed remote head without rechecking the checked-out branch', async () => {
+    const alignWorktreeToRemoteRef = Reflect.get(resetOperations, 'alignWorktreeToRemoteRef') as unknown
+    expect(alignWorktreeToRemoteRef).toBeTypeOf('function')
+    if (typeof alignWorktreeToRemoteRef !== 'function') return
+    gitResultWithOptionsMock
+      .mockResolvedValueOnce({ ok: true, message: 'HEAD is now aligned' })
+      .mockResolvedValueOnce({ ok: true, message: '' })
+
+    await expect(alignWorktreeToRemoteRef('/repo/worktree', target)).resolves.toEqual({ ok: true, message: '' })
     expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
-      2,
-      '/repo/worktree',
-      { signal },
-      'rev-parse',
-      '--verify',
-      'HEAD^{commit}',
-    )
-    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
-      3,
-      '/repo/worktree',
-      { signal },
-      'rev-parse',
-      '--verify',
-      'origin/main^{commit}',
-    )
-    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
-      4,
-      '/repo/worktree',
-      { signal },
-      'rev-parse',
-      '--abbrev-ref',
-      '--symbolic-full-name',
-      '@{upstream}',
-    )
-    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
-      5,
+      1,
       '/repo/worktree',
       { signal: undefined },
       'reset',
       '--hard',
       target.remoteHead,
     )
-    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(6, '/repo/worktree', { signal: undefined }, 'clean', '-fd')
-  })
-
-  test('refuses mutation when the checked-out branch changed after server validation', async () => {
-    const alignWorktreeToRemoteRef = Reflect.get(resetOperations, 'alignWorktreeToRemoteRef') as unknown
-    expect(alignWorktreeToRemoteRef).toBeTypeOf('function')
-    if (typeof alignWorktreeToRemoteRef !== 'function') return
-    gitResultWithOptionsMock.mockResolvedValueOnce({ ok: true, message: 'other-branch' })
-
-    await expect(alignWorktreeToRemoteRef('/repo/worktree', target)).resolves.toEqual({
-      ok: false,
-      message: 'error.repository-changed',
-    })
-    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(1)
+    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(2, '/repo/worktree', { signal: undefined }, 'clean', '-fd')
   })
 
   test('does not clean when the non-interruptible reset fails', async () => {
@@ -144,10 +113,6 @@ describe('alignWorktreeToRemoteRef', () => {
     expect(alignWorktreeToRemoteRef).toBeTypeOf('function')
     if (typeof alignWorktreeToRemoteRef !== 'function') return
     gitResultWithOptionsMock
-      .mockResolvedValueOnce({ ok: true, message: target.branch })
-      .mockResolvedValueOnce({ ok: true, message: target.expectedHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteRef })
       .mockResolvedValueOnce({ ok: false, message: 'fatal: reset failed' })
 
     await expect(alignWorktreeToRemoteRef('/repo/worktree', target)).resolves.toEqual({
@@ -155,33 +120,11 @@ describe('alignWorktreeToRemoteRef', () => {
       message: 'fatal: reset failed',
       repoChanged: true,
     })
-    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(5)
-  })
-
-  test('refuses mutation when content changes after backend validation', async () => {
-    gitResultWithOptionsMock
-      .mockResolvedValueOnce({ ok: true, message: target.branch })
-      .mockResolvedValueOnce({ ok: true, message: target.expectedHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteRef })
-    getWorktreeContentStateMock.mockResolvedValueOnce({
-      indexHash: target.expectedContentState.indexHash,
-      worktreeTree: '6'.repeat(40),
-    })
-
-    await expect(resetOperations.alignWorktreeToRemoteRef('/repo/worktree', target)).resolves.toEqual({
-      ok: false,
-      message: 'error.repository-changed',
-    })
-    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(4)
+    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(1)
   })
 
   test('marks reset-success clean-failure as requiring a fresh confirmation', async () => {
     gitResultWithOptionsMock
-      .mockResolvedValueOnce({ ok: true, message: target.branch })
-      .mockResolvedValueOnce({ ok: true, message: target.expectedHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteHead })
-      .mockResolvedValueOnce({ ok: true, message: target.remoteRef })
       .mockResolvedValueOnce({ ok: true, message: 'HEAD is now aligned' })
       .mockResolvedValueOnce({ ok: false, message: 'permission denied' })
 

@@ -129,14 +129,11 @@ export interface ExecResult {
   worktreeBootstrap?: WorktreeBootstrapSummary
 }
 
-/** Immutable state captured immediately before a destructive remote alignment. */
+/** Remote target selected for a confirmed destructive alignment. */
 export interface RemoteAlignmentTarget {
   branch: string
-  expectedHead: string
   remoteRef: string
   remoteHead: string
-  expectedFingerprint: string
-  expectedContentState: WorktreeContentState
 }
 
 export interface WorktreeContentState {

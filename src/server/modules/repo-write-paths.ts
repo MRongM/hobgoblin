@@ -1145,17 +1145,13 @@ export async function alignRepositoryWorktreeToRemote(
     sourceToken,
     async (mergedSignal) =>
       await runWithRepoBackend(repoId, async (backend) => {
-        const initial = await readRemoteAlignmentState(repoId, backend, branch, worktreePath, mergedSignal)
+        const initial = resolveRemoteAlignmentTarget(
+          await backend.getSnapshot(mergedSignal, { includeWorktreeStatus: false, includeRemote: false }),
+          backend.kind,
+          branch,
+          worktreePath,
+        )
         if (!initial.ok) return initial
-        if (options?.expectedFingerprint && options.expectedFingerprint !== initial.fingerprint) {
-          return { ok: false, message: 'error.repository-changed' }
-        }
-        if (
-          options?.previewToken &&
-          options.previewToken !== remoteAlignmentPreviewToken(repoId, branch, worktreePath, initial.fingerprint)
-        ) {
-          return { ok: false, message: 'error.repository-changed' }
-        }
         const parsed = parseRemoteBranchRef(initial.upstream)
         if (!parsed) return { ok: false, message: 'error.upstream-required' }
         gitAttempted = true
@@ -1170,19 +1166,12 @@ export async function alignRepositoryWorktreeToRemote(
         if (!remoteBranch) {
           return { ok: false, message: 'error.remote-branch-not-found' }
         }
-        const current = await readRemoteAlignmentState(repoId, backend, branch, worktreePath, mergedSignal)
-        if (!current.ok || current.fingerprint !== initial.fingerprint) {
-          return { ok: false, message: 'error.repository-changed' }
-        }
         return await backend.alignToRemoteRef(
           worktreePath,
           {
             branch,
-            expectedHead: initial.head,
             remoteRef: initial.upstream,
             remoteHead: remoteBranch.head,
-            expectedFingerprint: initial.fingerprint,
-            expectedContentState: initial.contentState,
           },
           mergedSignal,
         )

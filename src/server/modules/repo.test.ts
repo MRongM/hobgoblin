@@ -2228,7 +2228,7 @@ describe('repo mutation invalidation publishing', () => {
     })
   })
 
-  test('alignRepositoryWorktreeToRemote fetches, revalidates, then destructively aligns the exact worktree', async () => {
+  test('alignRepositoryWorktreeToRemote fetches then destructively aligns the exact worktree', async () => {
     const snapshot = alignedWorktreeSnapshot()
     mocks.getRemoteSnapshot.mockResolvedValue(snapshot)
     const remoteHead = '2'.repeat(40)
@@ -2274,11 +2274,8 @@ describe('repo mutation invalidation publishing', () => {
       '/srv/repo-feature',
       expect.objectContaining({
         branch: 'feature/a',
-        expectedHead: '1'.repeat(40),
         remoteRef: 'origin/feature/a',
         remoteHead,
-        expectedFingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
-        expectedContentState: REMOTE_ALIGNMENT_CONTENT_STATE,
       }),
       { signal: expect.any(AbortSignal) },
     )
@@ -2287,11 +2284,12 @@ describe('repo mutation invalidation publishing', () => {
     )
   }, 15_000)
 
-  test('rejects an ordinary alignment when worktree content changes after server preview', async () => {
+  test('forces alignment after confirmation without rereading local worktree content', async () => {
     mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
     mocks.getRemoteWorktreeContentState
       .mockResolvedValueOnce(REMOTE_ALIGNMENT_CONTENT_STATE)
-      .mockResolvedValueOnce({ indexHash: '5'.repeat(40), worktreeTree: '6'.repeat(40) })
+      .mockResolvedValueOnce(null)
+    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
     const { alignRepositoryWorktreeToRemote, buildRepositoryRemoteAlignmentPreview } = await import(
       '#/server/modules/repo-write-paths.ts'
     )
@@ -2312,10 +2310,11 @@ describe('repo mutation invalidation publishing', () => {
         undefined,
         { previewToken: preview.token },
       ),
-    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
+    ).resolves.toEqual({ ok: true, message: 'aligned remote' })
 
-    expect(mocks.fetchRemoteRepositoryByName).not.toHaveBeenCalled()
-    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
+    expect(mocks.getRemoteWorktreeContentState).toHaveBeenCalledTimes(1)
+    expect(mocks.fetchRemoteRepositoryByName).toHaveBeenCalledTimes(1)
+    expect(mocks.alignRemoteWorktreeToRemoteRef).toHaveBeenCalledTimes(1)
   })
 
   test('alignRepositoryWorktreeToRemote rejects a missing upstream before fetching', async () => {
@@ -2335,54 +2334,6 @@ describe('repo mutation invalidation publishing', () => {
 
     expect(mocks.fetchRemoteRepositoryByName).not.toHaveBeenCalled()
     expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
-  })
-
-  test('alignRepositoryWorktreeToRemote stops when the worktree identity changes after fetch', async () => {
-    mocks.getRemoteSnapshot
-      .mockResolvedValueOnce(alignedWorktreeSnapshot())
-      .mockResolvedValueOnce(alignedWorktreeSnapshot({ path: '/srv/other-worktree' }))
-    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
-    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
-
-    await expect(
-      alignRepositoryWorktreeToRemote(
-        'ssh-config://prod/srv/repo',
-        'feature/a',
-        '/srv/repo-feature',
-        undefined,
-        undefined,
-        remoteAlignmentOptions(),
-      ),
-    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
-
-    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
-    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledWith({
-      repoId: 'ssh-config://prod/srv/repo',
-      query: 'repo-snapshot',
-    })
-  })
-
-  test('alignRepositoryWorktreeToRemote stops when confirmed worktree content changes after fetch', async () => {
-    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
-    mocks.getRemoteWorktreeContentState
-      .mockResolvedValueOnce(REMOTE_ALIGNMENT_CONTENT_STATE)
-      .mockResolvedValueOnce({ indexHash: '5'.repeat(40), worktreeTree: '6'.repeat(40) })
-    mocks.getSshRemoteTrackingBranchInfo.mockResolvedValue([{ remoteRef: 'origin/feature/a', head: '2'.repeat(40) }])
-    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
-
-    await expect(
-      alignRepositoryWorktreeToRemote(
-        'ssh-config://prod/srv/repo',
-        'feature/a',
-        '/srv/repo-feature',
-        undefined,
-        undefined,
-        remoteAlignmentOptions(),
-      ),
-    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
-
-    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
-    expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledTimes(1)
   })
 
   test('propagates a final primitive repository-change rejection and invalidates the snapshot', async () => {
@@ -2408,26 +2359,6 @@ describe('repo mutation invalidation publishing', () => {
 
     expect(mocks.alignRemoteWorktreeToRemoteRef).toHaveBeenCalledTimes(1)
     expect(mocks.publishRepoQueryInvalidation).toHaveBeenCalledTimes(1)
-  })
-
-  test('alignRepositoryWorktreeToRemote rejects an expired batch fingerprint before fetch', async () => {
-    mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
-    const { alignRepositoryWorktreeToRemote } = await import('#/server/modules/repo-write-paths.ts')
-
-    await expect(
-      alignRepositoryWorktreeToRemote(
-        'ssh-config://prod/srv/repo',
-        'feature/a',
-        '/srv/repo-feature',
-        undefined,
-        undefined,
-        { expectedFingerprint: `sha256:${'f'.repeat(64)}` },
-      ),
-    ).resolves.toEqual({ ok: false, message: 'error.repository-changed' })
-
-    expect(mocks.fetchRemoteRepositoryByName).not.toHaveBeenCalled()
-    expect(mocks.alignRemoteWorktreeToRemoteRef).not.toHaveBeenCalled()
-    expect(mocks.publishRepoQueryInvalidation).not.toHaveBeenCalled()
   })
 
   test('alignRepositoryWorktreeToRemote invalidates snapshots when the destructive attempt fails', async () => {
