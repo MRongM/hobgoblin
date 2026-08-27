@@ -48,6 +48,17 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.repository-dependencies-expand']).toBe('펼쳐서 수정')
   })
 
+  test('localizes the branch workspace operation console guidance', () => {
+    expect(zh['workspace.branch-workspace.one-step.selection-description.create']).toBe(
+      '命名子工作区并选择要创建的成员工作树。',
+    )
+    expect(zh['workspace.branch-workspace.one-step.selection-description.remove']).toBe(
+      '选择是否一并删除符合条件的本地和上游分支。',
+    )
+    expect(zh['workspace.branch-workspace.one-step.plan-description.create']).toBe('此清单将随配置自动更新。')
+    expect(zh['workspace.branch-workspace.one-step.plan-description.remove']).toBe('确认后将按此清单执行删除。')
+  })
+
   test('preserves official classic theme names in every dictionary', () => {
     const expected = {
       'settings.theme-preset.catppuccin': 'Catppuccin',

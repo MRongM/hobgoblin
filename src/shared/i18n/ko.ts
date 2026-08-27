@@ -253,6 +253,12 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.one-step.plan-error': '작업 계획을 업데이트하지 못했습니다.',
   'workspace.branch-workspace.one-step.selection-title': '선택 및 구성',
   'workspace.branch-workspace.one-step.plan-title': '작업 계획',
+  'workspace.branch-workspace.one-step.selection-description.create':
+    '하위 작업 공간의 이름을 지정하고 만들 멤버 워크트리를 선택합니다.',
+  'workspace.branch-workspace.one-step.selection-description.remove':
+    '해당하는 로컬 및 업스트림 브랜치도 삭제할지 선택합니다.',
+  'workspace.branch-workspace.one-step.plan-description.create': '이 목록은 설정에 따라 자동으로 업데이트됩니다.',
+  'workspace.branch-workspace.one-step.plan-description.remove': '확인하면 이 목록에 따라 삭제합니다.',
   'workspace.branch-workspace.one-step.modify-selection': '선택 수정',
   'workspace.branch-workspace.progress.create': '브랜치 워크스페이스 생성 중…',
   'workspace.branch-workspace.progress.remove': '브랜치 워크스페이스 삭제 중…',

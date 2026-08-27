@@ -260,6 +260,12 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.one-step.plan-error': '操作プランを更新できませんでした。',
   'workspace.branch-workspace.one-step.selection-title': '選択と設定',
   'workspace.branch-workspace.one-step.plan-title': '操作プラン',
+  'workspace.branch-workspace.one-step.selection-description.create':
+    '子ワークスペースに名前を付け、作成するメンバーワークツリーを選択します。',
+  'workspace.branch-workspace.one-step.selection-description.remove':
+    '対象となるローカルブランチとアップストリームブランチも削除するか選択します。',
+  'workspace.branch-workspace.one-step.plan-description.create': 'この一覧は設定に合わせて自動更新されます。',
+  'workspace.branch-workspace.one-step.plan-description.remove': '確認すると、この一覧に従って削除します。',
   'workspace.branch-workspace.one-step.modify-selection': '選択を変更',
   'workspace.branch-workspace.progress.create': 'ブランチワークスペースを作成中…',
   'workspace.branch-workspace.progress.remove': 'ブランチワークスペースを削除中…',
