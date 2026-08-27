@@ -26,17 +26,16 @@ afterEach(() => {
 })
 
 describe('OneStepPlanningLayout', () => {
-  test('renders the constructive operation console without increasing its viewport footprint', () => {
+  test('renders a neutral operation console without increasing its viewport footprint', () => {
     act(() =>
       root.render(
-        <OneStepPlanningLayout enabled testIdPrefix="workspace" presentation="operation-console" tone="constructive">
+        <OneStepPlanningLayout enabled testIdPrefix="workspace" presentation="operation-console">
           <OneStepPlanningSelectionPane
             enabled
             testIdPrefix="workspace"
             title="Configure"
             description="Choose repositories"
             presentation="operation-console"
-            tone="constructive"
             step="01"
           >
             selection
@@ -47,7 +46,6 @@ describe('OneStepPlanningLayout', () => {
             title="Plan"
             description="Review operations"
             presentation="operation-console"
-            tone="constructive"
             step="02"
           >
             plan
@@ -58,12 +56,17 @@ describe('OneStepPlanningLayout', () => {
 
     const layout = document.querySelector<HTMLElement>('[data-testid="workspace-one-step-layout"]')
     expect(layout?.dataset.presentation).toBe('operation-console')
-    expect(layout?.dataset.tone).toBe('constructive')
+    expect(layout?.dataset.tone).toBeUndefined()
     expect(layout?.className).toContain('gap-0')
+    expect(layout?.className).toContain('border-separator')
     expect(layout?.className).toContain('overflow-x-hidden')
     expect(layout?.className).toContain('lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]')
-    expect(document.querySelector('[data-one-step-planning-step="01"]')?.textContent).toBe('01')
-    expect(document.querySelector('[data-one-step-planning-step="02"]')?.textContent).toBe('02')
+    const selectionStep = document.querySelector<HTMLElement>('[data-one-step-planning-step="01"]')
+    const planStep = document.querySelector<HTMLElement>('[data-one-step-planning-step="02"]')
+    expect(selectionStep?.textContent).toBe('01')
+    expect(planStep?.textContent).toBe('02')
+    expect(selectionStep?.className).toContain('border-separator')
+    expect(planStep?.className).toContain('border-separator')
     expect(document.body.textContent).toContain('Choose repositories')
     expect(document.body.textContent).toContain('Review operations')
     expect(document.querySelector<HTMLElement>('[data-testid="workspace-plan-pane"]')?.className).toContain(

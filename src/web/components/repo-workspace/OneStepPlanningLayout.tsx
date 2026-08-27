@@ -6,7 +6,6 @@ interface OneStepPlanningLayoutProps {
   testIdPrefix: string
   children: ReactNode
   presentation?: OneStepPlanningPresentation
-  tone?: OneStepPlanningTone
 }
 
 interface OneStepPlanningPaneProps extends OneStepPlanningLayoutProps {
@@ -16,20 +15,17 @@ interface OneStepPlanningPaneProps extends OneStepPlanningLayoutProps {
 }
 
 export type OneStepPlanningPresentation = 'plain' | 'operation-console'
-export type OneStepPlanningTone = 'constructive' | 'destructive'
 
 export function OneStepPlanningLayout({
   enabled,
   testIdPrefix,
   children,
   presentation = 'plain',
-  tone,
 }: OneStepPlanningLayoutProps) {
   return (
     <div
       data-testid={enabled ? `${testIdPrefix}-one-step-layout` : undefined}
       data-presentation={enabled ? presentation : undefined}
-      data-tone={enabled && presentation === 'operation-console' ? tone : undefined}
       className={cn(
         !enabled && 'contents',
         enabled &&
@@ -37,9 +33,7 @@ export function OneStepPlanningLayout({
           'grid min-h-0 gap-4 overflow-x-hidden overflow-y-auto lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)] lg:overflow-visible',
         enabled &&
           presentation === 'operation-console' &&
-          'grid min-h-0 gap-0 overflow-x-hidden overflow-y-auto rounded-lg border bg-card lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)] lg:overflow-visible',
-        enabled && presentation === 'operation-console' && tone === 'constructive' && 'border-success-border/70',
-        enabled && presentation === 'operation-console' && tone === 'destructive' && 'border-danger-border/70',
+          'grid min-h-0 gap-0 overflow-x-hidden overflow-y-auto rounded-lg border border-separator bg-card lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)] lg:overflow-visible',
       )}
     >
       {children}
@@ -55,7 +49,6 @@ export function OneStepPlanningSelectionPane({
   step,
   children,
   presentation = 'plain',
-  tone,
 }: OneStepPlanningPaneProps) {
   return (
     <section
@@ -72,7 +65,7 @@ export function OneStepPlanningSelectionPane({
     >
       {enabled ? (
         presentation === 'operation-console' ? (
-          <OneStepPlanningPaneHeader title={title} description={description} step={step} tone={tone} />
+          <OneStepPlanningPaneHeader title={title} description={description} step={step} />
         ) : (
           <h3 className="text-xs font-semibold">{title}</h3>
         )
@@ -90,7 +83,6 @@ export function OneStepPlanningPlanPane({
   step,
   children,
   presentation = 'plain',
-  tone,
 }: OneStepPlanningPaneProps) {
   return (
     <section
@@ -103,12 +95,12 @@ export function OneStepPlanningPlanPane({
           'grid min-w-0 content-start gap-3 lg:max-h-[65vh] lg:overflow-y-auto lg:pl-1',
         enabled &&
           presentation === 'operation-console' &&
-          'grid min-w-0 content-start gap-3 border-t bg-muted/10 p-3 sm:p-4 lg:max-h-[65vh] lg:overflow-y-auto lg:border-t-0 lg:border-l',
+          'grid min-w-0 content-start gap-3 border-t p-3 sm:p-4 lg:max-h-[65vh] lg:overflow-y-auto lg:border-t-0 lg:border-l',
       )}
     >
       {enabled ? (
         presentation === 'operation-console' ? (
-          <OneStepPlanningPaneHeader title={title} description={description} step={step} tone={tone} />
+          <OneStepPlanningPaneHeader title={title} description={description} step={step} />
         ) : (
           <h3 className="text-xs font-semibold">{title}</h3>
         )
@@ -122,19 +114,14 @@ function OneStepPlanningPaneHeader({
   title,
   description,
   step,
-  tone,
-}: Pick<OneStepPlanningPaneProps, 'title' | 'description' | 'step' | 'tone'>) {
+}: Pick<OneStepPlanningPaneProps, 'title' | 'description' | 'step'>) {
   return (
     <div className="flex min-w-0 items-start gap-2.5">
       {step ? (
         <span
           data-one-step-planning-step={step}
           aria-hidden="true"
-          className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-md border font-mono text-[9px] font-semibold',
-            tone === 'constructive' && 'border-success-border bg-success-surface text-success',
-            tone === 'destructive' && 'border-danger-border bg-danger-surface text-danger',
-          )}
+          className="flex size-6 shrink-0 items-center justify-center rounded-md border border-separator bg-muted/20 font-mono text-[9px] font-semibold text-muted-foreground"
         >
           {step}
         </span>
