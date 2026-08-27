@@ -584,9 +584,13 @@ export class TerminalSessionView {
   }
 
   private installKeyboardHandlers(term: XTermTerminal, onInput: (input: TerminalInput) => void): void {
-    const isMac = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
+    const platform = globalThis.navigator?.platform ?? ''
+    const isMac = isMacNavigatorPlatform(platform)
+    const isWindows = /^Win/i.test(platform)
     const safariShiftKeyResolver = this.safariShiftKeyResolver
     term.attachCustomKeyEventHandler((event) => {
+      const clipboardShortcut = windowsTerminalClipboardShortcut(event, isWindows)
+      if (clipboardShortcut === 'paste' || (clipboardShortcut === 'copy' && term.hasSelection())) return false
       const optionInput = terminalInputForMacOptionArrow(event, {
         isMac,
         applicationCursorKeysMode: term.modes.applicationCursorKeysMode,
@@ -852,6 +856,15 @@ export class TerminalSessionView {
     cancelScheduledAnimationFrame(this.pinToBottomFrame)
     this.pinToBottomFrame = null
   }
+}
+
+function windowsTerminalClipboardShortcut(event: KeyboardEvent, isWindows: boolean): 'copy' | 'paste' | null {
+  if (!isWindows || event.type !== 'keydown' || !event.ctrlKey || event.shiftKey || event.altKey || event.metaKey) {
+    return null
+  }
+  if (event.code === 'KeyC' || event.key.toLowerCase() === 'c') return 'copy'
+  if (event.code === 'KeyV' || event.key.toLowerCase() === 'v') return 'paste'
+  return null
 }
 
 function terminalSearchOptions(mode: TerminalThemeMode, incremental?: boolean): ISearchOptions {
