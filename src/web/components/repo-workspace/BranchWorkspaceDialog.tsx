@@ -170,7 +170,6 @@ export function BranchWorkspaceDialog({
   const [initializedDialogStateKey, setInitializedDialogStateKey] = useState<string | null>(null)
   const oneStep = mode === 'create' || mode === 'extend' || mode === 'reduce' || mode === 'remove'
   const operationConsole = mode === 'create' || mode === 'remove'
-  const operationTone = mode === 'remove' ? 'destructive' : 'constructive'
   const selectionDescriptionKey =
     mode === 'remove'
       ? 'workspace.branch-workspace.one-step.selection-description.remove'
@@ -631,22 +630,15 @@ export function BranchWorkspaceDialog({
       >
         <DialogHeader
           data-branch-workspace-operation-header={operationConsole ? '' : undefined}
-          data-tone={operationConsole ? operationTone : undefined}
           className={cn(
             'pr-8',
-            operationConsole && '-mx-4 -mt-4 rounded-t-lg border-b px-4 py-3.5 pr-12',
-            operationConsole && operationTone === 'constructive' && 'border-success-border/70 bg-success-surface/50',
-            operationConsole && operationTone === 'destructive' && 'border-danger-border/70 bg-danger-surface/50',
+            operationConsole && '-mx-4 -mt-4 rounded-t-lg border-b border-separator px-4 py-3.5 pr-12',
           )}
         >
           <div className="flex items-start gap-3">
             {operationConsole ? (
               <div
-                className={cn(
-                  'flex size-9 shrink-0 items-center justify-center rounded-md border bg-card/80 shadow-xs',
-                  operationTone === 'constructive' && 'border-success-border text-success',
-                  operationTone === 'destructive' && 'border-danger-border text-danger',
-                )}
+                className="flex size-9 shrink-0 items-center justify-center rounded-md border border-separator bg-card/80 text-muted-foreground shadow-xs"
                 aria-hidden="true"
               >
                 {mode === 'create' ? <FolderPlus className="size-4" /> : <Trash2 className="size-4" />}
@@ -685,7 +677,6 @@ export function BranchWorkspaceDialog({
           enabled={oneStep}
           testIdPrefix="branch-workspace"
           presentation={operationConsole ? 'operation-console' : 'plain'}
-          tone={operationTone}
         >
           <OneStepPlanningSelectionPane
             enabled={oneStep}
@@ -693,7 +684,6 @@ export function BranchWorkspaceDialog({
             title={t('workspace.branch-workspace.one-step.selection-title')}
             description={operationConsole ? t(selectionDescriptionKey) : undefined}
             presentation={operationConsole ? 'operation-console' : 'plain'}
-            tone={operationTone}
             step={operationConsole ? '01' : undefined}
           >
             {oneStep && (mode === 'create' || mode === 'extend') ? (
@@ -1192,15 +1182,9 @@ export function BranchWorkspaceDialog({
             title={t('workspace.branch-workspace.one-step.plan-title')}
             description={operationConsole ? t(planDescriptionKey) : undefined}
             presentation={operationConsole ? 'operation-console' : 'plain'}
-            tone={operationTone}
             step={operationConsole ? '02' : undefined}
           >
-            {workspace ? (
-              <WorkspaceSummary
-                workspace={workspace}
-                tone={operationConsole && mode === 'remove' ? 'destructive' : 'neutral'}
-              />
-            ) : null}
+            {workspace ? <WorkspaceSummary workspace={workspace} /> : null}
             {displayedPlan ? (
               <div className="grid gap-3">
                 {operationProgress ? (
@@ -1344,7 +1328,7 @@ export function BranchWorkspaceDialog({
               </div>
             ) : oneStep ? (
               operationConsole ? (
-                <BranchWorkspacePlanPlaceholder status={autoPlan.status} tone={operationTone} />
+                <BranchWorkspacePlanPlaceholder status={autoPlan.status} />
               ) : (
                 <div
                   data-plan-status={autoPlan.status}
@@ -1381,7 +1365,7 @@ export function BranchWorkspaceDialog({
         <DialogFooter
           className={cn(
             operationConsole &&
-              '-mx-4 -mb-4 border-t bg-muted/10 px-4 py-3 [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto',
+              '-mx-4 -mb-4 border-t border-separator px-4 py-3 [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto',
           )}
         >
           {mode === 'repair' ? (
@@ -1416,7 +1400,7 @@ export function BranchWorkspaceDialog({
             <Button
               type="button"
               data-action="force-confirm"
-              variant={operationConsole ? 'destructive-soft' : 'destructive'}
+              variant="destructive"
               title={t('workspace.branch-workspace.force-delete-description')}
               disabled={operationPending || !currentPlanReady || !requiredApprovalsSatisfied}
               onClick={() => void run(onForceConfirm)}
@@ -1579,13 +1563,7 @@ function BranchWorkspaceRepositoryDependencyPreview({ repository }: { repository
   )
 }
 
-function BranchWorkspacePlanPlaceholder({
-  status,
-  tone,
-}: {
-  status: 'incomplete' | 'planning' | 'ready' | 'error'
-  tone: 'constructive' | 'destructive'
-}) {
+function BranchWorkspacePlanPlaceholder({ status }: { status: 'incomplete' | 'planning' | 'ready' | 'error' }) {
   const t = useT()
   const icon =
     status === 'planning' ? (
@@ -1598,7 +1576,6 @@ function BranchWorkspacePlanPlaceholder({
   return (
     <div
       data-plan-status={status}
-      data-operation-tone={tone}
       className={cn(
         'flex min-h-20 items-start gap-2 rounded-md border p-3 text-xs',
         status === 'error'
@@ -1713,21 +1690,12 @@ function localBranchMatchesQuery(branch: string, query: string): boolean {
   return remoteRefMatchesQuery(branch, query)
 }
 
-function WorkspaceSummary({
-  workspace,
-  tone = 'neutral',
-}: {
-  workspace: BranchWorkspaceSnapshot
-  tone?: 'neutral' | 'destructive'
-}) {
+function WorkspaceSummary({ workspace }: { workspace: BranchWorkspaceSnapshot }) {
   const t = useT()
   return (
     <div
       data-branch-workspace-target-summary
-      className={cn(
-        'grid gap-1 rounded-md border bg-muted/20 p-3 text-xs',
-        tone === 'destructive' ? 'border-danger-border' : 'border-separator',
-      )}
+      className="grid gap-1 rounded-md border border-separator bg-muted/20 p-3 text-xs"
     >
       <div className="flex items-center gap-2 font-medium">
         <FolderKanban className="size-4" aria-hidden="true" />

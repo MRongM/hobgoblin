@@ -63,7 +63,7 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDialog', () => {
-  test('presents create as a compact constructive operation console', () => {
+  test('presents create as a compact neutral operation console', () => {
     renderDialog({})
 
     const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
@@ -72,17 +72,20 @@ describe('BranchWorkspaceDialog', () => {
 
     expect(content?.className).toContain('max-h-[85vh]')
     expect(content?.className).toContain('sm:max-w-5xl')
-    expect(header?.dataset.tone).toBe('constructive')
+    expect(header?.dataset.tone).toBeUndefined()
+    expect(header?.className).toContain('border-separator')
+    expect(header?.className).not.toContain('bg-success-surface')
     expect(header?.querySelector('.lucide-folder-plus')).not.toBeNull()
     expect(layout?.dataset.presentation).toBe('operation-console')
-    expect(layout?.dataset.tone).toBe('constructive')
+    expect(layout?.dataset.tone).toBeUndefined()
+    expect(layout?.className).toContain('border-separator')
     expect(document.querySelector('[data-one-step-planning-step="01"]')).not.toBeNull()
     expect(document.querySelector('[data-one-step-planning-step="02"]')).not.toBeNull()
     expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.selection-description.create')
     expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.plan-description.create')
   })
 
-  test('presents removal as a destructive operation console with one primary destructive action', () => {
+  test('presents removal with neutral chrome and the original destructive actions', () => {
     renderDialog({
       mode: 'remove',
       workspace: existingWorkspace(),
@@ -93,33 +96,31 @@ describe('BranchWorkspaceDialog', () => {
     })
 
     const header = document.querySelector<HTMLElement>('[data-branch-workspace-operation-header]')
-    expect(header?.dataset.tone).toBe('destructive')
+    expect(header?.dataset.tone).toBeUndefined()
+    expect(header?.className).toContain('border-separator')
+    expect(header?.className).not.toContain('bg-danger-surface')
     expect(header?.querySelector('.lucide-trash-2')).not.toBeNull()
     expect(document.querySelector('[data-branch-workspace-delete-scope]')).not.toBeNull()
     expect(document.querySelector('[data-branch-workspace-delete-scope] .lucide-shield-alert')).not.toBeNull()
-    expect(document.querySelector('[data-branch-workspace-target-summary]')?.className).toContain(
-      'border-danger-border',
-    )
-    expect(document.querySelector('[data-action="force-confirm"]')?.getAttribute('data-variant')).toBe(
-      'destructive-soft',
-    )
+    expect(document.querySelector('[data-branch-workspace-target-summary]')?.className).toContain('border-separator')
+    expect(document.querySelector('[data-action="force-confirm"]')?.getAttribute('data-variant')).toBe('destructive')
     expect(document.querySelector('[data-action="confirm"]')?.getAttribute('data-variant')).toBe('destructive')
   })
 
-  test('renders a constructive incomplete plan placeholder', () => {
+  test('renders a neutral incomplete plan placeholder', () => {
     renderDialog({})
 
     const placeholder = document.querySelector<HTMLElement>('[data-plan-status="incomplete"]')
-    expect(placeholder?.dataset.operationTone).toBe('constructive')
+    expect(placeholder?.dataset.operationTone).toBeUndefined()
     expect(placeholder?.querySelector('.lucide-clipboard-list')).not.toBeNull()
   })
 
-  test('renders a destructive planning placeholder', () => {
+  test('renders a neutral removal planning placeholder', () => {
     const onPreview = vi.fn(() => new Promise<boolean>(() => undefined))
     renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
 
     const placeholder = document.querySelector<HTMLElement>('[data-plan-status="planning"]')
-    expect(placeholder?.dataset.operationTone).toBe('destructive')
+    expect(placeholder?.dataset.operationTone).toBeUndefined()
     expect(placeholder?.querySelector('.lucide-loader-circle')).not.toBeNull()
   })
 
@@ -529,7 +530,7 @@ describe('BranchWorkspaceDialog', () => {
 
     const forceConfirm = document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')
     expect(forceConfirm?.textContent).toBe('workspace.branch-workspace.force-delete')
-    expect(forceConfirm?.dataset.variant).toBe('destructive-soft')
+    expect(forceConfirm?.dataset.variant).toBe('destructive')
     await clickAction('force-confirm')
 
     expect(onForceConfirm).toHaveBeenCalledWith([])
