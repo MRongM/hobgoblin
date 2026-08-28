@@ -17,6 +17,7 @@ import {
   resizeServerTerminal,
   takeoverServerTerminal,
   unregisterTerminalSocket,
+  submitServerTelegramTerminalInput,
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
 import type { ServerTerminalSocket } from '#/server/terminal/terminal-host.ts'
@@ -83,6 +84,9 @@ export interface TerminalFacade {
   getScreenSnapshot(
     input: TerminalWorkerRequestInputs['screen-snapshot'],
   ): MaybePromise<TerminalWorkerResponseOutputs['screen-snapshot']>
+  submitTelegramInput(
+    input: TerminalWorkerRequestInputs['telegram-input'],
+  ): MaybePromise<TerminalWorkerResponseOutputs['telegram-input']>
   reorder(
     clientId: string,
     input: TerminalWorkerRequestInputs['reorder'],
@@ -115,6 +119,9 @@ export function createTerminalFacade(): TerminalFacade {
     getSessionSnapshot: getServerTerminalSessionSnapshot,
     getOutputExcerpt: getServerTerminalOutputExcerpt,
     getScreenSnapshot: getServerTerminalScreenSnapshot,
+    submitTelegramInput(input) {
+      return submitServerTelegramTerminalInput(input.text)
+    },
     reorder: reorderServerTerminals,
     handleRealtimeMessage: handleRealtimeServerMessage,
     shutdown: closeAllServerTerminalSessions,

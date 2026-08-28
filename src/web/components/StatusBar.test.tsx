@@ -21,6 +21,7 @@ const { openExternalUrlMock, readBranchWorkspacesMock } = vi.hoisted(() => ({
 const shellOverlayMock = vi.hoisted(() => ({
   state: null as {
     openRepoPathDialog: () => void
+    openWslRepoPathDialog: () => void
     openRemoteRepo: () => void
     openCloneRepo: () => void
     openSettings: () => void
@@ -152,6 +153,7 @@ describe('StatusBar file area control', () => {
     const toggleSettings = vi.fn()
     shellOverlayMock.state = {
       openRepoPathDialog: vi.fn(),
+      openWslRepoPathDialog: vi.fn(),
       openRemoteRepo: vi.fn(),
       openCloneRepo: vi.fn(),
       openSettings: toggleSettings,
@@ -329,7 +331,7 @@ describe('StatusBar file area control', () => {
 describe('StatusBar repository refresh', () => {
   test('refreshes local branches and status without running remote sync', async () => {
     const refreshCoreData = vi.fn(async () => undefined)
-    const syncAndRefresh = vi.fn(async () => undefined)
+    const syncAndRefresh = vi.fn(async () => null)
     const token = useReposStore.getState().repos[REPO_ID]!.instanceToken
     useReposStore.setState({ refreshCoreData, syncAndRefresh })
 

@@ -58,6 +58,7 @@ import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
+import { fetchWorkspaceRepositories } from '#/web/workspace-repository-fetch.ts'
 import {
   activateWorkspaceParentTerminalTarget,
   resolveWorkspaceParentTerminalTarget,
@@ -273,6 +274,10 @@ export function WorkspaceRepositoryRail({
       }),
     [candidateNameById, repos, workspace?.repositoryIds],
   )
+  const fetchAllRepositories = useCallback(
+    async () => await fetchWorkspaceRepositories(workspaceRootId),
+    [workspaceRootId],
+  )
   const refreshWorkspaceMemberCoreData = useCallback(() => {
     const state = useReposStore.getState()
     const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
@@ -477,6 +482,7 @@ export function WorkspaceRepositoryRail({
         onBatchCommit={branchGitActions.executeBatchCommit}
         onBatchCommitAndPush={branchGitActions.executeBatchCommitAndPush}
         onBatchDiscard={branchGitActions.executeBatchDiscard}
+        onBatchAlignRemote={branchGitActions.executeBatchAlignRemote}
         onBatchSetUpstream={branchGitActions.executeBatchSetUpstream}
         onBatchMergeIn={branchGitActions.executeBatchMergeIn}
         onBatchMergeOut={branchGitActions.executeBatchMergeOut}
@@ -769,7 +775,9 @@ export function WorkspaceRepositoryRail({
         plan={branchActions.plan}
         result={branchActions.result}
         pending={branchActions.pending}
+        executing={branchActions.executing}
         error={branchActions.error}
+        onFetchAllRepositories={fetchAllRepositories}
         onRefreshAuxiliaryCandidates={branchQuery.refresh}
         onOpenChange={(open) => {
           setBranchDialogOpen(open)
@@ -778,8 +786,10 @@ export function WorkspaceRepositoryRail({
             if (!branchActions.pending) branchActions.reset()
           }
         }}
+        plannedRequest={branchActions.request}
         onPreview={branchActions.requestPlan}
         onConfirm={branchActions.confirm}
+        onForceConfirm={branchActions.forceConfirm}
         onRetry={branchActions.retry}
         onReturnToSelection={returnBranchDialogToSelection}
         onCancel={branchActions.cancel}
@@ -790,8 +800,12 @@ export function WorkspaceRepositoryRail({
         branchWorkspaceId={dependencyBranchWorkspaceId}
         candidates={branchDependencyActions.candidates}
         plan={branchDependencyActions.plan}
+        plannedRequest={branchDependencyActions.request}
         result={branchDependencyActions.result}
         pending={branchDependencyActions.pending}
+        reading={branchDependencyActions.reading}
+        planning={branchDependencyActions.planning}
+        executing={branchDependencyActions.executing}
         error={branchDependencyActions.error}
         onOpenChange={(open) => {
           setDependencyDialogOpen(open)
@@ -799,6 +813,7 @@ export function WorkspaceRepositoryRail({
         }}
         onPreview={branchDependencyActions.requestPlan}
         onConfirm={branchDependencyActions.confirm}
+        onRecheck={() => branchDependencyActions.read(dependencyBranchWorkspaceId)}
         onCancel={branchDependencyActions.cancel}
       />
       <ConfirmDialog

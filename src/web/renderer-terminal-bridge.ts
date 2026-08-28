@@ -250,6 +250,9 @@ export function createServerTerminalBridge(options: {
         return snapshot
       })
     },
+    markTelegramInputTarget(input) {
+      return requestOverSocket('mark-telegram-input-target', input)
+    },
     reorder(input) {
       return requestOverSocket('reorder', input satisfies TerminalReorderInput)
     },
@@ -340,6 +343,10 @@ export function createServerTerminalBridge(options: {
     action: 'session-snapshot',
     input: TerminalSessionSnapshotInput,
   ): Promise<TerminalSessionSnapshot | null>
+  async function requestOverSocket(
+    action: 'mark-telegram-input-target',
+    input: TerminalSocketRequestInputs['mark-telegram-input-target'],
+  ): Promise<TerminalMutationResult>
   async function requestOverSocket(
     action: 'write',
     input: TerminalSocketRequestInputs['write'],

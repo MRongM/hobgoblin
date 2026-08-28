@@ -1585,6 +1585,46 @@ describe('RepoExplorerPane', () => {
     await act(async () => root.unmount())
   })
 
+  test('uses a selected detached worktree as the file-area context', async () => {
+    const detachedPath = '/tmp/detached-worktree'
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: detachedPath,
+      status: [{ path: detachedPath, isMain: false, entries: [{ x: 'M', y: ' ', path: 'src/app.ts' }] }],
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        [detachedPath]: {
+          path: detachedPath,
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+          isDirty: true,
+          changeCount: 1,
+        },
+      },
+    })
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(<RepoExplorerPane repoId={REPO_ID} layout="left-right" showActions />)
+    })
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['tab.status', 'file-tree.title', 'tab.changes1'])
+    expect(container.querySelector('[data-testid="project-status-panel"]')).not.toBeNull()
+    expect(tabs[2]?.textContent).toContain('1')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch[`detached:${detachedPath}`]).toBeUndefined()
+    await act(async () => {
+      tabs[2]?.click()
+    })
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch[`detached:${detachedPath}`]).toBe('changes')
+    await act(async () => root.unmount())
+  })
+
   test('restores each repo explorer tab when the same component position changes repoId', async () => {
     const repoA = seedRepoState({ id: REPO_ID, selectedBranch: 'main', explorerTab: 'history' })
     const repoB = seedRepoState({ id: REPO_B_ID, selectedBranch: 'main', explorerTab: 'changes' })

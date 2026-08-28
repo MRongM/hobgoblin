@@ -4,6 +4,7 @@ import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import type { ReposStore } from '#/web/stores/repos/types.ts'
 import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
 import { terminalPathIdentityKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { detachedHeadTerminalLabel, isSelectableDetachedWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 export interface ResolvedTerminalRepoWorktree {
   repoRoot: string
@@ -29,6 +30,11 @@ export function repoIndexFromRepos(repos: ReposStore['repos']): TerminalRepoInde
       for (const branch of repo.data.branches) {
         const worktreePath = branch.worktree?.path
         if (worktreePath) branchByWorktreePath[worktreePath] = branch.name
+      }
+      for (const worktree of Object.values(repo.data.worktreesByPath)) {
+        if (isSelectableDetachedWorktree(worktree)) {
+          branchByWorktreePath[worktree.path] = detachedHeadTerminalLabel(worktree)
+        }
       }
     }
     index[repoRoot] = {

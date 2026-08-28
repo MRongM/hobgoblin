@@ -18,11 +18,12 @@ export const MainWindowNavigationProvider = MainWindowNavigationContext.Provider
 export function useMainWindowNavigation(): MainWindowNavigationActions {
   const context = useContext(MainWindowNavigationContext)
   const activeId = useReposStore((state) => state.activeId)
-  const { setActive, activateProject, closeRepo, cycleActive, selectBranch, setDetailTab } = useStoreWithEqualityFn(
-    useReposStore,
-    mainWindowNavigationStoreActionsFromStore,
-    mainWindowNavigationStoreActionsEqual,
-  )
+  const { setActive, activateProject, closeRepo, cycleActive, selectBranch, selectDetachedWorktree, setDetailTab } =
+    useStoreWithEqualityFn(
+      useReposStore,
+      mainWindowNavigationStoreActionsFromStore,
+      mainWindowNavigationStoreActionsEqual,
+    )
   const fallbackNavigation = useMemo(
     () =>
       createMainWindowNavigationActions({
@@ -32,9 +33,10 @@ export function useMainWindowNavigation(): MainWindowNavigationActions {
         closeRepo,
         cycleActive,
         selectBranch,
+        selectDetachedWorktree,
         setDetailTab,
       }),
-    [activeId, activateProject, closeRepo, cycleActive, selectBranch, setActive, setDetailTab],
+    [activeId, activateProject, closeRepo, cycleActive, selectBranch, selectDetachedWorktree, setActive, setDetailTab],
   )
 
   return context ?? fallbackNavigation

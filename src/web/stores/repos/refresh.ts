@@ -1,28 +1,20 @@
 import { appendRepoEvent, errorEvent, updateIfFresh } from '#/web/stores/repos/helpers.ts'
-import {
-  isRepoUnavailableReason,
-  markRepoUnavailable,
-} from '#/web/stores/repos/availability.ts'
+import { isRepoUnavailableReason, markRepoUnavailable } from '#/web/stores/repos/availability.ts'
 import { runExclusiveOperation, runLatestOperation } from '#/web/stores/repos/operation-runner.ts'
 import { persistRestorableRepoSnapshot } from '#/web/stores/repos/persistence.ts'
 import { runLatestResourceOperation } from '#/web/stores/repos/resource-runner.ts'
 import { applyStatusToWorktreeStates } from '#/web/stores/repos/worktree-state.ts'
-import {
-  runCoreDataRefreshWorkflow,
-  runSnapshotSuccessWorkflow,
-} from '#/web/stores/repos/refresh-workflows.ts'
+import { runCoreDataRefreshWorkflow, runSnapshotSuccessWorkflow } from '#/web/stores/repos/refresh-workflows.ts'
 import { reprobeWorkspaceCapability } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import { repoSupportsGitData } from '#/web/stores/repos/capabilities.ts'
 import {
   applySnapshotToRepoProjection,
+  reconcileRepoWorktreeSelectionAfterStatus,
   resolveActionToken,
 } from '#/web/stores/repos/refresh-state.ts'
 import { createRefreshSyncHelpers } from '#/web/stores/repos/refresh-sync.ts'
 import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
-import {
-  finishResourceError,
-  startResource,
-} from '#/web/stores/repos/resources.ts'
+import { finishResourceError, startResource } from '#/web/stores/repos/resources.ts'
 import { getRepositorySnapshot, getRepositoryStatus } from '#/web/repo-client.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
@@ -107,6 +99,7 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
           r.data.status = status
           r.data.statusLoaded = true
           r.data.worktreesByPath = applyStatusToWorktreeStates(r.data.worktreesByPath, status)
+          reconcileRepoWorktreeSelectionAfterStatus(r)
         },
         onSuccess: (_status, ctx) => {
           const repoAfterStatus = get().repos[id]
@@ -134,9 +127,9 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
      *  so there is one source of truth for post-sync cleanup. */
     async syncAndRefresh(id: string, options?: { token?: number }) {
       const resolved = resolveActionToken(get, id, options?.token)
-      if (!resolved) return
+      if (!resolved) return null
       const { token } = resolved
-      await runExclusiveOperation({
+      return await runExclusiveOperation({
         set,
         get,
         id,
@@ -147,9 +140,15 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
         task: async () =>
           await runWithRepoInvalidationSource('manual', async (sourceToken) => {
             const capability = await reprobeWorkspaceCapability(set, get, id, token)
-            if (capability.kind !== 'available') return
-            if (!capability.isGitRepo) return
-            await runManualSyncPipeline(capability.id, capability.token, sourceToken)
+            if (capability.kind === 'unavailable') return { ok: false as const, message: capability.message }
+            if (capability.kind === 'stale') return null
+            if (!capability.isGitRepo) return { ok: true as const, message: '' }
+            return (
+              (await runManualSyncPipeline(capability.id, capability.token, sourceToken)) ?? {
+                ok: true as const,
+                message: '',
+              }
+            )
           }),
       })
     },

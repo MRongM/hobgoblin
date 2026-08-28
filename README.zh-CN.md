@@ -125,6 +125,16 @@ bun run install:app
 
 该命令会构建当前主机架构的 `Hobgoblin.app`、安装到 `~/Applications`，并在目标路径可用时安全创建 `$HOME/.local/bin/hob`；已有命令不会被覆盖。
 
+### 从 WSL 快速构建 Windows 应用
+
+仓库位于 Windows 挂载盘时，可在 WSL 中调用 Windows 原生工具链构建主 Windows 应用：
+
+```bash
+bash scripts/build-windows-from-wsl.sh
+```
+
+默认生成 `release/win-unpacked`。使用 `--installer` 生成 NSIS 安装包，`--install` 构建后静默安装，`--typecheck` 在打包前验证，`--clean` 仅清理 `release/`，或使用 `--arch arm64` 构建 Windows ARM64 版本。如果 Windows 提供本地代理，可传入代理 URL 或端口，例如 `--proxy 7890`。脚本下载前会校验并复用已忽略的 `tmp/electron-cache` 或匹配的 Windows Electron 缓存，否则通过 npmmirror 下载。
+
 ## 开发
 
 安装依赖并启动开发应用：

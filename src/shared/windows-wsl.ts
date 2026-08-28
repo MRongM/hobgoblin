@@ -7,6 +7,12 @@ interface ResolveUsableWindowsWslOptions {
   fileExists?: (filePath: string) => boolean
 }
 
+const wslProbeCache = new Map<string, string | null>()
+
+export function clearWindowsWslProbeCache(): void {
+  wslProbeCache.clear()
+}
+
 export function resolveUsableWindowsWslExecutable(options: ResolveUsableWindowsWslOptions = {}): string | null {
   const env = options.env ?? process.env
   const systemRoot = environmentValue(env, 'SYSTEMROOT') ?? environmentValue(env, 'WINDIR')
@@ -16,18 +22,30 @@ export function resolveUsableWindowsWslExecutable(options: ResolveUsableWindowsW
   const fileExists = options.fileExists ?? isFile
   if (!executable || !fileExists(executable)) return null
 
+  // Shell resolution is currently synchronous. Cache the capability result
+  // so opening several terminals does not repeatedly block the server for up
+  // to five seconds.
+  // Custom file probes are used by tests and are intentionally not cached.
+  const cacheKey = executable.toLowerCase()
+  if (options.fileExists === undefined && wslProbeCache.has(cacheKey)) {
+    return wslProbeCache.get(cacheKey) ?? null
+  }
+
+  let usable: string | null = null
   try {
     const result = spawnSync(executable, ['--list', '--quiet'], {
-      encoding: 'utf8',
+      encoding: 'utf16le',
+      env: { ...env, WSL_UTF8: '0' },
       timeout: 5_000,
       windowsHide: true,
     })
-    return result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length > 0
-      ? executable
-      : null
+    usable =
+      result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length > 0 ? executable : null
   } catch {
-    return null
+    usable = null
   }
+  if (options.fileExists === undefined) wslProbeCache.set(cacheKey, usable)
+  return usable
 }
 
 function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefined {

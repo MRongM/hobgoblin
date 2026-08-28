@@ -22,10 +22,10 @@ import {
   materializeRemoteBranchWorkspaceSymlink,
   removeRemoteBranchWorkspaceEntry,
 } from '#/system/ssh/branch-workspaces.ts'
-import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 
 export interface BranchWorkspaceMaterializationDependencies {
-  resolveRemoteTarget?: typeof resolveSshRemoteTarget
+  resolveRemoteTarget?: typeof resolveRepositoryRemoteTarget
   listRemoteCandidates?: typeof listRemoteBranchWorkspaceAuxiliaryCandidates
   inspectRemotePath?: typeof inspectRemoteBranchWorkspacePath
   createRemoteDirectory?: typeof createRemoteBranchWorkspaceDirectory
@@ -403,7 +403,7 @@ async function resolveMaterializationRemoteTarget(
 ): Promise<RemoteRepoTarget> {
   const ref = parseRemoteRepoId(rootId)
   if (!ref) throw new Error('workspace.branch-workspace.invalid-root')
-  return (await (dependencies.resolveRemoteTarget ?? resolveSshRemoteTarget)(ref, signal)).target
+  return (await (dependencies.resolveRemoteTarget ?? resolveRepositoryRemoteTarget)(ref, signal)).target
 }
 
 function pathKind(stat: Awaited<ReturnType<typeof lstat>>): Exclude<BranchWorkspacePathKind, 'missing'> {

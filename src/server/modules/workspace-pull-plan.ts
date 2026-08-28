@@ -2,18 +2,11 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { getRepositorySnapshot } from '#/server/modules/repo-read-paths.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
-import {
-  workspaceRepositoryId,
-  workspaceRepositoryPath,
-  workspaceRootId,
-} from '#/server/modules/workspace-paths.ts'
+import { workspaceRepositoryId, workspaceRepositoryPath, workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { WorkspaceConfigSnapshot } from '#/shared/workspace.ts'
-import type {
-  WorkspacePullMemberPlan,
-  WorkspacePullPlan,
-  WorkspacePullPlanResult,
-} from '#/shared/workspace-pull.ts'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import type { WorkspacePullMemberPlan, WorkspacePullPlan, WorkspacePullPlanResult } from '#/shared/workspace-pull.ts'
 
 export interface WorkspacePullPlanDependencies {
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
@@ -79,7 +72,8 @@ export async function validateWorkspacePullRetryPlan(
   if (!current.ok || current.plan.token !== plan.token) {
     return {
       ok: false,
-      message: current.ok || current.message !== 'error.ssh-config-changed' ? 'workspace.pull.plan-stale' : current.message,
+      message:
+        current.ok || current.message !== 'error.ssh-config-changed' ? 'workspace.pull.plan-stale' : current.message,
     }
   }
   return { ok: true }
@@ -87,19 +81,15 @@ export async function validateWorkspacePullRetryPlan(
 
 function pullTarget(repoId: string, snapshot: RepoSnapshot | null): WorkspacePullMemberPlan | null {
   if (!snapshot) return null
-  const rootBranch = snapshot.branches.find(
-    (branch) => branch.worktree && isPrimaryWorktree(repoId, branch.worktree),
-  )
-  return rootBranch?.worktree?.path
-    ? { repoId, branch: rootBranch.name, worktreePath: rootBranch.worktree.path }
-    : null
+  const rootBranch = snapshot.branches.find((branch) => branch.worktree && isPrimaryWorktree(repoId, branch.worktree))
+  return rootBranch?.worktree?.path ? { repoId, branch: rootBranch.name, worktreePath: rootBranch.worktree.path } : null
 }
 
 function isPrimaryWorktree(repoId: string, worktree: { path: string; isPrimary?: boolean }): boolean {
   if (worktree.isPrimary === true) return true
   const repositoryPath = workspaceRepositoryPath(repoId)
   if (!repositoryPath) return false
-  return repoId.startsWith('ssh-config://')
+  return isRemoteRepoId(repoId)
     ? path.posix.normalize(worktree.path) === path.posix.normalize(repositoryPath)
     : path.resolve(worktree.path) === path.resolve(repositoryPath)
 }

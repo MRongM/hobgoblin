@@ -1,6 +1,6 @@
-import { createElement } from 'react'
+import { createElement, useState } from 'react'
 import type { ReactNode } from 'react'
-import { GitBranch, GitMerge, RotateCcw, SendHorizontal } from 'lucide-react'
+import { GitBranch, GitMerge, RefreshCw, RotateCcw, SendHorizontal } from 'lucide-react'
 import type { ExecResult } from '#/shared/git-types.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useRetainedDialogState } from '#/web/hooks/useRetainedDialogState.ts'
@@ -23,6 +23,7 @@ import {
   mergeRepositoryBranch,
   mergeRepositoryBranchOut,
   pullRepositoryBranch,
+  getRepositoryRemoteAlignmentPreview,
   resetRepositoryHard,
 } from '#/web/repo-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -38,6 +39,9 @@ import {
 } from '#/shared/repository-merge-branch.ts'
 import { useTrackRemoteBranchAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
 import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
+import type { RepositoryRemoteAlignmentPreviewResult } from '#/shared/repository-remote-alignment.ts'
+
+type RemoteAlignmentPreview = Extract<RepositoryRemoteAlignmentPreviewResult, { ok: true }>
 
 interface BranchWriteActions {
   mainItems: BranchActionItem[]
@@ -76,6 +80,8 @@ export function useBranchWriteActions(
   const mergeOutDialog = useRetainedDialogState<string>()
   const createBranchDialog = useRetainedDialogState<string>()
   const resetDialog = useRetainedDialogState<string>()
+  const alignRemoteDialog = useRetainedDialogState<RemoteAlignmentPreview>()
+  const [alignPreviewLoading, setAlignPreviewLoading] = useState(false)
   const trackRemoteBranch = useTrackRemoteBranchAction(repo)
 
   async function submitBranchWriteAction(action: Parameters<typeof runBranchAction>[1]) {
@@ -159,6 +165,33 @@ export function useBranchWriteActions(
     resetDialog.close()
   }
 
+  async function handleAlignRemote() {
+    const preview = alignRemoteDialog.payload
+    if (!preview) return
+    await submitBranchWriteAction({
+      kind: 'alignRemote',
+      branch: preview.branch,
+      worktreePath: preview.worktreePath,
+      previewToken: preview.token,
+    })
+    alignRemoteDialog.close()
+  }
+
+  async function openAlignRemotePreview() {
+    if (!worktreePath || alignPreviewLoading) return
+    setAlignPreviewLoading(true)
+    try {
+      const preview = await getRepositoryRemoteAlignmentPreview(repo.id, branch.name, worktreePath)
+      if (!preview.ok) {
+        setLastResult(repo.id, preview, repo.instanceToken)
+        return
+      }
+      alignRemoteDialog.openWith(preview)
+    } finally {
+      setAlignPreviewLoading(false)
+    }
+  }
+
   const mainItems: BranchActionItem[] = [
     {
       id: 'createBranch',
@@ -220,6 +253,19 @@ export function useBranchWriteActions(
 
   const destructiveItems: BranchActionItem[] = [
     {
+      id: 'alignRemote',
+      label: t('action.align-remote'),
+      title: branch.tracking
+        ? t('action.align-remote-title', { upstream: branch.tracking })
+        : t('action.align-remote-upstream-required'),
+      disabled:
+        !hasWorktree || !branch.tracking || branch.trackingGone === true || branchActionBusy || alignPreviewLoading,
+      visible: true,
+      destructive: true,
+      icon: createElement(RefreshCw),
+      onSelect: () => void openAlignRemotePreview(),
+    },
+    {
       id: 'resetHard',
       label: t('action.reset-hard'),
       disabled: !hasWorktree || branchActionBusy,
@@ -267,6 +313,27 @@ export function useBranchWriteActions(
         sourceWorktreePath={worktreePath ?? ''}
         onClose={mergeOutDialog.close}
         onMergeOut={handleMergeOut}
+      />
+      <ConfirmDialog
+        open={alignRemoteDialog.open}
+        title={t('action.confirm-align-remote-title')}
+        message={
+          <div className="space-y-2">
+            <p>{t('action.confirm-align-remote-body')}</p>
+            <p>
+              {t('action.confirm-align-remote-impact', {
+                branch: alignRemoteDialog.payload?.branch ?? branch.name,
+                upstream: alignRemoteDialog.payload?.upstream ?? '-',
+                commits: alignRemoteDialog.payload?.ahead ?? 0,
+                changes: alignRemoteDialog.payload?.changeCount ?? 0,
+              })}
+            </p>
+          </div>
+        }
+        confirmLabel={t('action.confirm-align-remote-confirm')}
+        destructive
+        onCancel={alignRemoteDialog.close}
+        onConfirm={handleAlignRemote}
       />
       <ConfirmDialog
         open={resetDialog.open}

@@ -55,11 +55,7 @@ export function createRefreshSyncHelpers(set: ReposSet, get: ReposGet) {
     })
   }
 
-  async function attemptFetch(
-    id: string,
-    token: number,
-    sourceToken?: string,
-  ): Promise<ExecResult | null> {
+  async function attemptFetch(id: string, token: number, sourceToken?: string): Promise<ExecResult | null> {
     let repo = repoIfFresh(get, id, token)
     if (!repo || !shouldAttemptFetch(repo, token)) return null
     if (!canStartRemoteFetch(repo)) {
@@ -92,10 +88,10 @@ export function createRefreshSyncHelpers(set: ReposSet, get: ReposGet) {
     if (fetchResult.message !== 'cancelled') get().setLastResult(id, fetchResult, token)
   }
 
-  async function runManualSyncPipeline(id: string, token: number, sourceToken: string): Promise<void> {
+  async function runManualSyncPipeline(id: string, token: number, sourceToken: string): Promise<ExecResult | null> {
     let fetchResult: ExecResult | null = null
     const repoBeforeFetch = repoIfFresh(get, id, token)
-    if (!repoBeforeFetch) return
+    if (!repoBeforeFetch) return null
     if (shouldAttemptFetch(repoBeforeFetch, token)) {
       fetchResult = await attemptFetch(id, token, sourceToken)
     }
@@ -103,6 +99,7 @@ export function createRefreshSyncHelpers(set: ReposSet, get: ReposGet) {
       await get().refreshCoreData(id, { token })
     }
     finalizeSyncFetchResult(id, token, fetchResult)
+    return fetchResult
   }
 
   return {

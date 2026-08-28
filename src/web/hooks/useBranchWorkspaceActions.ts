@@ -23,7 +23,8 @@ export function useBranchWorkspaceActions(rootId: string | null) {
   const [plan, setPlan] = useState<BranchWorkspacePlan | null>(null)
   const [request, setRequest] = useState<BranchWorkspacePlanRequest | null>(null)
   const [result, setResult] = useState<BranchWorkspaceExecuteResult | null>(null)
-  const [pending, setPending] = useState(false)
+  const [planning, setPlanning] = useState(false)
+  const [executing, setExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const invalidate = useCallback(async () => {
@@ -32,17 +33,23 @@ export function useBranchWorkspaceActions(rootId: string | null) {
   }, [queryClient, rootId])
 
   const requestPlan = useCallback(
-    async (nextRequest: BranchWorkspacePlanRequest) => {
+    async (nextRequest: BranchWorkspacePlanRequest, signal?: AbortSignal) => {
       if (!rootId) return false
-      setPending(true)
+      setPlanning(true)
       setError(null)
       setResult(null)
       setRequest(nextRequest)
-      const response = await planBranchWorkspace(rootId, nextRequest).catch(() => ({
-        ok: false as const,
-        message: 'workspace.branch-workspace.plan-failed',
-      }))
-      setPending(false)
+      setPlan(null)
+      const response = await planBranchWorkspace(rootId, nextRequest, signal).catch(() =>
+        signal?.aborted
+          ? null
+          : {
+              ok: false as const,
+              message: 'workspace.branch-workspace.plan-failed',
+            },
+      )
+      setPlanning(false)
+      if (!response || signal?.aborted) return false
       if (!response.ok) {
         setPlan(null)
         setError(response.message)
@@ -55,16 +62,20 @@ export function useBranchWorkspaceActions(rootId: string | null) {
   )
 
   const confirm = useCallback(
-    async (approvals: BranchWorkspaceApproval[]) => {
+    async (approvals: BranchWorkspaceApproval[], options: { force?: boolean } = {}) => {
       if (!rootId || !plan) return null
-      setPending(true)
+      setExecuting(true)
       setError(null)
-      const response = await executeBranchWorkspace(rootId, { planToken: plan.token, approvals }).catch(() => ({
+      const response = await executeBranchWorkspace(rootId, {
+        planToken: plan.token,
+        approvals,
+        ...(options.force === true ? { force: true } : {}),
+      }).catch(() => ({
         ok: false as const,
         message: 'workspace.branch-workspace.execute-failed',
         branchWorkspaceId: plan.branchWorkspaceId,
       }))
-      setPending(false)
+      setExecuting(false)
       if (!response.ok && response.message === 'workspace.branch-workspace.plan-stale' && request) {
         await requestPlan(request)
         return response
@@ -72,14 +83,23 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       setResult(response)
       if (!response.ok) setError(response.message)
       if (response.ok && response.warnings?.length) {
-        toast.warning(t('workspace.branch-workspace.dependency-warning', { count: response.warnings.length }), {
-          description: response.warnings
-            .map((warning) => {
-              const name = warning.kind === 'repository-dependency-failed' ? warning.repositoryName : warning.entryName
-              return `${name}: ${t(warning.message)}`
-            })
-            .join('\n'),
-        })
+        const cleanupWarning = response.warnings.some((warning) => warning.kind === 'member-worktree-cleanup-failed')
+        toast.warning(
+          t(
+            cleanupWarning
+              ? 'workspace.branch-workspace.force-delete-cleanup-warning'
+              : 'workspace.branch-workspace.dependency-warning',
+            { count: response.warnings.length },
+          ),
+          {
+            description: response.warnings
+              .map((warning) => {
+                const name = 'repositoryName' in warning ? warning.repositoryName : warning.entryName
+                return `${name}: ${t(warning.message)}`
+              })
+              .join('\n'),
+          },
+        )
       }
       if (response.ok && response.snapshot) {
         const snapshot = response.snapshot
@@ -103,6 +123,11 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       return response
     },
     [invalidate, plan, queryClient, request, requestPlan, rootId, t],
+  )
+
+  const forceConfirm = useCallback(
+    async (approvals: BranchWorkspaceApproval[]) => await confirm(approvals, { force: true }),
+    [confirm],
   )
 
   const cancel = useCallback(async () => {
@@ -137,18 +162,24 @@ export function useBranchWorkspaceActions(rootId: string | null) {
     setPlan(null)
     setRequest(null)
     setResult(null)
-    setPending(false)
+    setPlanning(false)
+    setExecuting(false)
     setError(null)
   }, [])
+
+  const pending = planning || executing
 
   return {
     plan,
     request,
     result,
     pending,
+    planning,
+    executing,
     error,
     requestPlan,
     confirm,
+    forceConfirm,
     retry: confirm,
     cancel,
     reorder,

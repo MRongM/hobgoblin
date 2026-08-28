@@ -34,6 +34,7 @@ import {
   isValidTerminalNotifyBellInput,
   isValidTerminalSize,
   normalizeTerminalClientMessage,
+  parseTerminalIdIndex,
   type TerminalAttachInput,
   type TerminalAttachResult,
   type TerminalClientMessage,
@@ -60,6 +61,10 @@ import {
   type TerminalTmuxPageInput,
   type TerminalWriteInput,
 } from '#/shared/terminal.ts'
+import {
+  TELEGRAM_TERMINAL_INPUT_MAX_CODE_POINTS,
+  type TelegramTerminalInputSubmissionResult,
+} from '#/shared/telegram-terminal-input.ts'
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
@@ -70,6 +75,28 @@ const TERMINAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
 const TERMINAL_DETACHED_TTL_MS = 24 * 60 * 60 * 1000
 const TERMINAL_OWNERSHIP_GRACE_MS = 30_000
 
+interface TelegramTerminalInputTarget {
+  clientId: string
+  sessionId: string
+  attachmentId: string
+  terminalIndex: number
+  version: number
+}
+
+let telegramTerminalInputTarget: TelegramTerminalInputTarget | null = null
+let telegramTerminalInputTargetVersion = 0
+
+function clearTelegramTerminalInputTarget(
+  matches?: Partial<Pick<TelegramTerminalInputTarget, 'clientId' | 'sessionId' | 'attachmentId'>>,
+): void {
+  const target = telegramTerminalInputTarget
+  if (!target) return
+  if (matches?.clientId !== undefined && target.clientId !== matches.clientId) return
+  if (matches?.sessionId !== undefined && target.sessionId !== matches.sessionId) return
+  if (matches?.attachmentId !== undefined && target.attachmentId !== matches.attachmentId) return
+  telegramTerminalInputTarget = null
+}
+
 const manager = new TerminalSessionManager<string>({
   onOutput(clientId, event) {
     broker.broadcast(clientId, { type: 'output', event })
@@ -78,11 +105,20 @@ const manager = new TerminalSessionManager<string>({
     broker.broadcast(clientId, { type: 'title', event })
   },
   onExit(clientId, event) {
+    clearTelegramTerminalInputTarget({ clientId, sessionId: event.sessionId })
     const repoRoot = manager.getSession(clientId, event.sessionId)?.scope
     broker.broadcast(clientId, { type: 'exit', event })
     if (repoRoot) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   },
   onOwnership(clientId, event) {
+    const target = telegramTerminalInputTarget
+    if (
+      target?.clientId === clientId &&
+      target.sessionId === event.sessionId &&
+      event.controller?.attachmentId !== target.attachmentId
+    ) {
+      clearTelegramTerminalInputTarget({ clientId, sessionId: event.sessionId })
+    }
     broker.broadcast(clientId, { type: 'ownership', event })
   },
   onUserInput(clientId, event) {
@@ -97,6 +133,7 @@ const connectionState = new TerminalConnectionState({
     manager.releaseAttachmentControl(clientId, attachmentId)
   },
   onClientExpired(clientId) {
+    clearTelegramTerminalInputTarget({ clientId })
     manager.closeOwner(clientId)
   },
 })
@@ -188,6 +225,9 @@ const realtimeRequestHandlers = {
   reorder(clientId, _attachmentId, input) {
     return reorderServerTerminals(clientId, input)
   },
+  'mark-telegram-input-target'(clientId, attachmentId, input) {
+    return markServerTelegramTerminalInputTarget(clientId, attachmentId, input)
+  },
 } satisfies RealtimeRequestHandlers
 
 export function registerTerminalSocket(clientId: string, attachmentId: string, socket: TerminalRealtimeSocket): void {
@@ -254,6 +294,7 @@ export async function restartServerTerminal(
     input.attachmentId,
     broker.attachmentIsConnected(clientId, input.attachmentId),
   )
+  if (result.ok) clearTelegramTerminalInputTarget({ clientId, sessionId: input.sessionId })
   return result.ok ? await withSessionSnapshot(result) : result
 }
 
@@ -289,6 +330,65 @@ export function writeServerTerminal(clientId: string, input: TerminalWriteInput)
     return false
   }
   return manager.writeSession(clientId, input.sessionId, input.data, input.attachmentId, input.userIntent !== false)
+}
+
+export function markServerTelegramTerminalInputTarget(
+  clientId: string,
+  attachmentId: string,
+  input: { sessionId: string },
+): boolean {
+  if (
+    !isValidTerminalClientId(clientId) ||
+    !isValidTerminalAttachmentId(attachmentId) ||
+    !isValidTerminalSessionId(input?.sessionId)
+  ) {
+    return false
+  }
+  const session = manager.getSession(clientId, input.sessionId)
+  const terminalId = session?.key.split('\0').at(-1)
+  const terminalIndex = terminalId ? parseTerminalIdIndex(terminalId) : null
+  if (
+    !session ||
+    session.phase !== 'open' ||
+    terminalIndex === null ||
+    !authorizeTerminalAttachment(session, attachmentId, 'write').ok
+  ) {
+    return false
+  }
+  telegramTerminalInputTargetVersion += 1
+  telegramTerminalInputTarget = {
+    clientId,
+    sessionId: input.sessionId,
+    attachmentId,
+    terminalIndex,
+    version: telegramTerminalInputTargetVersion,
+  }
+  return true
+}
+
+export async function submitServerTelegramTerminalInput(text: string): Promise<TelegramTerminalInputSubmissionResult> {
+  if (
+    typeof text !== 'string' ||
+    !text ||
+    Array.from(text).length > TELEGRAM_TERMINAL_INPUT_MAX_CODE_POINTS ||
+    /[\u0000-\u001f\u007f]/u.test(text)
+  ) {
+    return { ok: false, code: 'write-failed' }
+  }
+  const target = telegramTerminalInputTarget
+  if (!target) return { ok: false, code: 'no-target' }
+  const session = manager.getSession(target.clientId, target.sessionId)
+  if (!session || session.phase !== 'open' || !authorizeTerminalAttachment(session, target.attachmentId, 'write').ok) {
+    clearTelegramTerminalInputTarget({
+      clientId: target.clientId,
+      sessionId: target.sessionId,
+      attachmentId: target.attachmentId,
+    })
+    return { ok: false, code: 'target-lost' }
+  }
+  const written = manager.writeSession(target.clientId, target.sessionId, `${text}\r`, target.attachmentId, true)
+  if (!written) return { ok: false, code: 'write-failed' }
+  return { ok: true, terminal: { index: target.terminalIndex } }
 }
 
 export function resizeServerTerminal(clientId: string, input: TerminalResizeInput): TerminalMutationResult {
@@ -412,12 +512,14 @@ export async function closeServerTerminal(
   }
   const repoRoot = session.scope
   const closed = manager.closeOwnedSession(clientId, input.sessionId)
+  if (closed) clearTelegramTerminalInputTarget({ clientId, sessionId: input.sessionId })
   if (closed) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   return { ok: true }
 }
 
 export function closeServerTerminalSessions(sessionIds: string[]): TerminalCloseSessionsResult {
   const result = manager.closeSessions(sessionIds)
+  if (result.closed.includes(telegramTerminalInputTarget?.sessionId ?? '')) clearTelegramTerminalInputTarget()
   for (const repoRoot of result.scopes) {
     broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   }
@@ -433,7 +535,7 @@ export function takeoverServerTerminal(clientId: string, input: TerminalTakeover
   ) {
     return { ok: false, message: 'error.invalid-arguments' }
   }
-  return manager.takeoverSession(
+  const result = manager.takeoverSession(
     clientId,
     input.sessionId,
     input.cols,
@@ -441,6 +543,8 @@ export function takeoverServerTerminal(clientId: string, input: TerminalTakeover
     input.attachmentId,
     broker.attachmentIsConnected(clientId, input.attachmentId),
   )
+  if (result.ok) clearTelegramTerminalInputTarget({ clientId, sessionId: input.sessionId })
+  return result
 }
 
 export function notifyServerTerminalBell(_clientId: string, input: TerminalNotifyBellInput): TerminalMutationResult {
@@ -521,6 +625,7 @@ export function handleRealtimeServerMessage(
 }
 
 export function closeAllServerTerminalSessions(): void {
+  clearTelegramTerminalInputTarget()
   connectionState.shutdown()
   broker.disconnectAll()
   manager.closeAll()

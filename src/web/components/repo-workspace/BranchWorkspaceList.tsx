@@ -32,6 +32,7 @@ import {
   GitCompareArrows,
   GitFork,
   GitMerge,
+  RefreshCw,
   RotateCcw,
   SendHorizontal,
   Terminal,
@@ -373,13 +374,6 @@ function BranchWorkspaceRow({
             onSelect: () => onGitAction(item, 'batch-commit'),
           },
           {
-            label: 'workspace.branch-workspace.git-action.batch-discard',
-            icon: <RotateCcw aria-hidden="true" />,
-            disabled: disabled || gitActionsDisabled,
-            destructive: true,
-            onSelect: () => onGitAction(item, 'batch-discard'),
-          },
-          {
             label: 'workspace.branch-workspace.git-action.batch-set-upstream',
             icon: <GitFork aria-hidden="true" />,
             disabled: disabled || gitActionsDisabled,
@@ -408,6 +402,20 @@ function BranchWorkspaceRow({
             icon: <GitCompareArrows aria-hidden="true" />,
             disabled: disabled || gitActionsDisabled,
             onSelect: () => onGitAction(item, 'batch-merge-out'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.batch-align-remote',
+            icon: <RefreshCw aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            destructive: true,
+            onSelect: () => onGitAction(item, 'batch-align-remote'),
+          },
+          {
+            label: 'workspace.branch-workspace.git-action.batch-discard',
+            icon: <RotateCcw aria-hidden="true" />,
+            disabled: disabled || gitActionsDisabled,
+            destructive: true,
+            onSelect: () => onGitAction(item, 'batch-discard'),
           },
         ]
       : []
@@ -625,7 +633,13 @@ function BranchWorkspaceRow({
         onSelect: restoreTmuxTerminals,
       }}
       worktreeTerminalKeys={terminalKeys}
-      additionalActions={[...lowFrequencyActions, ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : [])]}
+      additionalActions={[
+        ...readyGitActions.filter(
+          (action) => action.label === 'workspace.branch-workspace.git-action.batch-align-remote',
+        ),
+        ...lowFrequencyActions,
+        ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
+      ]}
     >
       <WorkspaceListItemFrame
         itemRef={setNodeRef}

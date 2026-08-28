@@ -16,6 +16,7 @@ interface WorktreeDependencyTreeProps {
   selections: readonly WorktreeBootstrapSelection[]
   disabled?: boolean
   onSelectionsChange: (selections: WorktreeBootstrapSelection[]) => void
+  onPendingChange?: (pending: boolean) => void
 }
 
 interface DirectoryState {
@@ -29,14 +30,30 @@ export function WorktreeDependencyTree({
   selections,
   disabled = false,
   onSelectionsChange,
+  onPendingChange,
 }: WorktreeDependencyTreeProps) {
   const t = useT()
   const [directories, setDirectories] = useState<Record<string, DirectoryState>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const sourceAbortRef = useRef<AbortController | null>(null)
+  const onPendingChangeRef = useRef(onPendingChange)
+  onPendingChangeRef.current = onPendingChange
+  const pending = Object.values(directories).some((directory) => directory.status === 'loading')
+
+  useEffect(() => {
+    onPendingChangeRef.current?.(pending)
+  }, [pending])
+
+  useEffect(
+    () => () => {
+      onPendingChangeRef.current?.(false)
+    },
+    [],
+  )
 
   const loadDirectory = useCallback(
     async (dirPath: string, signal: AbortSignal) => {
+      onPendingChangeRef.current?.(true)
       setDirectories((current) => ({
         ...current,
         [dirPath]: { status: 'loading', entries: current[dirPath]?.entries ?? [] },
@@ -129,18 +146,14 @@ export function WorktreeDependencyTree({
 
     return (
       <div key={entry.absolutePath}>
-        <div
-          className="flex min-h-7 items-center gap-1 pr-2 text-xs"
-          style={{ paddingLeft: `${depth * 16 + 4}px` }}
-        >
+        <div className="flex min-h-7 items-center gap-1 pr-2 text-xs" style={{ paddingLeft: `${depth * 16 + 4}px` }}>
           {isDirectory ? (
             <button
               type="button"
               data-worktree-dependency-expand={entry.relativePath}
-              aria-label={t(
-                isExpanded ? 'worktree-dependency-tree.collapse' : 'worktree-dependency-tree.expand',
-                { path: entry.relativePath },
-              )}
+              aria-label={t(isExpanded ? 'worktree-dependency-tree.collapse' : 'worktree-dependency-tree.expand', {
+                path: entry.relativePath,
+              })}
               className="grid size-6 shrink-0 place-items-center rounded hover:bg-muted"
               disabled={disabled}
               onClick={() => toggleDirectory(entry)}

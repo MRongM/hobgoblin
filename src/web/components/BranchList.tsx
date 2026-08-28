@@ -25,7 +25,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderTree, GitCommitHorizontal, GitCompareArrows } from 'lucide-react'
+import { FolderTree, GitCommitHorizontal, GitCompareArrows, ListRestart, RotateCcw, Trash2 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useT } from '#/web/stores/i18n.ts'
@@ -42,6 +42,19 @@ import { cn } from '#/web/lib/cn.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
+import {
+  WorkspaceListItemFrame,
+  WorkspaceListItemMenu,
+  type WorkspaceListItemAction,
+} from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { AsyncButton } from '#/web/components/AsyncButton.tsx'
+import { Tip } from '#/web/components/Tip.tsx'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { ConfirmCheckbox } from '#/web/components/ConfirmCheckbox.tsx'
+import { isSelectableDetachedWorktree } from '#/web/stores/repos/worktree-selection.ts'
+import { discardRepositoryChanges } from '#/web/repo-client.ts'
+import type { StatusEntry } from '#/shared/git-types.ts'
+import { statusEntryPaths } from '#/shared/git-status.ts'
 
 interface Props {
   repoId: string
@@ -59,6 +72,7 @@ type BranchListRepo = BranchActionRepo & {
   }
   ui: {
     selectedBranch: string | null
+    selectedDetachedWorktreePath: string | null
     worktreePathOrder: string[]
   }
 }
@@ -77,6 +91,7 @@ function branchListRepoEqual(a: BranchListRepo | undefined, b: BranchListRepo | 
       a.data.status === b.data.status &&
       a.data.worktreesByPath === b.data.worktreesByPath &&
       a.ui.selectedBranch === b.ui.selectedBranch &&
+      a.ui.selectedDetachedWorktreePath === b.ui.selectedDetachedWorktreePath &&
       a.ui.worktreePathOrder === b.ui.worktreePathOrder &&
       a.operations.branchAction === b.operations.branchAction &&
       a.operations.fetch === b.operations.fetch &&
@@ -113,6 +128,13 @@ export function BranchList({
     },
     [navigation, onBranchSelected, repoId],
   )
+  const handleSelectDetachedWorktree = useCallback(
+    (worktreePath: string) => {
+      navigation.selectRepoDetachedWorktree(repoId, worktreePath)
+      onBranchSelected?.()
+    },
+    [navigation, onBranchSelected, repoId],
+  )
   const repo = useStoreWithEqualityFn(
     useReposStore,
     (s) => branchListRepoFromState(s.repos[repoId]),
@@ -142,7 +164,7 @@ export function BranchList({
   useEffect(() => {
     const selectedEl = selectedRef.current
     if (selectedEl) selectedEl.scrollIntoView({ block: 'nearest' })
-  }, [repo?.ui.selectedBranch])
+  }, [repo?.ui.selectedBranch, repo?.ui.selectedDetachedWorktreePath])
 
   if (!repo) return null
 
@@ -222,9 +244,18 @@ export function BranchList({
           {detachedWorktrees.map((worktree) => (
             <DetachedWorktreeRow
               key={worktree.path}
+              repo={repo}
               worktree={worktree}
+              repoId={repo.id}
+              repoInstanceToken={repo.instanceToken}
               repoRoot={repoRoot}
               remoteTarget={repo.remote.target}
+              statusEntries={repo.data.status.find((status) => status.path === worktree.path)?.entries ?? null}
+              selected={repo.ui.selectedDetachedWorktreePath === worktree.path}
+              selectedRef={selectedRef}
+              showActions={showActions}
+              onSelect={handleSelectDetachedWorktree}
+              onDoubleClick={onWorktreeDoubleClick}
             />
           ))}
         </>
@@ -250,6 +281,7 @@ function branchListRepoFromState(
     },
     ui: {
       selectedBranch: repo.ui.selectedBranch,
+      selectedDetachedWorktreePath: repo.ui.selectedDetachedWorktreePath,
       worktreePathOrder: repo.ui.worktreePathOrder,
     },
     operations: {
@@ -294,15 +326,38 @@ function SortableBranchRow(props: ComponentProps<typeof BranchRow> & { id: strin
 }
 
 function DetachedWorktreeRow({
+  repo,
   worktree,
+  repoId,
+  repoInstanceToken,
   repoRoot,
   remoteTarget,
+  statusEntries,
+  selected,
+  selectedRef,
+  showActions,
+  onSelect,
+  onDoubleClick,
 }: {
+  repo: BranchListRepo
   worktree: RepoWorktreeState
+  repoId: string
+  repoInstanceToken: number
   repoRoot: string
   remoteTarget?: RemoteRepoTarget
+  statusEntries: StatusEntry[] | null
+  selected: boolean
+  selectedRef: React.RefObject<HTMLLIElement | null>
+  showActions: boolean
+  onSelect: (worktreePath: string) => void
+  onDoubleClick?: () => void
 }) {
   const t = useT()
+  const runBranchAction = useReposStore((state) => state.runBranchAction)
+  const setLastResult = useReposStore((state) => state.setLastResult)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
+  const [forceRemove, setForceRemove] = useState(false)
   const displayPath = formatWorktreeListPath(worktree.path, remoteTarget, repoRoot)
   const head = worktree.head ? worktree.head.slice(0, 12) : t('branches.detached-head')
   const dirty = worktree.isDirty || (worktree.changeCount ?? 0) > 0
@@ -312,16 +367,132 @@ function DetachedWorktreeRow({
   const title = [t('branches.detached-worktree'), worktree.head ?? null, displayPath, dirty ? dirtyLabel : null]
     .filter(Boolean)
     .join(', ')
+  const selectable = isSelectableDetachedWorktree(worktree)
+  const prunable = worktree.isPrunable === true
+  const actionLabel = t(prunable ? 'action.cleanup-invalid-worktree' : 'action.remove-worktree')
+  const actionBusy =
+    repo.operations.branchAction.phase !== 'idle' && repo.operations.branchAction.target === worktree.path
+
+  const setItemRef = useCallback(
+    (node: HTMLLIElement | null) => {
+      if (selected) (selectedRef as { current: HTMLLIElement | null }).current = node
+    },
+    [selected, selectedRef],
+  )
+  const discardPaths = statusEntries ? statusEntryPaths(statusEntries) : []
+  const discardAction: WorkspaceListItemAction = {
+    id: 'discardDetachedWorktreeChanges',
+    label: t('action.reset-hard'),
+    title: discardPaths.length > 0 ? undefined : t('workspace.branch-workspace.dirty-state-unknown'),
+    disabled: discardPaths.length === 0,
+    destructive: true,
+    icon: <RotateCcw aria-hidden="true" />,
+    onSelect: () => setDiscardConfirmOpen(true),
+  }
+
+  async function confirmAction() {
+    const action = prunable
+      ? ({ kind: 'cleanupWorktree', worktreePath: worktree.path } as const)
+      : ({
+          kind: 'removeWorktree',
+          worktreePath: worktree.path,
+          alsoDeleteBranch: false,
+          forceRemoveWorktree: forceRemove,
+        } as const)
+    await runBranchAction(repo.id, action, { token: repo.instanceToken })
+    setConfirmOpen(false)
+    setForceRemove(false)
+  }
 
   return (
-    <li
-      title={title}
-      className="relative mx-1.5 grid min-h-9 grid-cols-1 items-stretch rounded-[var(--goblin-brand-radius-md,var(--radius-md))] text-muted-foreground transition-colors duration-100 hover:bg-list-row-hover"
+    <WorkspaceListItemFrame
+      selected={selected}
+      unavailable={prunable}
+      busy={actionBusy}
+      itemRef={selected ? setItemRef : undefined}
+      itemProps={{ className: 'mx-1.5', title }}
+      buttonProps={{
+        'aria-current': selected ? 'page' : undefined,
+        disabled: !selectable,
+        className: showActions ? undefined : 'pr-2',
+        onClick: () => onSelect(worktree.path),
+        onDoubleClick: selectable ? onDoubleClick : undefined,
+      }}
+      leadingIcon={<GitCommitHorizontal size={14} className={dirty ? 'text-attention' : 'text-muted-foreground'} />}
+      auxiliaryActions={
+        dirty && showActions ? <WorkspaceListItemMenu label={t('action.menu')} groups={[[discardAction]]} /> : undefined
+      }
+      actions={
+        showActions ? (
+          <Tip label={actionLabel}>
+            <span className="inline-flex">
+              <AsyncButton
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                loading={actionBusy}
+                disabled={repo.operations.branchAction.phase !== 'idle' || worktree.isLocked === true}
+                aria-label={actionLabel}
+                className={prunable ? undefined : 'text-danger hover:bg-danger-surface hover:text-danger'}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setConfirmOpen(true)
+                }}
+              >
+                {() => (prunable ? <ListRestart aria-hidden="true" /> : <Trash2 aria-hidden="true" />)}
+              </AsyncButton>
+            </span>
+          </Tip>
+        ) : undefined
+      }
+      expandedContent={
+        <>
+          <ConfirmDialog
+            open={confirmOpen}
+            title={t(
+              prunable ? 'action.confirm-cleanup-invalid-worktree-title' : 'action.confirm-remove-worktree-title',
+            )}
+            message={
+              <div className="space-y-2">
+                <span className="block">
+                  {t(prunable ? 'action.confirm-cleanup-invalid-worktree-body' : 'action.confirm-remove-worktree-body')}
+                </span>
+                <span className="block break-all font-mono text-foreground">{displayPath}</span>
+                {prunable ? (
+                  <span className="block">{t('action.confirm-cleanup-invalid-worktree-note')}</span>
+                ) : (
+                  <ConfirmCheckbox checked={forceRemove} onCheckedChange={setForceRemove} destructive>
+                    {t('action.confirm-remove-worktree-force')}
+                  </ConfirmCheckbox>
+                )}
+              </div>
+            }
+            confirmLabel={t(
+              prunable ? 'action.confirm-cleanup-invalid-worktree-confirm' : 'action.confirm-remove-worktree-confirm',
+            )}
+            destructive={!prunable}
+            onCancel={() => {
+              setConfirmOpen(false)
+              setForceRemove(false)
+            }}
+            onConfirm={confirmAction}
+          />
+          <ConfirmDialog
+            open={discardConfirmOpen}
+            title={t('action.confirm-reset-hard-title')}
+            message={t('action.confirm-discard-detached-worktree-body')}
+            confirmLabel={t('action.confirm-reset-hard-confirm')}
+            destructive
+            onCancel={() => setDiscardConfirmOpen(false)}
+            onConfirm={async () => {
+              const result = await discardRepositoryChanges(repoId, worktree.path, discardPaths)
+              setLastResult(repoId, result, repoInstanceToken)
+              setDiscardConfirmOpen(false)
+            }}
+          />
+        </>
+      }
     >
-      <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-2 px-2.5 py-1.5">
-        <span className="flex w-4 shrink-0 items-center justify-center">
-          <GitCommitHorizontal size={14} className={dirty ? 'text-attention' : 'text-muted-foreground'} />
-        </span>
         <span className="flex min-w-0 items-center gap-2 overflow-hidden">
           <span className="shrink-0 truncate font-mono text-sm text-foreground">{head}</span>
           {dirty ? (
@@ -346,7 +517,6 @@ function DetachedWorktreeRow({
           )}
           <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>
         </span>
-      </div>
-    </li>
+    </WorkspaceListItemFrame>
   )
 }

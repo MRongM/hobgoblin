@@ -12,6 +12,7 @@ import {
   getServerTerminalSessionSnapshot,
   handleRealtimeServerMessage,
   listServerTerminalSessions,
+  markServerTelegramTerminalInputTarget,
   openServerTmuxSessions,
   pageServerTerminal,
   pruneServerTerminals,
@@ -22,6 +23,7 @@ import {
   returnServerTerminalToBottom,
   resizeServerTerminal,
   takeoverServerTerminal,
+  submitServerTelegramTerminalInput,
   unregisterTerminalSocket,
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
@@ -161,6 +163,69 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
+  test('routes Telegram input only to the latest focused controlling attachment without fallback', async () => {
+    const socketA = { send: vi.fn(), close: vi.fn() }
+    const socketB = { send: vi.fn(), close: vi.fn() }
+    const viewerSocket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket('client_1', 'attachment_a', socketA)
+    registerTerminalSocket('client_1', 'attachment_b', socketB)
+    registerTerminalSocket('client_1', 'attachment_viewer', viewerSocket)
+    const first = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'primary',
+      attachmentId: 'attachment_a',
+    })
+    const second = await createServerTerminal('client_1', {
+      repoRoot: '/repo',
+      branch: 'feature',
+      worktreePath: '/repo-linked',
+      kind: 'additional',
+      attachmentId: 'attachment_b',
+    })
+    expect(first.ok && second.ok).toBe(true)
+    if (!first.ok || !second.ok) return
+    await attachServerTerminal('client_1', {
+      sessionId: first.sessionId,
+      cols: 80,
+      rows: 24,
+      attachmentId: 'attachment_viewer',
+    })
+
+    expect(markServerTelegramTerminalInputTarget('client_1', 'attachment_a', { sessionId: first.sessionId })).toBe(
+      true,
+    )
+    expect(
+      markServerTelegramTerminalInputTarget('client_1', 'attachment_viewer', { sessionId: first.sessionId }),
+    ).toBe(false)
+    await expect(submitServerTelegramTerminalInput('first command')).resolves.toEqual({
+      ok: true,
+      terminal: { index: 1 },
+    })
+    await Promise.resolve()
+    expect(mockPtys[0]?.write).toHaveBeenCalledWith('first command\r')
+    expect(mockPtys[1]?.write).not.toHaveBeenCalled()
+
+    expect(markServerTelegramTerminalInputTarget('client_1', 'attachment_b', { sessionId: second.sessionId })).toBe(
+      true,
+    )
+    await expect(submitServerTelegramTerminalInput('second command')).resolves.toEqual({
+      ok: true,
+      terminal: { index: 2 },
+    })
+    await Promise.resolve()
+    expect(mockPtys[1]?.write).toHaveBeenCalledWith('second command\r')
+
+    unregisterTerminalSocket('client_1', 'attachment_b', socketB)
+    await expect(submitServerTelegramTerminalInput('must not fall back')).resolves.toEqual({
+      ok: false,
+      code: 'no-target',
+    })
+    expect(mockPtys[0]?.write).toHaveBeenCalledTimes(1)
+    expect(mockPtys[1]?.write).toHaveBeenCalledTimes(1)
+  })
+
   test('returns a controlled tmux session to bottom without injecting terminal input', async () => {
     const socket = { send: vi.fn(), close: vi.fn() }
     registerTerminalSocket('client_1', 'attachment_a', socket)

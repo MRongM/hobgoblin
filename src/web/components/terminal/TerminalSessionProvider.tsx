@@ -252,6 +252,7 @@ export function TerminalSessionProvider({
       scrollToBottom: registry.scrollToBottom,
       pageTmux: registry.pageTmux,
       focusTerminal: registry.focusTerminal,
+      markTelegramInputTarget: registry.markTelegramInputTarget,
       scrollLines: registry.scrollLines,
       scrollByTouch: registry.scrollByTouch,
       beginMobileSelection: registry.beginMobileSelection,

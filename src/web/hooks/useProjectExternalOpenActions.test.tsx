@@ -97,6 +97,25 @@ describe('resolveProjectExternalOpenTarget', () => {
 
     expect(resolveProjectExternalOpenTarget(repo)).toBeNull()
   })
+
+  test('returns the selected detached worktree path', () => {
+    const repo = createRepo('/repo', (draft) => {
+      draft.data.branches = [createRepoBranch('main', { worktree: { path: '/repo' } })]
+      draft.data.worktreesByPath = {
+        '/repo': { path: '/repo', branch: 'main', isMain: true },
+        '/worktrees/detached': {
+          path: '/worktrees/detached',
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+        },
+      }
+      draft.ui.selectedBranch = null
+      draft.ui.selectedDetachedWorktreePath = '/worktrees/detached'
+    })
+
+    expect(resolveProjectExternalOpenTarget(repo)).toBe('/worktrees/detached')
+  })
 })
 
 function createRepo(id: string, mutate: (repo: RepoState) => void): RepoState {

@@ -367,6 +367,7 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>): BranchActionIte
         destructive: true,
         menuOnly: true,
       }),
+      disabledAction('alignRemote', 'action.align-remote', <RefreshCw aria-hidden="true" />, { destructive: true }),
       disabledAction('resetHard', 'action.reset-hard', <RotateCcw aria-hidden="true" />, { destructive: true }),
     ],
     dialogs: null,
@@ -393,6 +394,7 @@ function createDisabledAction(
     | 'copyPatch'
     | 'createTag'
     | 'closeAllTerminals'
+    | 'alignRemote'
     | 'resetHard',
   label: string,
   icon: ReactNode,

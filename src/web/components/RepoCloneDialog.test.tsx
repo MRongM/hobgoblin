@@ -103,8 +103,10 @@ function navigationWith(overrides: Partial<MainWindowNavigationActions>): MainWi
     closeRepo: () => {},
     cycleRepo: () => {},
     selectRepoBranch: () => {},
+    selectRepoDetachedWorktree: () => {},
     showRepoDetailTab: () => {},
     showRepoBranchDetailTab: () => {},
+    showRepoDetachedWorktreeDetailTab: () => {},
     openSettings: () => {},
     ...overrides,
   }

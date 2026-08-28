@@ -7,6 +7,7 @@ import { createContext, useContext } from 'react'
 
 export interface ShellOverlayActions {
   openRepoPathDialog: () => void
+  openWslRepoPathDialog: () => void
   openRemoteRepo: () => void
   openCloneRepo: () => void
   openSettings: () => void

@@ -9,15 +9,23 @@ import {
 } from '#/server/modules/remote.ts'
 import { routeEditorTarget } from '#/server/routes/editor-target.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
+import { listWindowsWslDistributions } from '#/system/wsl/distributions.ts'
 
 export function createRemoteRoutes() {
   const app = new Hono()
   app.get('/ssh-hosts', async (c) => c.json(await getServerSshHosts()))
+  app.get('/wsl-distributions', async (c) => c.json(await listWindowsWslDistributions(c.req.raw.signal)))
   app.post('/resolve-target', async (c) => {
     const body = await c.req.json().catch(() => null)
     const alias = typeof body?.alias === 'string' ? body.alias : ''
     const remotePath = typeof body?.remotePath === 'string' ? body.remotePath : ''
-    return c.json(await resolveServerRemoteTarget({ alias, remotePath }, c.req.raw.signal))
+    const transport = body?.transport === 'wsl' ? ('wsl' as const) : undefined
+    return c.json(
+      transport
+        ? await resolveRepositoryRemoteTarget({ alias, remotePath, transport }, c.req.raw.signal)
+        : await resolveServerRemoteTarget({ alias, remotePath }, c.req.raw.signal),
+    )
   })
   app.post('/path-suggestions', async (c) => {
     const body = await c.req.json().catch(() => null)

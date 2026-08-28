@@ -11,8 +11,9 @@ type TerminalIconPref = ResolvedTerminalApp | 'auto'
 type EditorIconPref = ResolvedEditorApp | 'auto'
 
 export function TerminalAppIcon({ pref, className }: AppIconProps & { pref: TerminalIconPref }) {
-  if (pref === 'auto') return <Terminal className={svgClass(className)} />
-  return pref === 'terminal' ? <AppleTerminalIcon className={className} /> : <GhosttyIcon className={className} />
+  if (pref === 'terminal') return <AppleTerminalIcon className={className} />
+  if (pref === 'ghostty') return <GhosttyIcon className={className} />
+  return <Terminal className={svgClass(className)} />
 }
 
 export function EditorAppIcon({ pref, className }: AppIconProps & { pref: EditorIconPref }) {

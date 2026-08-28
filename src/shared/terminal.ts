@@ -239,6 +239,10 @@ export interface TerminalSessionSnapshotInput {
   sessionId: string
 }
 
+export interface TerminalTelegramInputTargetInput {
+  sessionId: string
+}
+
 export interface TerminalSessionSnapshot {
   sessionId: string
   snapshot: string
@@ -293,6 +297,7 @@ export interface TerminalSocketRequestInputs {
   'open-tmux-sessions': TerminalOpenTmuxSessionsInput
   prune: { repoRoot: string }
   'session-snapshot': TerminalSessionSnapshotInput
+  'mark-telegram-input-target': TerminalTelegramInputTargetInput
   reorder: TerminalReorderInput
 }
 
@@ -310,6 +315,7 @@ export interface TerminalSocketResponseOutputs {
   'open-tmux-sessions': TerminalOpenTmuxSessionsResult
   prune: { pruned: number; remaining: number }
   'session-snapshot': TerminalSessionSnapshot | null
+  'mark-telegram-input-target': TerminalMutationResult
   reorder: TerminalMutationResult
 }
 
@@ -367,6 +373,7 @@ const TERMINAL_SOCKET_ACTIONS = [
   'open-tmux-sessions',
   'prune',
   'session-snapshot',
+  'mark-telegram-input-target',
   'reorder',
 ] as const satisfies TerminalSocketRequestAction[]
 const TERMINAL_SESSION_PHASE_VALUES = ['opening', 'restarting', 'open', 'error', 'closed'] as const
@@ -461,6 +468,9 @@ const TerminalReorderInputSchema = v.object({
   orderedKeys: v.array(v.string()),
 })
 const TerminalSessionSnapshotInputSchema = v.object({
+  sessionId: TerminalSessionIdSchema,
+})
+const TerminalTelegramInputTargetInputSchema = v.object({
   sessionId: TerminalSessionIdSchema,
 })
 const TerminalSessionSummarySchema = v.object({
@@ -610,6 +620,12 @@ const TerminalClientMessageSchema = v.variant('type', [
     requestId: TerminalRequestIdSchema,
     action: v.literal('session-snapshot'),
     input: TerminalSessionSnapshotInputSchema,
+  }),
+  v.object({
+    type: v.literal('request'),
+    requestId: TerminalRequestIdSchema,
+    action: v.literal('mark-telegram-input-target'),
+    input: TerminalTelegramInputTargetInputSchema,
   }),
   v.object({
     type: v.literal('request'),

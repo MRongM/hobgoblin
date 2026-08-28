@@ -153,6 +153,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     detach,
     selectTerminal,
     focusTerminal,
+    markTelegramInputTarget,
     isTerminalFocusTarget,
     findNext,
     findPrevious,
@@ -602,9 +603,11 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   }, [findPrevious, key, searchTerm])
   const handleFocus = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
-      setTerminalFocused(!!key && isTerminalFocusTarget(key, event.target))
+      const terminalFocused = !!key && isTerminalFocusTarget(key, event.target)
+      setTerminalFocused(terminalFocused)
+      if (terminalFocused && key && isController && !isMobile) markTelegramInputTarget?.(key)
     },
-    [isTerminalFocusTarget, key],
+    [isController, isMobile, isTerminalFocusTarget, key, markTelegramInputTarget],
   )
   const handleBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTerminalFocused(false)

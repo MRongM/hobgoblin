@@ -25,6 +25,7 @@ import {
 } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
 import type { CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
 import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 interface RepoExplorerPaneProps {
   repoId: string
@@ -74,8 +75,8 @@ export function RepoExplorerPane({
     useReposStore,
     (state) => {
       const repo = state.repos[repoId]
-      const selected = repo?.data.branches.find((branch) => branch.name === repo.ui.selectedBranch) ?? null
-      const worktreePath = selected?.worktree?.path
+      const selected = repo ? selectedRepoWorktree(repo) : null
+      const worktreePath = selected?.worktreePath
       return {
         activeTab: repo ? explorerTabForRepo(repo) : 'files',
         repoFileTreePaneSizes: repo?.ui.fileTreePaneSizes,

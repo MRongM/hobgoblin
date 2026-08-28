@@ -67,7 +67,15 @@ function createRepo(input: {
       status: { phase: 'idle', loadedAt: null, stale: false, error: null },
     },
     operations: {
-      fetch: { operationId: 0, phase: 'idle', reason: null, target: null, startedAt: null, settledAt: null, error: null },
+      fetch: {
+        operationId: 0,
+        phase: 'idle',
+        reason: null,
+        target: null,
+        startedAt: null,
+        settledAt: null,
+        error: null,
+      },
       manualRefresh: {
         operationId: 0,
         phase: 'idle',
@@ -86,7 +94,15 @@ function createRepo(input: {
         settledAt: null,
         error: null,
       },
-      status: { operationId: 0, phase: 'idle', reason: null, target: null, startedAt: null, settledAt: null, error: null },
+      status: {
+        operationId: 0,
+        phase: 'idle',
+        reason: null,
+        target: null,
+        startedAt: null,
+        settledAt: null,
+        error: null,
+      },
       branchAction: {
         operationId: 0,
         phase: 'idle',
@@ -99,6 +115,7 @@ function createRepo(input: {
     },
     ui: {
       selectedBranch: null,
+      selectedDetachedWorktreePath: null,
       branchViewMode: 'all',
       detailTab: 'status',
       explorerTabByBranch: {},

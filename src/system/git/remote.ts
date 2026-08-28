@@ -209,9 +209,16 @@ export function resolvePushTargetForRemotes(
   remotes: GitRemoteInfo[],
   upstream: UpstreamParts | null | undefined,
   branch: string,
+  createUpstreamRemote?: string,
 ): PushTarget | ExecResult {
   const remoteNames = new Set(remotes.map((remote) => remote.name))
   const upstreamRemoteExists = !!upstream && upstream.remote !== '.' && remoteNames.has(upstream.remote)
+  if (createUpstreamRemote !== undefined) {
+    if (upstreamRemoteExists || !isSafeRemoteName(createUpstreamRemote) || !remoteNames.has(createUpstreamRemote)) {
+      return { ok: false, message: 'error.invalid-arguments' }
+    }
+    return { remote: createUpstreamRemote, branch, setUpstream: true }
+  }
   if (upstreamRemoteExists) {
     return { remote: upstream.remote, branch: upstream.branch, setUpstream: false }
   }
@@ -222,9 +229,14 @@ export function resolvePushTargetForRemotes(
   return { remote, branch, setUpstream: true }
 }
 
-async function resolvePushTarget(cwd: string, branch: string, signal?: AbortSignal): Promise<PushTarget | ExecResult> {
+async function resolvePushTarget(
+  cwd: string,
+  branch: string,
+  signal?: AbortSignal,
+  createUpstreamRemote?: string,
+): Promise<PushTarget | ExecResult> {
   const [remotes, upstream] = await Promise.all([getRemotes(cwd, signal), getUpstreamParts(cwd, branch, signal)])
-  return resolvePushTargetForRemotes(remotes, upstream, branch)
+  return resolvePushTargetForRemotes(remotes, upstream, branch, createUpstreamRemote)
 }
 
 export async function fetchAll(
@@ -320,9 +332,13 @@ export async function pushBranch(
   branch: string,
   signal?: AbortSignal,
   networkOptions?: GitNetworkOptions,
+  createUpstreamRemote?: string,
 ): Promise<ExecResult> {
   if (!isSafeBranchName(branch)) return { ok: false, message: 'error.invalid-arguments' }
-  const target = await resolvePushTarget(cwd, branch, signal)
+  if (createUpstreamRemote !== undefined && !isSafeRemoteName(createUpstreamRemote)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  const target = await resolvePushTarget(cwd, branch, signal, createUpstreamRemote)
   if (signal?.aborted) return { ok: false, message: 'cancelled' }
   if ('ok' in target) return target
   const args = target.setUpstream

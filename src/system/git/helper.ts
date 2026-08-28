@@ -1,5 +1,6 @@
 import { execa, ExecaError } from 'execa'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { resolveGitExecutable } from '#/system/git/executable.ts'
 
 /** Default per-call timeout. Network ops (push/pull/fetch) override via opts. */
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -16,6 +17,8 @@ export interface GitOptions {
   signal?: AbortSignal
   /** Extra environment variables for this git child process only. */
   env?: Record<string, string>
+  /** Optional stdin text for commands such as `git hash-object --stdin`. */
+  stdin?: string
 }
 
 export interface GitNetworkOptions {
@@ -90,15 +93,30 @@ async function probeGitAvailable(): Promise<GitAvailability> {
  */
 export function git(cwd: string, args: string[], opts?: GitOptions): Promise<string> {
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  return execa('git', args, {
+  const executable = resolveGitExecutable()
+  if (!executable) return Promise.reject(gitExecutableNotFoundError())
+  return execa(executable, args, {
     cwd,
     timeout: timeoutMs,
     cancelSignal: opts?.signal,
-    env: opts?.env,
+    env: {
+      ...(opts?.env ?? {}),
+      LANGUAGE: 'en',
+      LC_ALL: 'en_US.UTF-8',
+      LANG: 'en_US.UTF-8',
+      GIT_PAGER: 'cat',
+    },
     forceKillAfterDelay: 500,
     // Some repos can produce large outputs (log, for-each-ref). 10MB headroom.
     maxBuffer: 10 * 1024 * 1024,
+    input: opts?.stdin,
   }).then(({ stdout }) => stdout.trimEnd())
+}
+
+function gitExecutableNotFoundError(): NodeJS.ErrnoException {
+  const error: NodeJS.ErrnoException = new Error('Git executable not found')
+  error.code = 'ENOENT'
+  return error
 }
 
 export async function gitResult(cwd: string, ...args: string[]): Promise<ExecResult> {

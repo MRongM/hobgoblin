@@ -246,6 +246,7 @@ export interface BranchWorkspaceRepositoryPlan {
   confirmationRequired: boolean
   satisfied: boolean
   action?: 'create-worktree' | 'remove-worktree' | 'remove-entry' | 'delete-branch' | 'satisfied'
+  pruneBeforeCreate?: boolean
   worktreePresent?: boolean
   deleteBranch?: boolean
   deleteUpstream?: boolean
@@ -301,6 +302,11 @@ export type BranchWorkspaceExecutionWarning =
       entryName: string
       message: string
     }
+  | {
+      kind: 'member-worktree-cleanup-failed'
+      repositoryName: string
+      message: string
+    }
 
 export type BranchWorkspaceExecuteResult =
   | {
@@ -314,6 +320,7 @@ export type BranchWorkspaceExecuteResult =
 export interface BranchWorkspaceExecuteInput {
   planToken: string
   approvals: BranchWorkspaceApproval[]
+  force?: boolean
   sourceToken?: string
 }
 

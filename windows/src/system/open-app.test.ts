@@ -203,4 +203,32 @@ describe('Windows editor CLI', () => {
       expect.objectContaining({ timeout: 10_000, reject: false }),
     )
   })
+
+  test('opens a Linux path through the selected WSL distribution', async () => {
+    const { openWslByAppCli } = await import('#/system/open-app.ts')
+
+    await expect(
+      openWslByAppCli('Visual Studio Code', 'code', 'Ubuntu-24.04', {
+        path: '/root/src/repo/app.ts',
+        line: 12,
+      }),
+    ).resolves.toEqual({ ok: true, message: '/root/src/repo/app.ts' })
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      'code.cmd',
+      ['--remote', 'wsl+Ubuntu-24.04', '--goto', '/root/src/repo/app.ts:12'],
+      expect.objectContaining({ timeout: 10_000, reject: false }),
+    )
+  })
+
+  test('rejects unsafe WSL distributions before invoking the editor', async () => {
+    const { openWslByAppCli } = await import('#/system/open-app.ts')
+
+    await expect(openWslByAppCli('Visual Studio Code', 'code', 'Ubuntu/../../bad', '/root/src/repo')).resolves.toEqual({
+      ok: false,
+      message: 'error.invalid-arguments',
+    })
+
+    expect(mocks.execa).not.toHaveBeenCalled()
+  })
 })

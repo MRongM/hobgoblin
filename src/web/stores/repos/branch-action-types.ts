@@ -5,15 +5,16 @@ export type RepoBranchAction =
   | { kind: 'checkout'; branch: string }
   | { kind: 'pull'; branch: string; worktreePath?: string }
   | { kind: 'push'; branch: string }
+  | { kind: 'alignRemote'; branch: string; worktreePath: string; previewToken: string }
   | { kind: 'createWorktree'; input: CreateWorktreeInput; worktreeBootstrap: WorktreeBootstrapDecision }
   | { kind: 'createBranch'; branch: string; baseBranch: string }
   | { kind: 'trackRemoteBranch'; localBranch: string; remoteRef: string }
   | { kind: 'setBranchUpstream'; branch: string; remoteRef: string | null }
   | { kind: 'deleteBranch'; branch: string; force?: boolean; alsoDeleteUpstream?: boolean }
-  | { kind: 'cleanupWorktree'; branch: string; worktreePath: string }
+  | { kind: 'cleanupWorktree'; branch?: string; worktreePath: string }
   | {
       kind: 'removeWorktree'
-      branch: string
+      branch?: string
       worktreePath: string
       alsoDeleteBranch: boolean
       forceRemoveWorktree?: boolean

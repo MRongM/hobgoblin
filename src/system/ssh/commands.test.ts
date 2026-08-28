@@ -40,6 +40,31 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test('runs repository commands and internal terminals inside the selected WSL distribution', () => {
+    const target = normalizeRemoteTarget({
+      transport: 'wsl',
+      alias: 'Ubuntu',
+      host: 'Ubuntu',
+      user: 'wsl',
+      port: 22,
+      remotePath: '/root/src/repo',
+      wslExecutable: 'C:\\Windows\\System32\\wsl.exe',
+    })!
+    const command = buildRemoteCommandInvocation(target, { type: 'gitStatus', path: '/root/src/repo' })
+    const terminal = buildRemoteTerminalInvocation(target, '/root/src/repo', {
+      cols: 120,
+      rows: 40,
+      terminalNumber: 1,
+    })
+
+    expect(command.command).toBe('C:\\Windows\\System32\\wsl.exe')
+    expect(command.args.slice(0, 5)).toEqual(['--distribution', 'Ubuntu', '--exec', 'sh', '-lc'])
+    expect(command.args[5]).toBe(command.script)
+    expect(terminal.command).toBe('C:\\Windows\\System32\\wsl.exe')
+    expect(terminal.args.slice(0, 5)).toEqual(['--distribution', 'Ubuntu', '--exec', 'sh', '-lc'])
+    expect(terminal.script).toContain("cd '/root/src/repo' || exit")
+  })
+
   test('builds tmux list, kill, and copy-mode cancellation commands without session ids', () => {
     const serverName = 'hobgoblin-project-v1-44159cd9e973adba7b472e6f'
     const list = buildRemoteCommandInvocation(TARGET, { type: 'tmuxListSessions', projectRoot: '/srv/repo' })
@@ -1016,6 +1041,85 @@ describe('remote command scripts', () => {
     })
 
     expect(invocation.script).toBe("git -C '/srv/repo-feature/user'\\''s-work' reset --hard")
+  })
+
+  test('renders remote alignment as reset followed by non-ignored clean', () => {
+    const remoteHead = '2'.repeat(40)
+    const invocation = buildRemoteCommandInvocation(TARGET, {
+      type: 'gitAlignToRemote',
+      path: "/srv/repo-feature/user's-work",
+      branch: "user's-work",
+      remoteRef: "origin/user's-work",
+      remoteHead,
+    })
+
+    expect(invocation.script).toContain("printf '%s\\n' 'error.align-remote-clean-incomplete' >&2")
+    expect(invocation.script).toContain(
+      `git -C '/srv/repo-feature/user'\\''s-work' reset --hard '${remoteHead}' && { git -C '/srv/repo-feature/user'\\''s-work' clean -fd`,
+    )
+    expect(invocation.script).not.toContain("reset --hard 'origin/user'\\''s-work'")
+  })
+
+  testPosix('remote alignment discards last-second changes and removes non-ignored files', async () => {
+    const dir = path.join(os.tmpdir(), `hobgoblin-align-command-${Date.now()}-${process.pid}`)
+    tempDirs.push(dir)
+    await execa('git', ['init', dir])
+    await execa('git', ['-C', dir, 'switch', '-c', 'feature/test'])
+    await execa('git', ['-C', dir, 'config', 'user.name', 'Test User'])
+    await execa('git', ['-C', dir, 'config', 'user.email', 'test@example.invalid'])
+    writeFileSync(path.join(dir, '.gitignore'), 'ignored.txt\n')
+    writeFileSync(path.join(dir, 'tracked.txt'), 'initial\n')
+    await execa('git', ['-C', dir, 'add', '.gitignore', 'tracked.txt'])
+    await execa('git', ['-C', dir, 'commit', '-m', 'initial'])
+    const expectedHead = (await execa('git', ['-C', dir, 'rev-parse', 'HEAD'])).stdout.trim()
+    const tree = (await execa('git', ['-C', dir, 'rev-parse', 'HEAD^{tree}'])).stdout.trim()
+    const remoteHead = (
+      await execa('git', [
+        '-C',
+        dir,
+        '-c',
+        'user.name=Test User',
+        '-c',
+        'user.email=test@example.invalid',
+        'commit-tree',
+        tree,
+        '-p',
+        expectedHead,
+        '-m',
+        'remote',
+      ])
+    ).stdout.trim()
+    await execa('git', ['-C', dir, 'update-ref', 'refs/remotes/origin/feature/test', remoteHead])
+    await execa('git', ['-C', dir, 'config', 'remote.origin.url', path.join(dir, 'unused-remote')])
+    await execa('git', [
+      '-C',
+      dir,
+      'config',
+      'remote.origin.fetch',
+      '+refs/heads/*:refs/remotes/origin/*',
+    ])
+    await execa('git', ['-C', dir, 'config', 'branch.feature/test.remote', 'origin'])
+    await execa('git', ['-C', dir, 'config', 'branch.feature/test.merge', 'refs/heads/feature/test'])
+    writeFileSync(path.join(dir, 'tracked.txt'), 'confirmed change\n')
+    writeFileSync(path.join(dir, 'untracked.txt'), 'remove me\n')
+    writeFileSync(path.join(dir, 'ignored.txt'), 'preserve me\n')
+
+    const alignment = () =>
+      buildRemoteCommandInvocation(TARGET, {
+        type: 'gitAlignToRemote',
+        path: dir,
+        branch: 'feature/test',
+        remoteRef: 'origin/feature/test',
+        remoteHead,
+      })
+
+    writeFileSync(path.join(dir, 'tracked.txt'), 'last-second change\n')
+    const result = await execa('sh', ['-c', alignment().script])
+
+    expect(result.stdout).toContain('HEAD is now at')
+    expect((await execa('git', ['-C', dir, 'rev-parse', 'HEAD'])).stdout.trim()).toBe(remoteHead)
+    expect(existsSync(path.join(dir, 'untracked.txt'))).toBe(false)
+    expect(readFileSync(path.join(dir, 'ignored.txt'), 'utf8')).toBe('preserve me\n')
   })
 
   test('renders quoted remote discard selected changes command', () => {

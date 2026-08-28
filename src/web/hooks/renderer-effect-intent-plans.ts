@@ -4,11 +4,13 @@ import type { DetailTab, RepoState } from '#/web/stores/repos/types.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { SettingsPage } from '#/shared/settings-pages.ts'
 import type { LangPref, ThemePref } from '#/shared/settings.ts'
+import { isSelectableDetachedWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 type WorkspaceRendererIntent = Extract<
   RendererEffectIntent,
   | { type: 'open-repo-requested' }
   | { type: 'open-repo-path-requested' }
+  | { type: 'open-wsl-repo-requested' }
   | { type: 'open-remote-repo-requested' }
   | { type: 'clone-repo-requested' }
   | { type: 'close-repo-requested' }
@@ -25,7 +27,7 @@ export type TerminalBellIntentPlan =
   | {
       kind: 'show-worktree-terminal'
       repoId: string
-      branch: string
+      target: { kind: 'branch'; branch: string } | { kind: 'detached'; worktreePath: string }
       key: string
       worktreeTerminalKey: string
     }
@@ -42,6 +44,7 @@ export type WorkspaceIntentPlan =
   | { kind: 'noop' }
   | { kind: 'open-repo' }
   | { kind: 'open-repo-path' }
+  | { kind: 'open-wsl-repo' }
   | { kind: 'open-clone-repo' }
   | { kind: 'open-remote-repo' }
   | { kind: 'close-repo'; repoId: string }
@@ -79,7 +82,17 @@ export function createTerminalBellIntentPlan(
       return {
         kind: 'show-worktree-terminal',
         repoId: repo.id,
-        branch: branch.name,
+        target: { kind: 'branch', branch: branch.name },
+        key: event.key,
+        worktreeTerminalKey: worktreeTerminalKey(parsedKey.repoRoot, parsedKey.worktreePath),
+      }
+    }
+    const detachedWorktree = repo.data.worktreesByPath[parsedKey.worktreePath]
+    if (isSelectableDetachedWorktree(detachedWorktree)) {
+      return {
+        kind: 'show-worktree-terminal',
+        repoId: repo.id,
+        target: { kind: 'detached', worktreePath: detachedWorktree.path },
         key: event.key,
         worktreeTerminalKey: worktreeTerminalKey(parsedKey.repoRoot, parsedKey.worktreePath),
       }
@@ -118,6 +131,8 @@ export function createWorkspaceIntentPlan(
       return { kind: 'open-repo' }
     case 'open-repo-path-requested':
       return { kind: 'open-repo-path' }
+    case 'open-wsl-repo-requested':
+      return { kind: 'open-wsl-repo' }
     case 'clone-repo-requested':
       return { kind: 'open-clone-repo' }
     case 'open-remote-repo-requested':
@@ -158,6 +173,7 @@ function isWorkspaceRendererIntent(event: RendererEffectIntent): event is Worksp
   return (
     event.type === 'open-repo-requested' ||
     event.type === 'open-repo-path-requested' ||
+    event.type === 'open-wsl-repo-requested' ||
     event.type === 'open-remote-repo-requested' ||
     event.type === 'clone-repo-requested' ||
     event.type === 'close-repo-requested' ||

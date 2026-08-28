@@ -27,6 +27,7 @@ import type {
 import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 import type { RepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
+import type { RepositoryRemoteAlignmentPreviewResult } from '#/shared/repository-remote-alignment.ts'
 
 export async function probeRepository(cwd: string): Promise<ProbeResult> {
   return await postServerJson('/api/repo/probe', { cwd })
@@ -228,7 +229,7 @@ export async function pushRepositoryLocalTag(
 export async function removeRepositoryWorktree(
   cwd: string,
   options: {
-    branch: string
+    branch?: string
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
@@ -429,6 +430,30 @@ export async function mergeRepositoryBranchOut(
 
 export async function resetRepositoryHard(repoId: string, worktreePath: string): Promise<ExecResult> {
   return postServerJson('/api/repo/reset-hard', { repoId, worktreePath })
+}
+
+export async function alignRepositoryWorktreeToRemote(
+  repoId: string,
+  branch: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+  previewToken?: string,
+): Promise<ExecResult> {
+  return postServerJson(
+    '/api/repo/align-remote',
+    { repoId, branch, worktreePath, sourceToken, previewToken },
+    { signal },
+  )
+}
+
+export async function getRepositoryRemoteAlignmentPreview(
+  repoId: string,
+  branch: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<RepositoryRemoteAlignmentPreviewResult> {
+  return postServerJson('/api/repo/align-remote-preview', { repoId, branch, worktreePath }, { signal })
 }
 
 export async function discardRepositoryChanges(

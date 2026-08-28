@@ -259,6 +259,36 @@ describe('terminal web host bridge', () => {
     dispose()
   })
 
+  test('marks the Telegram input target through the attachment-bound websocket request', async () => {
+    const { terminalBridge } = await import('#/web/terminal.ts')
+    const dispose = terminalBridge.onOutput(() => {})
+    const socket = MockWebSocket.instances[0]
+    const resultPromise = terminalBridge.markTelegramInputTarget?.({ sessionId: 'term_1234567890123456' })
+
+    socket?.emitOpen()
+    await Promise.resolve()
+    const request = socket?.sent
+      .map((payload) => JSON.parse(payload))
+      .find((message) => message.action === 'mark-telegram-input-target')
+    expect(request).toMatchObject({
+      type: 'request',
+      action: 'mark-telegram-input-target',
+      input: { sessionId: 'term_1234567890123456' },
+    })
+    socket?.emitMessage(
+      JSON.stringify({
+        type: 'response',
+        requestId: request?.requestId,
+        ok: true,
+        action: 'mark-telegram-input-target',
+        payload: true,
+      }),
+    )
+
+    await expect(resultPromise).resolves.toBe(true)
+    dispose()
+  })
+
   test('returns a tmux terminal to bottom through the terminal websocket', async () => {
     const { terminalBridge } = await import('#/web/terminal.ts')
     const dispose = terminalBridge.onOutput(() => {})

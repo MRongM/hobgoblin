@@ -76,6 +76,9 @@ html[data-host='electron']:not([data-chrome='overlay']) .topbar {
 html[data-host='electron'][data-chrome='overlay'] .topbar {
   padding: 0 150px 0 16px;
 }
+html[data-host='electron'][data-chrome='overlay'] .sidebar-project-topbar {
+  padding-right: 16px;
+}
 
 /* Compact chrome keeps every topbar function in one horizontal scroll flow.
  * Desktop keeps each component's existing clipping and flex behavior. */

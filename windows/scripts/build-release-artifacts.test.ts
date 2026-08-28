@@ -28,7 +28,7 @@ describe('parseWindowsReleaseArguments', () => {
 
 describe('expectedWindowsArtifactName', () => {
   test('keeps architecture in the Windows installer filename', () => {
-    expect(expectedWindowsArtifactName('2.2.8', 'x64')).toBe('Hobgoblin-2.2.8-x64.exe')
+    expect(expectedWindowsArtifactName('2.3.0', 'x64')).toBe('Hobgoblin-2.3.0-x64.exe')
   })
 })
 

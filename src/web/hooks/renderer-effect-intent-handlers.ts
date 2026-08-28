@@ -37,6 +37,7 @@ interface SharedRendererIntentDeps {
   currentRepoId: string | null
   closeAllOverlays: () => void
   openRepoPathDialog: () => void
+  openWslRepoPathDialog: () => void
   openCloneRepo: () => void
   openRemoteRepo: () => void
   isOverlayOpen: () => boolean
@@ -63,7 +64,11 @@ export function handleTerminalBellClickIntent(
   switch (plan.kind) {
     case 'show-worktree-terminal':
       deps.setSelectedTerminal(plan.worktreeTerminalKey, plan.key)
-      deps.navigation.showRepoBranchDetailTab(plan.repoId, plan.branch, 'terminal')
+      if (plan.target.kind === 'branch') {
+        deps.navigation.showRepoBranchDetailTab(plan.repoId, plan.target.branch, 'terminal')
+      } else {
+        deps.navigation.showRepoDetachedWorktreeDetailTab(plan.repoId, plan.target.worktreePath, 'terminal')
+      }
       deps.setDetailCollapsed(false)
       return
     case 'show-repo-terminal':
@@ -134,6 +139,9 @@ export async function handleWorkspaceRendererIntent(
       return true
     case 'open-repo-path':
       deps.openRepoPathDialog()
+      return true
+    case 'open-wsl-repo':
+      deps.openWslRepoPathDialog()
       return true
     case 'open-clone-repo':
       deps.openCloneRepo()

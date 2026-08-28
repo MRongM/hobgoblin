@@ -1,5 +1,5 @@
 import { runRemoteCommand } from '#/system/ssh/commands.ts'
-import { openRemoteInPreferredEditor } from '#/system/editors.ts'
+import { openRemoteInPreferredEditor, openWslInPreferredEditor } from '#/system/editors.ts'
 import { openRemoteInPreferredTerminal } from '#/system/terminals.ts'
 import { testRemoteRepository } from '#/system/ssh/diagnostics.ts'
 import {
@@ -25,6 +25,8 @@ import {
   type SshConfigHostsResult,
 } from '#/shared/remote-repo.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
+import { openWslInWindowsTerminal } from '#/system/windows-terminal.ts'
 
 async function resolveRemoteHomeDirectory(target: RemoteRepoTarget, signal?: AbortSignal): Promise<string> {
   const homeResult = await runRemoteCommand(target, { type: 'printHome' }, { signal })
@@ -116,7 +118,10 @@ export async function testServerRemoteRepository(
     throw new Error('Invalid remote repository target')
   }
   try {
-    const resolved = await resolveTrackedRemoteTarget(normalized, signal)
+    const resolved =
+      normalized.transport === 'wsl'
+        ? await resolveRepositoryRemoteTarget(normalized, signal)
+        : await resolveTrackedRemoteTarget(normalized, signal)
     return await testRemoteRepository(resolved.target, { signal })
   } catch {
     return {
@@ -149,12 +154,15 @@ export async function openServerRemoteEditor(
 
   let resolved: ResolvedRemoteTarget
   try {
-    resolved = await resolveSshRemoteTarget(ref, signal)
-  } catch {
-    return { ok: false, message: 'error.ssh-config-changed' }
+    resolved = await resolveRepositoryRemoteTarget(ref, signal)
+  } catch (error) {
+    return { ok: false, message: remoteResolutionErrorMessage(error, ref.transport) }
   }
 
   const prefs = await getServerSettingsPrefs()
+  if (resolved.target.transport === 'wsl') {
+    return await openWslInPreferredEditor(resolved.target.alias, target, prefs.editorApp)
+  }
   return await openRemoteInPreferredEditor(resolved.target.alias, target, prefs.editorApp)
 }
 
@@ -170,12 +178,15 @@ export async function openServerRemoteTerminal(
 
   let resolved: ResolvedRemoteTarget
   try {
-    resolved = await resolveSshRemoteTarget(ref, signal)
-  } catch {
-    return { ok: false, message: 'error.ssh-config-changed' }
+    resolved = await resolveRepositoryRemoteTarget(ref, signal)
+  } catch (error) {
+    return { ok: false, message: remoteResolutionErrorMessage(error, ref.transport) }
   }
 
   const prefs = await getServerSettingsPrefs()
+  if (resolved.target.transport === 'wsl') {
+    return await openWslInWindowsTerminal(resolved.target.alias, input.worktreePath)
+  }
   return await openRemoteInPreferredTerminal(
     {
       alias: resolved.target.alias,
@@ -185,4 +196,10 @@ export async function openServerRemoteTerminal(
     },
     prefs.terminalApp,
   )
+}
+
+function remoteResolutionErrorMessage(error: unknown, transport: 'wsl' | undefined): string {
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'error.wsl-unavailable' || message === 'error.wsl-distribution-unavailable') return message
+  return transport === 'wsl' ? 'error.wsl-unavailable' : 'error.ssh-config-changed'
 }

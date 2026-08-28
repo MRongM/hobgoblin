@@ -12,6 +12,7 @@ import type { SettingsSnapshot } from '#/shared/rpc.ts'
 
 export async function getSettingsSnapshot(state: ServerSettingsState): Promise<SettingsSnapshot> {
   const serverSettings = await getServerSettingsPrefs()
+  const telegramNotifications = await getServerTelegramNotificationSettings()
   return buildSettingsSnapshot({
     prefs: serverSettings,
     globalShortcutRegistered: state.globalShortcutRegistered,
@@ -19,6 +20,9 @@ export async function getSettingsSnapshot(state: ServerSettingsState): Promise<S
     recentRepos: await getServerRecentRepos(),
     repoSettings: await getServerRepoSettings(),
     webAccess: await getServerWebAccessSettings(),
-    telegramNotifications: await getServerTelegramNotificationSettings(),
+    telegramNotifications: {
+      ...telegramNotifications,
+      terminalInputRuntime: { ...state.telegramTerminalInputRuntime },
+    },
   })
 }

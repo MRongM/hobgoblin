@@ -7,22 +7,28 @@ const mocks = vi.hoisted(() => ({
   openRemoteVSCode: vi.fn(),
   openRemoteCursor: vi.fn(),
   openRemoteWindsurf: vi.fn(),
+  openWslVSCode: vi.fn(),
+  openWslCursor: vi.fn(),
+  openWslWindsurf: vi.fn(),
 }))
 
 vi.mock('#/system/vscode.ts', () => ({
   isVSCodeInstalled: mocks.vscodeInstalled,
   openInVSCode: vi.fn(),
   openRemoteInVSCode: mocks.openRemoteVSCode,
+  openWslInVSCode: mocks.openWslVSCode,
 }))
 vi.mock('#/system/cursor.ts', () => ({
   isCursorInstalled: mocks.cursorInstalled,
   openInCursor: vi.fn(),
   openRemoteInCursor: mocks.openRemoteCursor,
+  openWslInCursor: mocks.openWslCursor,
 }))
 vi.mock('#/system/windsurf.ts', () => ({
   isWindsurfInstalled: mocks.windsurfInstalled,
   openInWindsurf: vi.fn(),
   openRemoteInWindsurf: mocks.openRemoteWindsurf,
+  openWslInWindsurf: mocks.openWslWindsurf,
 }))
 
 describe('openRemoteInPreferredEditor', () => {
@@ -31,6 +37,9 @@ describe('openRemoteInPreferredEditor', () => {
     mocks.openRemoteVSCode.mockResolvedValue({ ok: true, message: '/srv/repo' })
     mocks.openRemoteCursor.mockResolvedValue({ ok: true, message: '/srv/repo' })
     mocks.openRemoteWindsurf.mockResolvedValue({ ok: true, message: '/srv/repo' })
+    mocks.openWslVSCode.mockResolvedValue({ ok: true, message: '/root/src/repo' })
+    mocks.openWslCursor.mockResolvedValue({ ok: true, message: '/root/src/repo' })
+    mocks.openWslWindsurf.mockResolvedValue({ ok: true, message: '/root/src/repo' })
   })
 
   test('opens the explicitly selected remote editor when it is installed', async () => {
@@ -74,5 +83,17 @@ describe('openRemoteInPreferredEditor', () => {
     await openRemoteInPreferredEditor('prod', { path: '/srv/repo/src/app.ts', line: 12 }, 'cursor')
 
     expect(mocks.openRemoteCursor).toHaveBeenCalledWith('prod', { path: '/srv/repo/src/app.ts', line: 12 })
+  })
+
+  test('opens a WSL path through the selected editor backend', async () => {
+    mocks.vscodeInstalled.mockReturnValue(true)
+    const { openWslInPreferredEditor } = await import('#/system/editors.ts')
+
+    await expect(openWslInPreferredEditor('Ubuntu-24.04', '/root/src/repo', 'vscode')).resolves.toEqual({
+      ok: true,
+      message: '/root/src/repo',
+    })
+
+    expect(mocks.openWslVSCode).toHaveBeenCalledWith('Ubuntu-24.04', '/root/src/repo')
   })
 })

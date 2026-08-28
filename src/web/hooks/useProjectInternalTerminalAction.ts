@@ -6,6 +6,7 @@ import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
+import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 export interface ProjectInternalTerminalAction {
   disabled: boolean
@@ -24,9 +25,9 @@ export function resolveProjectInternalTerminalBase(repo: RepoState | null | unde
     }
   }
   if (repo.isGitRepo === false) return null
-  const branch = repo.data.branches.find((candidate) => candidate.name === repo.ui.selectedBranch)
-  if (!branch?.worktree?.path) return null
-  return { repoRoot: repo.id, branch: branch.name, worktreePath: branch.worktree.path }
+  const context = selectedRepoWorktree(repo)
+  if (!context) return null
+  return { repoRoot: repo.id, branch: context.terminalLabel, worktreePath: context.worktreePath }
 }
 
 export function useProjectInternalTerminalAction(projectId: string): ProjectInternalTerminalAction {
@@ -47,7 +48,12 @@ export function useProjectInternalTerminalAction(projectId: string): ProjectInte
         if (workspaceProject) activateWorkspaceOverview(projectId)
         else navigation.activateRepo(projectId)
       } else {
-        navigation.showRepoBranchDetailTab(projectId, terminalBase.branch, 'terminal')
+        const context = selectedRepoWorktree(repo)
+        if (context?.kind === 'detached') {
+          navigation.showRepoDetachedWorktreeDetailTab(projectId, context.worktreePath, 'terminal')
+        } else {
+          navigation.showRepoBranchDetailTab(projectId, terminalBase.branch, 'terminal')
+        }
       }
       setDetailCollapsed(false)
       await createTerminal(terminalBase, launchMode)

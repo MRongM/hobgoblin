@@ -3,6 +3,7 @@ import type {
   TelegramNotificationSettingsSnapshot,
   TelegramNotificationSettingsUpdateInput,
 } from '#/shared/telegram-notifications.ts'
+import { TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS } from '#/shared/telegram-terminal-input.ts'
 import { sendTelegramTestNotification } from '#/web/settings-client.ts'
 import { currentSettingsSnapshot } from '#/web/settings-read-projection.ts'
 import { useSettingsSnapshotQuery } from '#/web/settings-queries.ts'
@@ -22,6 +23,10 @@ const DEFAULT_TELEGRAM_SETTINGS: TelegramNotificationSettingsSnapshot = {
   outputCompletionMinimumActivitySeconds: TELEGRAM_OUTPUT_COMPLETION_DEFAULT_ACTIVITY_SECONDS,
   includeTerminalOutput: false,
   outputTailLength: TELEGRAM_OUTPUT_TAIL_DEFAULT_LENGTH,
+  terminalInputEnabled: false,
+  terminalInputAllowedUserIds: [],
+  terminalInputPollingTimeoutSeconds: TELEGRAM_TERMINAL_INPUT_POLL_TIMEOUT_DEFAULT_SECONDS,
+  terminalInputRuntime: { status: 'stopped' },
 }
 
 export function getRuntimeTelegramNotificationSettings(): TelegramNotificationSettingsSnapshot {

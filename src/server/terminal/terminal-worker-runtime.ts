@@ -107,6 +107,8 @@ export class TerminalWorkerRuntime {
         return await this.options.service.getOutputExcerpt(message.input)
       case 'screen-snapshot':
         return await this.options.service.getScreenSnapshot(message.input)
+      case 'telegram-input':
+        return await this.options.service.submitTelegramInput(message.input)
       case 'reorder':
         return await this.options.service.reorder(message.clientId, message.input)
     }

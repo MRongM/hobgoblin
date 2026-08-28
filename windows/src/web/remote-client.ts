@@ -1,16 +1,13 @@
 import { fetchServerJson, postServerJson } from '#/web/lib/server-fetch.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
-import type {
-  RemoteDiagnosticsResult,
-  RemotePathSuggestionsInput,
-  SshConfigHostsResult,
-} from '#/shared/remote-repo.ts'
+import type { RemoteDiagnosticsResult, RemotePathSuggestionsInput, SshConfigHostsResult } from '#/shared/remote-repo.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 
 export async function resolveRemoteRepositoryTarget(ref: {
   alias: string
   remotePath: string
+  transport?: 'wsl'
 }): Promise<RemoteRepoTarget> {
   const result = await postServerJson<typeof ref, RemoteRepoTarget | { target: RemoteRepoTarget }>(
     '/api/remote/resolve-target',
@@ -21,6 +18,10 @@ export async function resolveRemoteRepositoryTarget(ref: {
 
 export async function getRemoteSshHosts(): Promise<SshConfigHostsResult> {
   return await fetchServerJson<SshConfigHostsResult>('/api/remote/ssh-hosts')
+}
+
+export async function getWindowsWslDistributions(): Promise<string[]> {
+  return await fetchServerJson<string[]>('/api/remote/wsl-distributions')
 }
 
 export async function getRemotePathSuggestions(

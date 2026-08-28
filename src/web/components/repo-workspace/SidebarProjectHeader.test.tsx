@@ -8,9 +8,16 @@ import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarPro
 const shellOverlayState = vi.hoisted(() => ({
   actions: {
     openRepoPathDialog: vi.fn(),
+    openWslRepoPathDialog: vi.fn(),
     openRemoteRepo: vi.fn(),
     openCloneRepo: vi.fn(),
   },
+}))
+
+const platformState = vi.hoisted(() => ({ hostPlatform: 'darwin' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
 }))
 
 const navigationState = vi.hoisted(() => ({
@@ -116,6 +123,7 @@ beforeEach(() => {
   repoState.activeProjectId = '/repo-a'
   repoState.projectListExpanded = false
   responsiveState.compact = false
+  platformState.hostPlatform = 'darwin'
   navigationState.showRepoDetailTab.mockReset()
   navigationState.activateRepo.mockReset()
   repoState.ensureWorkspaceOpen.mockReset()
@@ -179,6 +187,14 @@ describe('SidebarProjectHeader', () => {
     expect(topbar?.style.height).toBe('36px')
     expect(listWrapper?.className).not.toContain('border-t')
     expect(listWrapper?.className).not.toContain('border-separator')
+  })
+
+  test('marks its topbar for sidebar-edge chrome alignment', () => {
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" />)
+    })
+
+    expect(container!.querySelector<HTMLElement>('.topbar')?.className).toContain('sidebar-project-topbar')
   })
 
   test('keeps the global project list expansion state when the active project changes', () => {
@@ -313,6 +329,22 @@ describe('SidebarProjectHeader', () => {
     })
 
     expect(container!.querySelector('button[aria-label="topbar.open"]')).not.toBeNull()
+  })
+
+  test('shows the WSL project shortcut in the Windows desktop add-repository menu', async () => {
+    platformState.hostPlatform = 'win32'
+    act(() => {
+      root!.render(<SidebarProjectHeader repoId="/repo-a" />)
+    })
+
+    const trigger = container!.querySelector<HTMLButtonElement>('button[aria-label="topbar.open"]')
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
+      trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain('repo-tabs.open-wsl')
   })
 
   test('shows recent repositories in the desktop add-repository menu', async () => {

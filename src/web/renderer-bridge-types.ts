@@ -55,6 +55,7 @@ export interface RendererTerminalBridge {
   pruneTerminals: (repoRoot: string) => Promise<{ pruned: number; remaining: number }>
   listSessions: (input: { repoRoot: string }) => Promise<TerminalSessionSummary[]>
   getSessionSnapshot: (input: TerminalSessionSnapshotInput) => Promise<TerminalSessionSnapshot | null>
+  markTelegramInputTarget?: (input: TerminalSessionSnapshotInput) => Promise<TerminalMutationResult>
   reorder: (input: TerminalReorderInput) => Promise<TerminalMutationResult>
   notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>
   sendTestNotification: () => Promise<boolean>

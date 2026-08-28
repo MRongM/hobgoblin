@@ -55,6 +55,47 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceDependencyActions', () => {
+  test('separates planning from execution and forwards preview cancellation', async () => {
+    const execution = deferred<Awaited<ReturnType<typeof mocks.execute>>>()
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockImplementation(async () => await execution.promise)
+    let state: ReturnType<typeof useBranchWorkspaceDependencyActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    const request = { operation: 'remove' as const, branchWorkspaceId: 'branch-1', names: ['.env'] }
+    const controller = new AbortController()
+
+    await act(async () => state!.requestPlan(request, controller.signal))
+
+    expect(mocks.plan).toHaveBeenCalledWith('/workspace', request, controller.signal)
+    expect(state!.planning).toBe(false)
+    expect(state!.executing).toBe(false)
+
+    let confirmation!: ReturnType<ReturnType<typeof useBranchWorkspaceDependencyActions>['confirm']>
+    act(() => {
+      confirmation = state!.confirm([])
+    })
+    expect(state!.executing).toBe(true)
+    expect(state!.pending).toBe(true)
+
+    await act(async () => {
+      execution.resolve({
+        ok: true,
+        operation: 'remove',
+        branchWorkspaceId: 'branch-1',
+        completedNames: ['.env'],
+      })
+      await confirmation
+    })
+    expect(state!.executing).toBe(false)
+    expect(state!.pending).toBe(false)
+  })
+
   test('reads candidates, previews a request, and executes with exact-root invalidation', async () => {
     const candidates = [
       {
@@ -136,4 +177,12 @@ function Harness({ onReady }: { onReady: (value: ReturnType<typeof useBranchWork
     onReady(value)
   }, [onReady, value])
   return null
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
 }

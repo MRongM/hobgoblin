@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   fetchRemote,
   getBrowserRemoteUrl,
+  pushBranch,
   pushWorktreeHeadToRemoteBranch,
   resolveFetchRemoteForRemotes,
   resolvePushTargetForRemotes,
@@ -160,6 +161,36 @@ describe('local network git options', () => {
     )
   })
 
+  test('pushBranch creates an upstream on the explicit remote when fallback resolution is ambiguous', async () => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote' && args[1] === '-v') {
+        return [
+          'fork\thttps://example.com/fork/repo.git (fetch)',
+          'fork\thttps://example.com/fork/repo.git (push)',
+          'backup\thttps://example.com/backup/repo.git (fetch)',
+          'backup\thttps://example.com/backup/repo.git (push)',
+        ].join('\n')
+      }
+      if (args[0] === 'config' && args[1] === '--get') throw new Error('no upstream')
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+
+    await expect(pushBranch('/repo', 'feature/test', undefined, undefined, 'fork')).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledWith(
+      '/repo',
+      expect.any(Object),
+      'push',
+      '-u',
+      '--',
+      'fork',
+      'feature/test:feature/test',
+    )
+  })
+
   test('pushWorktreeHeadToRemoteBranch pushes detached HEAD to the exact remote branch without force', async () => {
     const signal = new AbortController().signal
 
@@ -252,6 +283,35 @@ describe('resolvePushTargetForRemotes', () => {
       branch: 'feature/test',
       setUpstream: true,
     })
+  })
+
+  test('uses an explicit existing remote when automatic fallback is ambiguous', () => {
+    expect(resolvePushTargetForRemotes([fork, remote('backup')], null, 'feature/test', 'fork')).toEqual({
+      remote: 'fork',
+      branch: 'feature/test',
+      setUpstream: true,
+    })
+  })
+
+  test.each(['missing', 'bad remote', '-fork', 'fork/main'])(
+    'rejects invalid or unavailable explicit remote %s',
+    (createUpstreamRemote) => {
+      expect(resolvePushTargetForRemotes([origin, fork], null, 'feature/test', createUpstreamRemote)).toEqual({
+        ok: false,
+        message: 'error.invalid-arguments',
+      })
+    },
+  )
+
+  test('does not allow an explicit remote to override an existing upstream', () => {
+    expect(
+      resolvePushTargetForRemotes(
+        [origin, fork],
+        { remote: 'fork', branch: 'topic/feature-test' },
+        'feature/test',
+        'origin',
+      ),
+    ).toEqual({ ok: false, message: 'error.invalid-arguments' })
   })
 })
 

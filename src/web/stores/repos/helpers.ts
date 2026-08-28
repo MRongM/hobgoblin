@@ -10,23 +10,23 @@ import type {
   ReposStore,
 } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+import { selectedWorktreeTabKey, selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 /** Resolve the explorer tab for the repo's currently selected branch. Falls
  *  back to the `''` key (used when no branch is selected, or as legacy
  *  per-repo state carried over from before per-branch tabs) and finally to
  *  a default based on worktree existence. */
 export function explorerTabForRepo(repo: {
-  ui: Pick<RepoState['ui'], 'selectedBranch' | 'explorerTabByBranch'>
-  data: Pick<RepoState['data'], 'branches'>
+  ui: Pick<RepoState['ui'], 'selectedBranch' | 'selectedDetachedWorktreePath' | 'explorerTabByBranch'>
+  data: Pick<RepoState['data'], 'branches' | 'worktreesByPath'>
 }): ExplorerTab {
-  const key = repo.ui.selectedBranch ?? ''
+  const key = selectedWorktreeTabKey(repo)
   const savedTab = repo.ui.explorerTabByBranch[key] ?? repo.ui.explorerTabByBranch['']
 
   if (savedTab) return savedTab
 
   // 检查是否有工作树
-  const selectedBranch = repo.data.branches.find(branch => branch.name === repo.ui.selectedBranch)
-  const hasWorktree = !!selectedBranch?.worktree?.path
+  const hasWorktree = selectedRepoWorktree(repo) !== null
 
   // 有工作树默认为 status，否则默认为 files
   return hasWorktree ? 'status' : 'files'
@@ -57,6 +57,7 @@ export function emptyRepo(id: string, name: string): RepoState {
     operations: emptyRepoOperations(),
     ui: {
       selectedBranch: null,
+      selectedDetachedWorktreePath: null,
       detailTab: 'status',
       explorerTabByBranch: {},
       workspaceLayout: 'left-right',
@@ -92,6 +93,7 @@ export function clearGitProjection(repo: Draft<RepoState> | RepoState): void {
   repo.resources = emptyRepoResources()
   resetRepoOperations(repo)
   repo.ui.selectedBranch = null
+  repo.ui.selectedDetachedWorktreePath = null
   repo.ui.worktreePathOrder = []
   repo.projection = { source: 'fresh', savedAt: null }
   repo.remote = {

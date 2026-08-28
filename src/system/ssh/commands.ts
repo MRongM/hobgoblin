@@ -87,6 +87,7 @@ export type RemoteCommandKind =
   | { type: 'gitWorktreeList'; path: string }
   | { type: 'gitWorktreePrune'; path: string }
   | { type: 'gitStatus'; path: string }
+  | { type: 'gitWorktreeContentState'; path: string }
   | { type: 'gitHistory'; path: string; branch: string; limit?: number; skip?: number }
   | { type: 'gitCommitMetadata'; path: string; commit: string }
   | { type: 'gitCommitNameStatus'; path: string; commit: string }
@@ -101,6 +102,13 @@ export type RemoteCommandKind =
   | { type: 'gitCommitAll'; path: string; message: string }
   | { type: 'gitMerge'; path: string; branch: string }
   | { type: 'gitResetHard'; path: string }
+  | {
+      type: 'gitAlignToRemote'
+      path: string
+      branch: string
+      remoteRef: string
+      remoteHead: string
+    }
   | { type: 'gitDiscardChanges'; path: string; paths: string[] }
   | { type: 'gitBranchCreate'; path: string; branch: string; baseBranch: string }
   | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
@@ -141,7 +149,7 @@ export interface RemoteCommandResult {
 }
 
 export interface RemoteCommandInvocation {
-  command: 'ssh'
+  command: string
   args: string[]
   script: string
   tmuxSessionName?: string | null
@@ -152,6 +160,7 @@ export interface RemoteCommandOptions {
   timeoutMs?: number
   stdin?: string
   maxBuffer?: number
+  wslEnvironment?: Record<string, string>
 }
 
 export function buildRemoteCommandInvocation(
@@ -159,6 +168,14 @@ export function buildRemoteCommandInvocation(
   command: RemoteCommandKind,
 ): RemoteCommandInvocation {
   const script = scriptForCommand(command)
+  if (target.transport === 'wsl') {
+    if (!target.wslExecutable) throw new Error('error.wsl-unavailable')
+    return {
+      command: target.wslExecutable,
+      args: ['--distribution', target.alias, '--exec', 'sh', '-lc', script],
+      script,
+    }
+  }
   const args = [
     '-T',
     '-o',
@@ -187,7 +204,7 @@ export function buildRemoteTerminalInvocation(
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
     {
-      alias: target.alias,
+      alias: target.transport === 'wsl' ? 'wsl' : target.alias,
       projectRoot: target.remotePath,
       workingDirectory: remotePath,
       terminalNumber: options.terminalNumber,
@@ -200,6 +217,15 @@ export function buildRemoteTerminalInvocation(
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')
+  if (target.transport === 'wsl') {
+    if (!target.wslExecutable) throw new Error('error.wsl-unavailable')
+    return {
+      command: target.wslExecutable,
+      args: ['--distribution', target.alias, '--exec', 'sh', '-lc', invocation.script],
+      script: invocation.script,
+      tmuxSessionName: invocation.tmuxSessionName,
+    }
+  }
   return {
     command: invocation.command,
     args: invocation.args,
@@ -215,6 +241,8 @@ export async function runRemoteCommand(
 ): Promise<RemoteCommandResult> {
   if (options?.signal?.aborted) return { ok: false, stdout: '', stderr: '', message: 'cancelled' }
   const invocation = buildRemoteCommandInvocation(target, command)
+  const wslEnvironment =
+    target.transport === 'wsl' ? buildWslProcessEnvironment(options?.wslEnvironment, process.env) : undefined
   try {
     const { stdout, stderr } = await execa(invocation.command, invocation.args, {
       timeout: options?.timeoutMs ?? SSH_COMMAND_TIMEOUT_MS,
@@ -222,6 +250,7 @@ export async function runRemoteCommand(
       forceKillAfterDelay: 500,
       input: options?.stdin,
       maxBuffer: options?.maxBuffer ?? 2 * 1024 * 1024,
+      ...(wslEnvironment ? { env: wslEnvironment } : {}),
     })
     return { ok: true, stdout: stdout.trimEnd(), stderr: stderr.trimEnd() }
   } catch (err) {
@@ -236,6 +265,46 @@ export async function runRemoteCommand(
     }
     return { ok: false, stdout, stderr, message: stderr || e.message || 'unknown' }
   }
+}
+
+function buildWslProcessEnvironment(
+  values: Record<string, string> | undefined,
+  inherited: NodeJS.ProcessEnv,
+): Record<string, string> | undefined {
+  const entries = Object.entries(values ?? {}).filter(
+    (entry): entry is [string, string] => /^[A-Za-z_][A-Za-z0-9_]*$/u.test(entry[0]) && typeof entry[1] === 'string',
+  )
+  if (entries.length === 0) return undefined
+
+  const inheritedWslEnv = environmentValue(inherited, 'WSLENV')
+  const names = inheritedWslEnv?.split(':').filter(Boolean) ?? []
+  const seen = new Set(
+    names
+      .map(wslEnvEntryName)
+      .filter(Boolean)
+      .map((name) => name.toLowerCase()),
+  )
+  for (const [name] of entries) {
+    const identity = name.toLowerCase()
+    if (seen.has(identity)) continue
+    seen.add(identity)
+    names.push(name)
+  }
+
+  return {
+    ...Object.fromEntries(entries),
+    WSLENV: names.join(':'),
+  }
+}
+
+function wslEnvEntryName(entry: string): string {
+  return entry.slice(0, entry.indexOf('/') < 0 ? undefined : entry.indexOf('/'))
+}
+
+function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const match = Object.entries(env).find(([key, value]) => key.toUpperCase() === name && typeof value === 'string')
+  const value = match?.[1]?.trim()
+  return value || undefined
 }
 
 function scriptForCommand(command: RemoteCommandKind): string {
@@ -497,6 +566,12 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} worktree prune --expire now`
     case 'gitStatus':
       return `git -C ${shellQuote(command.path)} status --porcelain -z`
+    case 'gitWorktreeContentState': {
+      const repo = shellQuote(command.path)
+      return [...remoteWorktreeContentStateStatements(repo), `printf '%s\\n%s\\n' "$index_hash" "$worktree_tree"`].join(
+        ' && ',
+      )
+    }
     case 'gitHistory': {
       const limit = Math.max(1, Math.min(200, Math.floor(command.limit ?? 100)))
       const skip = Math.max(0, Math.floor(command.skip ?? 0))
@@ -542,6 +617,11 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `git -C ${shellQuote(command.path)} merge -- ${shellQuote(command.branch)}`
     case 'gitResetHard':
       return `git -C ${shellQuote(command.path)} reset --hard`
+    case 'gitAlignToRemote': {
+      const repo = shellQuote(command.path)
+      const cleanFailed = `{ printf '%s\\n' 'error.align-remote-clean-incomplete' >&2; exit 1; }`
+      return `git -C ${repo} reset --hard ${shellQuote(command.remoteHead)} && { git -C ${repo} clean -fd || ${cleanFailed}; }`
+    }
     case 'gitDiscardChanges':
       return remoteDiscardChangesScript(command)
     case 'gitBranchCreate':
@@ -641,6 +721,21 @@ function scriptForCommand(command: RemoteCommandKind): string {
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function remoteWorktreeContentStateStatements(repo: string): string[] {
+  return [
+    'tmp_dir=$(mktemp -d)',
+    'tmp_index="$tmp_dir/index"',
+    'tmp_entries="$tmp_dir/entries"',
+    `trap 'rm -rf -- "$tmp_dir"' EXIT HUP INT TERM`,
+    `git_dir=$(git -C ${repo} rev-parse --absolute-git-dir)`,
+    `if [ -f "$git_dir/index" ]; then cp -- "$git_dir/index" "$tmp_index"; else rm -f -- "$tmp_index" && GIT_INDEX_FILE="$tmp_index" git -C ${repo} read-tree --empty; fi`,
+    `GIT_INDEX_FILE="$tmp_index" git -C ${repo} ls-files --stage -z > "$tmp_entries"`,
+    `index_hash=$(git -C ${repo} hash-object -- "$tmp_entries")`,
+    `GIT_INDEX_FILE="$tmp_index" git -C ${repo} add -A -- .`,
+    `worktree_tree=$(GIT_INDEX_FILE="$tmp_index" git -C ${repo} write-tree)`,
+  ]
 }
 
 function tmuxListFunctionScript(): string[] {
@@ -1584,13 +1679,8 @@ function remoteBootstrapScript(command: Extract<RemoteCommandKind, { type: 'boot
   ].join('\n')
 }
 
-function remoteBootstrapInnerScript(
-  command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>,
-): string {
-  const items = [
-    ...command.copy.map((rel) => `copy\t${rel}`),
-    ...command.symlink.map((rel) => `symlink\t${rel}`),
-  ]
+function remoteBootstrapInnerScript(command: Extract<RemoteCommandKind, { type: 'bootstrapRemoteWorktree' }>): string {
+  const items = [...command.copy.map((rel) => `copy\t${rel}`), ...command.symlink.map((rel) => `symlink\t${rel}`)]
     .map(shellQuote)
     .join(' ')
   return [

@@ -5,7 +5,7 @@ import {
   sendTelegramMessage,
   sendTelegramPhoto,
   telegramProxyUrlFromPrefs,
-} from '#/server/modules/telegram-notification-source.ts'
+} from '#/server/modules/telegram-bot-api-source.ts'
 import type { renderTelegramTerminalScreenImage } from '#/server/modules/telegram-terminal-screen-image.ts'
 import { DICTS } from '#/shared/i18n/dictionaries.ts'
 import { resolvePreferredLang } from '#/shared/i18n/resolve-lang.ts'

@@ -37,6 +37,28 @@ describe('i18n dictionaries', () => {
     expect(ko['workspace.branch-workspace.preview']).toBe('다음')
   })
 
+  test('localizes branch workspace repository dependency disclosure actions', () => {
+    expect(en['workspace.branch-workspace.repository-dependencies-collapse']).toBe('Collapse selected dependencies')
+    expect(en['workspace.branch-workspace.repository-dependencies-expand']).toBe('Expand to edit')
+    expect(zh['workspace.branch-workspace.repository-dependencies-collapse']).toBe('收起已选依赖')
+    expect(zh['workspace.branch-workspace.repository-dependencies-expand']).toBe('展开修改')
+    expect(ja['workspace.branch-workspace.repository-dependencies-collapse']).toBe('選択した依存関係を折りたたむ')
+    expect(ja['workspace.branch-workspace.repository-dependencies-expand']).toBe('展開して編集')
+    expect(ko['workspace.branch-workspace.repository-dependencies-collapse']).toBe('선택한 종속성 접기')
+    expect(ko['workspace.branch-workspace.repository-dependencies-expand']).toBe('펼쳐서 수정')
+  })
+
+  test('localizes the branch workspace operation console guidance', () => {
+    expect(zh['workspace.branch-workspace.one-step.selection-description.create']).toBe(
+      '命名子工作区并选择要创建的成员工作树。',
+    )
+    expect(zh['workspace.branch-workspace.one-step.selection-description.remove']).toBe(
+      '选择是否一并删除符合条件的本地和上游分支。',
+    )
+    expect(zh['workspace.branch-workspace.one-step.plan-description.create']).toBe('此清单将随配置自动更新。')
+    expect(zh['workspace.branch-workspace.one-step.plan-description.remove']).toBe('确认后将按此清单执行删除。')
+  })
+
   test('preserves official classic theme names in every dictionary', () => {
     const expected = {
       'settings.theme-preset.catppuccin': 'Catppuccin',
@@ -50,6 +72,10 @@ describe('i18n dictionaries', () => {
   })
 
   test('localizes menu and remote repository copy for non-English dictionaries', () => {
+    expect(zh['menu.file.open-wsl-project']).toBe('打开 WSL 项目…')
+    expect(ko['menu.file.open-wsl-project']).toBe('WSL 프로젝트 열기…')
+    expect(ja['menu.file.open-wsl-project']).toBe('WSL プロジェクトを開く…')
+
     expect(zh['menu.file.open-remote-repo']).toBe('打开远程仓库…')
     expect(ko['menu.file.open-remote-repo']).toBe('원격 리포지토리 열기…')
     expect(ja['menu.file.open-remote-repo']).toBe('リモートリポジトリを開く…')
@@ -57,6 +83,10 @@ describe('i18n dictionaries', () => {
     expect(zh['repo-tabs.open-remote']).toBe('打开远程仓库…')
     expect(ko['repo-tabs.open-remote']).toBe('원격 리포지토리 열기…')
     expect(ja['repo-tabs.open-remote']).toBe('リモートリポジトリを開く…')
+
+    expect(zh['repo-tabs.open-wsl']).toBe('打开 WSL 项目…')
+    expect(ko['repo-tabs.open-wsl']).toBe('WSL 프로젝트 열기…')
+    expect(ja['repo-tabs.open-wsl']).toBe('WSL プロジェクトを開く…')
 
     expect(ko['repo-tabs.open-remote-host-label']).toBe('호스트')
     expect(ja['repo-tabs.open-remote-host-label']).toBe('ホスト')
@@ -387,6 +417,7 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.creation-base-local',
       'workspace.branch-workspace.creation-base-remote',
       'workspace.branch-workspace.sync-before-create',
+      'workspace.branch-workspace.sync-before-create-select-all',
       'workspace.branch-workspace.sync-before-create-named',
       'workspace.branch-workspace.sync-no-upstream',
       'workspace.branch-workspace.existing-target-used',
@@ -519,6 +550,19 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
   })
 
+  test('localizes branch workspace fetch all feedback in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.fetch-all',
+      'workspace.branch-workspace.fetch-all-success',
+      'workspace.branch-workspace.fetch-all-incomplete',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['workspace.branch-workspace.fetch-all']).toBe('同步全部仓库')
+  })
+
   test('localizes scheduled status refresh settings in every locale', () => {
     const keys = ['settings.group.status-refresh', 'settings.status-refresh', 'settings.status-refresh-hint'] as const
     for (const [lang, dict] of Object.entries(dicts)) {
@@ -570,12 +614,10 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.dependency.remove.available-description',
       'workspace.branch-workspace.dependency.remove.empty',
       'workspace.branch-workspace.dependency.remove.confirm',
-      'workspace.branch-workspace.dependency.preview-title',
       'workspace.branch-workspace.dependency.operation.add',
       'workspace.branch-workspace.dependency.operation.replace',
       'workspace.branch-workspace.dependency.operation.remove',
       'workspace.branch-workspace.dependency.approval.outside-root-source',
-      'workspace.branch-workspace.dependency.planning',
       'workspace.branch-workspace.dependency.not-ready',
       'workspace.branch-workspace.dependency.read-failed',
       'workspace.branch-workspace.dependency.target-exists',
@@ -586,6 +628,8 @@ describe('i18n dictionaries', () => {
       'workspace.branch-workspace.dependency.plan-stale',
       'workspace.branch-workspace.dependency.plan-failed',
       'workspace.branch-workspace.dependency.execute-failed',
+      'workspace.branch-workspace.dependency.recheck',
+      'workspace.branch-workspace.dependency.recheck-required',
     ] as const
 
     for (const [lang, dict] of Object.entries(dicts)) {
@@ -593,6 +637,21 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['workspace.branch-workspace.dependency.add.action']).toBe('添加依赖项')
     expect(zh['workspace.branch-workspace.dependency.remove.action']).toBe('移除依赖项')
+  })
+
+  test('includes one-step planning dialog copy in every locale', () => {
+    const keys = [
+      'workspace.branch-workspace.one-step.incomplete',
+      'workspace.branch-workspace.one-step.planning',
+      'workspace.branch-workspace.one-step.plan-error',
+      'workspace.branch-workspace.one-step.selection-title',
+      'workspace.branch-workspace.one-step.plan-title',
+      'workspace.branch-workspace.one-step.modify-selection',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
   })
 
   test('includes transient one-time dependency warning copy in every locale', () => {

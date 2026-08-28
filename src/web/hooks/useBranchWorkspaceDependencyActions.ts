@@ -21,9 +21,12 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const queryClient = useQueryClient()
   const [branchWorkspaceId, setBranchWorkspaceId] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<BranchWorkspaceDependencyCandidate[]>([])
+  const [request, setRequest] = useState<BranchWorkspaceDependencyPlanRequest | null>(null)
   const [plan, setPlan] = useState<BranchWorkspaceDependencyPlan | null>(null)
   const [result, setResult] = useState<BranchWorkspaceDependencyExecuteResult | null>(null)
-  const [pending, setPending] = useState(false)
+  const [reading, setReading] = useState(false)
+  const [planning, setPlanning] = useState(false)
+  const [executing, setExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const invalidate = useCallback(async () => {
@@ -34,16 +37,17 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const read = useCallback(
     async (nextBranchWorkspaceId: string): Promise<BranchWorkspaceDependencyReadResult> => {
       if (!rootId) return { ok: false, message: 'workspace.branch-workspace.dependency.read-failed' }
-      setPending(true)
+      setReading(true)
       setError(null)
       setPlan(null)
       setResult(null)
+      setRequest(null)
       setBranchWorkspaceId(nextBranchWorkspaceId)
       const response = await readBranchWorkspaceDependencies(rootId, nextBranchWorkspaceId).catch(() => ({
         ok: false as const,
         message: 'workspace.branch-workspace.dependency.read-failed',
       }))
-      setPending(false)
+      setReading(false)
       if (!response.ok) {
         setCandidates([])
         setError(response.message)
@@ -56,17 +60,24 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   )
 
   const requestPlan = useCallback(
-    async (request: BranchWorkspaceDependencyPlanRequest) => {
+    async (request: BranchWorkspaceDependencyPlanRequest, signal?: AbortSignal) => {
       if (!rootId) return false
-      setPending(true)
+      setPlanning(true)
       setError(null)
       setResult(null)
+      setPlan(null)
+      setRequest(request)
       setBranchWorkspaceId(request.branchWorkspaceId)
-      const response = await planBranchWorkspaceDependencies(rootId, request).catch(() => ({
-        ok: false as const,
-        message: 'workspace.branch-workspace.dependency.plan-failed',
-      }))
-      setPending(false)
+      const response = await planBranchWorkspaceDependencies(rootId, request, signal).catch(() =>
+        signal?.aborted
+          ? null
+          : {
+              ok: false as const,
+              message: 'workspace.branch-workspace.dependency.plan-failed',
+            },
+      )
+      setPlanning(false)
+      if (!response || signal?.aborted) return false
       if (!response.ok) {
         setPlan(null)
         setError(response.message)
@@ -81,7 +92,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const confirm = useCallback(
     async (approvals: BranchWorkspaceDependencyApproval[]) => {
       if (!rootId || !plan) return null
-      setPending(true)
+      setExecuting(true)
       setError(null)
       const response = await runWithRepoInvalidationSource('workspace', async (sourceToken) =>
         executeBranchWorkspaceDependencies(rootId, { planToken: plan.token, approvals, sourceToken }).catch(() => ({
@@ -92,7 +103,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
           completedNames: [],
         })),
       )
-      setPending(false)
+      setExecuting(false)
       setResult(response)
       if (!response.ok) setError(response.message)
       if (response.ok || (response.completedNames?.length ?? 0) > 0) {
@@ -111,11 +122,32 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const reset = useCallback(() => {
     setBranchWorkspaceId(null)
     setCandidates([])
+    setRequest(null)
     setPlan(null)
     setResult(null)
-    setPending(false)
+    setReading(false)
+    setPlanning(false)
+    setExecuting(false)
     setError(null)
   }, [])
 
-  return { branchWorkspaceId, candidates, plan, result, pending, error, read, requestPlan, confirm, cancel, reset }
+  const pending = reading || planning || executing
+
+  return {
+    branchWorkspaceId,
+    candidates,
+    request,
+    plan,
+    result,
+    pending,
+    reading,
+    planning,
+    executing,
+    error,
+    read,
+    requestPlan,
+    confirm,
+    cancel,
+    reset,
+  }
 }

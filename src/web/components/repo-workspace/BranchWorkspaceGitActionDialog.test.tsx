@@ -16,8 +16,13 @@ vi.mock('#/web/repo-client.ts', () => ({
   generateRepositoryCommitMessage: mocks.generate,
 }))
 vi.mock('#/web/stores/i18n.ts', () => ({
-  useT: () => (key: string, values?: { repository?: string }) =>
-    key === 'workspace.branch-workspace.git-action.select-upstream-for-member' ? `${key}:${values?.repository}` : key,
+  useT: () => (key: string, values?: { repository?: string; upstream?: string }) => {
+    if (key === 'workspace.branch-workspace.git-action.select-upstream-for-member') {
+      return `${key}:${values?.repository}`
+    }
+    if (key === 'workspace.branch-workspace.git-action.creating-upstream') return `${key}:${values?.upstream}`
+    return key
+  },
 }))
 
 const batchPlan: BranchWorkspaceGitActionPlan = {
@@ -57,6 +62,29 @@ function discardPlan(dirty = true): Extract<BranchWorkspaceGitActionPlan, { kind
   }
 }
 
+function alignRemotePlan(ready = true): Extract<BranchWorkspaceGitActionPlan, { kind: 'batch-align-remote' }> {
+  return {
+    kind: 'batch-align-remote',
+    token: 'sha256:align-remote',
+    rootId: '/workspace',
+    branchWorkspaceId: 'ws-1',
+    ready,
+    members: ['api', 'web'].map((repositoryName) => ({
+      repositoryName,
+      repoId: `/workspace/${repositoryName}`,
+      targetBranch: 'feature/a',
+      targetWorktreePath: `/workspace/goblin-feature-a/${repositoryName}`,
+      targetHead: `local-${repositoryName}`,
+      upstream: ready ? `origin/feature/${repositoryName}` : null,
+      ahead: 2,
+      changeCount: repositoryName === 'api' ? 3 : 0,
+      ready,
+      ...(!ready ? { message: 'workspace.branch-workspace.git-action.target-upstream-required' } : {}),
+      fingerprint: `sha256:${repositoryName}`,
+    })),
+  }
+}
+
 function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitActionPlan {
   return {
     kind,
@@ -72,6 +100,8 @@ function syncPlan(kind: 'pull' | 'push', ready = true): BranchWorkspaceGitAction
       targetHead: `target-head-${index}`,
       upstream: repositoryName === 'api' ? 'origin/feature/a' : 'upstream/feature/web',
       trackingGone: false,
+      requiresUpstreamCreation: kind === 'push' && !ready,
+      pushRemotes: kind === 'push' && ready ? ['origin', 'upstream'] : [],
       ready,
       ...(!ready
         ? {
@@ -278,6 +308,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
   test.each([
     ['batch-commit', batchPlan],
     ['batch-discard', discardPlan()],
+    ['batch-align-remote', alignRemotePlan()],
     ['batch-set-upstream', upstreamPlan()],
     ['pull', syncPlan('pull')],
     ['push', syncPlan('push')],
@@ -345,6 +376,69 @@ describe('BranchWorkspaceGitActionPanel', () => {
     render({ kind: 'batch-discard', plan: discardPlan(false) })
 
     expect(document.querySelector<HTMLButtonElement>('[data-action="batch-discard"]')?.disabled).toBe(true)
+  })
+
+  test('requires a destructive confirmation before fully aligning every member', async () => {
+    const plan = alignRemotePlan()
+    const onBatchAlignRemote = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'batch-align-remote' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    render({ kind: 'batch-align-remote', plan, onBatchAlignRemote })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-align-remote"]')
+    expect(document.body.textContent).toContain('feature/a')
+    expect(document.body.textContent).toContain('origin/feature/api')
+    expect(action?.getAttribute('data-variant')).toBe('destructive')
+
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+
+    expect(onBatchAlignRemote).toHaveBeenCalledTimes(1)
+  })
+
+  test('closes for a fresh review instead of retrying a partially changed remote alignment plan', async () => {
+    const plan = alignRemotePlan()
+    const result: BranchWorkspaceGitActionResult = {
+      ok: false,
+      kind: 'batch-align-remote',
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      message: 'workspace.branch-workspace.git-action.members-failed',
+      retryable: false,
+      members: [
+        {
+          repositoryName: 'api',
+          phase: 'failed',
+          step: 'align',
+          message: 'error.align-remote-clean-incomplete',
+          worktreePath: '/workspace/goblin-feature-a/api',
+        },
+        { repositoryName: 'web', phase: 'succeeded' },
+      ],
+    }
+    const onBatchAlignRemote = vi.fn(async () => result)
+    const onOpenChange = vi.fn()
+    render({
+      kind: 'batch-align-remote',
+      plan,
+      result,
+      error: result.message,
+      onBatchAlignRemote,
+      onOpenChange,
+    })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="batch-align-remote"]')
+    expect(action?.textContent).toContain('workspace.branch-workspace.git-action.review-again')
+    await act(async () => action?.click())
+
+    expect(onBatchAlignRemote).not.toHaveBeenCalled()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   test('keeps each batch upstream member candidates and search query isolated', async () => {
@@ -1302,12 +1396,23 @@ describe('BranchWorkspaceGitActionPanel', () => {
     expect(document.querySelector('[data-sync-upstream="api"]')?.textContent).toContain('origin/feature/a')
     expect(document.querySelector('[data-sync-upstream="web"]')?.textContent).toContain('upstream/feature/web')
     expect(action?.querySelector(icon)).not.toBeNull()
+    if (kind === 'push') expect(document.querySelector('[data-push-remote]')).toBeNull()
 
     await act(async () => {
       action?.click()
       await Promise.resolve()
     })
-    expect(onSync).toHaveBeenCalledWith(kind, ['api', 'web'])
+    expect(onSync).toHaveBeenCalledWith(
+      kind === 'pull'
+        ? { kind, repositoryNames: ['api', 'web'] }
+        : {
+            kind,
+            targets: [
+              { repositoryName: 'api', action: 'push' },
+              { repositoryName: 'web', action: 'push' },
+            ],
+          },
+    )
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
@@ -1315,6 +1420,7 @@ describe('BranchWorkspaceGitActionPanel', () => {
     const plan = syncPlan('push')
     if (plan.kind !== 'push') throw new Error('expected push plan')
     plan.members[0]!.upstream = null
+    plan.members[0]!.requiresUpstreamCreation = true
     plan.members[1]!.trackingGone = true
 
     render({ kind: 'push', plan })
@@ -1361,7 +1467,62 @@ describe('BranchWorkspaceGitActionPanel', () => {
       action?.click()
       await Promise.resolve()
     })
-    expect(onSync).toHaveBeenCalledWith('push', ['api'])
+    expect(onSync).toHaveBeenCalledWith({
+      kind: 'push',
+      targets: [{ repositoryName: 'api', action: 'push' }],
+    })
+  })
+
+  test('defaults origin and requires an explicit remote for ambiguous upstream creation', async () => {
+    const plan = syncPlan('push')
+    if (plan.kind !== 'push') throw new Error('expected push plan')
+    Object.assign(plan.members[0]!, {
+      upstream: null,
+      requiresUpstreamCreation: true,
+      pushRemotes: ['fork', 'origin'],
+    })
+    Object.assign(plan.members[1]!, {
+      upstream: null,
+      requiresUpstreamCreation: true,
+      pushRemotes: ['backup', 'fork'],
+    })
+    const onSync = vi.fn(async () => ({
+      ok: true as const,
+      kind: 'push' as const,
+      planToken: plan.token,
+      branchWorkspaceId: plan.branchWorkspaceId,
+      members: [],
+    }))
+    render({ kind: 'push', plan, onSync })
+
+    const action = document.querySelector<HTMLButtonElement>('[data-action="push"]')
+    expect(document.querySelector('[data-push-remote="api"]')?.textContent).toContain('origin')
+    expect(document.querySelector('[data-sync-push-target="api"]')?.textContent).toContain('origin/feature/a')
+    expect(action?.disabled).toBe(true)
+
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-sync-repository="web"]')?.click())
+    expect(action?.disabled).toBe(false)
+    expect(document.querySelector<HTMLButtonElement>('[data-push-remote="web"]')?.disabled).toBe(true)
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-sync-repository="web"]')?.click())
+    expect(action?.disabled).toBe(true)
+
+    await selectPushRemote('web', 'fork')
+    expect(document.querySelector('[data-sync-push-target="web"]')?.textContent).toContain('fork/feature/a')
+    expect(action?.disabled).toBe(false)
+    await act(async () => {
+      action?.click()
+      await Promise.resolve()
+    })
+
+    expect(onSync).toHaveBeenCalledWith({
+      kind: 'push',
+      targets: [
+        { repositoryName: 'api', action: 'create-upstream', remote: 'origin' },
+        { repositoryName: 'web', action: 'create-upstream', remote: 'fork' },
+      ],
+    })
+    expect(document.querySelector<HTMLButtonElement>('[data-sync-repository="api"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-push-remote="api"]')?.disabled).toBe(true)
   })
 })
 
@@ -1380,6 +1541,7 @@ function render(overrides: Partial<React.ComponentProps<typeof BranchWorkspaceGi
         onBatchCommit={async () => null}
         onBatchCommitAndPush={async () => null}
         onBatchDiscard={async () => null}
+        onBatchAlignRemote={async () => null}
         onBatchSetUpstream={async () => null}
         onBatchMergeIn={async () => null}
         onBatchMergeOut={async () => null}
@@ -1452,6 +1614,21 @@ async function selectUpstreamRemote(repositoryName: string, remoteRef: string) {
   })
   const option = document.querySelector<HTMLElement>(`[data-upstream-remote-option="${repositoryName}:${remoteRef}"]`)
   if (!option) throw new Error(`Missing upstream remote option ${repositoryName}:${remoteRef}`)
+  await act(async () => {
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await Promise.resolve()
+  })
+}
+
+async function selectPushRemote(repositoryName: string, remote: string) {
+  const trigger = document.querySelector<HTMLButtonElement>(`[data-push-remote="${repositoryName}"]`)
+  if (!trigger) throw new Error(`Missing push remote trigger for ${repositoryName}`)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await Promise.resolve()
+  })
+  const option = document.querySelector<HTMLElement>(`[data-push-remote-option="${repositoryName}:${remote}"]`)
+  if (!option) throw new Error(`Missing push remote option ${repositoryName}:${remote}`)
   await act(async () => {
     option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await Promise.resolve()

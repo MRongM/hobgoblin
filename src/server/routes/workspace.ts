@@ -154,7 +154,7 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
     const rootId = typeof body?.rootId === 'string' ? body.rootId : ''
     const normalized = normalizeBranchWorkspacePlanRequest(body?.request)
     if (!normalized.ok) return c.json(normalized)
-    return c.json(await branchWorkspaceWriteService.plan(rootId, normalized.request))
+    return c.json(await branchWorkspaceWriteService.plan(rootId, normalized.request, c.req.raw.signal))
   })
 
   app.post('/branch-workspaces/execute', async (c) => {
@@ -168,7 +168,8 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
     if (
       !planToken ||
       !Array.isArray(body?.approvals) ||
-      !body.approvals.every((approval: unknown) => isBranchWorkspaceApproval(approval))
+      !body.approvals.every((approval: unknown) => isBranchWorkspaceApproval(approval)) ||
+      (body.force !== undefined && typeof body.force !== 'boolean')
     ) {
       return c.json({ ok: false as const, message: 'error.invalid-arguments' })
     }
@@ -176,6 +177,7 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       await branchWorkspaceWriteService.execute(rootId, {
         planToken,
         approvals: Array.from(new Set(body.approvals)),
+        ...(body.force === true ? { force: true } : {}),
         ...(sourceToken ? { sourceToken } : {}),
       }),
     )

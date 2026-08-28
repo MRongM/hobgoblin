@@ -8,6 +8,22 @@ import {
 } from '#/web/hooks/renderer-effect-intent-plans.ts'
 
 describe('renderer effect intent plans', () => {
+  test('routes the native WSL project command to the WSL dialog shortcut', () => {
+    expect(
+      createWorkspaceIntentPlan(
+        { type: 'open-wsl-repo-requested' },
+        {
+          overlayBlocked: false,
+          workspaceShortcutSuppressed: false,
+          terminalFocused: false,
+          currentRepoId: null,
+          currentProjectId: null,
+          currentRepo: null,
+        },
+      ),
+    ).toEqual({ kind: 'open-wsl-repo' })
+  })
+
   test('creates a worktree terminal bell plan when the bell key matches a known worktree', () => {
     resetReposStore()
     const repo = seedRepoState({
@@ -29,9 +45,42 @@ describe('renderer effect intent plans', () => {
     expect(plan).toEqual({
       kind: 'show-worktree-terminal',
       repoId: repo.id,
-      branch: 'feature/test',
+      target: { kind: 'branch', branch: 'feature/test' },
       key: '/tmp/repo\0/tmp/repo-feature\0terminal-2',
       worktreeTerminalKey: '/tmp/repo\0/tmp/repo-feature',
+    })
+  })
+
+  test('creates a detached worktree terminal bell plan from an authoritative exact path', () => {
+    resetReposStore()
+    const repo = seedRepoState({
+      id: '/tmp/repo',
+      currentBranch: 'main',
+      selectedBranch: 'main',
+      branchSnapshots: [createBranchSnapshot('main', { isCurrent: true, worktree: { path: '/tmp/repo-main' } })],
+      worktreesByPath: {
+        '/tmp/repo-main': { path: '/tmp/repo-main', branch: 'main', isMain: true },
+        '/tmp/repo-detached': {
+          path: '/tmp/repo-detached',
+          head: '1234567890abcdef',
+          isDetached: true,
+          isMain: false,
+        },
+      },
+    })
+
+    const plan = createTerminalBellIntentPlan(repo, {
+      type: 'terminal-bell-click',
+      repoRoot: repo.id,
+      key: '/tmp/repo\0/tmp/repo-detached\0terminal-2',
+    })
+
+    expect(plan).toEqual({
+      kind: 'show-worktree-terminal',
+      repoId: repo.id,
+      target: { kind: 'detached', worktreePath: '/tmp/repo-detached' },
+      key: '/tmp/repo\0/tmp/repo-detached\0terminal-2',
+      worktreeTerminalKey: '/tmp/repo\0/tmp/repo-detached',
     })
   })
 

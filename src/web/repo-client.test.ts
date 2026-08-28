@@ -868,6 +868,64 @@ describe('repo-client', () => {
     )
   })
 
+  test('requests destructive remote alignment through the embedded server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const preview = {
+      ok: true as const,
+      token: 'sha256:alignment-preview',
+      repoId: '/repo',
+      branch: 'feature/a',
+      worktreePath: '/repo-feature',
+      upstream: 'origin/feature/a',
+      ahead: 2,
+      changeCount: 1,
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => preview })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, message: 'aligned' }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { alignRepositoryWorktreeToRemote, getRepositoryRemoteAlignmentPreview } = await import(
+      '#/web/repo-client.ts'
+    )
+    await expect(getRepositoryRemoteAlignmentPreview('/repo', 'feature/a', '/repo-feature')).resolves.toEqual(preview)
+    await expect(
+      alignRepositoryWorktreeToRemote(
+        '/repo',
+        'feature/a',
+        '/repo-feature',
+        undefined,
+        undefined,
+        preview.token,
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      message: 'aligned',
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:32100/api/repo/align-remote-preview',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ repoId: '/repo', branch: 'feature/a', worktreePath: '/repo-feature' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:32100/api/repo/align-remote',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          repoId: '/repo',
+          branch: 'feature/a',
+          worktreePath: '/repo-feature',
+          previewToken: preview.token,
+        }),
+      }),
+    )
+  })
+
   test('deletes remote server branch through the embedded server', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({

@@ -5,11 +5,12 @@ import {
 } from '#/shared/repository-merge-branch.ts'
 import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
-import { isRemoteTrackingRef } from '#/shared/worktree-create.ts'
+import { isRemoteTrackingRef, isSafeRemoteName } from '#/shared/worktree-create.ts'
 
 export type BranchWorkspaceGitActionKind =
   | 'batch-commit'
   | 'batch-discard'
+  | 'batch-align-remote'
   | 'batch-merge-in'
   | 'batch-merge-out'
   | 'batch-set-upstream'
@@ -19,6 +20,7 @@ export type BranchWorkspaceMergeMode = 'merge' | 'pull-merge-push'
 export type BranchWorkspaceGitActionStep =
   | 'commit'
   | 'discard'
+  | 'align'
   | 'prepare'
   | 'pull'
   | 'fetch'
@@ -45,6 +47,20 @@ export interface BranchWorkspaceBatchDiscardMemberPlan {
   targetWorktreePath: string
   paths: string[]
   changeCount: number
+  fingerprint: string
+}
+
+export interface BranchWorkspaceBatchAlignRemoteMemberPlan {
+  repositoryName: string
+  repoId: string
+  targetBranch: string
+  targetWorktreePath: string
+  targetHead: string
+  upstream: string | null
+  ahead: number
+  changeCount: number
+  ready: boolean
+  message?: string
   fingerprint: string
 }
 
@@ -96,6 +112,8 @@ export interface BranchWorkspaceSyncMemberPlan {
   targetHead: string
   upstream: string | null
   trackingGone: boolean
+  requiresUpstreamCreation: boolean
+  pushRemotes: string[]
   ready: boolean
   message?: string
   fingerprint: string
@@ -131,6 +149,12 @@ export interface BranchWorkspaceBatchDiscardPlan extends BranchWorkspaceGitActio
   members: BranchWorkspaceBatchDiscardMemberPlan[]
 }
 
+export interface BranchWorkspaceBatchAlignRemotePlan extends BranchWorkspaceGitActionPlanBase {
+  kind: 'batch-align-remote'
+  members: BranchWorkspaceBatchAlignRemoteMemberPlan[]
+  ready: boolean
+}
+
 export interface BranchWorkspaceBatchMergeInPlan extends BranchWorkspaceGitActionPlanBase {
   kind: 'batch-merge-in'
   members: BranchWorkspaceBatchMergeInMemberPlan[]
@@ -156,6 +180,7 @@ export interface BranchWorkspaceBatchSetUpstreamPlan extends BranchWorkspaceGitA
 export type BranchWorkspaceGitActionPlan =
   | BranchWorkspaceBatchCommitPlan
   | BranchWorkspaceBatchDiscardPlan
+  | BranchWorkspaceBatchAlignRemotePlan
   | BranchWorkspaceBatchMergeInPlan
   | BranchWorkspaceBatchMergeOutPlan
   | BranchWorkspaceBatchSetUpstreamPlan
@@ -193,6 +218,14 @@ export type BranchWorkspaceBatchSetUpstreamInput =
   | { repositoryName: string; action: 'set'; remoteRef: string }
   | { repositoryName: string; action: 'unset' }
 
+export type BranchWorkspaceBatchPushTargetInput =
+  | { repositoryName: string; action: 'push' }
+  | { repositoryName: string; action: 'create-upstream'; remote: string }
+
+export type BranchWorkspaceSyncSelection =
+  | { kind: 'pull'; repositoryNames: string[] }
+  | { kind: 'push'; targets: BranchWorkspaceBatchPushTargetInput[] }
+
 export type BranchWorkspaceGitActionExecuteInput =
   | {
       kind: 'batch-commit'
@@ -201,6 +234,10 @@ export type BranchWorkspaceGitActionExecuteInput =
     }
   | {
       kind: 'batch-discard'
+      planToken: string
+    }
+  | {
+      kind: 'batch-align-remote'
       planToken: string
     }
   | {
@@ -221,9 +258,14 @@ export type BranchWorkspaceGitActionExecuteInput =
       upstreams: BranchWorkspaceBatchSetUpstreamInput[]
     }
   | {
-      kind: 'pull' | 'push'
+      kind: 'pull'
       planToken: string
       repositoryNames: string[]
+    }
+  | {
+      kind: 'push'
+      planToken: string
+      targets: BranchWorkspaceBatchPushTargetInput[]
     }
 
 export type BranchWorkspaceGitActionExecuteInputResult =
@@ -247,6 +289,8 @@ export interface BranchWorkspaceGitActionResult {
   branchWorkspaceId: string
   members: BranchWorkspaceGitActionMemberResult[]
   message?: string
+  /** False means repository state changed and a fresh reviewed plan is required. */
+  retryable?: boolean
 }
 
 export function normalizeBranchWorkspaceGitActionPlanRequest(
@@ -258,6 +302,7 @@ export function normalizeBranchWorkspaceGitActionPlanRequest(
     !branchWorkspaceId ||
     (input?.kind !== 'batch-commit' &&
       input?.kind !== 'batch-discard' &&
+      input?.kind !== 'batch-align-remote' &&
       input?.kind !== 'batch-merge-in' &&
       input?.kind !== 'batch-merge-out' &&
       input?.kind !== 'batch-set-upstream' &&
@@ -279,6 +324,9 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
   if (input?.kind === 'batch-discard') {
     return { ok: true, input: { kind: 'batch-discard', planToken } }
   }
+  if (input?.kind === 'batch-align-remote') {
+    return { ok: true, input: { kind: 'batch-align-remote', planToken } }
+  }
 
   if (input?.kind === 'batch-merge-in') {
     if (input.mode !== 'merge' && input.mode !== 'pull-merge-push') return invalidArguments()
@@ -297,10 +345,15 @@ export function normalizeBranchWorkspaceGitActionExecuteInput(
     if (!upstreams) return invalidArguments()
     return { ok: true, input: { kind: 'batch-set-upstream', planToken, upstreams } }
   }
-  if (input?.kind === 'pull' || input?.kind === 'push') {
+  if (input?.kind === 'pull') {
     const repositoryNames = normalizedRepositoryNames(input.repositoryNames)
     if (!repositoryNames) return invalidArguments()
-    return { ok: true, input: { kind: input.kind, planToken, repositoryNames } }
+    return { ok: true, input: { kind: 'pull', planToken, repositoryNames } }
+  }
+  if (input?.kind === 'push') {
+    const targets = normalizedBatchPushTargets(input.targets)
+    if (!targets) return invalidArguments()
+    return { ok: true, input: { kind: 'push', planToken, targets } }
   }
   if (input?.kind !== 'batch-commit' || !Array.isArray(input.messages)) return invalidArguments()
 
@@ -383,6 +436,26 @@ function normalizedBatchUpstreams(value: unknown): BranchWorkspaceBatchSetUpstre
       return null
     }
     normalized.push({ repositoryName, action: 'set', remoteRef })
+  }
+  return normalized
+}
+
+function normalizedBatchPushTargets(value: unknown): BranchWorkspaceBatchPushTargetInput[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const names = new Set<string>()
+  const normalized: BranchWorkspaceBatchPushTargetInput[] = []
+  for (const candidate of value) {
+    const input = asRecord(candidate)
+    const repositoryName = normalizedText(input?.repositoryName)
+    if (!repositoryName || !isWorkspaceRepositoryName(repositoryName) || names.has(repositoryName)) return null
+    names.add(repositoryName)
+    if (input?.action === 'push' && input.remote === undefined) {
+      normalized.push({ repositoryName, action: 'push' })
+      continue
+    }
+    const remote = normalizedText(input?.remote)
+    if (input?.action !== 'create-upstream' || !remote || !isSafeRemoteName(remote)) return null
+    normalized.push({ repositoryName, action: 'create-upstream', remote })
   }
   return normalized
 }

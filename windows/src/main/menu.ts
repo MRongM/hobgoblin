@@ -32,6 +32,7 @@ import {
 
 interface AppMenuState {
   isMac: boolean
+  isWindows: boolean
   name: string
   recentRepos: RepoSessionEntry[]
   shortcutsDisabled: boolean
@@ -78,12 +79,16 @@ export const platform = {
   isMacOS(): boolean {
     return process.platform === 'darwin'
   },
+  isWindows(): boolean {
+    return process.platform === 'win32'
+  },
 }
 
 function readMenuState(): AppMenuState {
   const runtimeState = readMenuRuntimeState()
   return {
     isMac: platform.isMacOS(),
+    isWindows: platform.isWindows(),
     name: app.name,
     recentRepos: runtimeState.recentRepos,
     shortcutsDisabled: runtimeState.shortcutsDisabled,
@@ -133,6 +138,7 @@ function createFileMenu(state: AppMenuState): MenuItemConstructorOptions {
     submenu: [
       createRendererCommandMenuItem('file-open-local-repo'),
       createRendererCommandMenuItem('file-open-local-repo-path'),
+      ...(state.isWindows ? [createRendererCommandMenuItem('file-open-wsl-project')] : []),
       createRendererCommandMenuItem('file-clone-repo'),
       createRendererCommandMenuItem('file-open-remote-repo'),
       { label: t('menu.file.open-recent'), submenu: createRecentReposMenu(state.recentRepos) },
@@ -279,9 +285,7 @@ function createLanguageMenu(langPref: LangPref): MenuItemConstructorOptions {
   }
 }
 
-function createRendererCommandMenuItem(
-  id: Parameters<typeof rendererMenuCommandById>[0],
-): MenuItemConstructorOptions {
+function createRendererCommandMenuItem(id: Parameters<typeof rendererMenuCommandById>[0]): MenuItemConstructorOptions {
   const command = rendererMenuCommandById(id)
   return {
     label: t(command.menuLabelKey),

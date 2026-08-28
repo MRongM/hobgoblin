@@ -90,6 +90,75 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceActions', () => {
+  test('separates planning from execution and forwards preview cancellation', async () => {
+    const execute = deferred<Awaited<ReturnType<typeof mocks.execute>>>()
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockImplementation(async () => await execute.promise)
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    const request = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [],
+      auxiliaryEntries: [],
+    }
+    const controller = new AbortController()
+
+    await act(async () => state!.requestPlan(request, controller.signal))
+
+    expect(mocks.plan).toHaveBeenCalledWith('/workspace', request, controller.signal)
+    expect(state!.planning).toBe(false)
+    expect(state!.executing).toBe(false)
+
+    let confirmation!: ReturnType<ReturnType<typeof useBranchWorkspaceActions>['confirm']>
+    act(() => {
+      confirmation = state!.confirm([])
+    })
+    expect(state!.planning).toBe(false)
+    expect(state!.executing).toBe(true)
+    expect(state!.pending).toBe(true)
+
+    await act(async () => {
+      execute.resolve({ ok: true, branchWorkspaceId: 'branch-1' })
+      await confirmation
+    })
+    expect(state!.executing).toBe(false)
+    expect(state!.pending).toBe(false)
+  })
+
+  test('does not surface an aborted preview as a planning error', async () => {
+    const controller = new AbortController()
+    mocks.plan.mockImplementation(async () => {
+      controller.abort()
+      throw new DOMException('Aborted', 'AbortError')
+    })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+
+    await act(async () =>
+      state!.requestPlan(
+        { operation: 'create', branch: 'feature/auth', repositories: [], auxiliaryEntries: [] },
+        controller.signal,
+      ),
+    )
+
+    expect(state!.plan).toBeNull()
+    expect(state!.error).toBeNull()
+    expect(state!.planning).toBe(false)
+  })
+
   test('shows successful one-time dependency warnings without changing settlement behavior', async () => {
     mocks.plan.mockResolvedValue({ ok: true, plan })
     mocks.execute.mockResolvedValue({
@@ -140,6 +209,54 @@ describe('useBranchWorkspaceActions', () => {
     expect(state!.result).toMatchObject({
       ok: true,
       warnings: [{ repositoryName: 'api' }, { entryName: 'README.md' }],
+    })
+  })
+
+  test('sends force removal separately and reports member cleanup warnings', async () => {
+    mocks.plan.mockResolvedValue({ ok: true, plan })
+    mocks.execute.mockResolvedValue({
+      ok: true,
+      branchWorkspaceId: 'branch-1',
+      warnings: [
+        {
+          kind: 'member-worktree-cleanup-failed',
+          repositoryName: 'api',
+          message: 'cleanup failed',
+        },
+      ],
+    })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    await act(async () =>
+      state!.requestPlan({
+        operation: 'create',
+        branch: 'feature/auth',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      }),
+    )
+
+    await act(async () => state!.forceConfirm(['worktree-bootstrap']))
+
+    expect(mocks.execute).toHaveBeenCalledWith('/workspace', {
+      planToken: plan.token,
+      approvals: ['worktree-bootstrap'],
+      force: true,
+    })
+    expect(mocks.warning).toHaveBeenCalledWith('workspace.branch-workspace.force-delete-cleanup-warning:1', {
+      description: 'api: cleanup failed',
     })
   })
 
@@ -293,4 +410,12 @@ function Harness({ onReady }: { onReady: (value: ReturnType<typeof useBranchWork
     onReady(value)
   }, [onReady, value])
   return null
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((next) => {
+    resolve = next
+  })
+  return { promise, resolve }
 }

@@ -1,4 +1,4 @@
-import { hasEditorCli, openByEditorCli, openRemoteByAppCli } from '#/system/open-app.ts'
+import { hasEditorCli, openByEditorCli, openRemoteByAppCli, openWslByAppCli } from '#/system/open-app.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 
 const APP_NAME = 'Windsurf'
@@ -12,6 +12,16 @@ export function openInWindsurf(target: EditorOpenTarget): Promise<{ ok: boolean;
   return openByEditorCli(APP_NAME, CLI_NAME, target)
 }
 
-export function openRemoteInWindsurf(alias: string, target: EditorOpenTarget): Promise<{ ok: boolean; message: string }> {
+export function openRemoteInWindsurf(
+  alias: string,
+  target: EditorOpenTarget,
+): Promise<{ ok: boolean; message: string }> {
   return openRemoteByAppCli(APP_NAME, CLI_NAME, alias, target)
+}
+
+export function openWslInWindsurf(
+  distribution: string,
+  target: EditorOpenTarget,
+): Promise<{ ok: boolean; message: string }> {
+  return openWslByAppCli(APP_NAME, CLI_NAME, distribution, target)
 }

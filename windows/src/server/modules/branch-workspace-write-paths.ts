@@ -17,6 +17,7 @@ import {
 } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import {
+  cleanupRepositoryWorktree,
   createRepositoryWorktree,
   deleteRepositoryBranch,
   deleteRepositoryRemoteBranch,
@@ -51,6 +52,7 @@ export interface BranchWorkspaceWriteDependencies {
   updateManifests?: typeof updateBranchWorkspaceManifests
   createDirectory?: typeof createBranchWorkspaceDirectory
   createWorktree?: typeof createRepositoryWorktree
+  cleanupWorktree?: typeof cleanupRepositoryWorktree
   materializeSymlink?: typeof materializeBranchWorkspaceSymlink
   copyEntry?: typeof copyBranchWorkspaceEntry
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
@@ -80,6 +82,7 @@ export function createBranchWorkspaceWriteService(
   const updateManifests = dependencies.updateManifests ?? updateBranchWorkspaceManifests
   const createDirectory = dependencies.createDirectory ?? createBranchWorkspaceDirectory
   const createWorktree = dependencies.createWorktree ?? createRepositoryWorktree
+  const cleanupWorktree = dependencies.cleanupWorktree ?? cleanupRepositoryWorktree
   const materializeSymlink = dependencies.materializeSymlink ?? materializeBranchWorkspaceSymlink
   const copyEntry = dependencies.copyEntry ?? copyBranchWorkspaceEntry
   const fingerprintEntry = dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry
@@ -471,16 +474,29 @@ export function createBranchWorkspaceWriteService(
           }
           let result
           try {
-            result = await createWorktree(
-              repository.repoId,
-              {
-                worktreePath: repository.worktreePath,
-                mode: repository.mode,
-                syncBeforeCreate: repository.syncBeforeCreate,
-              },
-              repository.worktreeBootstrap,
-              controller.signal,
-            )
+            if (repository.pruneBeforeCreate) {
+              const cleaned = await cleanupWorktree(
+                repository.repoId,
+                repository.worktreePath,
+                controller.signal,
+                input.sourceToken,
+              )
+              if (!cleaned.ok) {
+                result = cleaned
+              }
+            }
+            if (!result) {
+              result = await createWorktree(
+                repository.repoId,
+                {
+                  worktreePath: repository.worktreePath,
+                  mode: repository.mode,
+                  syncBeforeCreate: repository.syncBeforeCreate,
+                },
+                repository.worktreeBootstrap,
+                controller.signal,
+              )
+            }
           } catch (error) {
             result = { ok: false, message: operationMessage(error) }
           }

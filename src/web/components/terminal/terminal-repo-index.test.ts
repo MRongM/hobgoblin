@@ -43,6 +43,33 @@ describe('repoIndexFromRepos', () => {
     expect(branchForTerminalWorktree(index, repo.id, '/srv/plain')).toBe(NON_GIT_WORKSPACE_TERMINAL_BRANCH)
   })
 
+  test('indexes selectable detached worktrees by their exact path and detached HEAD label', () => {
+    const repo = emptyRepo('/workspace', 'workspace')
+    repo.data.worktreesByPath = {
+      '/workspace-detached': {
+        path: '/workspace-detached',
+        head: '1234567890abcdef',
+        isDetached: true,
+        isMain: false,
+      },
+      '/workspace-prunable': {
+        path: '/workspace-prunable',
+        head: 'fedcba0987654321',
+        isDetached: true,
+        isMain: false,
+        isPrunable: true,
+      },
+    }
+
+    const index = repoIndexFromRepos({ [repo.id]: repo })
+
+    expect(index[repo.id]?.branchByWorktreePath).toEqual({
+      '/workspace-detached': 'HEAD@1234567890ab',
+    })
+    expect(branchForTerminalWorktree(index, repo.id, '/workspace-detached')).toBe('HEAD@1234567890ab')
+    expect(branchForTerminalWorktree(index, repo.id, '/workspace-prunable')).toBeNull()
+  })
+
   test('adds query-owned branch workspace paths without synthetic RepoState records', () => {
     const root = emptyRepo('/workspace', 'workspace')
     root.isGitRepo = false

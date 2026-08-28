@@ -1,5 +1,5 @@
 import { type ReactNode, type Ref, useCallback, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Download, FolderOpen, Plus, Server, Trash2 } from 'lucide-react'
+import { ChevronDown, Download, FolderOpen, Plus, Server, TerminalSquare, Trash2 } from 'lucide-react'
 import {
   DndContext,
   type DragEndEvent,
@@ -74,6 +74,7 @@ interface RepoTabStripProps extends RecentRepoMenuActions {
   onClose: (id: string) => void
   onReorder: (activeId: string, overId: string) => void
   onOpenLocal: () => void
+  onOpenWsl?: () => void
   onOpenRemote: () => void
   onClone: () => void
 }
@@ -115,6 +116,7 @@ function RepoTabEdgeAction({
 function OpenRepoMenuItems({
   labels,
   onOpenLocal,
+  onOpenWsl,
   onOpenRemote,
   onClone,
   recentRepos = [],
@@ -123,7 +125,7 @@ function OpenRepoMenuItems({
   onClearCache,
 }: Pick<
   RepoTabStripProps,
-  'labels' | 'onOpenLocal' | 'onOpenRemote' | 'onClone' | 'recentRepos' | 'onOpenRecent' | 'onClearRecent'
+  'labels' | 'onOpenLocal' | 'onOpenWsl' | 'onOpenRemote' | 'onClone' | 'recentRepos' | 'onOpenRecent' | 'onClearRecent'
 > & { onClearCache: () => void }) {
   return (
     <>
@@ -132,6 +134,12 @@ function OpenRepoMenuItems({
         {labels.openLocal}
         {labels.openLocalShortcut && <DropdownMenuShortcut>{labels.openLocalShortcut}</DropdownMenuShortcut>}
       </DropdownMenuItem>
+      {onOpenWsl && (
+        <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenWsl}>
+          <TerminalSquare />
+          {labels.openWsl}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem className="whitespace-nowrap" onSelect={onOpenRemote}>
         <Server />
         {labels.openRemote}
@@ -271,6 +279,7 @@ export function RepoTabStrip({
   onClose,
   onReorder,
   onOpenLocal,
+  onOpenWsl,
   onOpenRemote,
   onClone,
   recentRepos = [],
@@ -353,6 +362,7 @@ export function RepoTabStrip({
             labels={labels}
             recentRepos={recentRepos}
             onOpenLocal={onOpenLocal}
+            onOpenWsl={onOpenWsl}
             onOpenRemote={onOpenRemote}
             onClone={onClone}
             onOpenRecent={onOpenRecent}
@@ -412,6 +422,7 @@ export function RepoTabStrip({
                       labels={labels}
                       recentRepos={recentRepos}
                       onOpenLocal={onOpenLocal}
+                      onOpenWsl={onOpenWsl}
                       onOpenRemote={onOpenRemote}
                       onClone={onClone}
                       onOpenRecent={onOpenRecent}

@@ -145,6 +145,18 @@ describe('app menu actions', () => {
     expect(mocks.sendRendererEffectIntent).toHaveBeenCalledWith(mocks.win, { type: 'open-repo-path-requested' })
   })
 
+  test('opens the WSL project dialog from the Windows file menu only', async () => {
+    mocks.getMainWindow.mockReturnValue(mocks.win)
+    const { buildAppMenu, platform } = await import('#/main/menu.ts')
+    vi.spyOn(platform, 'isWindows').mockReturnValue(true)
+    buildAppMenu()
+
+    clickMenuItem('menu.file', 'menu.file.open-wsl-project')
+    await Promise.resolve()
+
+    expect(mocks.sendRendererEffectIntent).toHaveBeenCalledWith(mocks.win, { type: 'open-wsl-repo-requested' })
+  })
+
   test('tildifies Windows home paths in the recent repos menu', async () => {
     mocks.appGetPath.mockImplementation((name: string) => (name === 'home' ? 'C:\\Users\\user' : '/data'))
     mocks.readMenuRuntimeState.mockReturnValue({

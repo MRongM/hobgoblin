@@ -224,6 +224,11 @@ function navigationWith(): MainWindowNavigationActions {
     closeRepo: () => {},
     cycleRepo: () => {},
     selectRepoBranch: () => {},
+    selectRepoDetachedWorktree: (repoId, worktreePath) => {
+      const state = useReposStore.getState()
+      state.setActive(repoId)
+      state.selectDetachedWorktree(repoId, worktreePath)
+    },
     showRepoDetailTab: (repoId, tab) => {
       const state = useReposStore.getState()
       state.setActive(repoId)
@@ -233,6 +238,12 @@ function navigationWith(): MainWindowNavigationActions {
       const state = useReposStore.getState()
       state.setActive(repoId)
       state.selectBranch(repoId, branch)
+      state.setDetailTab(repoId, tab)
+    },
+    showRepoDetachedWorktreeDetailTab: (repoId, worktreePath, tab) => {
+      const state = useReposStore.getState()
+      state.setActive(repoId)
+      state.selectDetachedWorktree(repoId, worktreePath)
       state.setDetailTab(repoId, tab)
     },
     openSettings: () => {},

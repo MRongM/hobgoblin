@@ -2,54 +2,73 @@ import type { ReposStore } from '#/web/stores/repos/types.ts'
 
 export interface LocalWorkspaceStoreActions extends Pick<ReposStore, 'setBranchSearchQuery'> {}
 
-export interface RestorableWorkspaceNavigationStoreActions extends Pick<ReposStore, 'setActive' | 'reorderRepos' | 'cycleActive'> {}
+export interface RestorableWorkspaceNavigationStoreActions extends Pick<
+  ReposStore,
+  'setActive' | 'reorderRepos' | 'cycleActive'
+> {}
 
 export interface RestorableWorkspaceViewportStoreActions extends Pick<ReposStore, 'setActive' | 'cycleActive'> {}
 
 export interface RestorableWorkspaceOrderStoreActions extends Pick<ReposStore, 'reorderRepos'> {}
 
-export interface RestorableWorkspaceLayoutStoreActions
-  extends Pick<
-    ReposStore,
-    'setDetailCollapsed' | 'toggleDetailCollapsed' | 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
-  > {}
+export interface RestorableWorkspaceLayoutStoreActions extends Pick<
+  ReposStore,
+  'setDetailCollapsed' | 'toggleDetailCollapsed' | 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
+> {}
 
-export interface RestorableWorkspaceDetailVisibilityStoreActions
-  extends Pick<ReposStore, 'setDetailCollapsed' | 'toggleDetailCollapsed'> {}
+export interface RestorableWorkspaceDetailVisibilityStoreActions extends Pick<
+  ReposStore,
+  'setDetailCollapsed' | 'toggleDetailCollapsed'
+> {}
 
-export interface RestorableWorkspaceLayoutPreferenceStoreActions
-  extends Pick<ReposStore, 'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'> {}
+export interface RestorableWorkspaceLayoutPreferenceStoreActions extends Pick<
+  ReposStore,
+  'setWorkspaceLayout' | 'resetLayout' | 'setSelectedTerminal'
+> {}
 
 export interface RuntimeCoherentRepoOpenStoreActions extends Pick<ReposStore, 'ensureWorkspaceOpen'> {}
 
-export interface RuntimeCoherentRepoNavigationStoreActions extends Pick<ReposStore, 'closeRepo' | 'selectBranch' | 'setDetailTab'> {}
+export interface RuntimeCoherentRepoNavigationStoreActions extends Pick<
+  ReposStore,
+  'closeRepo' | 'selectBranch' | 'selectDetachedWorktree' | 'setDetailTab'
+> {}
 
-export interface RestorableWorkspaceStoreActions
-  extends Pick<
-    ReposStore,
-    | 'setActive'
-    | 'reorderRepos'
-    | 'cycleActive'
-    | 'setDetailCollapsed'
-    | 'toggleDetailCollapsed'
-    | 'setWorkspaceLayout'
-    | 'resetLayout'
-    | 'setSelectedTerminal'
-  > {}
+export interface RestorableWorkspaceStoreActions extends Pick<
+  ReposStore,
+  | 'setActive'
+  | 'reorderRepos'
+  | 'cycleActive'
+  | 'setDetailCollapsed'
+  | 'toggleDetailCollapsed'
+  | 'setWorkspaceLayout'
+  | 'resetLayout'
+  | 'setSelectedTerminal'
+> {}
 
-export interface RuntimeCoherentRepoProjectionStoreActions
-  extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo' | 'selectBranch' | 'setDetailTab'> {}
+export interface RuntimeCoherentRepoProjectionStoreActions extends Pick<
+  ReposStore,
+  'ensureWorkspaceOpen' | 'closeRepo' | 'selectBranch' | 'selectDetachedWorktree' | 'setDetailTab'
+> {}
 
-export interface MainWindowNavigationStoreActions
-  extends Pick<ReposStore, 'setActive' | 'activateProject' | 'closeRepo' | 'cycleActive' | 'selectBranch' | 'setDetailTab'> {}
+export interface MainWindowNavigationStoreActions extends Pick<
+  ReposStore,
+  | 'setActive'
+  | 'activateProject'
+  | 'closeRepo'
+  | 'cycleActive'
+  | 'selectBranch'
+  | 'selectDetachedWorktree'
+  | 'setDetailTab'
+> {}
 
 export interface RepoTabStoreActions extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'reorderRepos'> {}
 
-export interface RendererEffectIntentStoreActions
-  extends Pick<ReposStore, 'ensureWorkspaceOpen' | 'setDetailCollapsed' | 'setSelectedTerminal'> {}
+export interface RendererEffectIntentStoreActions extends Pick<
+  ReposStore,
+  'ensureWorkspaceOpen' | 'setDetailCollapsed' | 'setSelectedTerminal'
+> {}
 
-export interface BranchDetailToolbarStoreActions
-  extends Pick<ReposStore, 'setDetailCollapsed'> {}
+export interface BranchDetailToolbarStoreActions extends Pick<ReposStore, 'setDetailCollapsed'> {}
 
 export interface DetailPanelStoreActions extends Pick<ReposStore, 'setDetailCollapsed'> {}
 
@@ -97,11 +116,12 @@ export function runtimeCoherentRepoOpenStoreActionsFromStore(
 }
 
 export function runtimeCoherentRepoNavigationStoreActionsFromStore(
-  state: Pick<ReposStore, 'closeRepo' | 'selectBranch' | 'setDetailTab'>,
+  state: Pick<ReposStore, 'closeRepo' | 'selectBranch' | 'selectDetachedWorktree' | 'setDetailTab'>,
 ): RuntimeCoherentRepoNavigationStoreActions {
   return {
     closeRepo: state.closeRepo,
     selectBranch: state.selectBranch,
+    selectDetachedWorktree: state.selectDetachedWorktree,
     setDetailTab: state.setDetailTab,
   }
 }
@@ -166,24 +186,38 @@ export function restorableWorkspaceStoreActionsFromStore(
 }
 
 export function runtimeCoherentRepoProjectionStoreActionsFromStore(
-  state: Pick<ReposStore, 'ensureWorkspaceOpen' | 'closeRepo' | 'selectBranch' | 'setDetailTab'>,
+  state: Pick<
+    ReposStore,
+    'ensureWorkspaceOpen' | 'closeRepo' | 'selectBranch' | 'selectDetachedWorktree' | 'setDetailTab'
+  >,
 ): RuntimeCoherentRepoProjectionStoreActions {
   const open = runtimeCoherentRepoOpenStoreActionsFromStore({ ensureWorkspaceOpen: state.ensureWorkspaceOpen })
   const navigation = runtimeCoherentRepoNavigationStoreActionsFromStore({
     closeRepo: state.closeRepo,
     selectBranch: state.selectBranch,
+    selectDetachedWorktree: state.selectDetachedWorktree,
     setDetailTab: state.setDetailTab,
   })
   return {
     ensureWorkspaceOpen: open.ensureWorkspaceOpen,
     closeRepo: navigation.closeRepo,
     selectBranch: navigation.selectBranch,
+    selectDetachedWorktree: navigation.selectDetachedWorktree,
     setDetailTab: navigation.setDetailTab,
   }
 }
 
 export function mainWindowNavigationStoreActionsFromStore(
-  state: Pick<ReposStore, 'setActive' | 'activateProject' | 'cycleActive' | 'closeRepo' | 'selectBranch' | 'setDetailTab'>,
+  state: Pick<
+    ReposStore,
+    | 'setActive'
+    | 'activateProject'
+    | 'cycleActive'
+    | 'closeRepo'
+    | 'selectBranch'
+    | 'selectDetachedWorktree'
+    | 'setDetailTab'
+  >,
 ): MainWindowNavigationStoreActions {
   const restorable = restorableWorkspaceViewportStoreActionsFromStore({
     setActive: state.setActive,
@@ -192,6 +226,7 @@ export function mainWindowNavigationStoreActionsFromStore(
   const runtimeCoherent = runtimeCoherentRepoNavigationStoreActionsFromStore({
     closeRepo: state.closeRepo,
     selectBranch: state.selectBranch,
+    selectDetachedWorktree: state.selectDetachedWorktree,
     setDetailTab: state.setDetailTab,
   })
   return {
@@ -200,6 +235,7 @@ export function mainWindowNavigationStoreActionsFromStore(
     closeRepo: runtimeCoherent.closeRepo,
     cycleActive: restorable.cycleActive,
     selectBranch: runtimeCoherent.selectBranch,
+    selectDetachedWorktree: runtimeCoherent.selectDetachedWorktree,
     setDetailTab: runtimeCoherent.setDetailTab,
   }
 }
@@ -238,7 +274,9 @@ export function branchDetailToolbarStoreActionsFromStore(
   }
 }
 
-export function detailPanelStoreActionsFromStore(state: Pick<ReposStore, 'setDetailCollapsed'>): DetailPanelStoreActions {
+export function detailPanelStoreActionsFromStore(
+  state: Pick<ReposStore, 'setDetailCollapsed'>,
+): DetailPanelStoreActions {
   return {
     setDetailCollapsed: state.setDetailCollapsed,
   }
@@ -254,6 +292,7 @@ export function mainWindowNavigationStoreActionsEqual(
     a.closeRepo === b.closeRepo &&
     a.cycleActive === b.cycleActive &&
     a.selectBranch === b.selectBranch &&
+    a.selectDetachedWorktree === b.selectDetachedWorktree &&
     a.setDetailTab === b.setDetailTab
   )
 }

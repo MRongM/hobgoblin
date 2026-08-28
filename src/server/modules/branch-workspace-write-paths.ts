@@ -1,4 +1,5 @@
 import path from 'node:path'
+import pLimit from 'p-limit'
 import {
   copyBranchWorkspaceEntry,
   createBranchWorkspaceDirectory,
@@ -17,6 +18,7 @@ import {
 } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import {
+  cleanupRepositoryWorktree,
   createRepositoryWorktree,
   deleteRepositoryBranch,
   deleteRepositoryRemoteBranch,
@@ -35,6 +37,8 @@ import type { TerminalCloseSessionsResult } from '#/shared/terminal.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 
+const BRANCH_WORKSPACE_CREATE_CONCURRENCY = 4
+
 interface PendingBranchWorkspacePlan {
   plan: BranchWorkspacePlan
   request: unknown
@@ -51,6 +55,7 @@ export interface BranchWorkspaceWriteDependencies {
   updateManifests?: typeof updateBranchWorkspaceManifests
   createDirectory?: typeof createBranchWorkspaceDirectory
   createWorktree?: typeof createRepositoryWorktree
+  cleanupWorktree?: typeof cleanupRepositoryWorktree
   materializeSymlink?: typeof materializeBranchWorkspaceSymlink
   copyEntry?: typeof copyBranchWorkspaceEntry
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
@@ -63,7 +68,7 @@ export interface BranchWorkspaceWriteDependencies {
 }
 
 export interface BranchWorkspaceWriteService {
-  plan(rootId: string, request: unknown): Promise<BranchWorkspacePlanResult>
+  plan(rootId: string, request: unknown, signal?: AbortSignal): Promise<BranchWorkspacePlanResult>
   execute(rootId: string, input: BranchWorkspaceExecuteInput): Promise<BranchWorkspaceExecuteResult>
   abort(rootId: string): boolean
   reorder(rootId: string, orderedIds: string[]): Promise<BranchWorkspaceReorderResult>
@@ -80,6 +85,7 @@ export function createBranchWorkspaceWriteService(
   const updateManifests = dependencies.updateManifests ?? updateBranchWorkspaceManifests
   const createDirectory = dependencies.createDirectory ?? createBranchWorkspaceDirectory
   const createWorktree = dependencies.createWorktree ?? createRepositoryWorktree
+  const cleanupWorktree = dependencies.cleanupWorktree ?? cleanupRepositoryWorktree
   const materializeSymlink = dependencies.materializeSymlink ?? materializeBranchWorkspaceSymlink
   const copyEntry = dependencies.copyEntry ?? copyBranchWorkspaceEntry
   const fingerprintEntry = dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry
@@ -118,11 +124,11 @@ export function createBranchWorkspaceWriteService(
   }
 
   return {
-    async plan(rootId, request) {
+    async plan(rootId, request, signal) {
       if (activeByRoot.has(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.operation-in-progress' }
       }
-      const result = await buildPlan(rootId, request, dependencies.planDependencies)
+      const result = await buildPlan(rootId, request, dependencies.planDependencies, signal)
       if (result.ok) {
         pendingByRoot.set(rootId, {
           plan: result.plan,
@@ -166,6 +172,74 @@ export function createBranchWorkspaceWriteService(
         branchWorkspaceId: string,
       ) => persist(targetRootId, mutate, branchWorkspaceId, input.sourceToken)
       try {
+        if (input.force === true) {
+          if (plan.operation !== 'remove') {
+            return failOperation(plan.branchWorkspaceId, 'error.invalid-arguments')
+          }
+          if (!pending.persisted) {
+            const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal)
+            if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
+              return {
+                ok: false,
+                message:
+                  !rebuilt.ok && rebuilt.message === 'error.ssh-config-changed'
+                    ? rebuilt.message
+                    : 'workspace.branch-workspace.plan-stale',
+                branchWorkspaceId: plan.branchWorkspaceId,
+              }
+            }
+          }
+          if (!pending.terminalsClosed) {
+            const closed = await closeSessions(plan.terminalSessionIds).catch(() => ({
+              closed: [],
+              missing: [...plan.terminalSessionIds],
+            }))
+            const closedIds = new Set(closed.closed)
+            if (closed.missing.length > 0 || plan.terminalSessionIds.some((sessionId) => !closedIds.has(sessionId))) {
+              return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.terminals-close-failed')
+            }
+            pending.terminalsClosed = true
+          }
+
+          try {
+            await removeEntry(rootId, plan.path, controller.signal)
+          } catch (error) {
+            return failOperation(plan.branchWorkspaceId, operationMessage(error))
+          }
+
+          try {
+            await updateManifests(rootId, (manifests) =>
+              manifests.filter((manifest) => manifest.id !== plan.branchWorkspaceId),
+            )
+          } catch (error) {
+            return failOperation(plan.branchWorkspaceId, operationMessage(error))
+          }
+          publishChange(rootId, input.sourceToken)
+          pendingByRoot.delete(rootId)
+
+          for (const repository of plan.repositories) {
+            if (!repository.worktreePresent) continue
+            const cleaned = await cleanupWorktree(
+              repository.repoId,
+              repository.worktreePath,
+              controller.signal,
+              input.sourceToken,
+            ).catch((error) => ({ ok: false as const, message: operationMessage(error) }))
+            if (!cleaned.ok) {
+              warnings.push({
+                kind: 'member-worktree-cleanup-failed',
+                repositoryName: repository.repositoryName,
+                message: cleaned.message,
+              })
+            }
+          }
+          return {
+            ok: true,
+            branchWorkspaceId: plan.branchWorkspaceId,
+            ...(warnings.length > 0 ? { warnings } : {}),
+          }
+        }
+
         if (!pending.persisted) {
           const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal)
           if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
@@ -302,6 +376,7 @@ export function createBranchWorkspaceWriteService(
                       worktreePath: repository.worktreePath,
                       alsoDeleteBranch: false,
                       forceRemoveWorktree: true,
+                      skipWorktreeStatus: true,
                       forceDeleteBranch: false,
                       alsoDeleteUpstream: false,
                     },
@@ -458,60 +533,82 @@ export function createBranchWorkspaceWriteService(
           }
         }
 
-        for (const repository of plan.repositories) {
-          const current = await currentManifest(readManifests, rootId, plan.branchWorkspaceId)
-          const member = current.repositories.find(
-            (candidate) => candidate.repositoryName === repository.repositoryName,
-          )
-          if (member?.progress === 'removed' || member?.progress === 'complete') {
-            continue
-          }
-          if (controller.signal.aborted) {
-            return failOperation(plan.branchWorkspaceId, 'cancelled')
-          }
-          let result
-          try {
-            result = await createWorktree(
-              repository.repoId,
-              {
-                worktreePath: repository.worktreePath,
-                mode: repository.mode,
-                syncBeforeCreate: repository.syncBeforeCreate,
-              },
-              repository.worktreeBootstrap,
-              controller.signal,
-            )
-          } catch (error) {
-            result = { ok: false, message: operationMessage(error) }
-          }
-          if (!result.ok) {
-            if (result.repoChanged && repository.worktreeBootstrap.kind !== 'skip') {
-              await persistMemberProgress(
-                persistExecution,
-                rootId,
-                plan.branchWorkspaceId,
-                repository.repositoryName,
-                'complete',
-              )
-              continue
-            }
-            await persistMemberProgress(
-              persistExecution,
-              rootId,
-              plan.branchWorkspaceId,
-              repository.repositoryName,
-              'failed',
-              result.message,
-            )
-            return failOperation(plan.branchWorkspaceId, result.message)
-          }
-          await persistMemberProgress(
-            persistExecution,
-            rootId,
-            plan.branchWorkspaceId,
-            repository.repositoryName,
-            'complete',
-          )
+        const creationLimit = pLimit(BRANCH_WORKSPACE_CREATE_CONCURRENCY)
+        const repositoryResults = await Promise.all(
+          plan.repositories.map((repository) =>
+            creationLimit(async (): Promise<{ message?: string }> => {
+              try {
+                const current = await currentManifest(readManifests, rootId, plan.branchWorkspaceId)
+                const member = current.repositories.find(
+                  (candidate) => candidate.repositoryName === repository.repositoryName,
+                )
+                if (member?.progress === 'removed' || member?.progress === 'complete') return {}
+                if (controller.signal.aborted) return { message: 'cancelled' }
+
+                let result
+                try {
+                  if (repository.pruneBeforeCreate) {
+                    const cleaned = await cleanupWorktree(
+                      repository.repoId,
+                      repository.worktreePath,
+                      controller.signal,
+                      input.sourceToken,
+                    )
+                    if (!cleaned.ok) result = cleaned
+                  }
+                  if (!result) {
+                    result = await createWorktree(
+                      repository.repoId,
+                      {
+                        worktreePath: repository.worktreePath,
+                        mode: repository.mode,
+                        syncBeforeCreate: repository.syncBeforeCreate,
+                      },
+                      repository.worktreeBootstrap,
+                      controller.signal,
+                    )
+                  }
+                } catch (error) {
+                  result = { ok: false, message: operationMessage(error) }
+                }
+                if (!result.ok) {
+                  if (result.repoChanged && repository.worktreeBootstrap.kind !== 'skip') {
+                    await persistMemberProgress(
+                      persistExecution,
+                      rootId,
+                      plan.branchWorkspaceId,
+                      repository.repositoryName,
+                      'complete',
+                    )
+                    return {}
+                  }
+                  await persistMemberProgress(
+                    persistExecution,
+                    rootId,
+                    plan.branchWorkspaceId,
+                    repository.repositoryName,
+                    'failed',
+                    result.message,
+                  )
+                  return { message: result.message }
+                }
+                await persistMemberProgress(
+                  persistExecution,
+                  rootId,
+                  plan.branchWorkspaceId,
+                  repository.repositoryName,
+                  'complete',
+                )
+                return {}
+              } catch (error) {
+                return { message: operationMessage(error) }
+              }
+            }),
+          ),
+        )
+        const repositoryFailure = repositoryResults.find((result) => result.message)
+        if (repositoryFailure?.message) {
+          return failOperation(plan.branchWorkspaceId, repositoryFailure.message)
         }
 
         for (const entry of plan.auxiliaryEntries) {

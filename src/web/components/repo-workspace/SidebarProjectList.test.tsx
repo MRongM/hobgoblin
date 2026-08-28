@@ -73,6 +73,11 @@ const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
 }))
 
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  warning: vi.fn(),
+}))
+
 const branchWorkspaceQueryState = vi.hoisted(() => ({
   resultByRoot: {} as Record<string, BranchWorkspaceReadResult | undefined>,
 }))
@@ -130,6 +135,10 @@ vi.mock('@dnd-kit/sortable', async () => {
 vi.mock('#/web/stores/i18n.ts', () => ({
   useT: () => (key: string, params?: Record<string, string>) =>
     key === 'repo-tabs.close-named' ? `Close ${params?.name}` : key,
+}))
+
+vi.mock('sonner', () => ({
+  toast: toastMocks,
 }))
 
 vi.mock('#/web/branch-workspace-queries.ts', () => ({
@@ -338,6 +347,8 @@ beforeEach(() => {
   workspaceRecoveryState.visible = false
   repoClientMocks.getRepositoryRemoteBranches.mockReset()
   repoClientMocks.getRepositoryRemoteBranches.mockResolvedValue(['origin/feature/menu'])
+  toastMocks.success.mockReset()
+  toastMocks.warning.mockReset()
   branchWorkspaceQueryState.resultByRoot = {}
   container = document.createElement('div')
   document.body.appendChild(container)
@@ -723,6 +734,57 @@ describe('SidebarProjectList', () => {
     expect((await openProjectMenu('/repo-b')).map((item) => item.textContent?.trim())).not.toContain(
       'workspace.detect-repositories',
     )
+  })
+
+  test('fetches every configured workspace repository from the workspace menu and summarizes failures', async () => {
+    const apiId = '/repo-b/api'
+    const webId = '/repo-b/web'
+    const api = seedRepoState({ id: apiId, name: 'api repo', instanceToken: 4 })
+    const web = seedRepoState({ id: webId, name: 'web repo', instanceToken: 5 })
+    const syncAndRefresh = vi.fn(async (repositoryId: string) =>
+      repositoryId === apiId ? { ok: false as const, message: 'offline' } : { ok: true as const, message: 'fetched' },
+    )
+    useReposStore.setState({
+      repos: { [apiId]: api, [webId]: web },
+      workspaceProjects: {
+        '/repo-b': {
+          rootId: '/repo-b',
+          repositoryIds: [apiId, webId],
+          candidates: [
+            { id: apiId, name: 'api', selected: true, available: true },
+            { id: webId, name: 'web', selected: true, available: true },
+          ],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+      syncAndRefresh,
+    })
+    renderList()
+
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).not.toContain(
+      'workspace.branch-workspace.fetch-all',
+    )
+    const fetchAll = (await openProjectMenu('/repo-b')).find(
+      (item) => item.textContent?.trim() === 'workspace.branch-workspace.fetch-all',
+    )
+    expect(fetchAll).toBeDefined()
+
+    await act(async () => {
+      fetchAll?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(syncAndRefresh).toHaveBeenCalledTimes(2)
+    expect(syncAndRefresh).toHaveBeenCalledWith(apiId, { token: 4 })
+    expect(syncAndRefresh).toHaveBeenCalledWith(webId, { token: 5 })
+    expect(toastMocks.warning).toHaveBeenCalledWith('workspace.branch-workspace.fetch-all-incomplete', {
+      description: 'api: offline',
+    })
   })
 
   test('offers configuration recovery only from an anomalous project context menu', async () => {

@@ -10,6 +10,7 @@ export const RemoteRepoRefSchema = v.object({
   alias: v.string(),
   remotePath: RemoteAbsolutePathSchema,
   displayName: v.string(),
+  transport: v.optional(v.literal('wsl')),
 })
 
 export const RepoSessionEntrySchema = v.union([

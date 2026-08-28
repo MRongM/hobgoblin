@@ -110,7 +110,7 @@ describe('settings write paths', () => {
         pref: 'ghostty',
         resolved: 'ghostty',
         available: true,
-        appAvailability: { ghostty: true, terminal: false },
+        appAvailability: { ghostty: true, terminal: false, wsl: false, powershell: false, cmd: false },
         detectedAt: 1,
       },
       editor: {
@@ -174,6 +174,10 @@ describe('settings write paths', () => {
       outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 1024,
+      terminalInputEnabled: true,
+      terminalInputAllowedUserIds: ['123', '456'],
+      terminalInputPollingTimeoutSeconds: 30,
+      terminalInputRuntime: { status: 'starting' as const },
     }
     mocks.updateServerTelegramNotificationSettings.mockResolvedValue(telegramNotifications)
     const { applyServerTelegramNotificationSettingsWrite } = await import('#/server/modules/settings-write-paths.ts')
@@ -189,6 +193,9 @@ describe('settings write paths', () => {
         outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
         outputTailLength: 1024,
+        terminalInputEnabled: true,
+        terminalInputAllowedUserIds: ['123', '456'],
+        terminalInputPollingTimeoutSeconds: 30,
       }),
     ).resolves.toEqual({ ok: true, telegramNotifications })
     expect(mocks.updateServerTelegramNotificationSettings).toHaveBeenCalledWith({
@@ -201,6 +208,9 @@ describe('settings write paths', () => {
       outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 1024,
+      terminalInputEnabled: true,
+      terminalInputAllowedUserIds: ['123', '456'],
+      terminalInputPollingTimeoutSeconds: 30,
     })
     expect(mocks.publishSettingsInvalidation).toHaveBeenCalledWith(['settings-snapshot'])
   })

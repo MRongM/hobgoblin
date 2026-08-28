@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Check, Circle, FolderKanban, LoaderCircle, RefreshCw, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  Circle,
+  ClipboardList,
+  FolderKanban,
+  FolderPlus,
+  LoaderCircle,
+  RefreshCw,
+  ShieldAlert,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type {
   BranchWorkspaceApproval,
   BranchWorkspaceAuxiliaryCandidate,
@@ -16,7 +29,6 @@ import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef
 import { BranchPrefixPicker } from '#/web/components/branch-list/BranchPrefixPicker.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
-import { WorktreeDependencyTree } from '#/web/components/WorktreeDependencyTree.tsx'
 import {
   MaterializationCandidateList,
   type MaterializationCandidateChoice,
@@ -36,7 +48,7 @@ import { Switch } from '#/web/components/ui/switch.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { getRepositoryRemoteBranches } from '#/web/repo-client.ts'
-import { WorktreeBootstrapSourcePicker } from '#/web/components/WorktreeBootstrapSourcePicker.tsx'
+import { BranchWorkspaceRepositoryDependencySelection } from '#/web/components/repo-workspace/BranchWorkspaceRepositoryDependencySelection.tsx'
 import {
   projectBranchWorkspaceOperationProgress,
   type BranchWorkspaceStepProgressStatus,
@@ -46,6 +58,17 @@ import {
   type RepositoryDependencySource,
   type RepositoryDependencyWorktree,
 } from '#/web/components/repo-workspace/branch-workspace-repository-dependency-source.ts'
+import {
+  OneStepPlanningLayout,
+  OneStepPlanningPlanPane,
+  OneStepPlanningSelectionPane,
+} from '#/web/components/repo-workspace/OneStepPlanningLayout.tsx'
+import type { BranchWorkspaceRepositoryFetchResult } from '#/web/branch-workspace-repository-fetch.ts'
+import {
+  showWorkspaceRepositoryFetchError,
+  showWorkspaceRepositoryFetchResult,
+} from '#/web/components/repo-workspace/workspace-repository-fetch-feedback.ts'
+import { useLatestPlanRequest } from '#/web/hooks/useLatestPlanRequest.ts'
 
 export interface BranchWorkspaceRepositoryOption {
   id: string
@@ -73,11 +96,15 @@ interface BranchWorkspaceDialogProps {
   plan: BranchWorkspacePlan | null
   result: BranchWorkspaceExecuteResult | null
   pending: boolean
+  executing?: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
+  onFetchAllRepositories: () => Promise<BranchWorkspaceRepositoryFetchResult>
   onRefreshAuxiliaryCandidates: () => Promise<BranchWorkspaceReadResult>
-  onPreview: (request: BranchWorkspacePlanRequest) => Promise<unknown>
+  plannedRequest?: BranchWorkspacePlanRequest | null
+  onPreview: (request: BranchWorkspacePlanRequest, signal?: AbortSignal) => Promise<unknown>
   onConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
+  onForceConfirm: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onRetry: (approvals: BranchWorkspaceApproval[]) => Promise<BranchWorkspaceExecuteResult | null>
   onReturnToSelection: () => Promise<void> | void
   onCancel: () => Promise<unknown>
@@ -101,11 +128,15 @@ export function BranchWorkspaceDialog({
   plan,
   result,
   pending,
+  executing = pending,
   error,
   onOpenChange,
+  onFetchAllRepositories,
   onRefreshAuxiliaryCandidates,
   onPreview,
+  plannedRequest,
   onConfirm,
+  onForceConfirm,
   onRetry,
   onReturnToSelection,
   onCancel,
@@ -123,14 +154,31 @@ export function BranchWorkspaceDialog({
   const [repositoryBootstrapSelections, setRepositoryBootstrapSelections] = useState<
     Record<string, WorktreeBootstrapSelection[] | undefined>
   >({})
+  const [repositoryDependencyReadPending, setRepositoryDependencyReadPending] = useState<Record<string, boolean>>({})
   const remoteBranchControllers = useRef<Record<string, AbortController>>({})
   const [repositoryBranchQueries, setRepositoryBranchQueries] = useState<Record<string, string>>({})
   const [auxiliaryChoices, setAuxiliaryChoices] = useState<Record<string, MaterializationCandidateChoice>>({})
   const [auxiliaryRefreshPending, setAuxiliaryRefreshPending] = useState(false)
   const [auxiliaryRefreshError, setAuxiliaryRefreshError] = useState<string | null>(null)
+  const [fetchAllPending, setFetchAllPending] = useState(false)
   const [alsoDeleteBranch, setAlsoDeleteBranch] = useState(false)
   const [alsoDeleteUpstream, setAlsoDeleteUpstream] = useState(false)
   const [approvals, setApprovals] = useState<BranchWorkspaceApproval[]>([])
+  const [planRevision, setPlanRevision] = useState(0)
+  const [planNotBefore, setPlanNotBefore] = useState(0)
+  const dialogStateKey = open ? JSON.stringify([mode, workspace?.id ?? null, fixedReduceRepositoryName]) : null
+  const [initializedDialogStateKey, setInitializedDialogStateKey] = useState<string | null>(null)
+  const oneStep = mode === 'create' || mode === 'extend' || mode === 'reduce' || mode === 'remove'
+  const operationConsole = mode === 'create' || mode === 'remove'
+  const selectionDescriptionKey =
+    mode === 'remove'
+      ? 'workspace.branch-workspace.one-step.selection-description.remove'
+      : 'workspace.branch-workspace.one-step.selection-description.create'
+  const planDescriptionKey =
+    mode === 'remove'
+      ? 'workspace.branch-workspace.one-step.plan-description.remove'
+      : 'workspace.branch-workspace.one-step.plan-description.create'
+  const selectionLocked = oneStep ? executing || result !== null : pending
 
   const fixedRepositories = useMemo(
     () =>
@@ -154,7 +202,10 @@ export function BranchWorkspaceDialog({
   initialDialogState.current = { workspace, repositories, fixedRepositories }
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setInitializedDialogStateKey(null)
+      return
+    }
     const initial = initialDialogState.current
     const initialBranch = initial.workspace?.branch ?? (mode === 'create' ? defaultBranchWorkspaceName() : '')
     const initialBases = Object.fromEntries(
@@ -196,6 +247,7 @@ export function BranchWorkspaceDialog({
     setRemoteBranches({})
     setRepositoryBootstrapSources({})
     setRepositoryBootstrapSelections({})
+    setRepositoryDependencyReadPending({})
     setRepositoryBranchQueries({})
     setAuxiliaryChoices({})
     setAuxiliaryRefreshPending(false)
@@ -203,7 +255,10 @@ export function BranchWorkspaceDialog({
     setAlsoDeleteBranch(mode === 'remove')
     setAlsoDeleteUpstream(false)
     setApprovals([])
-  }, [fixedReduceRepositoryName, mode, open, workspace?.id])
+    setPlanRevision(0)
+    setPlanNotBefore(0)
+    setInitializedDialogStateKey(dialogStateKey)
+  }, [dialogStateKey, fixedReduceRepositoryName, mode, open, workspace?.id])
 
   useEffect(() => {
     if (!open) return
@@ -244,6 +299,7 @@ export function BranchWorkspaceDialog({
       setAuxiliaryRefreshError('workspace.branch-workspace.read-failed')
     } finally {
       setAuxiliaryRefreshPending(false)
+      if (!closeOnSuccess) setPlanRevision((current) => current + 1)
     }
   }
 
@@ -254,6 +310,12 @@ export function BranchWorkspaceDialog({
       return next
     })
     setRepositoryBootstrapSelections((current) => {
+      const next = { ...current }
+      delete next[repositoryName]
+      return next
+    })
+    setRepositoryDependencyReadPending((current) => {
+      if (current[repositoryName] === undefined) return current
       const next = { ...current }
       delete next[repositoryName]
       return next
@@ -291,7 +353,27 @@ export function BranchWorkspaceDialog({
     }
   }
 
+  const fetchAllRepositories = async () => {
+    if (fetchAllPending) return
+    setFetchAllPending(true)
+    try {
+      const summary = await onFetchAllRepositories()
+      showWorkspaceRepositoryFetchResult(t, summary)
+      void Promise.allSettled(
+        repositories
+          .filter((repository) => repository.available && selectedRepositories[repository.name])
+          .map(loadRemoteBranches),
+      )
+    } catch (fetchError) {
+      showWorkspaceRepositoryFetchError(t, repositories.length, fetchError)
+    } finally {
+      setFetchAllPending(false)
+      setPlanRevision((current) => current + 1)
+    }
+  }
+
   const applyBranchChange = (nextBranch: string) => {
+    setPlanNotBefore(Date.now() + 300)
     setBranch(nextBranch)
     setSyncBeforeCreate((current) =>
       Object.fromEntries(
@@ -333,6 +415,10 @@ export function BranchWorkspaceDialog({
       contextBranch: creationBase.kind === 'localBranch' ? creationBase.branch : '',
       worktrees: repository.worktrees ?? [],
     })
+    setRepositoryDependencyReadPending((current) => ({
+      ...current,
+      [repository.name]: sources.initial !== null,
+    }))
     setRepositoryBootstrapSources((current) => ({
       ...current,
       [repository.name]: sources.initial ?? undefined,
@@ -413,10 +499,48 @@ export function BranchWorkspaceDialog({
       alsoDeleteUpstream: alsoDeleteBranch && alsoDeleteUpstream,
     }
   }
-  const removalExecutionLocked = mode === 'remove' && plan !== null && pending
+  const currentRequest =
+    open &&
+    oneStep &&
+    dialogStateKey !== null &&
+    initializedDialogStateKey === dialogStateKey &&
+    !executing &&
+    result === null
+      ? request()
+      : null
+  const currentRequestKey = currentRequest ? JSON.stringify(currentRequest) : null
+  const plannedRequestKey = plannedRequest ? JSON.stringify(plannedRequest) : null
+  const dependencyReadPending = repositories.some(
+    (repository) =>
+      selectedRepositories[repository.name] &&
+      repositoryDependenciesEnabled[repository.name] &&
+      repositoryDependencyReadPending[repository.name],
+  )
+  const autoPlan = useLatestPlanRequest({
+    enabled: open && oneStep && !fetchAllPending && !auxiliaryRefreshPending && !dependencyReadPending,
+    request: currentRequest,
+    requestKey: currentRequestKey,
+    revision: planRevision,
+    notBefore: planNotBefore,
+    requestPlan: async (nextRequest, signal) => (await onPreview(nextRequest, signal)) !== false,
+  })
+  const currentPlanReady =
+    plan !== null &&
+    (!oneStep ||
+      plannedRequest === undefined ||
+      (autoPlan.status === 'ready' && currentRequestKey !== null && plannedRequestKey === currentRequestKey))
+  const displayedPlan =
+    plan &&
+    (!oneStep ||
+      plannedRequest === undefined ||
+      executing ||
+      (autoPlan.status === 'ready' && currentRequestKey !== null && plannedRequestKey === currentRequestKey))
+      ? plan
+      : null
+  const removalExecutionLocked = mode === 'remove' && plan !== null && executing
   const close = () => {
     if (removalExecutionLocked) return
-    if (pending) void onCancel()
+    if (oneStep ? executing : pending) void onCancel()
     onOpenChange(false)
   }
   const run = async (
@@ -439,17 +563,37 @@ export function BranchWorkspaceDialog({
   const allSelectableRepositoriesSelected =
     selectableRepositories.length > 0 && selectedSelectableCount === selectableRepositories.length
   const someSelectableRepositoriesSelected = selectedSelectableCount > 0 && !allSelectableRepositoriesSelected
+  const synchronizableSelectedRepositories = visibleRepositories.filter((repository) => {
+    if (!repository.available || fixedRepositories.has(repository.name) || !selectedRepositories[repository.name]) {
+      return false
+    }
+    const creationBase = effectiveCreationBase(
+      repository,
+      branch.trim(),
+      creationBases[repository.name] ?? defaultCreationBase(repository),
+    )
+    return syncEligible(repository, creationBase)
+  })
+  const synchronizedSelectedCount = synchronizableSelectedRepositories.filter(
+    (repository) => syncBeforeCreate[repository.name],
+  ).length
+  const allSynchronizableSelectedRepositoriesSynchronized =
+    synchronizableSelectedRepositories.length > 0 &&
+    synchronizedSelectedCount === synchronizableSelectedRepositories.length
+  const someSynchronizableSelectedRepositoriesSynchronized =
+    synchronizedSelectedCount > 0 && !allSynchronizableSelectedRepositoriesSynchronized
+  const operationPending = oneStep ? executing : pending
   const operationProgress =
-    plan && plan.steps.length > 0 && (mode === 'create' || mode === 'remove') && (pending || result !== null)
+    plan && plan.steps.length > 0 && (mode === 'create' || mode === 'remove') && (operationPending || result !== null)
       ? projectBranchWorkspaceOperationProgress(plan, progressWorkspace, {
-          executing: pending,
-          failed: !pending && result?.ok === false,
+          executing: operationPending,
+          failed: !operationPending && result?.ok === false,
         })
       : null
   const progressStatusByStepId = new Map(operationProgress?.steps.map((item) => [item.step.id, item.status]))
   const creationCompletedDespiteRemoteReadFailure =
     mode === 'create' &&
-    !pending &&
+    !operationPending &&
     result?.ok === false &&
     (result.message === 'workspace.branch-workspace.remote-operation-failed' ||
       result.message === 'workspace.branch-workspace.remote-invalid-response') &&
@@ -472,7 +616,10 @@ export function BranchWorkspaceDialog({
       }}
     >
       <DialogContent
-        className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"
+        className={cn(
+          'max-h-[85vh]',
+          oneStep ? 'grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-5xl' : 'overflow-y-auto sm:max-w-2xl',
+        )}
         showCloseButton={!removalExecutionLocked}
         onEscapeKeyDown={(event) => {
           if (removalExecutionLocked) event.preventDefault()
@@ -481,590 +628,746 @@ export function BranchWorkspaceDialog({
           if (removalExecutionLocked) event.preventDefault()
         }}
       >
-        <DialogHeader>
-          <DialogTitle>{t(`workspace.branch-workspace.dialog.${mode}.title`)}</DialogTitle>
-          <DialogDescription>{t(`workspace.branch-workspace.dialog.${mode}.description`)}</DialogDescription>
+        <DialogHeader
+          data-branch-workspace-operation-header={operationConsole ? '' : undefined}
+          className={cn(
+            'pr-8',
+            operationConsole && '-mx-4 -mt-4 rounded-t-lg border-b border-separator px-4 py-3.5 pr-12',
+          )}
+        >
+          <div className="flex items-start gap-3">
+            {operationConsole ? (
+              <div
+                className="flex size-9 shrink-0 items-center justify-center rounded-md border border-separator bg-card/80 text-muted-foreground shadow-xs"
+                aria-hidden="true"
+              >
+                {mode === 'create' ? <FolderPlus className="size-4" /> : <Trash2 className="size-4" />}
+              </div>
+            ) : null}
+            <div className="grid min-w-0 flex-1 gap-2">
+              <DialogTitle className={cn(operationConsole && 'text-base')}>
+                {t(`workspace.branch-workspace.dialog.${mode}.title`)}
+              </DialogTitle>
+              <DialogDescription className={cn(operationConsole && 'text-xs leading-relaxed')}>
+                {t(`workspace.branch-workspace.dialog.${mode}.description`)}
+              </DialogDescription>
+            </div>
+            {mode === 'create' && (oneStep || !plan) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-action="fetch-all-repositories"
+                aria-label={t('workspace.branch-workspace.fetch-all')}
+                disabled={executing || fetchAllPending || repositories.length === 0}
+                onClick={() => void fetchAllRepositories()}
+              >
+                {fetchAllPending ? (
+                  <LoaderCircle className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw aria-hidden="true" />
+                )}
+                {t('workspace.branch-workspace.fetch-all')}
+              </Button>
+            ) : null}
+          </div>
         </DialogHeader>
 
-        {!plan && (mode === 'create' || mode === 'extend') ? (
-          <div className="grid gap-4">
-            <label className="grid gap-1.5 text-xs font-medium">
-              {t('workspace.branch-workspace.branch')}
-              <div className="flex gap-2">
-                <BranchPrefixPicker
-                  value={branch}
-                  disabled={pending || !!workspace}
-                  onChange={(nextBranch) => applyBranchChange(nextBranch)}
-                />
-                <Input
-                  aria-label={t('workspace.branch-workspace.branch')}
-                  value={branch}
-                  disabled={pending || !!workspace}
-                  className="font-mono flex-1 min-w-0"
-                  onChange={(event) => applyBranchChange(event.target.value)}
-                />
-              </div>
-            </label>
-            <fieldset className="grid gap-2 rounded-md border border-separator p-3">
-              <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
-              <label className="flex items-center gap-2 border-b border-separator pb-2 text-xs font-medium">
-                <input
-                  type="checkbox"
-                  ref={(element) => {
-                    if (element) element.indeterminate = someSelectableRepositoriesSelected
-                  }}
-                  aria-label={t('workspace.branch-workspace.repositories-select-all')}
-                  checked={allSelectableRepositoriesSelected}
-                  disabled={pending || selectableRepositories.length === 0}
-                  onChange={() => {
-                    const selected = !allSelectableRepositoriesSelected
-                    const selectableNames = new Set(selectableRepositories.map((repository) => repository.name))
-                    setSelectedRepositories((current) => ({
-                      ...current,
-                      ...Object.fromEntries([...selectableNames].map((name) => [name, selected])),
-                    }))
-                    for (const repository of selectableRepositories) {
-                      if (selected) {
-                        void loadRemoteBranches(repository)
-                        continue
-                      }
-                      setRepositoryDependenciesEnabled((current) => ({
-                        ...current,
-                        [repository.name]: false,
-                      }))
-                      clearRepositoryBootstrap(repository.name)
-                      remoteBranchControllers.current[repository.name]?.abort()
-                    }
-                  }}
-                />
-                <span>{t('workspace.branch-workspace.repositories-select-all')}</span>
-              </label>
-              {visibleRepositories.map((repository) => {
-                const fixed = fixedRepositories.has(repository.name)
-                const requestedCreationBase = creationBases[repository.name] ?? defaultCreationBase(repository)
-                const creationBase = effectiveCreationBase(repository, branch.trim(), requestedCreationBase)
-                const dependencySources = repositoryDependencySources({
-                  contextBranch: creationBase.kind === 'localBranch' ? creationBase.branch : '',
-                  worktrees: repository.worktrees ?? [],
-                })
-                const dependencySource =
-                  dependencySources.options.find(
-                    (source) => source.id === repositoryBootstrapSources[repository.name]?.id,
-                  ) ?? dependencySources.initial
-                const existingTarget = creationBase.kind === 'localBranch' && creationBase.branch === branch.trim()
-                const synchronizationEligible = syncEligible(repository, creationBase)
-                const remoteState = remoteBranches[repository.name]
-                return (
-                  <div key={repository.name} className="grid gap-2">
-                    <div
-                      data-branch-workspace-repository-row={repository.name}
-                      className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.55fr)_minmax(8rem,0.8fr)_minmax(7rem,0.6fr)]"
-                    >
-                      <label className={cn('flex items-center gap-2 text-xs', !repository.available && 'opacity-60')}>
-                        <input
-                          type="checkbox"
-                          aria-label={t('workspace.branch-workspace.repository-named', { name: repository.name })}
-                          checked={selectedRepositories[repository.name] === true}
-                          disabled={pending || fixed || !repository.available}
-                          onChange={(event) => {
-                            const selected = event.target.checked
-                            setSelectedRepositories((current) => ({
-                              ...current,
-                              [repository.name]: selected,
-                            }))
-                            if (selected) void loadRemoteBranches(repository)
-                            if (!selected) {
-                              setRepositoryDependenciesEnabled((current) => ({
-                                ...current,
-                                [repository.name]: false,
-                              }))
-                              clearRepositoryBootstrap(repository.name)
-                              remoteBranchControllers.current[repository.name]?.abort()
+        <OneStepPlanningLayout
+          enabled={oneStep}
+          testIdPrefix="branch-workspace"
+          presentation={operationConsole ? 'operation-console' : 'plain'}
+        >
+          <OneStepPlanningSelectionPane
+            enabled={oneStep}
+            testIdPrefix="branch-workspace"
+            title={t('workspace.branch-workspace.one-step.selection-title')}
+            description={operationConsole ? t(selectionDescriptionKey) : undefined}
+            presentation={operationConsole ? 'operation-console' : 'plain'}
+            step={operationConsole ? '01' : undefined}
+          >
+            {oneStep && (mode === 'create' || mode === 'extend') ? (
+              <div className="grid gap-4">
+                <label className="grid gap-1.5 text-xs font-medium">
+                  {t('workspace.branch-workspace.branch')}
+                  <div className="flex gap-2">
+                    <BranchPrefixPicker
+                      value={branch}
+                      disabled={selectionLocked || !!workspace}
+                      onChange={(nextBranch) => applyBranchChange(nextBranch)}
+                    />
+                    <Input
+                      aria-label={t('workspace.branch-workspace.branch')}
+                      value={branch}
+                      disabled={selectionLocked || !!workspace}
+                      className="font-mono flex-1 min-w-0"
+                      onChange={(event) => applyBranchChange(event.target.value)}
+                    />
+                  </div>
+                </label>
+                <fieldset className="grid gap-2 rounded-md border border-separator p-3">
+                  <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
+                  <div className="grid grid-cols-1 gap-3 border-b border-separator pb-2 text-xs font-medium sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.55fr)_minmax(8rem,0.8fr)_minmax(7rem,0.6fr)]">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        ref={(element) => {
+                          if (element) element.indeterminate = someSelectableRepositoriesSelected
+                        }}
+                        aria-label={t('workspace.branch-workspace.repositories-select-all')}
+                        checked={allSelectableRepositoriesSelected}
+                        disabled={selectionLocked || selectableRepositories.length === 0}
+                        onChange={() => {
+                          const selected = !allSelectableRepositoriesSelected
+                          const selectableNames = new Set(selectableRepositories.map((repository) => repository.name))
+                          setSelectedRepositories((current) => ({
+                            ...current,
+                            ...Object.fromEntries([...selectableNames].map((name) => [name, selected])),
+                          }))
+                          for (const repository of selectableRepositories) {
+                            if (selected) {
+                              void loadRemoteBranches(repository)
+                              continue
                             }
-                          }}
-                        />
-                        <span className="truncate font-medium">{repository.name}</span>
-                        {fixed ? (
-                          <span className="text-[10px] text-muted-foreground">
-                            {t('workspace.branch-workspace.member-fixed')}
-                          </span>
-                        ) : null}
-                      </label>
-                      <label className="flex min-w-0 items-center justify-center gap-2 text-xs text-muted-foreground">
-                        <Switch
-                          checked={repositoryDependenciesEnabled[repository.name] === true}
-                          disabled={pending || fixed || !repository.available || !selectedRepositories[repository.name]}
-                          aria-label={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
-                            name: repository.name,
-                          })}
-                          title={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
-                            name: repository.name,
-                          })}
-                          onCheckedChange={(enabled) => {
                             setRepositoryDependenciesEnabled((current) => ({
                               ...current,
-                              [repository.name]: enabled,
+                              [repository.name]: false,
                             }))
-                            if (enabled) initializeRepositoryBootstrap(repository)
-                            else clearRepositoryBootstrap(repository.name)
-                          }}
-                        />
-                        <span className="truncate">
-                          {t('workspace.branch-workspace.repository-dependencies-toggle')}
-                        </span>
-                      </label>
-                      <Select
-                        value={creationBaseSelectValue(creationBase)}
-                        disabled={pending || fixed || !selectedRepositories[repository.name] || existingTarget}
-                        onValueChange={(value) => {
-                          const nextCreationBase = parseCreationBaseSelectValue(value)
-                          if (!nextCreationBase) return
-                          setCreationBases((current) => ({
-                            ...current,
-                            [repository.name]: nextCreationBase,
-                          }))
+                            clearRepositoryBootstrap(repository.name)
+                            remoteBranchControllers.current[repository.name]?.abort()
+                          }
+                        }}
+                      />
+                      <span>{t('workspace.branch-workspace.repositories-select-all')}</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-muted-foreground sm:col-start-4">
+                      <input
+                        type="checkbox"
+                        ref={(element) => {
+                          if (element) {
+                            element.indeterminate = someSynchronizableSelectedRepositoriesSynchronized
+                          }
+                        }}
+                        aria-label={t('workspace.branch-workspace.sync-before-create-select-all')}
+                        checked={allSynchronizableSelectedRepositoriesSynchronized}
+                        disabled={selectionLocked || synchronizableSelectedRepositories.length === 0}
+                        onChange={() => {
+                          const synchronized = !allSynchronizableSelectedRepositoriesSynchronized
                           setSyncBeforeCreate((current) => ({
                             ...current,
-                            [repository.name]: syncEligible(repository, nextCreationBase),
+                            ...Object.fromEntries(
+                              synchronizableSelectedRepositories.map((repository) => [repository.name, synchronized]),
+                            ),
                           }))
-                          if (repositoryDependenciesEnabled[repository.name]) {
-                            initializeRepositoryBootstrap(repository, nextCreationBase)
-                          }
                         }}
-                        onOpenChange={(open) => {
-                          if (!open) {
-                            setRepositoryBranchQueries((current) => {
-                              const next = { ...current }
-                              delete next[repository.name]
-                              return next
-                            })
-                          }
-                        }}
-                      >
-                        <SelectTrigger
-                          size="sm"
-                          aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
-                          className="font-mono text-xs"
+                      />
+                      <span className="truncate">{t('workspace.branch-workspace.sync-before-create')}</span>
+                    </label>
+                  </div>
+                  {visibleRepositories.map((repository) => {
+                    const fixed = fixedRepositories.has(repository.name)
+                    const requestedCreationBase = creationBases[repository.name] ?? defaultCreationBase(repository)
+                    const creationBase = effectiveCreationBase(repository, branch.trim(), requestedCreationBase)
+                    const dependencySources = repositoryDependencySources({
+                      contextBranch: creationBase.kind === 'localBranch' ? creationBase.branch : '',
+                      worktrees: repository.worktrees ?? [],
+                    })
+                    const dependencySource =
+                      dependencySources.options.find(
+                        (source) => source.id === repositoryBootstrapSources[repository.name]?.id,
+                      ) ?? dependencySources.initial
+                    const existingTarget = creationBase.kind === 'localBranch' && creationBase.branch === branch.trim()
+                    const synchronizationEligible = syncEligible(repository, creationBase)
+                    const remoteState = remoteBranches[repository.name]
+                    return (
+                      <div key={repository.name} className="grid gap-2">
+                        <div
+                          data-branch-workspace-repository-row={repository.name}
+                          className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.55fr)_minmax(8rem,0.8fr)_minmax(7rem,0.6fr)]"
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent
-                          header={
-                            !existingTarget ? (
-                              <RemoteBranchSearchInput
-                                id={`branch-workspace-base-search-${repository.name}`}
-                                value={repositoryBranchQueries[repository.name] ?? ''}
-                                placeholder={t('branches.search-placeholder')}
-                                ariaLabel={t('branches.search-label')}
-                                disabled={pending || fixed || !selectedRepositories[repository.name]}
-                                onChange={(query) => {
-                                  setRepositoryBranchQueries((current) => ({
-                                    ...current,
-                                    [repository.name]: query,
-                                  }))
-                                }}
-                              />
-                            ) : undefined
-                          }
-                        >
-                          {(existingTarget ? [branch.trim()] : repository.branches)
-                            .filter((candidate) =>
-                              localBranchMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
-                            )
-                            .map((candidate) => (
-                              <SelectItem key={`local:${candidate}`} value={candidate} textValue={candidate}>
-                                {candidate}
-                              </SelectItem>
-                            ))}
-                          {!existingTarget &&
-                            remoteState?.branches
-                              .filter((candidate) =>
-                                remoteRefMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
-                              )
-                              .map((candidate) => (
-                                <SelectItem
-                                  key={`remote:${candidate}`}
-                                  value={`remote:${candidate}`}
-                                  textValue={candidate}
-                                >
-                                  {candidate}
-                                </SelectItem>
-                              ))}
-                        </SelectContent>
-                      </Select>
-                      <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          aria-label={t('workspace.branch-workspace.sync-before-create-named', {
-                            name: repository.name,
-                          })}
-                          checked={syncBeforeCreate[repository.name] === true && synchronizationEligible}
-                          disabled={
-                            pending || fixed || !selectedRepositories[repository.name] || !synchronizationEligible
-                          }
-                          onChange={(event) =>
-                            setSyncBeforeCreate((current) => ({
-                              ...current,
-                              [repository.name]: event.target.checked,
-                            }))
-                          }
-                        />
-                        <span className="truncate">{t('workspace.branch-workspace.sync-before-create')}</span>
-                      </label>
-                    </div>
-                    {selectedRepositories[repository.name] && existingTarget ? (
-                      <p className="pl-6 text-[10px] text-muted-foreground">
-                        {t('workspace.branch-workspace.existing-target-used', { branch: branch.trim() })}
-                      </p>
-                    ) : null}
-                    {selectedRepositories[repository.name] &&
-                    creationBase.kind === 'localBranch' &&
-                    !synchronizationEligible ? (
-                      <p className="pl-6 text-[10px] text-muted-foreground">
-                        {t('workspace.branch-workspace.sync-no-upstream')}
-                      </p>
-                    ) : null}
-                    {selectedRepositories[repository.name] && remoteState?.status === 'loading' ? (
-                      <p className="pl-6 text-[10px] text-muted-foreground" role="status">
-                        {t('workspace.branch-workspace.remote-branches-loading')}
-                      </p>
-                    ) : null}
-                    {selectedRepositories[repository.name] && remoteState?.status === 'error' ? (
-                      <div className="flex items-center gap-2 pl-6 text-[10px] text-danger" role="alert">
-                        <span>{t('workspace.branch-workspace.remote-branches-error')}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void loadRemoteBranches(repository)}
-                        >
-                          {t('workspace.branch-workspace.retry')}
-                        </Button>
-                      </div>
-                    ) : null}
-                    {selectedRepositories[repository.name] &&
-                    repositoryDependenciesEnabled[repository.name] &&
-                    !fixed ? (
-                      <div
-                        className="grid gap-2 pl-6"
-                        aria-labelledby={`branch-workspace-repository-dependencies-${repository.name}`}
-                      >
-                        <div>
-                          <p
-                            id={`branch-workspace-repository-dependencies-${repository.name}`}
-                            className="text-xs font-medium"
+                          <label
+                            className={cn('flex items-center gap-2 text-xs', !repository.available && 'opacity-60')}
                           >
-                            {t('workspace.branch-workspace.repository-dependencies')}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {t('workspace.branch-workspace.repository-dependencies-description')}
-                          </p>
-                        </div>
-                        {dependencySource ? (
-                          <>
-                            <WorktreeBootstrapSourcePicker
-                              source={dependencySource}
-                              options={dependencySources.options}
-                              pending={pending}
-                              onSourceChange={(source) => {
-                                setRepositoryBootstrapSources((current) => ({
+                            <input
+                              type="checkbox"
+                              aria-label={t('workspace.branch-workspace.repository-named', { name: repository.name })}
+                              checked={selectedRepositories[repository.name] === true}
+                              disabled={selectionLocked || fixed || !repository.available}
+                              onChange={(event) => {
+                                const selected = event.target.checked
+                                setSelectedRepositories((current) => ({
                                   ...current,
-                                  [repository.name]: source,
+                                  [repository.name]: selected,
                                 }))
-                                setRepositoryBootstrapSelections((current) => ({
-                                  ...current,
-                                  [repository.name]: [],
-                                }))
+                                if (selected) void loadRemoteBranches(repository)
+                                if (!selected) {
+                                  setRepositoryDependenciesEnabled((current) => ({
+                                    ...current,
+                                    [repository.name]: false,
+                                  }))
+                                  clearRepositoryBootstrap(repository.name)
+                                  remoteBranchControllers.current[repository.name]?.abort()
+                                }
                               }}
                             />
-                            <WorktreeDependencyTree
-                              repoId={repository.id}
-                              sourceWorktreePath={dependencySource.worktreePath}
-                              selections={repositoryBootstrapSelections[repository.name] ?? []}
-                              disabled={pending}
-                              onSelectionsChange={(selections) =>
-                                setRepositoryBootstrapSelections((current) => ({
+                            <span className="truncate font-medium">{repository.name}</span>
+                            {fixed ? (
+                              <span className="text-[10px] text-muted-foreground">
+                                {t('workspace.branch-workspace.member-fixed')}
+                              </span>
+                            ) : null}
+                          </label>
+                          <label className="flex min-w-0 items-center justify-center gap-2 text-xs text-muted-foreground">
+                            <Switch
+                              checked={repositoryDependenciesEnabled[repository.name] === true}
+                              disabled={
+                                selectionLocked ||
+                                fixed ||
+                                !repository.available ||
+                                !selectedRepositories[repository.name]
+                              }
+                              aria-label={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
+                                name: repository.name,
+                              })}
+                              title={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
+                                name: repository.name,
+                              })}
+                              onCheckedChange={(enabled) => {
+                                setRepositoryDependenciesEnabled((current) => ({
                                   ...current,
-                                  [repository.name]: selections,
+                                  [repository.name]: enabled,
+                                }))
+                                if (enabled) initializeRepositoryBootstrap(repository)
+                                else clearRepositoryBootstrap(repository.name)
+                              }}
+                            />
+                            <span className="truncate">
+                              {t('workspace.branch-workspace.repository-dependencies-toggle')}
+                            </span>
+                          </label>
+                          <Select
+                            value={creationBaseSelectValue(creationBase)}
+                            disabled={
+                              selectionLocked || fixed || !selectedRepositories[repository.name] || existingTarget
+                            }
+                            onValueChange={(value) => {
+                              const nextCreationBase = parseCreationBaseSelectValue(value)
+                              if (!nextCreationBase) return
+                              setCreationBases((current) => ({
+                                ...current,
+                                [repository.name]: nextCreationBase,
+                              }))
+                              setSyncBeforeCreate((current) => ({
+                                ...current,
+                                [repository.name]: syncEligible(repository, nextCreationBase),
+                              }))
+                              if (repositoryDependenciesEnabled[repository.name]) {
+                                initializeRepositoryBootstrap(repository, nextCreationBase)
+                              }
+                            }}
+                            onOpenChange={(open) => {
+                              if (!open) {
+                                setRepositoryBranchQueries((current) => {
+                                  const next = { ...current }
+                                  delete next[repository.name]
+                                  return next
+                                })
+                              }
+                            }}
+                          >
+                            <SelectTrigger
+                              size="sm"
+                              aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
+                              className="font-mono text-xs"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent
+                              header={
+                                !existingTarget ? (
+                                  <RemoteBranchSearchInput
+                                    id={`branch-workspace-base-search-${repository.name}`}
+                                    value={repositoryBranchQueries[repository.name] ?? ''}
+                                    placeholder={t('branches.search-placeholder')}
+                                    ariaLabel={t('branches.search-label')}
+                                    disabled={selectionLocked || fixed || !selectedRepositories[repository.name]}
+                                    onChange={(query) => {
+                                      setRepositoryBranchQueries((current) => ({
+                                        ...current,
+                                        [repository.name]: query,
+                                      }))
+                                    }}
+                                  />
+                                ) : undefined
+                              }
+                            >
+                              {(existingTarget ? [branch.trim()] : repository.branches)
+                                .filter((candidate) =>
+                                  localBranchMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
+                                )
+                                .map((candidate) => (
+                                  <SelectItem key={`local:${candidate}`} value={candidate} textValue={candidate}>
+                                    {candidate}
+                                  </SelectItem>
+                                ))}
+                              {!existingTarget &&
+                                remoteState?.branches
+                                  .filter((candidate) =>
+                                    remoteRefMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
+                                  )
+                                  .map((candidate) => (
+                                    <SelectItem
+                                      key={`remote:${candidate}`}
+                                      value={`remote:${candidate}`}
+                                      textValue={candidate}
+                                    >
+                                      {candidate}
+                                    </SelectItem>
+                                  ))}
+                            </SelectContent>
+                          </Select>
+                          <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              aria-label={t('workspace.branch-workspace.sync-before-create-named', {
+                                name: repository.name,
+                              })}
+                              checked={syncBeforeCreate[repository.name] === true && synchronizationEligible}
+                              disabled={
+                                selectionLocked ||
+                                fixed ||
+                                !selectedRepositories[repository.name] ||
+                                !synchronizationEligible
+                              }
+                              onChange={(event) =>
+                                setSyncBeforeCreate((current) => ({
+                                  ...current,
+                                  [repository.name]: event.target.checked,
                                 }))
                               }
                             />
-                          </>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            {t('workspace.branch-workspace.repository-dependencies-empty')}
+                            <span className="truncate">{t('workspace.branch-workspace.sync-before-create')}</span>
+                          </label>
+                        </div>
+                        {selectedRepositories[repository.name] && existingTarget ? (
+                          <p className="pl-6 text-[10px] text-muted-foreground">
+                            {t('workspace.branch-workspace.existing-target-used', { branch: branch.trim() })}
                           </p>
-                        )}
+                        ) : null}
+                        {selectedRepositories[repository.name] &&
+                        creationBase.kind === 'localBranch' &&
+                        !synchronizationEligible ? (
+                          <p className="pl-6 text-[10px] text-muted-foreground">
+                            {t('workspace.branch-workspace.sync-no-upstream')}
+                          </p>
+                        ) : null}
+                        {selectedRepositories[repository.name] && remoteState?.status === 'loading' ? (
+                          <p className="pl-6 text-[10px] text-muted-foreground" role="status">
+                            {t('workspace.branch-workspace.remote-branches-loading')}
+                          </p>
+                        ) : null}
+                        {selectedRepositories[repository.name] && remoteState?.status === 'error' ? (
+                          <div className="flex items-center gap-2 pl-6 text-[10px] text-danger" role="alert">
+                            <span>{t('workspace.branch-workspace.remote-branches-error')}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void loadRemoteBranches(repository)}
+                            >
+                              {t('workspace.branch-workspace.retry')}
+                            </Button>
+                          </div>
+                        ) : null}
+                        {selectedRepositories[repository.name] &&
+                        repositoryDependenciesEnabled[repository.name] &&
+                        !fixed ? (
+                          <div
+                            className="grid gap-2 pl-6"
+                            aria-labelledby={`branch-workspace-repository-dependencies-${repository.name}`}
+                          >
+                            <div>
+                              <p
+                                id={`branch-workspace-repository-dependencies-${repository.name}`}
+                                className="text-xs font-medium"
+                              >
+                                {t('workspace.branch-workspace.repository-dependencies')}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {t('workspace.branch-workspace.repository-dependencies-description')}
+                              </p>
+                            </div>
+                            {dependencySource ? (
+                              <BranchWorkspaceRepositoryDependencySelection
+                                repoId={repository.id}
+                                source={dependencySource}
+                                sourceOptions={dependencySources.options}
+                                selections={repositoryBootstrapSelections[repository.name] ?? []}
+                                disabled={selectionLocked}
+                                onSourceChange={(source) => {
+                                  setRepositoryDependencyReadPending((current) => ({
+                                    ...current,
+                                    [repository.name]: true,
+                                  }))
+                                  setRepositoryBootstrapSources((current) => ({
+                                    ...current,
+                                    [repository.name]: source,
+                                  }))
+                                  setRepositoryBootstrapSelections((current) => ({
+                                    ...current,
+                                    [repository.name]: [],
+                                  }))
+                                }}
+                                onPendingChange={(nextPending) =>
+                                  setRepositoryDependencyReadPending((current) =>
+                                    current[repository.name] === nextPending
+                                      ? current
+                                      : { ...current, [repository.name]: nextPending },
+                                  )
+                                }
+                                onSelectionsChange={(selections) =>
+                                  setRepositoryBootstrapSelections((current) => ({
+                                    ...current,
+                                    [repository.name]: selections,
+                                  }))
+                                }
+                              />
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                {t('workspace.branch-workspace.repository-dependencies-empty')}
+                              </p>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </fieldset>
-            {mode === 'create' ? (
-              <MaterializationCandidateList
-                items={auxiliaryCandidates.map((candidate) => {
-                  const fixed = fixedAuxiliary.has(candidate.name)
-                  return {
-                    id: candidate.name,
-                    label: candidate.name,
-                    kind: candidate.kind === 'directory' ? 'directory' : 'file',
-                    disabled: fixed,
-                    annotation: (
-                      <>
-                        {candidate.outsideRoot ? (
-                          <span className="shrink-0 text-[10px] text-warning">
-                            {t('workspace.branch-workspace.outside-root')}
-                          </span>
-                        ) : null}
-                        {fixed ? (
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {t('workspace.branch-workspace.member-fixed')}
-                          </span>
-                        ) : null}
-                      </>
-                    ),
-                  }
-                })}
-                choices={auxiliaryChoices}
-                onChoiceChange={(name, choice) => setAuxiliaryChoices((current) => ({ ...current, [name]: choice }))}
-                headingId="branch-workspace-auxiliary-candidates"
-                label={t('workspace.branch-workspace.auxiliary')}
-                emptyMessage={t('workspace.branch-workspace.auxiliary-empty')}
-                headerAction={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t('workspace.branch-workspace.auxiliary-refresh')}
-                    title={t('workspace.branch-workspace.auxiliary-refresh')}
-                    disabled={pending || auxiliaryRefreshPending}
-                    onClick={() => void refreshAuxiliaryCandidates()}
-                  >
-                    <RefreshCw className={cn(auxiliaryRefreshPending && 'animate-spin')} aria-hidden="true" />
-                  </Button>
-                }
-                disabled={pending}
-              />
+                    )
+                  })}
+                </fieldset>
+                {mode === 'create' ? (
+                  <MaterializationCandidateList
+                    items={auxiliaryCandidates.map((candidate) => {
+                      const fixed = fixedAuxiliary.has(candidate.name)
+                      return {
+                        id: candidate.name,
+                        label: candidate.name,
+                        kind: candidate.kind === 'directory' ? 'directory' : 'file',
+                        disabled: fixed,
+                        annotation: (
+                          <>
+                            {candidate.outsideRoot ? (
+                              <span className="shrink-0 text-[10px] text-warning">
+                                {t('workspace.branch-workspace.outside-root')}
+                              </span>
+                            ) : null}
+                            {fixed ? (
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                {t('workspace.branch-workspace.member-fixed')}
+                              </span>
+                            ) : null}
+                          </>
+                        ),
+                      }
+                    })}
+                    choices={auxiliaryChoices}
+                    onChoiceChange={(name, choice) =>
+                      setAuxiliaryChoices((current) => ({ ...current, [name]: choice }))
+                    }
+                    headingId="branch-workspace-auxiliary-candidates"
+                    label={t('workspace.branch-workspace.auxiliary')}
+                    emptyMessage={t('workspace.branch-workspace.auxiliary-empty')}
+                    headerAction={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t('workspace.branch-workspace.auxiliary-refresh')}
+                        title={t('workspace.branch-workspace.auxiliary-refresh')}
+                        disabled={selectionLocked || auxiliaryRefreshPending}
+                        onClick={() => void refreshAuxiliaryCandidates()}
+                      >
+                        <RefreshCw className={cn(auxiliaryRefreshPending && 'animate-spin')} aria-hidden="true" />
+                      </Button>
+                    }
+                    disabled={selectionLocked}
+                  />
+                ) : null}
+                {mode === 'create' && auxiliaryRefreshError ? (
+                  <p className="text-xs text-danger" role="alert">
+                    {t(auxiliaryRefreshError)}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
-            {mode === 'create' && auxiliaryRefreshError ? (
+
+            {mode === 'repair' && auxiliaryRefreshError ? (
               <p className="text-xs text-danger" role="alert">
                 {t(auxiliaryRefreshError)}
               </p>
             ) : null}
-          </div>
-        ) : null}
 
-        {mode === 'repair' && auxiliaryRefreshError ? (
-          <p className="text-xs text-danger" role="alert">
-            {t(auxiliaryRefreshError)}
-          </p>
-        ) : null}
-
-        {!plan && mode === 'reduce' && workspace ? (
-          <div className="grid gap-3">
-            <p className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
-              {t('workspace.branch-workspace.reduce-retains-branches')}
-            </p>
-            <fieldset className="grid gap-2 rounded-md border border-separator p-3">
-              <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
-              {workspace.repositories.map((member) => (
-                <label key={member.repositoryName} className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    data-branch-workspace-reduce-member={member.repositoryName}
-                    aria-label={t('workspace.branch-workspace.repository-named', { name: member.repositoryName })}
-                    checked={selectedRepositories[member.repositoryName] === true}
-                    disabled={pending || fixedReduceRepositoryName !== null}
-                    onChange={(event) =>
-                      setSelectedRepositories((current) => ({
-                        ...current,
-                        [member.repositoryName]: event.target.checked,
-                      }))
-                    }
-                  />
-                  <span className="truncate font-medium">{member.repositoryName}</span>
-                </label>
-              ))}
-            </fieldset>
-          </div>
-        ) : null}
-
-        {!plan && mode === 'remove' ? (
-          <div className="grid gap-2 rounded-md border border-danger-border bg-danger-surface p-3 text-xs">
-            <p>{t('workspace.branch-workspace.delete-warning')}</p>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                aria-label={t('workspace.branch-workspace.delete-local-branch')}
-                checked={alsoDeleteBranch}
-                disabled={pending}
-                onChange={(event) => {
-                  setAlsoDeleteBranch(event.target.checked)
-                  if (!event.target.checked) setAlsoDeleteUpstream(false)
-                }}
-              />
-              {t('workspace.branch-workspace.delete-local-branch')}
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                aria-label={t('workspace.branch-workspace.delete-upstream-branch')}
-                checked={alsoDeleteUpstream}
-                disabled={pending || !alsoDeleteBranch}
-                onChange={(event) => setAlsoDeleteUpstream(event.target.checked)}
-              />
-              {t('workspace.branch-workspace.delete-upstream-branch')}
-            </label>
-          </div>
-        ) : null}
-
-        {workspace ? <WorkspaceSummary workspace={workspace} /> : null}
-        {plan ? (
-          <div className="grid gap-3">
-            {operationProgress ? (
-              <div
-                data-branch-workspace-operation-progress
-                role="status"
-                aria-live="polite"
-                className="flex items-center gap-2 rounded-md border border-separator bg-muted/20 px-3 py-2 text-xs"
-              >
-                {pending ? (
-                  <LoaderCircle className="size-4 shrink-0 animate-spin text-foreground" aria-hidden="true" />
-                ) : result?.ok === false ? (
-                  <X className="size-4 shrink-0 text-danger" aria-hidden="true" />
-                ) : (
-                  <Check className="size-4 shrink-0 text-success" aria-hidden="true" />
-                )}
-                <span className="font-medium">
-                  {t(`workspace.branch-workspace.progress.${mode === 'create' ? 'create' : 'remove'}`)}
-                </span>
-                <span className="ml-auto tabular-nums text-muted-foreground">
-                  {t('workspace.branch-workspace.progress.summary', {
-                    completed: operationProgress.completedCount,
-                    total: operationProgress.totalCount,
-                  })}
-                </span>
+            {oneStep && mode === 'reduce' && workspace ? (
+              <div className="grid gap-3">
+                <p className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+                  {t('workspace.branch-workspace.reduce-retains-branches')}
+                </p>
+                <fieldset className="grid gap-2 rounded-md border border-separator p-3">
+                  <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
+                  {workspace.repositories.map((member) => (
+                    <label key={member.repositoryName} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        data-branch-workspace-reduce-member={member.repositoryName}
+                        aria-label={t('workspace.branch-workspace.repository-named', { name: member.repositoryName })}
+                        checked={selectedRepositories[member.repositoryName] === true}
+                        disabled={selectionLocked || fixedReduceRepositoryName !== null}
+                        onChange={(event) =>
+                          setSelectedRepositories((current) => ({
+                            ...current,
+                            [member.repositoryName]: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span className="truncate font-medium">{member.repositoryName}</span>
+                    </label>
+                  ))}
+                </fieldset>
               </div>
             ) : null}
-            <div className="rounded-md border border-separator">
-              {plan.steps.length === 0 ? (
-                <p className="p-3 text-xs text-muted-foreground">{t('workspace.branch-workspace.no-pending-steps')}</p>
-              ) : (
-                groupBranchCleanupSteps(plan.steps).map((item) => {
-                  if (item.kind === 'branch-group') {
-                    return (
-                      <div
-                        key={item.steps.map((step) => step.id).join(':')}
-                        data-branch-workspace-branch-group={item.repositoryName}
-                        role="group"
-                        aria-label={item.repositoryName}
-                        className="border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
-                      >
-                        <div
-                          className={cn(
-                            'grid gap-2',
-                            item.steps.length > 1 && 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center',
-                          )}
-                        >
-                          {item.steps.map((step, index) => (
-                            <div key={step.id} className="contents">
-                              {index > 0 ? (
-                                <ArrowRight
-                                  className="mx-auto size-3.5 rotate-90 text-muted-foreground/70 sm:rotate-0"
-                                  aria-hidden="true"
-                                />
-                              ) : null}
-                              <div
-                                data-branch-workspace-progress-step={step.id}
-                                data-progress-status={progressStatusByStepId.get(step.id)}
-                                className="grid min-w-0 gap-1"
-                              >
-                                <BranchCleanupStepLabel step={step} />
-                                {progressStatusByStepId.get(step.id) ? (
-                                  <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
-                                ) : null}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  }
 
-                  const { step } = item
-                  const creationRepository =
-                    step.kind === 'create-worktree' && step.repositoryName
-                      ? plan.repositories.find((repository) => repository.repositoryName === step.repositoryName)
-                      : undefined
-                  return (
-                    <div
-                      key={step.id}
-                      data-branch-workspace-plan-step={step.kind}
-                      data-branch-workspace-progress-step={step.id}
-                      data-progress-status={progressStatusByStepId.get(step.id)}
-                      className={cn(
-                        'flex items-center justify-between gap-3 border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
-                        mode === 'create' &&
-                          step.kind === 'create-directory' &&
-                          'bg-success-surface font-semibold text-success',
-                        mode === 'remove' &&
-                          step.kind === 'remove-directory' &&
-                          'bg-danger-surface font-semibold text-danger',
-                      )}
-                    >
-                      <span className="grid min-w-0 gap-0.5">
-                        <span>{step.label}</span>
-                        {creationRepository ? (
-                          <BranchWorkspaceCreationSourcePreview repository={creationRepository} />
-                        ) : null}
-                      </span>
-                      {progressStatusByStepId.get(step.id) ? (
-                        <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
-                      ) : null}
-                    </div>
-                  )
-                })
-              )}
-            </div>
-            {plan.requiredApprovals.length > 0 ? (
-              <fieldset className="grid gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
-                <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.approvals')}</legend>
-                {plan.requiredApprovals.map((approval) => (
-                  <label key={approval} className="flex items-center gap-2 text-xs">
+            {oneStep && mode === 'remove' ? (
+              <div
+                data-branch-workspace-delete-scope
+                className="overflow-hidden rounded-md border border-danger-border bg-card text-xs"
+              >
+                <div className="flex items-start gap-2 border-b border-danger-border/60 bg-danger-surface p-3">
+                  <ShieldAlert className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden="true" />
+                  <p className="leading-relaxed">{t('workspace.branch-workspace.delete-warning')}</p>
+                </div>
+                <div className="grid divide-y divide-danger-border/50">
+                  <label className="flex items-center gap-2 px-3 py-2.5">
                     <input
                       type="checkbox"
-                      aria-label={t(`workspace.branch-workspace.approval.${approval}`)}
-                      checked={approvals.includes(approval)}
-                      disabled={pending}
-                      onChange={(event) =>
-                        setApprovals((current) =>
-                          event.target.checked
-                            ? [...current, approval]
-                            : current.filter((candidate) => candidate !== approval),
+                      aria-label={t('workspace.branch-workspace.delete-local-branch')}
+                      checked={alsoDeleteBranch}
+                      disabled={selectionLocked}
+                      onChange={(event) => {
+                        setAlsoDeleteBranch(event.target.checked)
+                        if (!event.target.checked) setAlsoDeleteUpstream(false)
+                      }}
+                    />
+                    {t('workspace.branch-workspace.delete-local-branch')}
+                  </label>
+                  <label
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-2.5',
+                      (selectionLocked || !alsoDeleteBranch) && 'opacity-60',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={t('workspace.branch-workspace.delete-upstream-branch')}
+                      checked={alsoDeleteUpstream}
+                      disabled={selectionLocked || !alsoDeleteBranch}
+                      onChange={(event) => setAlsoDeleteUpstream(event.target.checked)}
+                    />
+                    {t('workspace.branch-workspace.delete-upstream-branch')}
+                  </label>
+                </div>
+              </div>
+            ) : null}
+          </OneStepPlanningSelectionPane>
+          <OneStepPlanningPlanPane
+            enabled={oneStep}
+            testIdPrefix="branch-workspace"
+            title={t('workspace.branch-workspace.one-step.plan-title')}
+            description={operationConsole ? t(planDescriptionKey) : undefined}
+            presentation={operationConsole ? 'operation-console' : 'plain'}
+            step={operationConsole ? '02' : undefined}
+          >
+            {workspace ? <WorkspaceSummary workspace={workspace} /> : null}
+            {displayedPlan ? (
+              <div className="grid gap-3">
+                {operationProgress ? (
+                  <div
+                    data-branch-workspace-operation-progress
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center gap-2 rounded-md border border-separator bg-muted/20 px-3 py-2 text-xs"
+                  >
+                    {operationPending ? (
+                      <LoaderCircle className="size-4 shrink-0 animate-spin text-foreground" aria-hidden="true" />
+                    ) : result?.ok === false ? (
+                      <X className="size-4 shrink-0 text-danger" aria-hidden="true" />
+                    ) : (
+                      <Check className="size-4 shrink-0 text-success" aria-hidden="true" />
+                    )}
+                    <span className="font-medium">
+                      {t(`workspace.branch-workspace.progress.${mode === 'create' ? 'create' : 'remove'}`)}
+                    </span>
+                    <span className="ml-auto tabular-nums text-muted-foreground">
+                      {t('workspace.branch-workspace.progress.summary', {
+                        completed: operationProgress.completedCount,
+                        total: operationProgress.totalCount,
+                      })}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="overflow-hidden rounded-md border border-separator bg-card">
+                  {displayedPlan.steps.length === 0 ? (
+                    <p className="p-3 text-xs text-muted-foreground">
+                      {t('workspace.branch-workspace.no-pending-steps')}
+                    </p>
+                  ) : (
+                    groupBranchCleanupSteps(displayedPlan.steps).map((item, itemIndex) => {
+                      if (item.kind === 'branch-group') {
+                        return (
+                          <div
+                            key={item.steps.map((step) => step.id).join(':')}
+                            data-branch-workspace-branch-group={item.repositoryName}
+                            role="group"
+                            aria-label={item.repositoryName}
+                            className="flex items-start gap-2 border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
+                          >
+                            {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
+                            <div
+                              className={cn(
+                                'grid min-w-0 flex-1 gap-2',
+                                item.steps.length > 1 &&
+                                  'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center',
+                              )}
+                            >
+                              {item.steps.map((step, index) => (
+                                <div key={step.id} className="contents">
+                                  {index > 0 ? (
+                                    <ArrowRight
+                                      className="mx-auto size-3.5 rotate-90 text-muted-foreground/70 sm:rotate-0"
+                                      aria-hidden="true"
+                                    />
+                                  ) : null}
+                                  <div
+                                    data-branch-workspace-progress-step={step.id}
+                                    data-progress-status={progressStatusByStepId.get(step.id)}
+                                    className="grid min-w-0 gap-1"
+                                  >
+                                    <BranchCleanupStepLabel step={step} />
+                                    {progressStatusByStepId.get(step.id) ? (
+                                      <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )
                       }
-                    />
-                    {t(`workspace.branch-workspace.approval.${approval}`)}
-                  </label>
-                ))}
-              </fieldset>
+
+                      const { step } = item
+                      const creationRepository =
+                        step.kind === 'create-worktree' && step.repositoryName
+                          ? displayedPlan.repositories.find(
+                              (repository) => repository.repositoryName === step.repositoryName,
+                            )
+                          : undefined
+                      return (
+                        <div
+                          key={step.id}
+                          data-branch-workspace-plan-step={step.kind}
+                          data-branch-workspace-progress-step={step.id}
+                          data-progress-status={progressStatusByStepId.get(step.id)}
+                          className={cn(
+                            'flex items-center justify-between gap-3 border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
+                            mode === 'create' &&
+                              step.kind === 'create-directory' &&
+                              'bg-success-surface font-semibold text-success',
+                            mode === 'remove' &&
+                              step.kind === 'remove-directory' &&
+                              'bg-danger-surface font-semibold text-danger',
+                          )}
+                        >
+                          {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
+                          <div className="grid min-w-0 flex-1 gap-0.5">
+                            <span>{step.label}</span>
+                            {creationRepository ? (
+                              <>
+                                <BranchWorkspaceCreationSourcePreview repository={creationRepository} />
+                                <BranchWorkspaceRepositoryDependencyPreview repository={creationRepository} />
+                              </>
+                            ) : null}
+                          </div>
+                          {progressStatusByStepId.get(step.id) ? (
+                            <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
+                          ) : null}
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                {displayedPlan.requiredApprovals.length > 0 ? (
+                  <fieldset className="grid gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
+                    <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.approvals')}</legend>
+                    {displayedPlan.requiredApprovals.map((approval) => (
+                      <label key={approval} className="flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          aria-label={t(`workspace.branch-workspace.approval.${approval}`)}
+                          checked={approvals.includes(approval)}
+                          disabled={operationPending}
+                          onChange={(event) =>
+                            setApprovals((current) =>
+                              event.target.checked
+                                ? [...current, approval]
+                                : current.filter((candidate) => candidate !== approval),
+                            )
+                          }
+                        />
+                        {t(`workspace.branch-workspace.approval.${approval}`)}
+                      </label>
+                    ))}
+                  </fieldset>
+                ) : null}
+              </div>
+            ) : oneStep ? (
+              operationConsole ? (
+                <BranchWorkspacePlanPlaceholder status={autoPlan.status} />
+              ) : (
+                <div
+                  data-plan-status={autoPlan.status}
+                  className="flex min-h-20 items-center justify-center gap-2 rounded-md border border-separator bg-muted/20 p-4 text-xs text-muted-foreground"
+                  role="status"
+                >
+                  {autoPlan.status === 'planning' ? (
+                    <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                  ) : null}
+                  {t(
+                    autoPlan.status === 'planning'
+                      ? 'workspace.branch-workspace.one-step.planning'
+                      : autoPlan.status === 'error'
+                        ? 'workspace.branch-workspace.one-step.plan-error'
+                        : 'workspace.branch-workspace.one-step.incomplete',
+                  )}
+                </div>
+              )
+            ) : pending ? (
+              <div className="flex min-h-20 items-center justify-center gap-2 text-xs text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                {t('workspace.branch-workspace.planning')}
+              </div>
             ) : null}
-          </div>
-        ) : pending ? (
-          <div className="flex min-h-20 items-center justify-center gap-2 text-xs text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-            {t('workspace.branch-workspace.planning')}
-          </div>
-        ) : null}
 
-        {error ? (
-          <p className="text-xs text-danger" role="alert">
-            {t(error)}
-          </p>
-        ) : null}
+            {error ? (
+              <p className="text-xs text-danger" role="alert">
+                {t(error)}
+              </p>
+            ) : null}
+          </OneStepPlanningPlanPane>
+        </OneStepPlanningLayout>
 
-        <DialogFooter>
+        <DialogFooter
+          className={cn(
+            operationConsole &&
+              '-mx-4 -mb-4 border-t border-separator px-4 py-3 [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto',
+          )}
+        >
           {mode === 'repair' ? (
             <Button
               type="button"
@@ -1080,7 +1383,7 @@ export function BranchWorkspaceDialog({
           <Button type="button" variant="outline" disabled={removalExecutionLocked} onClick={close}>
             {t('dialog.cancel')}
           </Button>
-          {!plan ? (
+          {!oneStep && !plan ? (
             <Button
               type="button"
               data-action="preview"
@@ -1093,16 +1396,34 @@ export function BranchWorkspaceDialog({
               {t('workspace.branch-workspace.preview')}
             </Button>
           ) : null}
-          {plan ? (
+          {plan && mode === 'remove' ? (
+            <Button
+              type="button"
+              data-action="force-confirm"
+              variant="destructive"
+              title={t('workspace.branch-workspace.force-delete-description')}
+              disabled={operationPending || !currentPlanReady || !requiredApprovalsSatisfied}
+              onClick={() => void run(onForceConfirm)}
+            >
+              {t('workspace.branch-workspace.force-delete')}
+            </Button>
+          ) : null}
+          {plan || oneStep ? (
             <Button
               type="button"
               data-action="confirm"
               variant={destructiveConfirm ? 'destructive' : 'default'}
-              disabled={pending || !requiredApprovalsSatisfied}
+              disabled={operationPending || !currentPlanReady || !requiredApprovalsSatisfied}
               onClick={() => void run(onConfirm)}
             >
-              {operationProgress && pending && result === null ? (
+              {operationProgress && operationPending && result === null ? (
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : operationConsole ? (
+                mode === 'create' ? (
+                  <FolderPlus className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                )
               ) : null}
               {t(`workspace.branch-workspace.dialog.${mode}.confirm`)}
             </Button>
@@ -1112,10 +1433,14 @@ export function BranchWorkspaceDialog({
               type="button"
               data-action="return-to-selection"
               variant="outline"
-              disabled={pending}
+              disabled={operationPending}
               onClick={onReturnToSelection}
             >
-              {t('workspace.branch-workspace.return-to-selection')}
+              {t(
+                oneStep
+                  ? 'workspace.branch-workspace.one-step.modify-selection'
+                  : 'workspace.branch-workspace.return-to-selection',
+              )}
             </Button>
           ) : null}
           {result && !result.ok ? (
@@ -1123,10 +1448,10 @@ export function BranchWorkspaceDialog({
               type="button"
               data-action="retry"
               variant="outline"
-              disabled={pending || !requiredApprovalsSatisfied}
+              disabled={operationPending || !requiredApprovalsSatisfied}
               onClick={() => void run(onRetry)}
             >
-              {operationProgress && pending ? (
+              {operationProgress && operationPending ? (
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
               ) : null}
               {t('workspace.branch-workspace.retry')}
@@ -1197,6 +1522,90 @@ function BranchWorkspaceCreationSourcePreview({ repository }: { repository: Bran
           ? 'workspace.branch-workspace.preview-sync-enabled'
           : 'workspace.branch-workspace.preview-sync-disabled',
       )}
+    </span>
+  )
+}
+
+function BranchWorkspaceRepositoryDependencyPreview({ repository }: { repository: BranchWorkspaceRepositoryPlan }) {
+  const t = useT()
+  if (repository.worktreeBootstrap.kind !== 'materialize') return null
+  const { selections } = repository.worktreeBootstrap
+  if (selections.length === 0) return null
+
+  return (
+    <div
+      data-branch-workspace-plan-repository-dependencies={repository.repositoryName}
+      role="group"
+      aria-label={t('workspace.branch-workspace.repository-dependencies')}
+      className="mt-1 grid gap-1.5 rounded-md border border-separator/60 bg-muted/15 p-2 font-normal"
+    >
+      <span className="text-[10px] font-medium text-muted-foreground">
+        {t('workspace.branch-workspace.repository-dependencies')}
+      </span>
+      <ul className="grid gap-1">
+        {selections.map((selection) => (
+          <li
+            key={selection.path}
+            data-branch-workspace-plan-repository-dependency={selection.path}
+            className="flex min-w-0 items-center gap-1.5 text-[10px]"
+          >
+            <Check className="size-3 shrink-0 text-success" aria-hidden="true" />
+            <code className="min-w-0 break-all font-mono" title={selection.path}>
+              {selection.path}
+            </code>
+            <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+              {t(`worktree-dependency-tree.${selection.mode}`)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function BranchWorkspacePlanPlaceholder({ status }: { status: 'incomplete' | 'planning' | 'ready' | 'error' }) {
+  const t = useT()
+  const icon =
+    status === 'planning' ? (
+      <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden="true" />
+    ) : status === 'error' ? (
+      <AlertTriangle className="size-4 shrink-0 text-danger" aria-hidden="true" />
+    ) : (
+      <ClipboardList className="size-4 shrink-0" aria-hidden="true" />
+    )
+  return (
+    <div
+      data-plan-status={status}
+      className={cn(
+        'flex min-h-20 items-start gap-2 rounded-md border p-3 text-xs',
+        status === 'error'
+          ? 'border-danger-border bg-danger-surface text-danger'
+          : 'border-separator bg-muted/20 text-muted-foreground',
+      )}
+      role="status"
+    >
+      {icon}
+      <span className="leading-relaxed">
+        {t(
+          status === 'planning'
+            ? 'workspace.branch-workspace.one-step.planning'
+            : status === 'error'
+              ? 'workspace.branch-workspace.one-step.plan-error'
+              : 'workspace.branch-workspace.one-step.incomplete',
+        )}
+      </span>
+    </div>
+  )
+}
+
+function BranchWorkspacePlanSequence({ index }: { index: number }) {
+  return (
+    <span
+      data-branch-workspace-plan-sequence={index + 1}
+      aria-hidden="true"
+      className="w-5 shrink-0 pt-0.5 font-mono text-[9px] font-medium tabular-nums text-muted-foreground"
+    >
+      {String(index + 1).padStart(2, '0')}
     </span>
   )
 }
@@ -1284,12 +1693,17 @@ function localBranchMatchesQuery(branch: string, query: string): boolean {
 function WorkspaceSummary({ workspace }: { workspace: BranchWorkspaceSnapshot }) {
   const t = useT()
   return (
-    <div className="grid gap-1 rounded-md border border-separator bg-muted/20 p-3 text-xs">
+    <div
+      data-branch-workspace-target-summary
+      className="grid gap-1 rounded-md border border-separator bg-muted/20 p-3 text-xs"
+    >
       <div className="flex items-center gap-2 font-medium">
         <FolderKanban className="size-4" aria-hidden="true" />
         <span>{workspace.branch}</span>
       </div>
-      <span className="font-mono text-[10px] text-muted-foreground">{workspace.path}</span>
+      <span className="break-all font-mono text-[10px] text-muted-foreground" title={workspace.path}>
+        {workspace.path}
+      </span>
       {workspace.issues.map((issue, index) => (
         <span key={`${issue.kind}-${index}`} className="text-warning">
           {t(issue.message ?? `workspace.branch-workspace.issue.${issue.kind}`)}

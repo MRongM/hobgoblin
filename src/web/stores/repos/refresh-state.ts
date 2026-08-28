@@ -1,18 +1,12 @@
 import { markRepoAvailable } from '#/web/stores/repos/availability.ts'
 import { selectedBranchForBranchSet } from '#/web/stores/repos/branch-view-mode.ts'
-import {
-  cancelResource,
-  finishResourceError,
-  finishResourceSuccess,
-} from '#/web/stores/repos/resources.ts'
+import { cancelResource, finishResourceError, finishResourceSuccess } from '#/web/stores/repos/resources.ts'
 import { canStartRemoteFetch } from '#/web/stores/repos/sync-state.ts'
-import {
-  stripBranchWorktreeMetadata,
-  worktreeStatesFromBranches,
-} from '#/web/stores/repos/worktree-state.ts'
+import { stripBranchWorktreeMetadata, worktreeStatesFromBranches } from '#/web/stores/repos/worktree-state.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 import type { RepoState, ReposGet } from '#/web/stores/repos/types.ts'
 import type { ExecResult } from '#/web/types.ts'
+import { isSelectableDetachedWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
 export function applySnapshotToRepoProjection(r: RepoState, snap: RepoSnapshot): void {
   const selected = selectedBranchForBranchSet({
@@ -25,7 +19,7 @@ export function applySnapshotToRepoProjection(r: RepoState, snap: RepoSnapshot):
   r.data.branches = branches
   r.data.currentBranch = snap.current
   r.data.worktreesByPath = worktreeStatesFromBranches(snap.branches, r.data.worktreesByPath, r.data.status)
-  r.ui.selectedBranch = selected
+  r.ui.selectedBranch = r.ui.selectedDetachedWorktreePath ? null : selected
   if (snap.remote) {
     r.remote.remotes = snap.remote.remotes.map((remote) => remote.name)
     r.remote.remoteDetails = snap.remote.remotes
@@ -40,7 +34,11 @@ export function applySnapshotToRepoProjection(r: RepoState, snap: RepoSnapshot):
     }
   }
   markRepoAvailable(r)
-  if (r.ui.detailTab === 'terminal' && !branches.some((branch) => branch.name === selected && branch.worktree?.path)) {
+  if (
+    r.ui.detailTab === 'terminal' &&
+    !r.ui.selectedDetachedWorktreePath &&
+    !branches.some((branch) => branch.name === selected && branch.worktree?.path)
+  ) {
     r.ui.detailTab = 'status'
   }
   r.projection.source = 'fresh'
@@ -48,8 +46,35 @@ export function applySnapshotToRepoProjection(r: RepoState, snap: RepoSnapshot):
   finishResourceSuccess(r.resources.snapshot)
 }
 
+export function reconcileRepoWorktreeSelectionAfterStatus(r: RepoState): void {
+  const detachedPath = r.ui.selectedDetachedWorktreePath
+  if (!detachedPath) return
+  if (isSelectableDetachedWorktree(r.data.worktreesByPath[detachedPath])) {
+    r.ui.selectedBranch = null
+    return
+  }
+  r.ui.selectedDetachedWorktreePath = null
+  r.ui.selectedBranch = selectedBranchForBranchSet({
+    branches: r.data.branches,
+    currentBranch: r.data.currentBranch,
+    selectedBranch: r.ui.selectedBranch,
+    viewMode: 'worktrees',
+  })
+  if (
+    r.ui.detailTab === 'terminal' &&
+    !r.data.branches.some((branch) => branch.name === r.ui.selectedBranch && branch.worktree?.path)
+  ) {
+    r.ui.detailTab = 'status'
+  }
+}
+
 export function shouldAttemptFetch(repo: RepoState | null | undefined, token: number): boolean {
-  return !!repo && repo.instanceToken === token && repo.remote.hasRemotes === true && repo.availability.phase !== 'unavailable'
+  return (
+    !!repo &&
+    repo.instanceToken === token &&
+    repo.remote.hasRemotes === true &&
+    repo.availability.phase !== 'unavailable'
+  )
 }
 
 export function repoIfFresh(get: ReposGet, id: string, token: number): RepoState | null {

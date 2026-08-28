@@ -137,6 +137,10 @@ describe('settings snapshot partitions', () => {
         outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: false,
         outputTailLength: 200,
+        terminalInputEnabled: false,
+        terminalInputAllowedUserIds: [],
+        terminalInputPollingTimeoutSeconds: 25,
+        terminalInputRuntime: { status: 'stopped' },
       },
       session: {
         openRepos: [{ kind: 'local', id: '/tmp/repo-b' }],
@@ -204,6 +208,10 @@ describe('settings snapshot partitions', () => {
         outputCompletionMinimumActivitySeconds: 10,
         includeTerminalOutput: false,
         outputTailLength: 200,
+        terminalInputEnabled: false,
+        terminalInputAllowedUserIds: [],
+        terminalInputPollingTimeoutSeconds: 25,
+        terminalInputRuntime: { status: 'stopped' },
       },
     })
 
@@ -229,6 +237,10 @@ describe('settings snapshot partitions', () => {
         outputCompletionMinimumActivitySeconds: 30,
         includeTerminalOutput: true,
         outputTailLength: 1024,
+        terminalInputEnabled: true,
+        terminalInputAllowedUserIds: ['123'],
+        terminalInputPollingTimeoutSeconds: 30,
+        terminalInputRuntime: { status: 'running', botUsername: 'hobgoblin_bot' },
       },
     })
 
@@ -243,6 +255,10 @@ describe('settings snapshot partitions', () => {
       outputCompletionMinimumActivitySeconds: 30,
       includeTerminalOutput: true,
       outputTailLength: 1024,
+      terminalInputEnabled: true,
+      terminalInputAllowedUserIds: ['123'],
+      terminalInputPollingTimeoutSeconds: 30,
+      terminalInputRuntime: { status: 'running', botUsername: 'hobgoblin_bot' },
     })
     expect(JSON.stringify(snapshot)).not.toContain('passwordHash')
   })

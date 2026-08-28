@@ -129,6 +129,18 @@ export interface ExecResult {
   worktreeBootstrap?: WorktreeBootstrapSummary
 }
 
+/** Remote target selected for a confirmed destructive alignment. */
+export interface RemoteAlignmentTarget {
+  branch: string
+  remoteRef: string
+  remoteHead: string
+}
+
+export interface WorktreeContentState {
+  indexHash: string
+  worktreeTree: string
+}
+
 /** Branch names we treat as protected — direct push/delete/etc. require
  *  extra confirmation, and "delete branch" is forbidden outright. Shared
  *  between main (server-side enforcement in IPC handlers) and renderer

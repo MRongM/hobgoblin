@@ -6,17 +6,26 @@ class MockExecaError extends Error {
   stderr = ''
 }
 
-const execaMock = vi.hoisted(() => vi.fn())
+const { execaMock, resolveGitExecutableMock } = vi.hoisted(() => ({
+  execaMock: vi.fn(),
+  resolveGitExecutableMock: vi.fn(),
+}))
 
 vi.mock('execa', () => ({
   execa: execaMock,
   ExecaError: MockExecaError,
 }))
 
+vi.mock('#/system/git/executable.ts', () => ({
+  resolveGitExecutable: resolveGitExecutableMock,
+}))
+
 describe('git network helper options', () => {
   beforeEach(() => {
     execaMock.mockReset()
     execaMock.mockResolvedValue({ stdout: 'ok\n', stderr: '' })
+    resolveGitExecutableMock.mockReset()
+    resolveGitExecutableMock.mockReturnValue('git')
   })
 
   test('does not build proxy env for missing or unsupported proxy urls', async () => {
@@ -61,7 +70,30 @@ describe('git network helper options', () => {
       expect.objectContaining({
         cwd: '/repo',
         timeout: 120_000,
-        env,
+        env: expect.objectContaining(env ?? {}),
+      }),
+    )
+  })
+
+  test('uses the resolved executable with deterministic non-interactive output settings', async () => {
+    resolveGitExecutableMock.mockReturnValue('C:\\Program Files\\Git\\cmd\\git.exe')
+    const { buildGitNetworkEnv, git } = await import('#/system/git/helper.ts')
+
+    await git('/repo', ['fetch'], {
+      env: buildGitNetworkEnv('http://127.0.0.1:7890'),
+    })
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'C:\\Program Files\\Git\\cmd\\git.exe',
+      ['fetch'],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          HTTPS_PROXY: 'http://127.0.0.1:7890',
+          LANGUAGE: 'en',
+          LC_ALL: 'en_US.UTF-8',
+          LANG: 'en_US.UTF-8',
+          GIT_PAGER: 'cat',
+        }),
       }),
     )
   })

@@ -7,6 +7,7 @@ import {
 import { branchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { publishBranchWorkspaceOperationUpdate } from '#/server/modules/invalidation-broker.ts'
 import {
+  alignRepositoryWorktreeToRemote,
   commitRepositoryChanges,
   createRepositoryWorktree,
   discardRepositoryChanges,
@@ -22,6 +23,7 @@ import {
 import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import {
   normalizeBranchWorkspaceGitActionExecuteInput,
+  type BranchWorkspaceBatchPushTargetInput,
   type BranchWorkspaceBatchMergeInMemberPlan,
   type BranchWorkspaceBatchMergeInSourceInput,
   type BranchWorkspaceBatchMergeInSourcePlan,
@@ -51,6 +53,7 @@ import {
 interface PendingAction {
   plan: BranchWorkspaceGitActionPlan
   completed: Set<string>
+  requiresReplan?: boolean
   mergeProgress: Map<string, 'pulled' | 'fetched' | 'verified' | 'merged' | 'pushed'>
   mergeTemporaryWorktrees: Map<string, string>
   mergeExecution?:
@@ -68,6 +71,10 @@ interface PendingAction {
     kind: 'batch-set-upstream'
     upstreams: BranchWorkspaceBatchSetUpstreamInput[]
   }
+  pushExecution?: {
+    kind: 'push'
+    targets: BranchWorkspaceBatchPushTargetInput[]
+  }
 }
 
 type BranchWorkspaceBatchMergeInExecutionMember = BranchWorkspaceBatchMergeInMemberPlan & {
@@ -80,6 +87,8 @@ type BranchWorkspaceBatchMergeOutExecutionMember = BranchWorkspaceBatchMergeOutM
 
 type BranchWorkspaceBatchSetUpstreamExecutionMember = BranchWorkspaceBatchSetUpstreamMemberPlan &
   BranchWorkspaceBatchSetUpstreamInput
+
+type BranchWorkspaceBatchPushExecutionMember = BranchWorkspaceSyncMemberPlan & BranchWorkspaceBatchPushTargetInput
 
 interface ActiveAction {
   branchWorkspaceId: string
@@ -109,6 +118,7 @@ export interface BranchWorkspaceGitActionWriteDependencies {
   validatePlan?: typeof validateBranchWorkspaceGitActionPlan
   commit?: typeof commitRepositoryChanges
   discard?: typeof discardRepositoryChanges
+  alignRemote?: typeof alignRepositoryWorktreeToRemote
   pull?: typeof pullRepositoryBranch
   merge?: typeof mergeRepositoryBranch
   push?: typeof pushRepositoryBranch
@@ -144,6 +154,7 @@ export function createBranchWorkspaceGitActionWriteService(
   const validatePlan = dependencies.validatePlan ?? validateBranchWorkspaceGitActionPlan
   const commit = dependencies.commit ?? commitRepositoryChanges
   const discard = dependencies.discard ?? discardRepositoryChanges
+  const alignRemote = dependencies.alignRemote ?? alignRepositoryWorktreeToRemote
   const pull = dependencies.pull ?? pullRepositoryBranch
   const merge = dependencies.merge ?? mergeRepositoryBranch
   const push = dependencies.push ?? pushRepositoryBranch
@@ -182,11 +193,17 @@ export function createBranchWorkspaceGitActionWriteService(
       if (!state || state.plan.token !== input.planToken || state.plan.kind !== input.kind) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.plan-expired' }
       }
+      if (state.requiresReplan) {
+        return { ok: false, message: 'workspace.branch-workspace.git-action.plan-expired' }
+      }
       if (active.has(normalizedRootId)) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.operation-active' }
       }
       if (input.kind === 'batch-commit' && !validBatchMessages(state.plan, input)) {
         return { ok: false, message: 'error.invalid-arguments' }
+      }
+      if (input.kind === 'batch-align-remote' && state.plan.kind === input.kind && !state.plan.ready) {
+        return { ok: false, message: 'workspace.branch-workspace.git-action.target-upstream-required' }
       }
       const mergeInSelection =
         input.kind === 'batch-merge-in' ? selectedBatchMergeInMembers(state.plan, input.sources) : null
@@ -198,10 +215,13 @@ export function createBranchWorkspaceGitActionWriteService(
       if (input.kind === 'batch-merge-out' && (!mergeOutSelection || !mergeOutSelection.ok)) {
         return { ok: false, message: mergeOutSelection?.message ?? 'error.invalid-arguments' }
       }
-      const syncSelection =
-        input.kind === 'pull' || input.kind === 'push' ? selectedSyncMembers(state.plan, input.repositoryNames) : null
-      if ((input.kind === 'pull' || input.kind === 'push') && (!syncSelection || !syncSelection.ok)) {
-        return { ok: false, message: syncSelection?.message ?? 'error.invalid-arguments' }
+      const pullSelection = input.kind === 'pull' ? selectedSyncMembers(state.plan, input.repositoryNames) : null
+      if (input.kind === 'pull' && (!pullSelection || !pullSelection.ok)) {
+        return { ok: false, message: pullSelection?.message ?? 'error.invalid-arguments' }
+      }
+      const pushSelection = input.kind === 'push' ? selectedBatchPushMembers(state.plan, input.targets) : null
+      if (input.kind === 'push' && (!pushSelection || !pushSelection.ok)) {
+        return { ok: false, message: pushSelection?.message ?? 'error.invalid-arguments' }
       }
       const upstreamSelection =
         input.kind === 'batch-set-upstream' ? selectedBatchSetUpstreamMembers(state.plan, input.upstreams) : null
@@ -210,7 +230,7 @@ export function createBranchWorkspaceGitActionWriteService(
       }
       const mergeInMembers = mergeInSelection?.ok ? mergeInSelection.members : null
       const mergeOutMembers = mergeOutSelection?.ok ? mergeOutSelection.members : null
-      const syncMembers = syncSelection?.ok ? syncSelection.members : null
+      const syncMembers = pullSelection?.ok ? pullSelection.members : pushSelection?.ok ? pushSelection.members : null
       const upstreamMembers = upstreamSelection?.ok ? upstreamSelection.members : null
       const selectedMembers = mergeInMembers ?? mergeOutMembers ?? upstreamMembers ?? syncMembers
       if (input.kind === 'batch-merge-in' && mergeInMembers) {
@@ -264,6 +284,17 @@ export function createBranchWorkspaceGitActionWriteService(
         }
         state.upstreamExecution ??= { kind: input.kind, upstreams }
       }
+      if (input.kind === 'push' && pushSelection?.ok) {
+        const targets = pushSelection.members.map<BranchWorkspaceBatchPushTargetInput>((member) =>
+          member.action === 'create-upstream'
+            ? { repositoryName: member.repositoryName, action: member.action, remote: member.remote }
+            : { repositoryName: member.repositoryName, action: member.action },
+        )
+        if (state.pushExecution && !sameBatchPushTargets(state.pushExecution.targets, targets)) {
+          return { ok: false, message: 'error.invalid-arguments' }
+        }
+        state.pushExecution ??= { kind: 'push', targets }
+      }
 
       const controller = new AbortController()
       const progressMembers = selectedMembers ?? state.plan.members
@@ -315,6 +346,9 @@ export function createBranchWorkspaceGitActionWriteService(
         }
         if (input.kind === 'batch-discard') {
           return await executeBatchDiscard(state, controller.signal, discard, executionContext)
+        }
+        if (input.kind === 'batch-align-remote') {
+          return await executeBatchAlignRemote(state, controller.signal, alignRemote, executionContext)
         }
         if (input.kind === 'batch-merge-in') {
           const execution = state.mergeExecution
@@ -400,7 +434,21 @@ export function createBranchWorkspaceGitActionWriteService(
             skippedRepositoryNames,
           )
         }
-        if (!syncMembers) return { ok: false, message: 'error.invalid-arguments' }
+        if (input.kind === 'push') {
+          const execution = state.pushExecution
+          if (!execution) return { ok: false, message: 'error.invalid-arguments' }
+          const refreshedSelection = selectedBatchPushMembers(validation.plan, execution.targets, state.completed)
+          if (!refreshedSelection.ok) return { ok: false, message: refreshedSelection.message }
+          return await executeSync(
+            state,
+            input.kind,
+            refreshedSelection.members,
+            controller.signal,
+            { pull, push },
+            executionContext,
+          )
+        }
+        if (!syncMembers || input.kind !== 'pull') return { ok: false, message: 'error.invalid-arguments' }
         return await executeSync(state, input.kind, syncMembers, controller.signal, { pull, push }, executionContext)
       } catch (error) {
         return failureResult(state.plan, state.completed, controller.signal.aborted ? 'cancelled' : safeMessage(error))
@@ -469,6 +517,22 @@ function sameBatchSetUpstreams(
         return false
       }
       return upstream.action === 'unset' || (candidate.action === 'set' && upstream.remoteRef === candidate.remoteRef)
+    })
+  )
+}
+
+function sameBatchPushTargets(
+  left: BranchWorkspaceBatchPushTargetInput[],
+  right: BranchWorkspaceBatchPushTargetInput[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((target, index) => {
+      const candidate = right[index]
+      if (!candidate || target.repositoryName !== candidate.repositoryName || target.action !== candidate.action) {
+        return false
+      }
+      return target.action === 'push' || (candidate.action === 'create-upstream' && target.remote === candidate.remote)
     })
   )
 }
@@ -569,6 +633,38 @@ function selectedSyncMembers(
     : { ok: false, message: 'error.invalid-arguments' }
 }
 
+function selectedBatchPushMembers(
+  plan: BranchWorkspaceGitActionPlan,
+  targets: BranchWorkspaceBatchPushTargetInput[],
+  completed: ReadonlySet<string> = new Set(),
+): { ok: true; members: BranchWorkspaceBatchPushExecutionMember[] } | { ok: false; message: string } {
+  if (plan.kind !== 'push') return { ok: false, message: 'error.invalid-arguments' }
+  const selected = new Map(targets.map((target) => [target.repositoryName, target]))
+  const members: BranchWorkspaceBatchPushExecutionMember[] = []
+  for (const member of plan.members) {
+    const target = selected.get(member.repositoryName)
+    if (!target) continue
+    if (!completed.has(member.repositoryName) && !member.ready) {
+      return { ok: false, message: member.message ?? 'error.invalid-arguments' }
+    }
+    if (completed.has(member.repositoryName)) {
+      members.push({ ...member, ...target })
+      continue
+    }
+    if (member.requiresUpstreamCreation) {
+      if (target.action !== 'create-upstream' || !member.pushRemotes.includes(target.remote)) {
+        return { ok: false, message: 'error.invalid-arguments' }
+      }
+    } else if (target.action !== 'push') {
+      return { ok: false, message: 'error.invalid-arguments' }
+    }
+    members.push({ ...member, ...target })
+  }
+  return members.length === selected.size && members.length > 0
+    ? { ok: true, members }
+    : { ok: false, message: 'error.invalid-arguments' }
+}
+
 function validBatchMessages(
   plan: BranchWorkspaceGitActionPlan,
   input: Extract<BranchWorkspaceGitActionExecuteInput, { kind: 'batch-commit' }>,
@@ -650,6 +746,47 @@ async function executeBatchDiscard(
     publishActiveOperation(context)
   }
   return executionResult(state.plan, state.completed, failures)
+}
+
+async function executeBatchAlignRemote(
+  state: PendingAction,
+  signal: AbortSignal,
+  alignRemote: typeof alignRepositoryWorktreeToRemote,
+  context: ActionExecutionContext,
+): Promise<BranchWorkspaceGitActionResult> {
+  if (state.plan.kind !== 'batch-align-remote') {
+    return failureResult(state.plan, state.completed, 'error.invalid-arguments')
+  }
+  const failures: BranchWorkspaceGitActionMemberFailures = new Map()
+  let retryable = true
+  for (let index = 0; index < state.plan.members.length; index += 1) {
+    const member = state.plan.members[index]!
+    if (state.completed.has(member.repositoryName)) continue
+    if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+    updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, 'align')
+    publishActiveOperation(context)
+    context.touchedRepoIds.add(member.repoId)
+    const result = await attemptMemberOperation(() =>
+      alignRemote(member.repoId, member.targetBranch, member.targetWorktreePath, signal, undefined, {
+        ...DEFER_REPOSITORY_INVALIDATION,
+        expectedFingerprint: member.fingerprint,
+      }),
+    )
+    if (!result.ok) {
+      recordActionFailure(failures, member.repositoryName, 'align', result, member.targetWorktreePath)
+      if (result.repoChanged) {
+        retryable = false
+        state.requiresReplan = true
+        if (signal.aborted) return executionResult(state.plan, state.completed, failures, new Set(), false)
+      }
+      if (signal.aborted) return failureResult(state.plan, state.completed, 'cancelled')
+      continue
+    }
+    state.completed.add(member.repositoryName)
+    updateActive(context.active.get(context.rootId), index + 1, state.completed.size)
+    publishActiveOperation(context)
+  }
+  return executionResult(state.plan, state.completed, failures, new Set(), retryable)
 }
 
 async function executeBatchMergeIn(
@@ -1318,7 +1455,7 @@ async function executeBatchSetUpstream(
 async function executeSync(
   state: PendingAction,
   kind: 'pull' | 'push',
-  members: BranchWorkspaceSyncMemberPlan[],
+  members: BranchWorkspaceSyncMemberPlan[] | BranchWorkspaceBatchPushExecutionMember[],
   signal: AbortSignal,
   operations: {
     pull: typeof pullRepositoryBranch
@@ -1377,9 +1514,12 @@ async function executeSync(
     updateActive(context.active.get(context.rootId), index + 1, state.completed.size, member.repositoryName, kind)
     publishActiveOperation(context)
     context.touchedRepoIds.add(member.repoId)
-    const result = await attemptMemberOperation(
-      async () =>
-        await operations.push(member.repoId, member.targetBranch, signal, undefined, DEFER_REPOSITORY_INVALIDATION),
+    const pushOptions =
+      'action' in member && member.action === 'create-upstream'
+        ? { ...DEFER_REPOSITORY_INVALIDATION, createUpstreamRemote: member.remote }
+        : DEFER_REPOSITORY_INVALIDATION
+    const result = await attemptMemberOperation(async () =>
+      operations.push(member.repoId, member.targetBranch, signal, undefined, pushOptions),
     )
     if (!result.ok) {
       if (signal.aborted) return failureResult(plan, state.completed, 'cancelled')
@@ -1497,6 +1637,7 @@ function executionResult(
   completed: ReadonlySet<string>,
   failures: ReadonlyMap<string, BranchWorkspaceGitActionMemberResult>,
   satisfied: ReadonlySet<string> = new Set(),
+  retryable = true,
 ): BranchWorkspaceGitActionResult {
   if (failures.size === 0) return successResult(plan, completed, satisfied)
   return {
@@ -1505,6 +1646,7 @@ function executionResult(
     planToken: plan.token,
     branchWorkspaceId: plan.branchWorkspaceId,
     message: 'workspace.branch-workspace.git-action.members-failed',
+    ...(retryable ? {} : { retryable: false }),
     members: plan.members.map((member) => {
       const failure = failures.get(member.repositoryName)
       if (failure) return failure

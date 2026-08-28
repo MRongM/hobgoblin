@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   stopBackgroundSync: vi.fn(),
   shutdownPortForwarding: vi.fn(),
   workerHostCtor: vi.fn(),
+  telegramRuntime: { reconcile: vi.fn(async () => undefined), shutdown: vi.fn() },
+  createTelegramTerminalInputRuntime: vi.fn(),
 }))
 
 vi.mock('#/server/app-factory.ts', () => ({
@@ -18,6 +20,10 @@ vi.mock('#/server/modules/background-sync.ts', () => ({
 
 vi.mock('#/server/modules/port-forwarding.ts', () => ({
   shutdownPortForwarding: mocks.shutdownPortForwarding,
+}))
+
+vi.mock('#/server/modules/telegram-terminal-input-runtime.ts', () => ({
+  createTelegramTerminalInputRuntime: mocks.createTelegramTerminalInputRuntime,
 }))
 
 vi.mock('#/server/terminal/terminal-worker-host.ts', () => ({
@@ -34,11 +40,15 @@ vi.mock('#/server/terminal/terminal-worker-host.ts', () => ({
         resize: vi.fn(),
         takeover: vi.fn(),
         close: vi.fn(),
+        closeSessions: vi.fn(),
         notifyBell: vi.fn(),
         listSessions: vi.fn(),
         create: vi.fn(),
         prune: vi.fn(),
         getSessionSnapshot: vi.fn(),
+        getOutputExcerpt: vi.fn(),
+        getScreenSnapshot: vi.fn(),
+        submitTelegramInput: vi.fn(),
         shutdown: vi.fn(),
       }
       mocks.workerHostCtor({ host, options })
@@ -50,6 +60,7 @@ vi.mock('#/server/terminal/terminal-worker-host.ts', () => ({
 describe('server runtime', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.createTelegramTerminalInputRuntime.mockReturnValue(mocks.telegramRuntime)
   })
 
   test('injects the terminal host into the server app factory', async () => {
@@ -64,12 +75,15 @@ describe('server runtime', () => {
     })
 
     expect(runtime.terminalHost).toBe(terminalHost)
-    expect(mocks.createApp).toHaveBeenCalledWith({
+    expect(mocks.createApp).toHaveBeenCalledWith(expect.objectContaining({
       version: '0.1.0',
       startedAt: 1,
       internalSecret: 'secret',
       terminalHost,
-    })
+    }))
+    expect(mocks.createTelegramTerminalInputRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ terminalHost, settingsState: expect.any(Object) }),
+    )
   })
 
   test('uses the worker-backed terminal host by default', async () => {
@@ -88,12 +102,12 @@ describe('server runtime', () => {
       host: runtime.terminalHost,
       options: { workerEntry: '/tmp/entrypoints/terminal-worker.ts' },
     })
-    expect(mocks.createApp).toHaveBeenCalledWith({
+    expect(mocks.createApp).toHaveBeenCalledWith(expect.objectContaining({
       version: '0.1.0',
       startedAt: 1,
       internalSecret: 'secret',
       terminalHost: runtime.terminalHost,
-    })
+    }))
   })
 
   test('shutdown is idempotent and stops background sync, port forwarding, and terminal host teardown', async () => {
@@ -110,6 +124,9 @@ describe('server runtime', () => {
     mocks.shutdownPortForwarding.mockImplementation(() => {
       events.push('port-forwarding')
     })
+    mocks.telegramRuntime.shutdown.mockImplementation(() => {
+      events.push('telegram')
+    })
 
     const runtime = createServerRuntime({
       version: '0.1.0',
@@ -123,7 +140,8 @@ describe('server runtime', () => {
 
     expect(mocks.stopBackgroundSync).toHaveBeenCalledTimes(1)
     expect(mocks.shutdownPortForwarding).toHaveBeenCalledTimes(1)
+    expect(mocks.telegramRuntime.shutdown).toHaveBeenCalledTimes(1)
     expect(terminalHost.shutdown).toHaveBeenCalledTimes(1)
-    expect(events).toEqual(['background-sync', 'port-forwarding', 'terminal'])
+    expect(events).toEqual(['telegram', 'background-sync', 'port-forwarding', 'terminal'])
   })
 })

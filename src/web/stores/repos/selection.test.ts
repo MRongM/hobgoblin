@@ -168,6 +168,125 @@ describe('selectBranch', () => {
     expect(repo?.ui.detailTab).toBe('status')
     expect(useReposStore.getState().restorableRepoCache[REPO_ID]?.ui.detailTab).toBe('status')
   })
+
+  test('clears a detached worktree selection', () => {
+    seedRepo({ selectedBranch: 'main' })
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]!
+      return {
+        repos: {
+          ...state.repos,
+          [REPO_ID]: replaceRepo(repo, (draft) => {
+            draft.ui.selectedBranch = null
+            draft.ui.selectedDetachedWorktreePath = '/tmp/detached-worktree'
+          }),
+        },
+      }
+    })
+
+    useReposStore.getState().selectBranch(REPO_ID, 'feature/plain')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui).toMatchObject({
+      selectedBranch: 'feature/plain',
+      selectedDetachedWorktreePath: null,
+    })
+  })
+})
+
+describe('selectDetachedWorktree', () => {
+  test('selects an exact live detached worktree and clears branch identity', () => {
+    seedRepo({ selectedBranch: 'main', detailTab: 'terminal' })
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]!
+      return {
+        repos: {
+          ...state.repos,
+          [REPO_ID]: replaceRepo(repo, (draft) => {
+            draft.data.worktreesByPath['/tmp/detached-worktree'] = {
+              path: '/tmp/detached-worktree',
+              head: 'abc1234',
+              isDetached: true,
+              isMain: false,
+            }
+          }),
+        },
+      }
+    })
+
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/detached-worktree')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui).toMatchObject({
+      selectedBranch: null,
+      selectedDetachedWorktreePath: '/tmp/detached-worktree',
+      detailTab: 'terminal',
+    })
+  })
+
+  test('rejects unknown, primary, and prunable paths', () => {
+    seedRepo({ selectedBranch: 'main' })
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]!
+      return {
+        repos: {
+          ...state.repos,
+          [REPO_ID]: replaceRepo(repo, (draft) => {
+            draft.data.worktreesByPath['/tmp/primary-detached'] = {
+              path: '/tmp/primary-detached',
+              isDetached: true,
+              isMain: true,
+            }
+            draft.data.worktreesByPath['/tmp/prunable-detached'] = {
+              path: '/tmp/prunable-detached',
+              isDetached: true,
+              isMain: false,
+              isPrunable: true,
+            }
+          }),
+        },
+      }
+    })
+    const before = useReposStore.getState().repos[REPO_ID]
+
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/missing')
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/primary-detached')
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/prunable-detached')
+
+    expect(useReposStore.getState().repos[REPO_ID]).toBe(before)
+  })
+
+  test('remembers explorer tabs independently by detached worktree path', () => {
+    seedRepo({ selectedBranch: 'main' })
+    useReposStore.setState((state) => {
+      const repo = state.repos[REPO_ID]!
+      return {
+        repos: {
+          ...state.repos,
+          [REPO_ID]: replaceRepo(repo, (draft) => {
+            draft.data.worktreesByPath['/tmp/detached-a'] = {
+              path: '/tmp/detached-a',
+              isDetached: true,
+              isMain: false,
+            }
+            draft.data.worktreesByPath['/tmp/detached-b'] = {
+              path: '/tmp/detached-b',
+              isDetached: true,
+              isMain: false,
+            }
+          }),
+        },
+      }
+    })
+
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/detached-a')
+    useReposStore.getState().setExplorerTab(REPO_ID, 'history')
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/detached-b')
+    useReposStore.getState().setExplorerTab(REPO_ID, 'changes')
+
+    expect(useReposStore.getState().repos[REPO_ID]?.ui.explorerTabByBranch).toMatchObject({
+      'detached:/tmp/detached-a': 'history',
+      'detached:/tmp/detached-b': 'changes',
+    })
+  })
 })
 
 describe('checkoutSelectedInRepo', () => {

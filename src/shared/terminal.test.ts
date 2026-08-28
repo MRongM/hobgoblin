@@ -226,6 +226,25 @@ describe('terminal protocol normalization', () => {
     ).toBeNull()
   })
 
+  test('accepts Telegram target intent without allowing the client to nominate an attachment', () => {
+    expect(
+      normalizeTerminalClientMessage({
+        type: 'request',
+        requestId: 'request_telegram_target',
+        action: 'mark-telegram-input-target',
+        input: {
+          sessionId: 'term_abcdefghijklmnop',
+          attachmentId: 'spoofed_attachment',
+        },
+      }),
+    ).toEqual({
+      type: 'request',
+      requestId: 'request_telegram_target',
+      action: 'mark-telegram-input-target',
+      input: { sessionId: 'term_abcdefghijklmnop' },
+    })
+  })
+
   test('accepts only a boolean terminal write attribution', () => {
     const request = {
       type: 'request' as const,

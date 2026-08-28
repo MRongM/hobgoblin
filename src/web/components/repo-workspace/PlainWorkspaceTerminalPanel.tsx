@@ -28,7 +28,14 @@ interface PlainWorkspaceTerminalPanelProps {
   onExitTerminalFocus?: () => void
 }
 
-const DETAIL_ID = 'plain-workspace-terminal'
+interface WorktreeTerminalPanelProps extends PlainWorkspaceTerminalPanelProps {
+  worktreePath: string
+  terminalLabel: string
+  detailId?: string
+  toolbarTestId?: string
+}
+
+const PLAIN_WORKSPACE_DETAIL_ID = 'plain-workspace-terminal'
 
 export function PlainWorkspaceTerminalPanel({
   repoId,
@@ -38,11 +45,39 @@ export function PlainWorkspaceTerminalPanel({
   onShowCompactOverview,
   onExitTerminalFocus,
 }: PlainWorkspaceTerminalPanelProps) {
-  const t = useT()
-  const compact = useIsCompactUi()
   const repo = useReposStore((state) => state.repos[repoId])
   const workspacePath = repoPlainWorkspacePath(repo) ?? repoId
-  const terminalWorktreeKey = worktreeTerminalKey(repoId, workspacePath)
+  return (
+    <WorktreeTerminalPanel
+      repoId={repoId}
+      layout={layout}
+      worktreePath={workspacePath}
+      terminalLabel={NON_GIT_WORKSPACE_TERMINAL_BRANCH}
+      detailId={PLAIN_WORKSPACE_DETAIL_ID}
+      toolbarTestId="plain-workspace-terminal-toolbar"
+      focusMode={focusMode}
+      compactFocusPresentation={compactFocusPresentation}
+      onShowCompactOverview={onShowCompactOverview}
+      onExitTerminalFocus={onExitTerminalFocus}
+    />
+  )
+}
+
+export function WorktreeTerminalPanel({
+  repoId,
+  layout,
+  worktreePath,
+  terminalLabel,
+  detailId = 'worktree-terminal',
+  toolbarTestId = 'worktree-terminal-toolbar',
+  focusMode = false,
+  compactFocusPresentation = false,
+  onShowCompactOverview,
+  onExitTerminalFocus,
+}: WorktreeTerminalPanelProps) {
+  const t = useT()
+  const compact = useIsCompactUi()
+  const terminalWorktreeKey = worktreeTerminalKey(repoId, worktreePath)
   const snapshot = useWorktreeTerminalSnapshot(terminalWorktreeKey)
   const terminalTabFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
   const contextRail = focusMode || compactFocusPresentation
@@ -58,10 +93,10 @@ export function PlainWorkspaceTerminalPanel({
   const terminalBase = useMemo<TerminalSessionBase>(
     () => ({
       repoRoot: repoId,
-      branch: NON_GIT_WORKSPACE_TERMINAL_BRANCH,
-      worktreePath: workspacePath,
+      branch: terminalLabel,
+      worktreePath,
     }),
-    [repoId, workspacePath],
+    [repoId, terminalLabel, worktreePath],
   )
 
   const handleNewTerminal = useCallback(
@@ -95,7 +130,7 @@ export function PlainWorkspaceTerminalPanel({
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-pane">
       <Toolbar
-        data-testid="plain-workspace-terminal-toolbar"
+        data-testid={toolbarTestId}
         variant="detail"
         chrome={compact ? 'toolbar' : 'topbar'}
         tone="topbar"
@@ -136,7 +171,7 @@ export function PlainWorkspaceTerminalPanel({
           <TerminalTabs
             worktreeTerminalKey={terminalWorktreeKey}
             sessions={snapshot.sessions}
-            detailId={DETAIL_ID}
+            detailId={detailId}
             responsiveCompact={compact}
             panelActive
             focusMode={contextRail}
@@ -153,7 +188,7 @@ export function PlainWorkspaceTerminalPanel({
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
-          <TerminalSlot repoRoot={repoId} worktreePath={workspacePath} />
+          <TerminalSlot repoRoot={repoId} worktreePath={worktreePath} />
         ) : null}
       </div>
     </section>

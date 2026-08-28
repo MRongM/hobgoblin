@@ -130,6 +130,40 @@ async function enableChangeSelection(): Promise<void> {
 }
 
 describe('ProjectChangesPanel', () => {
+  test('renders selected detached worktree changes by exact path', async () => {
+    const detachedPath = '/tmp/detached-worktree'
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: detachedPath,
+      statusLoaded: true,
+      status: [{ path: detachedPath, isMain: false, entries: [{ x: 'M', y: ' ', path: 'src/detached.ts' }] }],
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        [detachedPath]: {
+          path: detachedPath,
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+          isDirty: true,
+          changeCount: 1,
+        },
+      },
+    })
+
+    await act(async () => {
+      root!.render(
+        <InlineCommitDraftProvider>
+          <ProjectChangesPanel repoId={REPO_ID} />
+        </InlineCommitDraftProvider>,
+      )
+    })
+
+    expect(container?.textContent).toContain('detached.ts')
+    expect(container?.querySelector('[aria-label="M modified"]')).not.toBeNull()
+  })
+
   test('renders selected worktree changes with typed status markers without a commit entry', async () => {
     seedRepoState({
       id: REPO_ID,
@@ -247,7 +281,7 @@ describe('ProjectChangesPanel', () => {
 
   test('refresh icon refreshes only selected repository status', async () => {
     const refreshStatus = vi.fn(async () => undefined)
-    const syncAndRefresh = vi.fn(async () => undefined)
+    const syncAndRefresh = vi.fn(async () => null)
     seedRepoState({
       id: REPO_ID,
       branches: [createRepoBranch('feature/worktree', { worktree: { path: WORKTREE_PATH } })],

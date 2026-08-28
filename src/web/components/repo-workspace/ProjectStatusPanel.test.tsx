@@ -58,6 +58,39 @@ afterEach(() => {
 })
 
 describe('ProjectStatusPanel', () => {
+  test('renders selected detached worktree status without a synthetic branch', async () => {
+    const detachedPath = '/tmp/detached-worktree'
+    seedRepoState({
+      id: REPO_ID,
+      name: 'Status Project',
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: null,
+      selectedDetachedWorktreePath: detachedPath,
+      statusLoaded: true,
+      status: [{ path: detachedPath, isMain: false, entries: [{ x: 'M', y: ' ', path: 'src/detached.ts' }] }],
+      worktreesByPath: {
+        [REPO_ID]: { path: REPO_ID, branch: 'main', isMain: true },
+        [detachedPath]: {
+          path: detachedPath,
+          head: 'abcdef1234567890',
+          isDetached: true,
+          isMain: false,
+          isDirty: true,
+          changeCount: 1,
+        },
+      },
+    })
+
+    await act(async () => {
+      root!.render(<ProjectStatusPanel repoId={REPO_ID} />)
+    })
+
+    expect(container?.textContent).toContain('branches.detached-worktree')
+    expect(container?.textContent).toContain('abcdef1234567890')
+    expect(container?.textContent).toContain(detachedPath)
+    expect(container?.textContent).toContain('branch-status.worktree-dirty')
+  })
+
   test('renders selected branch status in the explorer surface', async () => {
     seedRepoState({
       id: REPO_ID,

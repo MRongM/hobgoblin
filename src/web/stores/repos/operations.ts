@@ -5,6 +5,7 @@ export type RepoBranchActionReason =
   | 'branch:checkout'
   | 'branch:pull'
   | 'branch:push'
+  | 'branch:alignRemote'
   | 'branch:createWorktree'
   | 'branch:createBranch'
   | 'branch:trackRemoteBranch'

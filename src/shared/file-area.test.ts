@@ -59,9 +59,9 @@ describe('detached file area window request', () => {
         ...valid,
         repo: {
           kind: 'remote',
-          id: 'ignored',
+          id: 'ssh-config://dev/workspace/repo',
           ref: {
-            id: 'ignored',
+            id: 'ssh-config://dev/workspace/repo',
             alias: 'dev',
             remotePath: '/workspace/repo',
             displayName: 'repo',

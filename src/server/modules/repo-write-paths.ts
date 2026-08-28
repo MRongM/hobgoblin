@@ -1,5 +1,10 @@
 import { runServerCancellable, abortServerNetworkOp } from '#/server/common/network-ops.ts'
 import { getRepositoryRemoteBranchInfo } from '#/server/modules/repo-read-paths.ts'
+import {
+  findRepositoryStatus,
+  normalizedStatusEntries,
+  repositoryPlanFingerprint,
+} from '#/server/modules/repository-status-plan.ts'
 import { publishRepoQueryInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import { gitNetworkOptionsFromPrefs } from '#/server/modules/git-network-settings.ts'
@@ -33,18 +38,15 @@ import {
 } from '#/system/ssh/git.ts'
 import { openInPreferredEditor } from '#/system/editors.ts'
 import { openInPreferredTerminal } from '#/system/terminals.ts'
-import { type ExecResult } from '#/shared/git-types.ts'
+import type { ExecResult, WorktreeContentState } from '#/shared/git-types.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
-import { isRemoteRepoId, type NetworkOpKind } from '#/shared/rpc.ts'
+import { isRemoteRepoId, type NetworkOpKind, type RepoSnapshot } from '#/shared/rpc.ts'
+import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { checkGitAvailable } from '#/system/git/helper.ts'
 import { isValidCwd, isValidRepoLocator } from '#/shared/input-validation.ts'
 import { type CloneRepoResult } from '#/shared/rpc.ts'
-import {
-  isProtectedRemoteBranchRef,
-  parseRemoteBranchInput,
-  parseRemoteBranchRef,
-} from '#/shared/remote-branches.ts'
+import { isProtectedRemoteBranchRef, parseRemoteBranchInput, parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 import {
   normalizeRepositoryMergeBranchSelection,
   repositoryMergeBranchFullRef,
@@ -52,6 +54,7 @@ import {
 } from '#/shared/repository-merge-branch.ts'
 import { parseRemoteTagInput } from '#/shared/remote-tags.ts'
 import { constants as fsConstants, promises as fs } from 'node:fs'
+import path from 'node:path'
 import PQueue from 'p-queue'
 import {
   isAbsoluteWorktreePath,
@@ -63,11 +66,21 @@ import {
 } from '#/shared/worktree-create.ts'
 import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summary.ts'
 import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
+import type { RepositoryRemoteAlignmentPreviewResult } from '#/shared/repository-remote-alignment.ts'
 
 type ProbeAvailability = { ok: true } | { ok: false; message: string }
 
 export interface RepoMutationInvalidationOptions {
   publishInvalidation?: boolean
+}
+
+export interface RepoRemoteAlignmentOptions extends RepoMutationInvalidationOptions {
+  expectedFingerprint?: string
+  previewToken?: string
+}
+
+export interface RepoPushOptions extends RepoMutationInvalidationOptions {
+  createUpstreamRemote?: string
 }
 
 const MAX_CLONE_URL_LENGTH = 4096
@@ -82,6 +95,11 @@ const createWorktreeOperationQueuesByRepo = new Map<string, PQueue>()
 
 async function getGitNetworkOptions() {
   return gitNetworkOptionsFromPrefs(await getServerSettingsPrefs())
+}
+
+async function getGitNetworkOptionsForBackend(backend: { id: string; kind: 'local' | 'remote' }) {
+  if (backend.kind === 'remote' && parseRemoteRepoId(backend.id)?.transport !== 'wsl') return undefined
+  return await getGitNetworkOptions()
 }
 
 async function probeWritableDirectory(cwd: string): Promise<ProbeAvailability> {
@@ -282,7 +300,7 @@ export async function fetchRepository(
   }
   async function executeFetch(): Promise<{ ok: boolean; message: string }> {
     return await runWithRepoBackend(cwd, async (backend) => {
-      const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+      const networkOptions = await getGitNetworkOptionsForBackend(backend)
       return await runFetch((signal) => backend.fetch(signal, networkOptions))
     })
   }
@@ -313,7 +331,7 @@ export async function fetchRepositoryRemote(
     return { ok: false, message: 'error.invalid-arguments' }
   }
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(
     cwd,
     signal,
@@ -343,7 +361,7 @@ export async function pullRepositoryBranch(
   options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(
     cwd,
     signal,
@@ -358,15 +376,18 @@ export async function pushRepositoryBranch(
   branch: string,
   signal?: AbortSignal,
   sourceToken?: string,
-  options?: RepoMutationInvalidationOptions,
+  options?: RepoPushOptions,
 ): Promise<ExecResult> {
+  if (options?.createUpstreamRemote !== undefined && !isSafeRemoteName(options.createUpstreamRemote)) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(
     cwd,
     signal,
     sourceToken,
-    async (mergedSignal) => await backend.push(branch, mergedSignal, networkOptions),
+    async (mergedSignal) => await backend.push(branch, mergedSignal, networkOptions, options?.createUpstreamRemote),
     options,
   )
 }
@@ -384,7 +405,7 @@ export async function pushRepositoryWorktreeHeadToRemoteBranch(
     return { ok: false, message: 'error.invalid-arguments' }
   }
   const backend = await resolveRepoBackend(repoId)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(
     repoId,
     signal,
@@ -418,7 +439,7 @@ export async function createRepositoryWorktree(
       if (!normalized.syncBeforeCreate) {
         return await backend.createWorktree(normalized, signal, { worktreeBootstrap })
       }
-      const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+      const networkOptions = await getGitNetworkOptionsForBackend(backend)
       return await runServerCancellable(cwd, 'user', async (networkSignal) => {
         return await withMergedAbortSignal([signal, networkSignal], async (mergedSignal) => {
           const synchronized = await synchronizeWorktreeCreationSource(
@@ -558,7 +579,7 @@ export async function getRepositoryRemoteBranches(cwd: string, signal?: AbortSig
 export async function getRepositoryRemoteTags(cwd: string, signal?: AbortSignal): Promise<string[]> {
   if (!isValidRepoLocator(cwd)) return []
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await backend.getRemoteTags(signal, networkOptions)
 }
 
@@ -589,7 +610,7 @@ export async function deleteRepositoryRemoteBranch(
   const parsed = parseRemoteBranchInput(remote, branch)
   if (!parsed || isProtectedRemoteBranchRef(parsed.fullRef)) return { ok: false, message: 'error.invalid-arguments' }
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
     return await backend.deleteRemoteServerBranch(parsed.remote, parsed.branch, mergedSignal, networkOptions)
   })
@@ -606,7 +627,7 @@ export async function deleteRepositoryRemoteTag(
   const parsed = parseRemoteTagInput(remote, tag)
   if (!parsed) return { ok: false, message: 'error.invalid-arguments' }
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
     return await backend.deleteRemoteServerTag(parsed.remote, parsed.tag, mergedSignal, networkOptions)
   })
@@ -657,7 +678,7 @@ export async function pushRepositoryLocalTag(
 ): Promise<ExecResult> {
   if (!isValidRepoLocator(cwd)) return { ok: false, message: 'error.invalid-arguments' }
   const backend = await resolveRepoBackend(cwd)
-  const networkOptions = backend.kind === 'local' ? await getGitNetworkOptions() : undefined
+  const networkOptions = await getGitNetworkOptionsForBackend(backend)
   return await runUserNetworkMutation(cwd, signal, sourceToken, async (mergedSignal) => {
     return await backend.pushLocalTag(name, mergedSignal, networkOptions)
   })
@@ -666,7 +687,7 @@ export async function pushRepositoryLocalTag(
 export async function removeRepositoryWorktree(
   cwd: string,
   input: {
-    branch: string
+    branch?: string
     worktreePath: string
     alsoDeleteBranch: boolean
     forceRemoveWorktree?: boolean
@@ -678,6 +699,7 @@ export async function removeRepositoryWorktree(
   sourceToken?: string,
   options?: RepoMutationInvalidationOptions,
 ): Promise<ExecResult> {
+  if (input.alsoDeleteBranch && !input.branch) return { ok: false, message: 'error.invalid-arguments' }
   return await runWithRepoBackend(cwd, async (backend) => {
     return await publishSnapshotInvalidationAfterMutation(
       cwd,
@@ -982,6 +1004,184 @@ export async function resetRepositoryHard(
       sourceToken,
     )
   })
+}
+
+function resolveRemoteAlignmentTarget(
+  snapshot: RepoSnapshot | null,
+  backendKind: 'local' | 'remote',
+  branch: string,
+  worktreePath: string,
+): { ok: true; upstream: string; head: string; ahead: number } | { ok: false; message: string } {
+  if (!snapshot) return { ok: false, message: 'error.failed-read-repo' }
+  const candidate = snapshot.branches.find((item) => item.name === branch)
+  const normalizePath = backendKind === 'remote' ? path.posix.normalize : path.resolve
+  if (!candidate?.worktree || normalizePath(candidate.worktree.path) !== normalizePath(worktreePath)) {
+    return { ok: false, message: 'error.worktree-not-found' }
+  }
+  if (candidate.trackingGone || !candidate.tracking || !parseRemoteBranchRef(candidate.tracking)) {
+    return { ok: false, message: 'error.upstream-required' }
+  }
+  const head = candidate.worktree.head ?? candidate.lastCommitHash
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(head)) {
+    return { ok: false, message: 'error.failed-read-repo' }
+  }
+  return { ok: true, upstream: candidate.tracking, head: head.toLowerCase(), ahead: candidate.ahead }
+}
+
+type RemoteAlignmentState = {
+  ok: true
+  upstream: string
+  head: string
+  fingerprint: string
+  contentState: WorktreeContentState
+  ahead: number
+  changeCount: number
+}
+
+async function readRemoteAlignmentState(
+  repoId: string,
+  backend: Awaited<ReturnType<typeof resolveRepoBackend>>,
+  branch: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<RemoteAlignmentState | { ok: false; message: string }> {
+  const resolved = resolveRemoteAlignmentTarget(
+    await backend.getSnapshot(signal, { includeWorktreeStatus: false, includeRemote: false }),
+    backend.kind,
+    branch,
+    worktreePath,
+  )
+  if (!resolved.ok) return resolved
+
+  const [entries, contentState] = await Promise.all([
+    backend.getWorktreeStatusEntries
+      ? backend.getWorktreeStatusEntries(worktreePath, signal)
+      : backend
+          .getStatus(signal)
+          .then((statuses) => findRepositoryStatus(repoId, statuses, worktreePath)?.entries ?? null),
+    backend.getWorktreeContentState(worktreePath, signal),
+  ])
+  if (signal?.aborted) return { ok: false, message: 'cancelled' }
+  if (!entries || !contentState) return { ok: false, message: 'error.failed-read-repo' }
+  return {
+    ok: true,
+    upstream: resolved.upstream,
+    head: resolved.head,
+    contentState,
+    ahead: resolved.ahead,
+    changeCount: entries.length,
+    fingerprint: repositoryPlanFingerprint({
+      head: resolved.head,
+      status: normalizedStatusEntries(entries),
+      contentState,
+      upstream: resolved.upstream,
+      trackingGone: false,
+    }),
+  }
+}
+
+function remoteAlignmentPreviewToken(
+  repoId: string,
+  branch: string,
+  worktreePath: string,
+  fingerprint: string,
+): string {
+  return repositoryPlanFingerprint({ repoId, branch, worktreePath, fingerprint })
+}
+
+export async function buildRepositoryRemoteAlignmentPreview(
+  repoId: string,
+  branch: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+): Promise<RepositoryRemoteAlignmentPreviewResult> {
+  if (
+    !isValidRepoLocator(repoId) ||
+    !isValidRepositoryWorktreePath(repoId, worktreePath) ||
+    typeof branch !== 'string' ||
+    branch.trim() === ''
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  return await runWithRepoBackend(repoId, async (backend) => {
+    const state = await readRemoteAlignmentState(repoId, backend, branch, worktreePath, signal)
+    if (!state.ok) return state
+    return {
+      ok: true,
+      token: remoteAlignmentPreviewToken(repoId, branch, worktreePath, state.fingerprint),
+      repoId,
+      branch,
+      worktreePath,
+      upstream: state.upstream,
+      ahead: state.ahead,
+      changeCount: state.changeCount,
+    }
+  })
+}
+
+export async function alignRepositoryWorktreeToRemote(
+  repoId: string,
+  branch: string,
+  worktreePath: string,
+  signal?: AbortSignal,
+  sourceToken?: string,
+  options?: RepoRemoteAlignmentOptions,
+): Promise<ExecResult> {
+  if (
+    !isValidRepoLocator(repoId) ||
+    !isValidRepositoryWorktreePath(repoId, worktreePath) ||
+    typeof branch !== 'string' ||
+    branch.trim() === ''
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  if (!options?.expectedFingerprint && !options?.previewToken) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
+  let gitAttempted = false
+  const result = await runUserNetworkMutation(
+    repoId,
+    signal,
+    sourceToken,
+    async (mergedSignal) =>
+      await runWithRepoBackend(repoId, async (backend) => {
+        const initial = resolveRemoteAlignmentTarget(
+          await backend.getSnapshot(mergedSignal, { includeWorktreeStatus: false, includeRemote: false }),
+          backend.kind,
+          branch,
+          worktreePath,
+        )
+        if (!initial.ok) return initial
+        const parsed = parseRemoteBranchRef(initial.upstream)
+        if (!parsed) return { ok: false, message: 'error.upstream-required' }
+        gitAttempted = true
+        const fetched = await backend.fetchRemote(
+          parsed.remote,
+          mergedSignal,
+          await getGitNetworkOptionsForBackend(backend),
+        )
+        if (!fetched.ok) return fetched
+        const remoteBranches = await backend.getRemoteBranchInfo(mergedSignal)
+        const remoteBranch = remoteBranches.find((candidate) => candidate.remoteRef === initial.upstream)
+        if (!remoteBranch) {
+          return { ok: false, message: 'error.remote-branch-not-found' }
+        }
+        return await backend.alignToRemoteRef(
+          worktreePath,
+          {
+            branch,
+            remoteRef: initial.upstream,
+            remoteHead: remoteBranch.head,
+          },
+          mergedSignal,
+        )
+      }),
+    options,
+  )
+  if (!result.ok && gitAttempted && options?.publishInvalidation !== false) {
+    publishRepoSnapshotInvalidation(repoId, sourceToken)
+  }
+  return result
 }
 
 export async function discardRepositoryChanges(

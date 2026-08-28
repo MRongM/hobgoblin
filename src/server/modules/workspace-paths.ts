@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { REMOTE_PATH_EXISTS_MARKER, REMOTE_PATH_MISSING_MARKER, runRemoteCommand } from '#/system/ssh/commands.ts'
-import { resolveRemoteTarget as resolveSshRemoteTarget } from '#/system/ssh/config.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { BRANCH_WORKSPACE_DIRECTORY_PREFIX, isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 import {
   isRemoteRepoId,
@@ -105,5 +105,5 @@ export async function workspacePathExists(
 async function resolveWorkspaceRemoteTarget(repoId: string): Promise<RemoteRepoTarget> {
   const parsed = parseRemoteRepoId(repoId)
   if (!parsed) throw new Error('error.ssh-config-changed')
-  return (await resolveSshRemoteTarget(parsed)).target
+  return (await resolveRepositoryRemoteTarget(parsed)).target
 }

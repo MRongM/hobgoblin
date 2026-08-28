@@ -22,6 +22,7 @@ describe('resolveWindowsTerminalShellCandidates', () => {
 
     expect(
       resolveWindowsTerminalShellCandidates({
+        cwd: 'C:\\src\\repo',
         env: {
           ProgramFiles: 'C:\\Program Files',
           SystemRoot: 'C:\\Windows',
@@ -29,7 +30,11 @@ describe('resolveWindowsTerminalShellCandidates', () => {
         fileExists,
       }),
     ).toEqual([
-      { kind: 'wsl', command: 'C:\\Windows\\System32\\wsl.exe', args: [] },
+      {
+        kind: 'wsl',
+        command: 'C:\\Windows\\System32\\wsl.exe',
+        args: ['--cd', 'C:\\src\\repo'],
+      },
       {
         kind: 'powershell-core',
         command: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -43,10 +48,33 @@ describe('resolveWindowsTerminalShellCandidates', () => {
       { kind: 'cmd', command: 'C:\\Windows\\System32\\cmd.exe', args: [] },
     ])
     expect(probeWslMock).toHaveBeenCalledWith('C:\\Windows\\System32\\wsl.exe', ['--list', '--quiet'], {
-      encoding: 'utf8',
+      encoding: 'utf16le',
+      env: expect.objectContaining({ WSL_UTF8: '0' }),
       timeout: 5_000,
       windowsHide: true,
     })
+  })
+
+  test('omits WSL for a Windows UNC working directory and retains native fallbacks', () => {
+    probeWslMock.mockReturnValue({ status: 0, stdout: 'Ubuntu\n' })
+    const fileExists = existingFiles(
+      'C:\\Windows\\System32\\wsl.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    )
+
+    expect(
+      resolveWindowsTerminalShellCandidates({
+        cwd: '\\\\server\\share\\repo',
+        env: { SystemRoot: 'C:\\Windows' },
+        fileExists,
+      }),
+    ).toEqual([
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+    ])
   })
 
   test('falls back to native Windows shells when no WSL distribution is registered', () => {

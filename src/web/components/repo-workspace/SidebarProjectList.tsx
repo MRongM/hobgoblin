@@ -16,7 +16,17 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ExternalLink, Folder, FolderGit2, FolderSearch, FolderTree, GitCompareArrows, Terminal, X } from 'lucide-react'
+import {
+  ExternalLink,
+  Folder,
+  FolderGit2,
+  FolderSearch,
+  FolderTree,
+  GitCompareArrows,
+  RefreshCw,
+  Terminal,
+  X,
+} from 'lucide-react'
 import {
   ProjectTerminalStatus,
   projectLocation,
@@ -50,6 +60,11 @@ import {
   activateWorkspaceParentTerminalTarget,
   resolveWorkspaceParentTerminalTarget,
 } from '#/web/components/repo-workspace/workspace-parent-terminal-navigation.ts'
+import { fetchWorkspaceRepositories } from '#/web/workspace-repository-fetch.ts'
+import {
+  showWorkspaceRepositoryFetchError,
+  showWorkspaceRepositoryFetchResult,
+} from '#/web/components/repo-workspace/workspace-repository-fetch-feedback.ts'
 
 const restrictToVerticalProjectList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -221,6 +236,20 @@ function SortableProjectRow({
     disabled: project.unavailable,
     onSelect: () => rescanWorkspace(project.id),
   }
+  const fetchAllRepositoriesAction: WorkspaceListItemAction = {
+    id: 'fetchAllRepositories',
+    label: t('workspace.branch-workspace.fetch-all'),
+    icon: <RefreshCw aria-hidden="true" />,
+    disabled: project.unavailable,
+    visible: workspace?.configured === true && workspace.repositoryIds.length > 0,
+    onSelect: async () => {
+      try {
+        showWorkspaceRepositoryFetchResult(t, await fetchWorkspaceRepositories(project.id))
+      } catch (error) {
+        showWorkspaceRepositoryFetchError(t, workspace?.repositoryIds.length ?? 0, error)
+      }
+    },
+  }
   const handleActivate = () => {
     if (!workspace?.configured || !terminalReadContext || !terminalCommands) {
       onActivate(project.id)
@@ -320,7 +349,11 @@ function SortableProjectRow({
                 <WorkspaceListItemMenu
                   label={t('action.menu')}
                   groups={[
-                    project.isGitRepo ? creation.items : workspace ? [] : [detectWorkspaceRepositoriesAction],
+                    project.isGitRepo
+                      ? creation.items
+                      : workspace
+                        ? [fetchAllRepositoriesAction]
+                        : [detectWorkspaceRepositoriesAction],
                     [remoteAction, tmuxTerminalAction, externalTerminalAction],
                     [closeAction],
                     ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),

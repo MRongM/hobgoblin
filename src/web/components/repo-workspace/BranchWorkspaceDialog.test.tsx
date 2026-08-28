@@ -9,6 +9,15 @@ import type { BranchWorkspacePlan, BranchWorkspaceSnapshot } from '#/shared/bran
 const mocks = vi.hoisted(() => ({
   getRepositoryFileTree: vi.fn(),
   getRepositoryRemoteBranches: vi.fn(),
+  toastSuccess: vi.fn(),
+  toastWarning: vi.fn(),
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: mocks.toastSuccess,
+    warning: mocks.toastWarning,
+  },
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
@@ -41,6 +50,8 @@ beforeEach(() => {
     entries: [],
   })
   mocks.getRepositoryRemoteBranches.mockResolvedValue([])
+  mocks.toastSuccess.mockReset()
+  mocks.toastWarning.mockReset()
 })
 
 afterEach(() => {
@@ -52,6 +63,242 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDialog', () => {
+  test('presents create as a compact neutral operation console', () => {
+    renderDialog({})
+
+    const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')
+    const header = document.querySelector<HTMLElement>('[data-branch-workspace-operation-header]')
+    const layout = document.querySelector<HTMLElement>('[data-testid="branch-workspace-one-step-layout"]')
+
+    expect(content?.className).toContain('max-h-[85vh]')
+    expect(content?.className).toContain('sm:max-w-5xl')
+    expect(header?.dataset.tone).toBeUndefined()
+    expect(header?.className).toContain('border-separator')
+    expect(header?.className).not.toContain('bg-success-surface')
+    expect(header?.querySelector('.lucide-folder-plus')).not.toBeNull()
+    expect(layout?.dataset.presentation).toBe('operation-console')
+    expect(layout?.dataset.tone).toBeUndefined()
+    expect(layout?.className).toContain('border-separator')
+    expect(document.querySelector('[data-one-step-planning-step="01"]')).not.toBeNull()
+    expect(document.querySelector('[data-one-step-planning-step="02"]')).not.toBeNull()
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.selection-description.create')
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.plan-description.create')
+  })
+
+  test('presents removal with neutral chrome and the original destructive actions', () => {
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      progressWorkspace: existingWorkspace(),
+      plan: removalPlan(),
+      pending: true,
+      executing: true,
+    })
+
+    const header = document.querySelector<HTMLElement>('[data-branch-workspace-operation-header]')
+    expect(header?.dataset.tone).toBeUndefined()
+    expect(header?.className).toContain('border-separator')
+    expect(header?.className).not.toContain('bg-danger-surface')
+    expect(header?.querySelector('.lucide-trash-2')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-delete-scope]')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-delete-scope] .lucide-shield-alert')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-target-summary]')?.className).toContain('border-separator')
+    expect(document.querySelector('[data-action="force-confirm"]')?.getAttribute('data-variant')).toBe('destructive')
+    expect(document.querySelector('[data-action="confirm"]')?.getAttribute('data-variant')).toBe('destructive')
+  })
+
+  test('renders a neutral incomplete plan placeholder', () => {
+    renderDialog({})
+
+    const placeholder = document.querySelector<HTMLElement>('[data-plan-status="incomplete"]')
+    expect(placeholder?.dataset.operationTone).toBeUndefined()
+    expect(placeholder?.querySelector('.lucide-clipboard-list')).not.toBeNull()
+  })
+
+  test('renders a neutral removal planning placeholder', () => {
+    const onPreview = vi.fn(() => new Promise<boolean>(() => undefined))
+    renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
+
+    const placeholder = document.querySelector<HTMLElement>('[data-plan-status="planning"]')
+    expect(placeholder?.dataset.operationTone).toBeUndefined()
+    expect(placeholder?.querySelector('.lucide-loader-circle')).not.toBeNull()
+  })
+
+  test('keeps extend on the plain presentation', () => {
+    renderDialog({ mode: 'extend', workspace: existingWorkspace() })
+
+    expect(
+      document.querySelector<HTMLElement>('[data-testid="branch-workspace-one-step-layout"]')?.dataset.presentation,
+    ).toBe('plain')
+    expect(document.querySelector('[data-branch-workspace-operation-header]')).toBeNull()
+  })
+
+  test('shows lifecycle selection and its reviewed plan together without a next-step action', () => {
+    renderDialog({
+      mode: 'extend',
+      workspace: existingWorkspace(),
+      plan: planWithSteps('extend', [
+        { id: 'repository:web', kind: 'create-worktree', label: 'web', repositoryName: 'web' },
+      ]),
+    })
+
+    const layout = document.querySelector<HTMLElement>('[data-testid="branch-workspace-one-step-layout"]')
+    expect(layout?.className).toContain('lg:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]')
+    expect(layout?.className).toContain('overflow-x-hidden')
+    expect(layout?.className).toContain('overflow-y-auto')
+    expect(document.querySelector<HTMLElement>('[data-testid="branch-workspace-selection-pane"]')?.className).toContain(
+      'lg:overflow-y-auto',
+    )
+    expect(document.querySelector<HTMLElement>('[data-testid="branch-workspace-plan-pane"]')?.className).toContain(
+      'lg:overflow-y-auto',
+    )
+    expect(document.querySelector<HTMLElement>('[data-slot="dialog-content"]')?.className).toContain('sm:max-w-5xl')
+    expect(document.querySelector<HTMLElement>('[data-slot="dialog-content"]')?.className).toContain(
+      'grid-rows-[auto_minmax(0,1fr)_auto]',
+    )
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.selection-title')
+    expect(document.body.textContent).toContain('workspace.branch-workspace.one-step.plan-title')
+    expect(repositoryCheckbox('web')).not.toBeNull()
+    expect(document.querySelector('[data-branch-workspace-plan-step="create-worktree"]')).not.toBeNull()
+    expect(document.querySelector('[data-action="preview"]')).toBeNull()
+    expect(document.querySelector('[data-action="confirm"]')).not.toBeNull()
+  })
+
+  test('automatically plans a valid lifecycle selection', async () => {
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ onPreview })
+
+    act(() => repositoryCheckbox('api').click())
+    await flushAsyncWork()
+
+    expect(onPreview).toHaveBeenCalledWith(
+      {
+        operation: 'create',
+        branch: expect.stringMatching(/^feat\/[0-9]{8}$/),
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      expect.any(AbortSignal),
+    )
+    expect(document.querySelector('[data-action="preview"]')).toBeNull()
+  })
+
+  test('does not submit a lifecycle plan that belongs to a different selection', () => {
+    renderDialog({
+      plan: planWithSteps('create', [{ id: 'directory', kind: 'create-directory', label: 'stale' }]),
+      plannedRequest: {
+        operation: 'create',
+        branch: 'stale',
+        repositories: [
+          {
+            repositoryName: 'api',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+    })
+
+    expect(document.querySelector('[data-branch-workspace-plan-step="create-directory"]')).toBeNull()
+    expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.disabled).toBe(true)
+  })
+
+  test('keeps next-step planning only for the excluded repair flow', () => {
+    renderDialog({ mode: 'repair', workspace: existingWorkspace() })
+    expect(document.querySelector('[data-action="preview"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="branch-workspace-one-step-layout"]')).toBeNull()
+  })
+
+  test('keeps removal configuration editable while planning and locks it while executing', () => {
+    renderDialog({ mode: 'remove', workspace: existingWorkspace(), pending: true, executing: false })
+
+    expect(
+      document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.delete-local-branch"]')
+        ?.disabled,
+    ).toBe(false)
+    expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull()
+
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: removalPlan(),
+      pending: true,
+      executing: true,
+    })
+
+    expect(
+      document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.delete-local-branch"]')
+        ?.disabled,
+    ).toBe(true)
+    expect(document.querySelector('[data-slot="dialog-close"]')).toBeNull()
+  })
+
+  test('keeps fetch all available throughout the create one-step dialog', () => {
+    renderDialog({})
+    expect(document.querySelector('[data-action="fetch-all-repositories"]')).not.toBeNull()
+
+    renderDialog({ mode: 'extend' })
+    expect(document.querySelector('[data-action="fetch-all-repositories"]')).toBeNull()
+
+    renderDialog({ mode: 'create', plan: approvalPlan() })
+    expect(document.querySelector('[data-action="fetch-all-repositories"]')).not.toBeNull()
+  })
+
+  test('keeps the creation form usable while all repositories are fetching', async () => {
+    let finishFetch!: (result: { total: number; succeeded: number; failures: [] }) => void
+    const onFetchAllRepositories = vi.fn(
+      () =>
+        new Promise<{ total: number; succeeded: number; failures: [] }>((resolve) => {
+          finishFetch = resolve
+        }),
+    )
+    renderDialog({ onFetchAllRepositories })
+    act(() => repositoryCheckbox('api').click())
+    await flushAsyncWork()
+
+    const fetchAll = document.querySelector<HTMLButtonElement>('[data-action="fetch-all-repositories"]')
+    act(() => fetchAll?.click())
+
+    expect(fetchAll?.disabled).toBe(true)
+    expect(fetchAll?.querySelector('.lucide-loader-circle')).not.toBeNull()
+    expect(repositoryCheckbox('api').disabled).toBe(false)
+    expect(document.querySelector('[data-action="preview"]')).toBeNull()
+
+    await act(async () => {
+      finishFetch({ total: 2, succeeded: 2, failures: [] })
+      await Promise.resolve()
+    })
+
+    expect(fetchAll?.disabled).toBe(false)
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('workspace.branch-workspace.fetch-all-success')
+    expect(mocks.getRepositoryRemoteBranches).toHaveBeenCalledTimes(2)
+  })
+
+  test('summarizes failed repositories without turning them into a dialog error', async () => {
+    const onFetchAllRepositories = vi.fn(async () => ({
+      total: 2,
+      succeeded: 1,
+      failures: [{ repositoryName: 'api', message: 'offline' }],
+    }))
+    renderDialog({ onFetchAllRepositories })
+
+    await clickAction('fetch-all-repositories')
+
+    expect(mocks.toastWarning).toHaveBeenCalledWith('workspace.branch-workspace.fetch-all-incomplete:1/2', {
+      description: 'api: offline',
+    })
+    expect(document.body.textContent).not.toContain('offline')
+    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
+    expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.disabled).toBe(true)
+  })
+
   test('uses the canonical dialog cancel copy', () => {
     renderDialog({})
 
@@ -269,6 +516,61 @@ describe('BranchWorkspaceDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  test('offers force deletion on the removal check screen and invokes its separate action', async () => {
+    const onOpenChange = vi.fn()
+    const onForceConfirm = vi.fn(async () => ({ ok: true as const, branchWorkspaceId: 'branch-1' }))
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: { ...removalPlan(), requiredApprovals: [] },
+      onOpenChange,
+      onForceConfirm,
+      onPreview: () => new Promise<boolean>(() => undefined),
+    })
+
+    const forceConfirm = document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')
+    expect(forceConfirm?.textContent).toBe('workspace.branch-workspace.force-delete')
+    expect(forceConfirm?.dataset.variant).toBe('destructive')
+    await clickAction('force-confirm')
+
+    expect(onForceConfirm).toHaveBeenCalledWith([])
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  test('disables normal and force deletion when the visible plan no longer matches removal options', async () => {
+    const onPreview = vi.fn(async () => true)
+    const plannedRequest = {
+      operation: 'remove' as const,
+      branchWorkspaceId: 'branch-1',
+      alsoDeleteBranch: true,
+      alsoDeleteUpstream: false,
+    }
+    renderDialog({
+      mode: 'remove',
+      workspace: existingWorkspace(),
+      plan: { ...removalPlan(), requiredApprovals: [] },
+      plannedRequest,
+      onPreview,
+    })
+    await expectAutoPreview(onPreview, plannedRequest)
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.disabled).toBe(false)
+      expect(document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')?.disabled).toBe(false)
+    })
+
+    click('workspace.branch-workspace.delete-upstream-branch')
+
+    expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')?.disabled).toBe(true)
+  })
+
+  test('does not offer force deletion outside a removal plan', () => {
+    renderDialog({ plan: approvalPlan() })
+
+    expect(document.querySelector('[data-action="force-confirm"]')).toBeNull()
+  })
+
   test('keeps progress hidden during preview and in non-target lifecycle modes', () => {
     renderDialog({ plan: planWithSteps('create', [{ id: 'directory', kind: 'create-directory', label: 'folder' }]) })
     expect(document.querySelector('[data-branch-workspace-operation-progress]')).toBeNull()
@@ -319,21 +621,27 @@ describe('BranchWorkspaceDialog', () => {
       error: 'workspace.branch-workspace.execute-failed',
       onReturnToSelection,
     })
+    expect(repositoryCheckbox('api').disabled).toBe(true)
+    expect(document.querySelector('[data-action="return-to-selection"]')?.textContent).toBe(
+      'workspace.branch-workspace.one-step.modify-selection',
+    )
     await clickAction('return-to-selection')
 
     expect(onReturnToSelection).toHaveBeenCalledTimes(1)
 
     renderDialog({ onReturnToSelection })
+    expect(repositoryCheckbox('api').disabled).toBe(false)
     expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/reselect')
     expect(checked('workspace.branch-workspace.repository-named')).toBe(true)
   })
 
-  test('uses only completed members as the fixed baseline after partial creation', () => {
+  test('uses only completed members as the fixed baseline after partial creation', async () => {
     const workspace = workspaceWithTwoMembers()
     workspace.state = { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
     workspace.repositories[1] = { ...workspace.repositories[1]!, progress: 'failed', ready: false }
 
-    renderDialog({ workspace })
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ workspace, onPreview })
 
     expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/auth')
     const members = document.querySelectorAll<HTMLInputElement>(
@@ -345,10 +653,16 @@ describe('BranchWorkspaceDialog', () => {
     expect(members[1]?.checked).toBe(false)
     expect(members[1]?.disabled).toBe(false)
     expect(document.body.textContent).toContain('workspace.branch-workspace.member-fixed')
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
 
     act(() => members[1]?.click())
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        operation: 'create',
+        repositories: expect.arrayContaining([expect.objectContaining({ repositoryName: 'web' })]),
+      }),
+    )
   })
 
   test.each(['reduce', 'repair', 'remove'] as const)(
@@ -384,9 +698,7 @@ describe('BranchWorkspaceDialog', () => {
     changeSelect('workspace.branch-workspace.base-named', 'develop')
     await flushAsyncWork()
     clickSelector('[data-materialization-item="docs"] [data-materialization-choice="copy"]')
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -438,6 +750,74 @@ describe('BranchWorkspaceDialog', () => {
     expect(web.checked).toBe(false)
   })
 
+  test('batch toggles synchronization for selected eligible repositories through a tri-state header checkbox', async () => {
+    renderDialog({
+      repositories: [
+        {
+          id: '/workspace/api',
+          name: 'api',
+          available: true,
+          branches: ['main'],
+          defaultBranch: 'main',
+          branchDetails: { main: { tracking: 'origin/main' } },
+        },
+        {
+          id: '/workspace/web',
+          name: 'web',
+          available: true,
+          branches: ['trunk'],
+          defaultBranch: 'trunk',
+          branchDetails: { trunk: { tracking: 'origin/trunk' } },
+        },
+        {
+          id: '/workspace/offline',
+          name: 'offline',
+          available: true,
+          branches: ['main'],
+          defaultBranch: 'main',
+        },
+      ],
+    })
+
+    act(() =>
+      document
+        .querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.repositories-select-all"]')
+        ?.click(),
+    )
+    await flushAsyncWork()
+
+    const syncAll = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.sync-before-create-select-all"]',
+    )
+    const apiSync = repositorySyncCheckbox('api')
+    const webSync = repositorySyncCheckbox('web')
+    const offlineSync = repositorySyncCheckbox('offline')
+    expect(syncAll?.checked).toBe(true)
+    expect(syncAll?.indeterminate).toBe(false)
+    expect(apiSync.checked).toBe(true)
+    expect(webSync.checked).toBe(true)
+    expect(offlineSync.checked).toBe(false)
+    expect(offlineSync.disabled).toBe(true)
+
+    act(() => apiSync.click())
+    expect(syncAll?.checked).toBe(false)
+    expect(syncAll?.indeterminate).toBe(true)
+
+    act(() => syncAll?.click())
+    expect(apiSync.checked).toBe(true)
+    expect(webSync.checked).toBe(true)
+
+    act(() => syncAll?.click())
+    expect(apiSync.checked).toBe(false)
+    expect(webSync.checked).toBe(false)
+    expect(offlineSync.checked).toBe(false)
+
+    act(() => repositoryCheckbox('web').click())
+    act(() => syncAll?.click())
+    expect(apiSync.checked).toBe(true)
+    expect(webSync.checked).toBe(false)
+  })
+
   test('loads local and remote creation bases and submits the selected exact remote', async () => {
     mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'upstream/release'])
     const onPreview = vi.fn(async () => true)
@@ -472,8 +852,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(sync?.disabled).toBe(false)
 
     changeSelect('workspace.branch-workspace.base-named', 'remote:upstream/release')
-    await clickAction('preview')
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/new',
       repositories: [
@@ -516,7 +895,9 @@ describe('BranchWorkspaceDialog', () => {
       ),
     )
     expect(selectValue('workspace.branch-workspace.base-named')).toBe('main')
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+    await vi.waitFor(() =>
+      expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('ready'),
+    )
 
     mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main'])
     clickSelector('[role="alert"] button')
@@ -571,8 +952,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(sync?.checked).toBe(true)
     expect(document.body.textContent).toContain('workspace.branch-workspace.existing-target-used')
 
-    await clickAction('preview')
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -611,6 +991,37 @@ describe('BranchWorkspaceDialog', () => {
       expect.any(AbortSignal),
     )
     expect(document.querySelector('[data-worktree-bootstrap-source-select]')).not.toBeNull()
+  })
+
+  test('waits for selected repository dependencies to load before planning', async () => {
+    let finishRead!: (result: { ok: true; worktreePath: string; dirPath: string; entries: [] }) => void
+    mocks.getRepositoryFileTree.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishRead = resolve
+      }),
+    )
+    const onPreview = vi.fn(async () => true)
+    renderDialog({ onPreview })
+    click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await flushAsyncWork()
+    onPreview.mockClear()
+
+    clickSelector('[data-materialization-item="docs"] [data-materialization-choice="copy"]')
+    await flushAsyncWork()
+    expect(onPreview).not.toHaveBeenCalled()
+    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
+
+    await act(async () => {
+      finishRead({
+        ok: true,
+        worktreePath: '/workspace/api-main',
+        dirPath: '/workspace/api-main',
+        entries: [],
+      })
+      await Promise.resolve()
+    })
+    await expectAutoPreview(onPreview, expect.objectContaining({ auxiliaryEntries: [{ name: 'docs', mode: 'copy' }] }))
   })
 
   test('selects a nested dependency from the source worktree tree and submits its exact source', async () => {
@@ -656,9 +1067,7 @@ describe('BranchWorkspaceDialog', () => {
     )
     clickSelector('[data-worktree-dependency-path="backend/.venv"]')
     changeSelect('worktree-dependency-tree.mode', 'copy')
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -698,6 +1107,8 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
     clickSelector('[data-worktree-dependency-path="node_modules"]')
+    clickSelector('[data-action="collapse-repository-dependencies"]')
+    expect(document.querySelector<HTMLElement>('[data-branch-workspace-repository-dependency-tree]')?.hidden).toBe(true)
 
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).toBeNull()
@@ -707,8 +1118,11 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.querySelector<HTMLInputElement>('[data-worktree-dependency-path="node_modules"]')?.checked).toBe(
       false,
     )
-    await clickAction('preview')
-    expect(onPreview).toHaveBeenCalledWith({
+    expect(document.querySelector<HTMLElement>('[data-branch-workspace-repository-dependency-tree]')?.hidden).toBe(
+      false,
+    )
+    expect(document.querySelector('[data-branch-workspace-repository-dependency-summary]')).toBeNull()
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -803,9 +1217,7 @@ describe('BranchWorkspaceDialog', () => {
       expect.any(AbortSignal),
     )
     clickSelector('[data-worktree-dependency-path="node_modules"]')
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -822,6 +1234,60 @@ describe('BranchWorkspaceDialog', () => {
       ],
       auxiliaryEntries: [],
     })
+
+    onPreview.mockClear()
+    clickSelector('[data-action="collapse-repository-dependencies"]')
+    expect(document.querySelector<HTMLElement>('[data-branch-workspace-repository-dependency-tree]')?.hidden).toBe(true)
+    expect(document.querySelector('[data-repository-dependency-summary="node_modules"]')?.textContent).toContain(
+      'worktree-dependency-tree.copy',
+    )
+    expect(document.querySelector('[data-worktree-bootstrap-source-select]')).not.toBeNull()
+    await flushAsyncWork()
+    expect(onPreview).not.toHaveBeenCalled()
+
+    clickSelector('[data-action="expand-repository-dependencies"]')
+    expect(document.querySelector<HTMLInputElement>('[data-worktree-dependency-path="node_modules"]')?.checked).toBe(
+      true,
+    )
+    expect(mocks.getRepositoryFileTree).toHaveBeenCalledTimes(1)
+  })
+
+  test('offers the repository dependency summary while extending a branch workspace', async () => {
+    mocks.getRepositoryFileTree.mockResolvedValue({
+      ok: true,
+      worktreePath: '/workspace/web-main',
+      dirPath: '/workspace/web-main',
+      entries: [
+        {
+          name: 'node_modules',
+          absolutePath: '/workspace/web-main/node_modules',
+          relativePath: 'node_modules',
+          kind: 'directory',
+        },
+      ],
+    })
+    renderDialog({
+      mode: 'extend',
+      workspace: existingWorkspace(),
+      repositories: [
+        { id: '/workspace/api', name: 'api', available: true, branches: ['main'], defaultBranch: 'main' },
+        {
+          id: '/workspace/web',
+          name: 'web',
+          available: true,
+          branches: ['trunk'],
+          defaultBranch: 'trunk',
+          worktrees: [{ path: '/workspace/web-main', branch: 'trunk', isMain: true }],
+        },
+      ],
+    })
+
+    click('workspace.branch-workspace.repository-named')
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await flushAsyncWork()
+    clickSelector('[data-worktree-dependency-path="node_modules"]')
+
+    expect(document.querySelector('[data-action="collapse-repository-dependencies"]')).not.toBeNull()
   })
 
   test('reloads repository dependencies when the selected base worktree changes', async () => {
@@ -860,8 +1326,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(Array.from(sourceSelect?.options ?? []).map((option) => option.value)).toContain(
       'worktree:/workspace/api-main',
     )
-    await clickAction('preview')
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -959,9 +1424,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.querySelector('[data-worktree-dependency-path="node_modules"]')).toBeNull()
     clickSelector('[data-worktree-dependency-path=".env"]')
     changeSelect('worktree-dependency-tree.mode', 'copy')
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -1025,9 +1488,7 @@ describe('BranchWorkspaceDialog', () => {
     const auxiliaryList = '[aria-labelledby="branch-workspace-auxiliary-candidates"]'
     clickSelector(`${auxiliaryList} [data-materialization-select-all]`)
     clickSelector(`${auxiliaryList} [data-materialization-bulk-choice="symlink"]`)
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -1126,8 +1587,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(choiceState('AGENTS.md', 'skip')).toBe('on')
     expect(document.querySelector('[data-materialization-item=".env"]')).toBeNull()
 
-    await clickAction('preview')
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -1188,7 +1648,9 @@ describe('BranchWorkspaceDialog', () => {
     await flushAsyncWork()
 
     expect(document.querySelector('[data-worktree-dependency-error="/workspace/api-main"]')).not.toBeNull()
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
+    await vi.waitFor(() =>
+      expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('ready'),
+    )
   })
 
   test('defaults every server-required approval and allows confirming the create plan', async () => {
@@ -1222,6 +1684,7 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({
       mode: 'remove',
       workspace: existingWorkspace(),
+      onPreview: () => new Promise<boolean>(() => undefined),
       plan: planWithSteps('remove', [
         { id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' },
         { id: 'branch:api', kind: 'delete-local-branch', label: 'feature/auth', repositoryName: 'api' },
@@ -1243,7 +1706,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(group?.textContent).toContain('workspace.branch-workspace.step.upstream-branch')
     expect(group?.textContent).toContain('origin/feature/auth')
     expect(group?.querySelector('.lucide-arrow-right')).not.toBeNull()
-    expect(document.querySelector('[data-branch-workspace-plan-step="remove-worktree"]')?.textContent).toBe('api')
+    expect(document.querySelector('[data-branch-workspace-plan-step="remove-worktree"]')?.textContent).toContain('api')
   })
 
   test('renders local-only branch cleanup without an upstream rail', () => {
@@ -1277,6 +1740,9 @@ describe('BranchWorkspaceDialog', () => {
     expect(directory?.className).toContain('font-semibold')
     expect(repository?.className).not.toContain('text-success')
     expect(repository?.className).not.toContain('text-danger')
+    expect(
+      Array.from(document.querySelectorAll('[data-branch-workspace-plan-sequence]')).map((item) => item.textContent),
+    ).toEqual(['01', '02'])
   })
 
   test('shows the effective creation source and synchronization intent in the preview', () => {
@@ -1308,6 +1774,46 @@ describe('BranchWorkspaceDialog', () => {
     const repository = document.querySelector<HTMLElement>('[data-branch-workspace-plan-step="create-worktree"]')
     expect(repository?.textContent).toContain('workspace.branch-workspace.preview-source-remote')
     expect(repository?.textContent).toContain('workspace.branch-workspace.preview-sync-enabled')
+    expect(document.querySelector('[data-branch-workspace-plan-repository-dependencies]')).toBeNull()
+  })
+
+  test('shows selected repository dependencies and modes from the reviewed plan', () => {
+    const plan = approvalPlan()
+    plan.repositories = [
+      {
+        repositoryName: 'api',
+        repoId: '/workspace/api',
+        targetBranch: 'feature/auth',
+        creationBase: { kind: 'localBranch', branch: 'main' },
+        syncBeforeCreate: false,
+        branchOrigin: 'created',
+        worktreePath: '/workspace/goblin-feature-auth/api',
+        mode: {
+          kind: 'newBranch',
+          newBranch: 'feature/auth',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+        worktreeBootstrap: {
+          kind: 'materialize',
+          sourceWorktreePath: '/workspace/api-main',
+          selections: [
+            { path: 'node_modules', mode: 'copy' },
+            { path: '.env.local', mode: 'symlink' },
+          ],
+        },
+        confirmationRequired: false,
+        satisfied: false,
+        action: 'create-worktree',
+      },
+    ]
+    plan.steps = [{ id: 'repository:api', kind: 'create-worktree', label: 'api', repositoryName: 'api' }]
+
+    renderDialog({ plan })
+
+    const preview = document.querySelector<HTMLElement>('[data-branch-workspace-plan-repository-dependencies="api"]')
+    expect(preview?.textContent).toContain('workspace.branch-workspace.repository-dependencies')
+    expect(planDependencyText('node_modules')).toContain('worktree-dependency-tree.copy')
+    expect(planDependencyText('.env.local')).toContain('worktree-dependency-tree.symlink')
   })
 
   test('highlights only the removed branch workspace directory in red', () => {
@@ -1367,21 +1873,22 @@ describe('BranchWorkspaceDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  test('previews branch workspace removal without a force-worktree option', async () => {
+  test('shows removal options beside the automatically planned deletion', async () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
 
+    expect(document.querySelector('[data-testid="branch-workspace-one-step-layout"]')).not.toBeNull()
+    expect(document.querySelector('[data-action="preview"]')).toBeNull()
     expect(document.querySelector('[aria-label="action.confirm-remove-worktree-force"]')).toBeNull()
     expect(checked('workspace.branch-workspace.delete-local-branch')).toBe(true)
     expect(checked('workspace.branch-workspace.delete-upstream-branch')).toBe(false)
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'remove',
       branchWorkspaceId: 'branch-1',
       alsoDeleteBranch: true,
       alsoDeleteUpstream: false,
     })
+    expect(onPreview).toHaveBeenCalledTimes(1)
   })
 
   test('extends an existing branch workspace with only non-member repository controls', async () => {
@@ -1394,13 +1901,10 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.body.textContent).not.toContain('workspace.branch-workspace.member-fixed')
     expect(document.querySelector('[aria-labelledby="branch-workspace-auxiliary-candidates"]')).toBeNull()
     expect(document.querySelectorAll('[aria-label="workspace.branch-workspace.repository-named"]')).toHaveLength(1)
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(true)
+    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
 
     click('workspace.branch-workspace.repository-named')
-    await flushAsyncWork()
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'create',
       branch: 'feature/auth',
       repositories: [
@@ -1423,24 +1927,22 @@ describe('BranchWorkspaceDialog', () => {
     const onPreview = vi.fn(async () => true)
     renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), onPreview })
 
-    const preview = document.querySelector<HTMLButtonElement>('[data-action="preview"]')
-    expect(preview?.disabled).toBe(true)
+    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
     expect(document.body.textContent).toContain('workspace.branch-workspace.reduce-retains-branches')
 
     const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-branch-workspace-reduce-member]'))
     expect(checkboxes).toHaveLength(2)
     act(() => checkboxes[0]?.click())
-    expect(preview?.disabled).toBe(false)
-    await clickAction('preview')
-
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'reduce',
       branchWorkspaceId: 'branch-1',
       repositories: ['api'],
     })
 
     act(() => checkboxes[1]?.click())
-    expect(preview?.disabled).toBe(true)
+    await vi.waitFor(() =>
+      expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete'),
+    )
   })
 
   test('locks a member-scoped reduction to its preselected repository', async () => {
@@ -1455,10 +1957,7 @@ describe('BranchWorkspaceDialog', () => {
     const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-branch-workspace-reduce-member]'))
     expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, false])
     expect(checkboxes.every((checkbox) => checkbox.disabled)).toBe(true)
-    expect(document.querySelector<HTMLButtonElement>('[data-action="preview"]')?.disabled).toBe(false)
-
-    await clickAction('preview')
-    expect(onPreview).toHaveBeenCalledWith({
+    await expectAutoPreview(onPreview, {
       operation: 'reduce',
       branchWorkspaceId: 'branch-1',
       repositories: ['api'],
@@ -1485,6 +1984,25 @@ describe('BranchWorkspaceDialog', () => {
     expect(confirm?.disabled).toBe(false)
     await clickAction('confirm')
     expect(onConfirm).toHaveBeenCalledWith(['close-terminals'])
+  })
+
+  test('keeps member reduction choices locked after execution fails', () => {
+    renderDialog({
+      mode: 'reduce',
+      workspace: workspaceWithTwoMembers(),
+      plan: reductionPlan(),
+      result: {
+        ok: false,
+        message: 'workspace.branch-workspace.execute-failed',
+        branchWorkspaceId: 'branch-1',
+      },
+      error: 'workspace.branch-workspace.execute-failed',
+    })
+
+    const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-branch-workspace-reduce-member]'))
+    expect(checkboxes.every((checkbox) => checkbox.disabled)).toBe(true)
+    expect(document.querySelector('[data-action="return-to-selection"]')).toBeNull()
+    expect(document.querySelector('[data-action="retry"]')).not.toBeNull()
   })
 
   test('requires unmanaged-content approval before cleaning a member-removal residue', async () => {
@@ -1562,8 +2080,10 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof BranchWorks
           items: [],
           auxiliaryCandidates: [],
         })}
+        onFetchAllRepositories={async () => ({ total: 2, succeeded: 2, failures: [] })}
         onPreview={async () => true}
         onConfirm={async () => null}
+        onForceConfirm={async () => null}
         onRetry={async () => null}
         onReturnToSelection={() => {}}
         onCancel={async () => {}}
@@ -1611,6 +2131,14 @@ function repositoryCheckbox(repositoryName: string): HTMLInputElement {
     `[data-branch-workspace-repository-row="${repositoryName}"] input[type="checkbox"]`,
   )
   if (!checkbox) throw new Error(`Missing repository checkbox: ${repositoryName}`)
+  return checkbox
+}
+
+function repositorySyncCheckbox(repositoryName: string): HTMLInputElement {
+  const checkbox = document.querySelector<HTMLInputElement>(
+    `[data-branch-workspace-repository-row="${repositoryName}"] [aria-label="workspace.branch-workspace.sync-before-create-named"]`,
+  )
+  if (!checkbox) throw new Error(`Missing repository synchronization checkbox: ${repositoryName}`)
   return checkbox
 }
 
@@ -1715,11 +2243,19 @@ function stepProgress(id: string): string | undefined {
   )
 }
 
+function planDependencyText(path: string): string {
+  return document.querySelector(`[data-branch-workspace-plan-repository-dependency="${path}"]`)?.textContent ?? ''
+}
+
 async function flushAsyncWork() {
   await act(async () => {
     await Promise.resolve()
     await Promise.resolve()
   })
+}
+
+async function expectAutoPreview(onPreview: ReturnType<typeof vi.fn>, request: unknown) {
+  await vi.waitFor(() => expect(onPreview).toHaveBeenLastCalledWith(request, expect.any(AbortSignal)))
 }
 
 function existingWorkspace(): BranchWorkspaceSnapshot {

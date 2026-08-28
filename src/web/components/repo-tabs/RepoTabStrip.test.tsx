@@ -45,12 +45,18 @@ afterEach(() => {
 function createStorage(): Storage {
   const store = new Map<string, string>()
   return {
-    get length() { return store.size },
+    get length() {
+      return store.size
+    },
     clear: () => store.clear(),
     getItem: (key) => store.get(key) ?? null,
     key: (index) => Array.from(store.keys())[index] ?? null,
-    removeItem: (key) => { store.delete(key) },
-    setItem: (key, value) => { store.set(key, value) },
+    removeItem: (key) => {
+      store.delete(key)
+    },
+    setItem: (key, value) => {
+      store.set(key, value)
+    },
   }
 }
 
@@ -103,7 +109,9 @@ describe('RepoTabStrip', () => {
   test('marks non-git local workspace tabs as plain repositories', () => {
     render(
       <RepoTabStrip
-        repos={[repo('plain-project', '/tmp/plain-project', { isGitRepo: false, worktreePaths: ['/tmp/plain-project'] })]}
+        repos={[
+          repo('plain-project', '/tmp/plain-project', { isGitRepo: false, worktreePaths: ['/tmp/plain-project'] }),
+        ]}
         activeId="/tmp/plain-project"
         labels={labels}
         onActivate={() => {}}
@@ -392,11 +400,7 @@ describe('RepoTabStrip', () => {
 
     render(
       <RepoTabStrip
-        repos={[
-          repo('repo-a', '/tmp/repo-a'),
-          repo('repo-b', '/tmp/repo-b'),
-          repo('repo-c', '/tmp/repo-c'),
-        ]}
+        repos={[repo('repo-a', '/tmp/repo-a'), repo('repo-b', '/tmp/repo-b'), repo('repo-c', '/tmp/repo-c')]}
         activeId="/tmp/repo-a"
         labels={labels}
         onActivate={() => {}}
@@ -521,7 +525,11 @@ function render(
   })
 }
 
-function repo(name: string, id: string, options: { worktreePaths?: string[]; isGitRepo?: boolean } = {}): RepoTabSummary {
+function repo(
+  name: string,
+  id: string,
+  options: { worktreePaths?: string[]; isGitRepo?: boolean } = {},
+): RepoTabSummary {
   return {
     id,
     name,
@@ -580,6 +588,7 @@ const labels = {
   open: 'Open',
   openLocal: 'Open local repository…',
   openLocalShortcut: '⌘O',
+  openWsl: 'Open WSL project…',
   openRemote: 'Open remote repository…',
   openRemoteShortcut: '⌘⇧R',
   clone: 'Clone repository…',
