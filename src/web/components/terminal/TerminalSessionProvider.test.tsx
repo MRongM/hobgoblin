@@ -599,6 +599,16 @@ beforeEach(() => {
 })
 
 describe('TerminalSessionProvider', () => {
+  test('exposes the terminal selection reader through the command context', async () => {
+    const { getContext, unmount } = await renderProvider()
+
+    try {
+      expect(getContext().selectionText).toBeTypeOf('function')
+    } finally {
+      await unmount()
+    }
+  })
+
   test('keeps terminal detail open and switches the selected session when one of multiple terminals exits', async () => {
     seedRepoState({
       id: REPO_ID,

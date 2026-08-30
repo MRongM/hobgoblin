@@ -609,6 +609,10 @@ export class TerminalSessionRegistry {
     this.sessions.get(key)?.cancelMobileSelection(point)
   }
 
+  selectionText = (key: string): string => {
+    return this.sessions.get(key)?.selectionText() ?? ''
+  }
+
   mobileSelectionText = (key: string): string => {
     return this.sessions.get(key)?.mobileSelectionText() ?? ''
   }

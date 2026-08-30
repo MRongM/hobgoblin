@@ -259,6 +259,7 @@ export function TerminalSessionProvider({
       extendMobileSelection: registry.extendMobileSelection,
       finishMobileSelection: registry.finishMobileSelection,
       cancelMobileSelection: registry.cancelMobileSelection,
+      selectionText: registry.selectionText,
       mobileSelectionText: registry.mobileSelectionText,
       clearMobileSelection: registry.clearMobileSelection,
       clearBell: registry.clearBell,

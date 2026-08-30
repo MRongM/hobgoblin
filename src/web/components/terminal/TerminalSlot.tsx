@@ -15,6 +15,12 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '#/web/components/ui/context-menu.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
@@ -146,6 +152,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [mobileSelectionCopyAction, setMobileSelectionCopyAction] = useState<MobileTerminalSelectionCopyAction | null>(
     null,
   )
+  const [desktopSelectionCopyText, setDesktopSelectionCopyText] = useState<string | null>(null)
   const context = useTerminalSessionContext()
   const {
     clearBell,
@@ -168,6 +175,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     extendMobileSelection,
     finishMobileSelection,
     cancelMobileSelection,
+    selectionText,
     mobileSelectionText,
     clearMobileSelection,
     takeover,
@@ -208,6 +216,10 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   useEffect(() => {
     setMobileFocusMode(false)
   }, [attachment?.role, isMobile, key])
+
+  useEffect(() => {
+    setDesktopSelectionCopyText(null)
+  }, [isMobile, isWindowsPlatform, key])
 
   const cancelTouchInertia = useCallback(() => {
     if (touchInertiaFrameRef.current !== null) window.cancelAnimationFrame(touchInertiaFrameRef.current)
@@ -513,6 +525,29 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     clearMobileSelection(action.key)
     setMobileSelectionCopyAction((current) => (current === action ? null : current))
   }, [clearMobileSelection, mobileSelectionCopyAction, mobileSelectionText, t])
+
+  const handleDesktopContextMenuOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setDesktopSelectionCopyText(null)
+        return
+      }
+      if (!isWindowsPlatform || isMobile || !key) return
+      const text = selectionText(key)
+      setDesktopSelectionCopyText(text || null)
+    },
+    [isMobile, isWindowsPlatform, key, selectionText],
+  )
+
+  const copyDesktopTerminalSelection = useCallback(async () => {
+    const text = desktopSelectionCopyText
+    if (!text) return
+    if (!(await writeTerminalClipboardText(text))) {
+      toast.error(t('terminal.selection-copy-failed'))
+      return
+    }
+    setDesktopSelectionCopyText(null)
+  }, [desktopSelectionCopyText, t])
 
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
@@ -886,6 +921,39 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       {customButtonElements}
     </div>
   ) : null
+  const terminalHost = (
+    <div
+      id={terminalHostId}
+      ref={hostRef}
+      className={cn(
+        'goblin-terminal-slot__host',
+        isReadonly && 'goblin-terminal-slot__host--canonical-readonly',
+        isMobileTerminal && 'goblin-terminal-slot__host--touch-scroll',
+        isMobileTerminal && !fitToWidth && 'goblin-terminal-slot__host--original-width',
+      )}
+      aria-readonly={(!isController && hasSessions) || undefined}
+      onPointerDown={isMobileTerminal ? handleTouchScrollStart : undefined}
+      onPointerMove={isMobileTerminal ? handleTouchScrollMove : undefined}
+      onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
+      onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
+      onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
+    />
+  )
+  const terminalHostSurface =
+    isWindowsPlatform && !isMobile ? (
+      <ContextMenu open={desktopSelectionCopyText !== null} onOpenChange={handleDesktopContextMenuOpenChange}>
+        <ContextMenuTrigger asChild>{terminalHost}</ContextMenuTrigger>
+        {desktopSelectionCopyText !== null && (
+          <ContextMenuContent>
+            <ContextMenuItem onSelect={() => void copyDesktopTerminalSelection()}>
+              {t('menu.edit.copy')}
+            </ContextMenuItem>
+          </ContextMenuContent>
+        )}
+      </ContextMenu>
+    ) : (
+      terminalHost
+    )
 
   return (
     <div
@@ -916,22 +984,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           )}
         </div>
       )}
-      <div
-        id={terminalHostId}
-        ref={hostRef}
-        className={cn(
-          'goblin-terminal-slot__host',
-          isReadonly && 'goblin-terminal-slot__host--canonical-readonly',
-          isMobileTerminal && 'goblin-terminal-slot__host--touch-scroll',
-          isMobileTerminal && !fitToWidth && 'goblin-terminal-slot__host--original-width',
-        )}
-        aria-readonly={(!isController && hasSessions) || undefined}
-        onPointerDown={isMobileTerminal ? handleTouchScrollStart : undefined}
-        onPointerMove={isMobileTerminal ? handleTouchScrollMove : undefined}
-        onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
-        onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
-        onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
-      />
+      {terminalHostSurface}
       {mobileSelectionCopyAction && (
         <Button
           type="button"

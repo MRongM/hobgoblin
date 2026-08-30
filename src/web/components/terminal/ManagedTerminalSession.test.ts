@@ -1066,6 +1066,7 @@ describe('ManagedTerminalSession', () => {
     expect(mouseDown).toHaveBeenCalledTimes(1)
     expect(mouseMove).toHaveBeenCalledTimes(1)
     expect(mouseUp).toHaveBeenCalledTimes(1)
+    expect(session.selectionText()).toBe('copy me')
     expect(session.mobileSelectionText()).toBe('copy me')
 
     session.clearMobileSelection()

@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { TerminalCustomButton } from '#/shared/settings.ts'
+import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
@@ -45,7 +46,7 @@ vi.mock('sonner', () => ({
 }))
 
 const appShellMocks = vi.hoisted(() => ({
-  readSystemClipboardImage: vi.fn(async () => null),
+  readSystemClipboardImage: vi.fn(async (): Promise<ClipboardBinaryFilePayload | null> => null),
   readSystemClipboardFilePaths: vi.fn(async () => [] as string[]),
   saveClipboardBinaryFilesFromPaste: vi.fn(),
 }))
@@ -137,6 +138,122 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('opens the Windows terminal selection context menu and copies without clearing the selection', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const selectionText = vi.fn(() => 'selected output')
+    const clearMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', { selectionText, clearMobileSelection })
+
+    try {
+      clearMobileSelection.mockClear()
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+        candidate.textContent?.includes('menu.edit.copy'),
+      )
+      expect(item).toBeInstanceOf(HTMLElement)
+
+      await act(async () => {
+        item?.click()
+        await Promise.resolve()
+      })
+
+      expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected output')
+      expect(clearMobileSelection).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not open the Windows terminal selection context menu for an empty selection', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const { container, root } = await renderTerminalSlotFixture('controller', { selectionText: vi.fn(() => '') })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      expect(
+        [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+          candidate.textContent?.includes('menu.edit.copy'),
+        ),
+      ).toBeUndefined()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps the Windows terminal selection when context-menu copy fails', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const clearMobileSelection = vi.fn()
+    clipboardMocks.writeTerminalClipboardText.mockResolvedValue(false)
+    i18nMocks.translations['terminal.selection-copy-failed'] = 'Copy failed'
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => 'retry selection'),
+      clearMobileSelection,
+    })
+
+    try {
+      clearMobileSelection.mockClear()
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+        candidate.textContent?.includes('menu.edit.copy'),
+      )
+
+      await act(async () => {
+        item?.click()
+        await Promise.resolve()
+      })
+
+      expect(toastMocks.error).toHaveBeenCalledWith('Copy failed')
+      expect(clearMobileSelection).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not add the Windows terminal selection context menu on macOS', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => 'selected output'),
+    })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      expect(
+        [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+          candidate.textContent?.includes('menu.edit.copy'),
+        ),
+      ).toBeUndefined()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('marks a desktop controlling terminal as the Telegram target on emulator focus', async () => {
     const markTelegramInputTarget = vi.fn()
     const { container, root } = await renderTerminalSlotFixture('controller', {
@@ -553,6 +670,7 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -710,6 +828,7 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -2204,6 +2323,7 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -2324,6 +2444,7 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -3281,6 +3402,7 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     clearBell: vi.fn(() => false),

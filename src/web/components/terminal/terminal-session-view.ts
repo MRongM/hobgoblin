@@ -398,6 +398,10 @@ export class TerminalSessionView {
     cancelTerminalMobileSelection(this.term, point)
   }
 
+  selectionText(): string {
+    return this.term?.getSelection() ?? ''
+  }
+
   mobileSelectionText(): string {
     return terminalMobileSelectionText(this.term)
   }

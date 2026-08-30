@@ -315,6 +315,7 @@ describe('TerminalSessionRegistry', () => {
     const extendMobileSelection = vi.fn()
     const finishMobileSelection = vi.fn()
     const cancelMobileSelection = vi.fn()
+    const selectionText = vi.fn(() => 'selected')
     const mobileSelectionText = vi.fn(() => 'selected')
     const clearMobileSelection = vi.fn()
     Object.assign(session, {
@@ -322,6 +323,7 @@ describe('TerminalSessionRegistry', () => {
       extendMobileSelection,
       finishMobileSelection,
       cancelMobileSelection,
+      selectionText,
       mobileSelectionText,
       clearMobileSelection,
     })
@@ -330,6 +332,7 @@ describe('TerminalSessionRegistry', () => {
     registry.extendMobileSelection(key, point)
     registry.finishMobileSelection(key, point)
     registry.cancelMobileSelection(key, point)
+    expect(registry.selectionText(key)).toBe('selected')
     expect(registry.mobileSelectionText(key)).toBe('selected')
     registry.clearMobileSelection(key)
 
@@ -337,6 +340,7 @@ describe('TerminalSessionRegistry', () => {
     expect(extendMobileSelection).toHaveBeenCalledWith(point)
     expect(finishMobileSelection).toHaveBeenCalledWith(point)
     expect(cancelMobileSelection).toHaveBeenCalledWith(point)
+    expect(selectionText).toHaveBeenCalledTimes(1)
     expect(mobileSelectionText).toHaveBeenCalledTimes(1)
     expect(clearMobileSelection).toHaveBeenCalledTimes(1)
   })
