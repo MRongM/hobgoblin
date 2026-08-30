@@ -178,6 +178,8 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 
     writeInput() {}
 
+    pasteText() {}
+
     takeover() {}
 
     serialize(): string {
@@ -599,11 +601,12 @@ beforeEach(() => {
 })
 
 describe('TerminalSessionProvider', () => {
-  test('exposes the terminal selection reader through the command context', async () => {
+  test('exposes renderer-local selection and paste through the command context', async () => {
     const { getContext, unmount } = await renderProvider()
 
     try {
       expect(getContext().selectionText).toBeTypeOf('function')
+      expect(getContext().pasteText).toBeTypeOf('function')
     } finally {
       await unmount()
     }

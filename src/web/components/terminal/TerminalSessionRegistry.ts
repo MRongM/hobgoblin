@@ -613,6 +613,10 @@ export class TerminalSessionRegistry {
     return this.sessions.get(key)?.selectionText() ?? ''
   }
 
+  pasteText = (key: string, text: string): void => {
+    this.sessions.get(key)?.pasteText(text)
+  }
+
   mobileSelectionText = (key: string): string => {
     return this.sessions.get(key)?.mobileSelectionText() ?? ''
   }

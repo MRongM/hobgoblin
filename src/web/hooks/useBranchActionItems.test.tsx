@@ -1611,6 +1611,7 @@ function terminalContextValue(): TerminalSessionContextValue {
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
     selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     writeExtraKey: vi.fn(),

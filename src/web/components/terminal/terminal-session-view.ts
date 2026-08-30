@@ -402,6 +402,10 @@ export class TerminalSessionView {
     return this.term?.getSelection() ?? ''
   }
 
+  pasteText(text: string): void {
+    this.term?.paste(text)
+  }
+
   mobileSelectionText(): string {
     return terminalMobileSelectionText(this.term)
   }

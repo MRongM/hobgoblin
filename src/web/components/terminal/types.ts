@@ -173,6 +173,7 @@ export interface TerminalSessionContextValue {
   finishMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void
   cancelMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void
   selectionText: (key: string) => string
+  pasteText: (key: string, text: string) => void
   mobileSelectionText: (key: string) => string
   clearMobileSelection: (key: string) => void
   clearBell: (key: string) => boolean

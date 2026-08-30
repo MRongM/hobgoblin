@@ -200,6 +200,10 @@ export class ManagedTerminalSession {
     return this.view.selectionText()
   }
 
+  pasteText(text: string): void {
+    this.view.pasteText(text)
+  }
+
   mobileSelectionText(): string {
     return this.view.mobileSelectionText()
   }
