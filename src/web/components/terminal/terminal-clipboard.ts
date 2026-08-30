@@ -1,3 +1,13 @@
+export async function readTerminalClipboardText(): Promise<string | null> {
+  const clipboard = globalThis.navigator?.clipboard
+  if (typeof clipboard?.readText !== 'function') return null
+  try {
+    return await clipboard.readText()
+  } catch {
+    return null
+  }
+}
+
 export async function writeTerminalClipboardText(text: string): Promise<boolean> {
   const clipboard = globalThis.navigator?.clipboard
   if (typeof clipboard?.writeText === 'function') {
