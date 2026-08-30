@@ -328,6 +328,17 @@ describe('app menu actions', () => {
     buildAppMenu()
 
     const editMenu = mocks.template.find((entry) => entry.label === 'menu.edit')
+    expect(editMenu?.submenu?.map((entry: any) => entry.role)).toEqual([
+      'undo',
+      'redo',
+      undefined,
+      'cut',
+      'copy',
+      'paste',
+      'pasteAndMatchStyle',
+      'delete',
+      'selectAll',
+    ])
     expect(editMenu?.submenu?.map((entry: any) => entry.label)).toEqual([
       'menu.edit.undo',
       'menu.edit.redo',
@@ -339,10 +350,41 @@ describe('app menu actions', () => {
       'menu.edit.delete',
       'menu.edit.select-all',
     ])
+    expect(editMenu?.submenu?.map((entry: any) => entry.accelerator)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ])
 
     const viewMenu = mocks.template.find((entry) => entry.label === 'menu.view')
     const fullScreenItem = viewMenu?.submenu?.find((entry: any) => entry.label === 'menu.view.toggle-full-screen')
     expect(fullScreenItem?.role).toBe('togglefullscreen')
+  })
+
+  test('registers standard edit accelerators outside macOS', async () => {
+    const { buildAppMenu, platform } = await import('#/main/menu.ts')
+    vi.mocked(platform.isMacOS).mockReturnValue(false)
+
+    buildAppMenu()
+
+    const editMenu = mocks.template.find((entry) => entry.label === 'menu.edit')
+    expect(editMenu?.submenu?.map((entry: any) => entry.accelerator)).toEqual([
+      'CmdOrCtrl+Z',
+      'Ctrl+Y',
+      undefined,
+      'CmdOrCtrl+X',
+      'CmdOrCtrl+C',
+      'CmdOrCtrl+V',
+      'CmdOrCtrl+Shift+V',
+      undefined,
+      'CmdOrCtrl+A',
+    ])
   })
 
   test('puts native window management items before repo navigation', async () => {

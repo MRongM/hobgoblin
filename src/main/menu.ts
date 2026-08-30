@@ -101,7 +101,7 @@ function createAppMenuTemplate(state: AppMenuState): MenuItemConstructorOptions[
   return [
     ...(state.isMac ? [createMacAppMenu(state)] : []),
     createFileMenu(state),
-    createEditMenu(),
+    createEditMenu(state.isMac),
     createViewMenu(state),
     createWindowMenu(state),
     createHelpMenu(),
@@ -177,19 +177,34 @@ function createRecentReposMenu(recentRepos: RepoSessionEntry[]): MenuItemConstru
     : [{ label: t('menu.file.no-recent'), enabled: false }]
 }
 
-function createEditMenu(): MenuItemConstructorOptions {
+function createEditMenu(isMac: boolean): MenuItemConstructorOptions {
+  const editAccelerators = isMac
+    ? {}
+    : ({
+        undo: 'CmdOrCtrl+Z',
+        redo: 'Ctrl+Y',
+        cut: 'CmdOrCtrl+X',
+        copy: 'CmdOrCtrl+C',
+        paste: 'CmdOrCtrl+V',
+        pasteAndMatchStyle: 'CmdOrCtrl+Shift+V',
+        selectAll: 'CmdOrCtrl+A',
+      } as const)
   return {
     label: t('menu.edit'),
     submenu: [
-      { role: 'undo', label: t('menu.edit.undo') },
-      { role: 'redo', label: t('menu.edit.redo') },
+      { role: 'undo', label: t('menu.edit.undo'), accelerator: editAccelerators.undo },
+      { role: 'redo', label: t('menu.edit.redo'), accelerator: editAccelerators.redo },
       separator(),
-      { role: 'cut', label: t('menu.edit.cut') },
-      { role: 'copy', label: t('menu.edit.copy') },
-      { role: 'paste', label: t('menu.edit.paste') },
-      { role: 'pasteAndMatchStyle', label: t('menu.edit.paste-match-style') },
+      { role: 'cut', label: t('menu.edit.cut'), accelerator: editAccelerators.cut },
+      { role: 'copy', label: t('menu.edit.copy'), accelerator: editAccelerators.copy },
+      { role: 'paste', label: t('menu.edit.paste'), accelerator: editAccelerators.paste },
+      {
+        role: 'pasteAndMatchStyle',
+        label: t('menu.edit.paste-match-style'),
+        accelerator: editAccelerators.pasteAndMatchStyle,
+      },
       { role: 'delete', label: t('menu.edit.delete') },
-      { role: 'selectAll', label: t('menu.edit.select-all') },
+      { role: 'selectAll', label: t('menu.edit.select-all'), accelerator: editAccelerators.selectAll },
     ],
   }
 }
