@@ -24,6 +24,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import {
   pathForDroppedFile,
+  readSystemClipboardImage,
   readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste,
 } from '#/web/app-shell-client.ts'
@@ -198,7 +199,9 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
-  const isMacPlatform = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
+  const navigatorPlatform = globalThis.navigator?.platform ?? ''
+  const isMacPlatform = isMacNavigatorPlatform(navigatorPlatform)
+  const isWindowsPlatform = /^Win/i.test(navigatorPlatform)
   const isMobileTerminal = isMobile && (isController || isReadonly) && !!key
   const isMobileFocusMode = isMobile && isController && !!key && mobileFocusMode
 
@@ -637,12 +640,17 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       const files = binaryPasteFiles(event.clipboardData)
       event.preventDefault()
       event.stopPropagation()
-      void resolvePastedFilePaths(files, { repoRoot, worktreePath, temporaryFilesDirectory }).then((paths) => {
+      void resolvePastedFilePaths(files, {
+        repoRoot,
+        worktreePath,
+        temporaryFilesDirectory,
+        allowNativeClipboardImage: isWindowsPlatform,
+      }).then((paths) => {
         if (paths.length === 0) return
         writeInput(key, paths.map(shellEscapePath).join(' '))
       })
     },
-    [isController, key, repoRoot, temporaryFilesDirectory, worktreePath, writeInput],
+    [isController, isWindowsPlatform, key, repoRoot, temporaryFilesDirectory, worktreePath, writeInput],
   )
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -1155,11 +1163,14 @@ interface ResolvePastedFilePathsOptions {
   repoRoot: string
   worktreePath: string
   temporaryFilesDirectory: string
+  allowNativeClipboardImage: boolean
 }
 
 async function resolvePastedFilePaths(files: File[], options: ResolvePastedFilePathsOptions): Promise<string[]> {
   const sourcePaths = await readSystemClipboardFilePaths()
-  if (isRemoteRepoId(options.repoRoot)) return await resolveRemotePastedFilePaths(files, sourcePaths, options)
+  const payloads =
+    sourcePaths.length > 0 ? [] : await pastedBinaryPayloads(files, options.allowNativeClipboardImage)
+  if (isRemoteRepoId(options.repoRoot)) return await resolveRemotePastedFilePaths(payloads, sourcePaths, options)
   if (sourcePaths.length > 0) {
     const result = await saveClipboardBinaryFilesFromPaste({
       worktreePath: options.worktreePath,
@@ -1169,18 +1180,17 @@ async function resolvePastedFilePaths(files: File[], options: ResolvePastedFileP
     })
     return result.ok ? result.paths : []
   }
-  if (files.length === 0) return []
-  const payload = await Promise.all(files.map(fileToClipboardPayload))
+  if (payloads.length === 0) return []
   const result = await saveClipboardBinaryFilesFromPaste({
     worktreePath: options.worktreePath,
     temporaryFilesDirectory: options.temporaryFilesDirectory,
-    files: payload,
+    files: payloads,
   })
   return result.ok ? result.paths : []
 }
 
 async function resolveRemotePastedFilePaths(
-  files: File[],
+  payloads: ClipboardBinaryFilePayload[],
   sourcePaths: string[],
   options: ResolvePastedFilePathsOptions,
 ): Promise<string[]> {
@@ -1197,8 +1207,8 @@ async function resolveRemotePastedFilePaths(
     })
     return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
   }
-  if (files.length === 0) return []
-  const items = await Promise.all(files.map(uploadedItemFromFile))
+  if (payloads.length === 0) return []
+  const items = await Promise.all(payloads.map((payload) => uploadedItemFromFile(fileFromClipboardPayload(payload))))
   const result = await transferRepositoryFiles({
     repoId: options.repoRoot,
     worktreePath: options.worktreePath,
@@ -1209,6 +1219,20 @@ async function resolveRemotePastedFilePaths(
     },
   })
   return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
+}
+
+async function pastedBinaryPayloads(
+  files: File[],
+  allowNativeClipboardImage: boolean,
+): Promise<ClipboardBinaryFilePayload[]> {
+  if (files.length > 0) return await Promise.all(files.map(fileToClipboardPayload))
+  if (!allowNativeClipboardImage) return []
+  const image = await readSystemClipboardImage()
+  return image ? [image] : []
+}
+
+function fileFromClipboardPayload(payload: ClipboardBinaryFilePayload): File {
+  return new File([payload.bytes], payload.name ?? 'clipboard', { type: payload.type ?? '' })
 }
 
 function remoteTerminalPasteTargetDir(worktreePath: string): string {

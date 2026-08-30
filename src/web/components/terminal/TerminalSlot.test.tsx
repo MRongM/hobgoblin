@@ -45,12 +45,14 @@ vi.mock('sonner', () => ({
 }))
 
 const appShellMocks = vi.hoisted(() => ({
+  readSystemClipboardImage: vi.fn(async () => null),
   readSystemClipboardFilePaths: vi.fn(async () => [] as string[]),
   saveClipboardBinaryFilesFromPaste: vi.fn(),
 }))
 
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: () => '',
+  readSystemClipboardImage: appShellMocks.readSystemClipboardImage,
   readSystemClipboardFilePaths: appShellMocks.readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste: appShellMocks.saveClipboardBinaryFilesFromPaste,
 }))
@@ -115,6 +117,8 @@ afterEach(() => {
   runtimeSettingsMocks.terminalCustomButtonSize = 'medium'
   runtimeSettingsMocks.terminalCustomButtons = []
   i18nMocks.translations = {}
+  appShellMocks.readSystemClipboardImage.mockReset()
+  appShellMocks.readSystemClipboardImage.mockResolvedValue(null)
   appShellMocks.readSystemClipboardFilePaths.mockReset()
   appShellMocks.readSystemClipboardFilePaths.mockResolvedValue([])
   appShellMocks.saveClipboardBinaryFilesFromPaste.mockReset()
@@ -2637,8 +2641,150 @@ describe('TerminalSlot', () => {
         temporaryFilesDirectory: '/Users/test/project/tmp',
         files: [{ name: 'image.png', type: 'image/png', bytes: expect.any(ArrayBuffer) }],
       })
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
       expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/Users/test/project/tmp/pasted image.png'")
     } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('uses a Windows native clipboard image when a paste event has no DOM files', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new Uint8Array([1, 2, 3]).buffer }
+    appShellMocks.readSystemClipboardImage.mockResolvedValue(payload)
+    appShellMocks.saveClipboardBinaryFilesFromPaste.mockResolvedValue({
+      ok: true,
+      paths: ['C:/project/tmp/pasted-image.png'],
+    })
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+      await vi.waitFor(() => expect(writeInput).toHaveBeenCalled())
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(appShellMocks.readSystemClipboardImage).toHaveBeenCalledTimes(1)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).toHaveBeenCalledWith({
+        worktreePath: '/worktree',
+        temporaryFilesDirectory: '',
+        files: [payload],
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'C:/project/tmp/pasted-image.png')
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('uploads a Windows native clipboard image for a remote terminal', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    appShellMocks.readSystemClipboardImage.mockResolvedValue({
+      name: 'clipboard.png',
+      type: 'image/png',
+      bytes: new Uint8Array([1, 2, 3]).buffer,
+    })
+    repoClientMocks.transferRepositoryFiles.mockResolvedValue({
+      ok: true,
+      copied: [{ destinationPath: '/srv/repo-feature/tmp/pasted-image.png', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture(
+      'controller',
+      { writeInput },
+      { repoRoot: REMOTE_REPO_ID, worktreePath: '/srv/repo-feature' },
+    )
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+      await vi.waitFor(() => expect(writeInput).toHaveBeenCalled())
+
+      expect(repoClientMocks.transferRepositoryFiles).toHaveBeenCalledWith({
+        repoId: REMOTE_REPO_ID,
+        worktreePath: '/srv/repo-feature',
+        targetDirPath: '/srv/repo-feature/tmp',
+        source: {
+          kind: 'uploadedItems',
+          items: [
+            {
+              name: expect.stringMatching(/^clipboard-20\d{6}-\d{6}\.png$/),
+              mimeType: 'image/png',
+              bytesBase64: 'AQID',
+              byteLength: 3,
+            },
+          ],
+        },
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', '/srv/repo-feature/tmp/pasted-image.png')
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps Windows terminal paste text ahead of the native image fallback', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => 'copied text', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+
+      expect(event.defaultPrevented).toBe(false)
+      expect(appShellMocks.readSystemClipboardFilePaths).not.toHaveBeenCalled()
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not use the Windows native image fallback on macOS', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+      await vi.waitFor(() => expect(appShellMocks.readSystemClipboardFilePaths).toHaveBeenCalledTimes(1))
+
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
       await act(async () => root.unmount())
       container.remove()
     }
@@ -2701,6 +2847,7 @@ describe('TerminalSlot', () => {
         files: [],
         sourcePaths: ['/Users/test/Desktop/report.pdf'],
       })
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
       expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/worktree/tmp/pasted report.pdf'")
     } finally {
       await act(async () => root.unmount())
@@ -2922,7 +3069,7 @@ function controllerFixture(
 async function renderTerminalSlotFixture(
   role: 'controller' | 'viewer' | 'unowned',
   contextOverrides: Partial<TerminalSessionContextValue> = {},
-  fixtureOptions: { tmuxBacked?: boolean } = {},
+  fixtureOptions: { tmuxBacked?: boolean; repoRoot?: string; worktreePath?: string } = {},
 ): Promise<{ container: HTMLDivElement; root: Root }> {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const container = document.createElement('div')
@@ -2943,7 +3090,10 @@ async function renderTerminalSlotFixture(
     root.render(
       <TerminalSessionContext.Provider value={context}>
         <TerminalSessionReadContext.Provider value={readContext}>
-          <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          <TerminalSlot
+            repoRoot={fixtureOptions.repoRoot ?? '/repo'}
+            worktreePath={fixtureOptions.worktreePath ?? '/worktree'}
+          />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
