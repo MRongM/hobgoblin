@@ -15,7 +15,7 @@ import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { TerminalSessionBase, TerminalSessionContextValue } from '#/web/components/terminal/types.ts'
-import type { TerminalLaunchMode } from '#/shared/terminal.ts'
+import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
 
 interface BranchWorkspaceTerminalPanelProps {
   context: BranchWorkspaceFolderContext
@@ -134,10 +134,15 @@ export async function openBranchWorkspaceInternalTerminal(
   context: BranchWorkspaceFolderContext,
   dependencies: OpenBranchWorkspaceInternalTerminalDependencies,
   launchMode: TerminalLaunchMode = 'native',
+  windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
 ): Promise<boolean> {
   if (!context.available || context.busy) return false
   dependencies.activate()
-  await dependencies.createTerminal(branchWorkspaceTerminalBase(context), launchMode)
+  if (windowsInternalTerminalShell) {
+    await dependencies.createTerminal(branchWorkspaceTerminalBase(context), launchMode, windowsInternalTerminalShell)
+  } else {
+    await dependencies.createTerminal(branchWorkspaceTerminalBase(context), launchMode)
+  }
   return true
 }
 

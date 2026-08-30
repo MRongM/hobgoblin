@@ -18,11 +18,18 @@ const branchActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   internalTerminalOnSelect: vi.fn(),
+  powershellTerminalOnSelect: vi.fn(),
+  wslTerminalOnSelect: vi.fn(),
   tmuxTerminalOnSelect: vi.fn(),
   restoreTmuxTerminalsOnSelect: vi.fn(),
   createWorktreeOnSelect: vi.fn(),
   syncOnSelect: vi.fn(),
   pullDisabled: false,
+}))
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -62,7 +69,11 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
-  useBranchActionItems: () => ({
+  useBranchActionItems: (
+    _repo: unknown,
+    _branch: unknown,
+    options?: { windowsInternalTerminalShellMenu?: boolean },
+  ) => ({
     patchItems: [
       {
         id: 'createTag',
@@ -138,6 +149,28 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         visible: true,
         onSelect: branchActionState.internalTerminalOnSelect,
       },
+      ...(options?.windowsInternalTerminalShellMenu
+        ? [
+            {
+              id: 'terminalPowerShell',
+              label: 'terminal.internal-powershell',
+              icon: <span data-testid="powershell-terminal-icon" />,
+              disabled: false,
+              visible: true,
+              menuOnly: true,
+              onSelect: branchActionState.powershellTerminalOnSelect,
+            },
+            {
+              id: 'terminalWsl',
+              label: 'terminal.internal-wsl',
+              icon: <span data-testid="wsl-terminal-icon" />,
+              disabled: false,
+              visible: true,
+              menuOnly: true,
+              onSelect: branchActionState.wslTerminalOnSelect,
+            },
+          ]
+        : []),
       {
         id: 'terminalTmux',
         label: 'terminal.new-with-tmux',
@@ -222,11 +255,14 @@ beforeEach(() => {
   branchActionState.editorOnSelect.mockReset()
   branchActionState.externalTerminalOnSelect.mockReset()
   branchActionState.internalTerminalOnSelect.mockReset()
+  branchActionState.powershellTerminalOnSelect.mockReset()
+  branchActionState.wslTerminalOnSelect.mockReset()
   branchActionState.tmuxTerminalOnSelect.mockReset()
   branchActionState.restoreTmuxTerminalsOnSelect.mockReset()
   branchActionState.createWorktreeOnSelect.mockReset()
   branchActionState.syncOnSelect.mockReset()
   branchActionState.pullDisabled = false
+  platformState.hostPlatform = 'linux'
 })
 
 afterEach(() => {
@@ -1142,6 +1178,46 @@ describe('BranchRow', () => {
     expect(items.find((item) => item.textContent?.includes('tmux.cleanup.action'))?.getAttribute('data-variant')).toBe(
       'destructive',
     )
+  })
+
+  test('offers PowerShell and WSL menu launches for a Windows local worktree', async () => {
+    platformState.hostPlatform = 'win32'
+    const repo = emptyRepo('C:\\workspace\\repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: 'C:\\workspace\\worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const menuItems = await openRowMenu()
+    expect(menuItems.map((item) => item.textContent?.trim()).slice(0, 2)).toEqual([
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+    ])
+    await act(async () => {
+      menuItems[0]?.click()
+      await Promise.resolve()
+    })
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim()).slice(2, 4)).toEqual([
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+    ])
+
+    await clickContextMenuItem(row, 'terminal.internal-wsl')
+
+    expect(branchActionState.powershellTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.wslTerminalOnSelect).toHaveBeenCalledTimes(1)
   })
 
   test('adds worktree creation and refresh to branch workspace member menus', async () => {

@@ -30,6 +30,10 @@ interface WorkspaceItemContextMenuProps {
   remote?: WorkspaceItemOpenAction
   externalTerminal: WorkspaceItemOpenAction
   internalTerminal: WorkspaceItemOpenAction
+  windowsInternalTerminals?: {
+    powershell: WorkspaceItemOpenAction
+    wsl: WorkspaceItemOpenAction
+  }
   tmuxTerminal: WorkspaceItemOpenAction
   restoreTmuxTerminals?: WorkspaceItemOpenAction
   actions?: readonly WorkspaceItemContextAction[]
@@ -44,6 +48,7 @@ export function WorkspaceItemContextMenu({
   remote,
   externalTerminal,
   internalTerminal,
+  windowsInternalTerminals,
   tmuxTerminal,
   restoreTmuxTerminals,
   actions = [],
@@ -63,7 +68,16 @@ export function WorkspaceItemContextMenu({
           <OpenActionItem action={editor}>{t('worktrees.open-in-editor-label')}</OpenActionItem>
           {remote ? <OpenActionItem action={remote}>{t('action.remote')}</OpenActionItem> : null}
           <OpenActionItem action={externalTerminal}>{t('terminal.external')}</OpenActionItem>
-          <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
+          {windowsInternalTerminals ? (
+            <>
+              <OpenActionItem action={windowsInternalTerminals.powershell}>
+                {t('terminal.internal-powershell')}
+              </OpenActionItem>
+              <OpenActionItem action={windowsInternalTerminals.wsl}>{t('terminal.internal-wsl')}</OpenActionItem>
+            </>
+          ) : (
+            <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
+          )}
           <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem>
           {restoreTmuxTerminals ? (
             <OpenActionItem action={restoreTmuxTerminals}>{t('terminal.restore-directory-tmux')}</OpenActionItem>

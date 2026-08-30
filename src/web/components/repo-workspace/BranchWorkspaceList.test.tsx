@@ -22,11 +22,16 @@ import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 
 const terminalState = vi.hoisted(() => ({ outputActive: true, count: 2 }))
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
 const folderActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   editorDisabled: false,
   externalTerminalDisabled: false,
+}))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -75,6 +80,7 @@ beforeEach(() => {
   folderActionState.externalTerminalOnSelect.mockReset()
   folderActionState.editorDisabled = false
   folderActionState.externalTerminalDisabled = false
+  platformState.hostPlatform = 'linux'
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   container = document.createElement('div')
   document.body.append(container)
@@ -1309,6 +1315,59 @@ describe('BranchWorkspaceList', () => {
       repoRoot: '/workspace',
       worktreePath: item.path,
     })
+  })
+
+  test('offers explicit PowerShell and WSL launches for a Windows local branch-workspace root', async () => {
+    platformState.hostPlatform = 'win32'
+    const item = workspace('ready')
+    const createTerminal = vi.fn<TerminalSessionContextValue['createTerminal']>(async () => 'new-terminal')
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="C:\\workspace"
+            items={[item]}
+            activeId={null}
+            onActivate={vi.fn()}
+            onReorder={() => {}}
+            onInspect={() => {}}
+            onRepair={() => {}}
+            onRemove={() => {}}
+            onCancel={() => {}}
+          />,
+          new Map(),
+          { createTerminal },
+        ),
+      ),
+    )
+    const row = container.querySelector('[data-branch-workspace-state="ready"]')
+    if (!(row instanceof HTMLElement)) throw new Error('missing branch workspace row')
+
+    const menuItems = await openMenuItems(row)
+    expect(menuItems.map((entry) => entry.textContent?.trim()).slice(0, 2)).toEqual([
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+    ])
+    await act(async () => {
+      menuItems[0]?.click()
+      await Promise.resolve()
+    })
+    expect(createTerminal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ worktreePath: item.path }),
+      'native',
+      'powershell',
+    )
+
+    expect((await openContextMenu(row)).map((entry) => entry.textContent?.trim()).slice(2, 4)).toEqual([
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+    ])
+    await clickContextMenuItem(row, 'terminal.internal-wsl')
+    expect(createTerminal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ worktreePath: item.path }),
+      'native',
+      'wsl',
+    )
   })
 
   test.each(['active', 'creation-interrupted', 'reduce-incomplete', 'delete-incomplete'] as const)(

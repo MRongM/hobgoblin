@@ -630,6 +630,39 @@ describe('TerminalSessionRegistry', () => {
       expect(key).toBe(`${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`)
     })
 
+    test('forwards an explicit Windows internal terminal shell only for an opted-in create request', async () => {
+      registry.setRepoIndex(makeRepoIndex())
+      bridgeMocks.create.mockResolvedValueOnce({
+        ok: true,
+        action: 'created',
+        key: `${REPO_ROOT}\0${WORKTREE_PATH}\0terminal-1`,
+        sessionId: 'powershell-session-1',
+        processName: 'pwsh.exe',
+        canonicalTitle: null,
+        snapshot: 'first-frame',
+        snapshotSeq: 1,
+        controller: { attachmentId: 'attachment_local', status: 'connected' },
+        canonicalCols: 80,
+        canonicalRows: 24,
+        phase: 'open',
+        message: null,
+        sessions: [makeServerSession('powershell-session-1', 'terminal-1', { processName: 'pwsh.exe' })],
+      })
+
+      await registry.createTerminal(
+        { repoRoot: REPO_ROOT, branch: BRANCH, worktreePath: WORKTREE_PATH },
+        'native',
+        'powershell',
+      )
+
+      expect(bridgeMocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          launchMode: 'native',
+          windowsInternalTerminalShell: 'powershell',
+        }),
+      )
+    })
+
     test('restores and reconciles detached tmux sessions through the batch request', async () => {
       registry.setRepoIndex(makeRepoIndex())
       bridgeMocks.openTmuxSessions.mockResolvedValueOnce({

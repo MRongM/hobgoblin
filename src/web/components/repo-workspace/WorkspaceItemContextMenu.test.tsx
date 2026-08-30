@@ -123,6 +123,28 @@ describe('WorkspaceItemContextMenu', () => {
     expect(itemByText(items, 'terminal.restore-directory-tmux').hasAttribute('data-disabled')).toBe(true)
   })
 
+  test('replaces the generic internal terminal entry with explicit Windows shell actions', async () => {
+    const powershell = vi.fn()
+    const wsl = vi.fn()
+    renderMenu({ powershell, wsl })
+
+    expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
+      'terminal.close-all',
+    ])
+
+    await clickContextMenuItem('terminal.internal-powershell')
+    await clickContextMenuItem('terminal.internal-wsl')
+
+    expect(powershell).toHaveBeenCalledTimes(1)
+    expect(wsl).toHaveBeenCalledTimes(1)
+  })
+
   test('confirms the live aggregate count before closing every current scoped session', async () => {
     const rootKey = '/workspace\0/workspace'
     const memberKey = '/workspace/api\0/worktrees/api-feature'
@@ -160,6 +182,8 @@ function renderMenu(
     editor?: () => void
     externalTerminal?: () => void
     internalTerminal?: () => void
+    powershell?: () => void
+    wsl?: () => void
     tmuxTerminal?: () => void
     restoreTmuxTerminals?: () => void
     restoreTmuxDisabled?: boolean
@@ -204,6 +228,22 @@ function renderMenu(
               icon: <span data-testid="internal-terminal-icon" />,
               onSelect: fixture.internalTerminal ?? vi.fn(),
             }}
+            windowsInternalTerminals={
+              fixture.powershell && fixture.wsl
+                ? {
+                    powershell: {
+                      disabled: false,
+                      icon: <span data-testid="powershell-terminal-icon" />,
+                      onSelect: fixture.powershell,
+                    },
+                    wsl: {
+                      disabled: false,
+                      icon: <span data-testid="wsl-terminal-icon" />,
+                      onSelect: fixture.wsl,
+                    },
+                  }
+                : undefined
+            }
             tmuxTerminal={{
               disabled: fixture.internalTerminalDisabled ?? false,
               icon: <span data-testid="tmux-terminal-icon" />,

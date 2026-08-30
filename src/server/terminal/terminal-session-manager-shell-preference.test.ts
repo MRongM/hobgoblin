@@ -53,3 +53,32 @@ test('uses the latest Windows shell preference only when creating or restarting 
     expect.objectContaining({ windowsInternalTerminalShell: 'cmd' }),
   )
 })
+
+test('keeps an explicit Windows shell override for the lifetime of the terminal session', () => {
+  const manager = new TerminalSessionManager<string>({ onOutput: vi.fn(), onExit: vi.fn() })
+  manager.setWindowsInternalTerminalShellPreference('wsl')
+
+  const created = manager.ensureSession({
+    ownerId: 'client_a',
+    scope: 'C:\\workspace',
+    key: 'C:\\workspace\0C:\\workspace\\feature\0terminal-1',
+    cwd: 'C:\\workspace\\feature',
+    cols: 80,
+    rows: 24,
+    attachmentId: 'attachment_a',
+    windowsInternalTerminalShell: 'powershell',
+  })
+  expect(created.ok).toBe(true)
+  if (!created.ok) return
+  expect(spawnTerminalPtyRuntimeMock).toHaveBeenLastCalledWith(
+    expect.objectContaining({ windowsInternalTerminalShell: 'powershell' }),
+  )
+
+  manager.setWindowsInternalTerminalShellPreference('cmd')
+  const restarted = manager.restartSession('client_a', created.sessionId, 100, 30, 'attachment_a', true)
+
+  expect(restarted.ok).toBe(true)
+  expect(spawnTerminalPtyRuntimeMock).toHaveBeenLastCalledWith(
+    expect.objectContaining({ windowsInternalTerminalShell: 'powershell' }),
+  )
+})

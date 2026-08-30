@@ -45,6 +45,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { formatShortCommitHashTag } from '#/web/lib/commit-hash.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
+import { supportsWindowsInternalTerminalShellMenu } from '#/web/windows-internal-terminal-shell-menu.ts'
 
 export interface BranchWorkspaceMemberActionTarget {
   repo: BranchActionRepo
@@ -92,6 +93,7 @@ function ResolvedBranchWorkspaceMemberRow({
 }: BranchWorkspaceMemberRowProps & { actionTarget: BranchWorkspaceMemberActionTarget }) {
   const actions = useBranchActionItems(actionTarget.repo, actionTarget.branch, {
     onNavigateToInternalTerminal: () => onOpenInternalTerminal?.(item, member),
+    windowsInternalTerminalShellMenu: supportsWindowsInternalTerminalShellMenu(actionTarget.repo.id),
   })
   return (
     <BranchWorkspaceMemberRowFrame
@@ -173,6 +175,19 @@ function BranchWorkspaceMemberRowFrame({
     ...actionProjection.contextMenu.internalTerminal,
     disabled: actionProjection.contextMenu.internalTerminal.disabled || !onOpenInternalTerminal,
   }
+  const windowsInternalTerminalContextActions = actionProjection.contextMenu.windowsInternalTerminals
+    ? {
+        powershell: {
+          ...actionProjection.contextMenu.windowsInternalTerminals.powershell,
+          disabled:
+            actionProjection.contextMenu.windowsInternalTerminals.powershell.disabled || !onOpenInternalTerminal,
+        },
+        wsl: {
+          ...actionProjection.contextMenu.windowsInternalTerminals.wsl,
+          disabled: actionProjection.contextMenu.windowsInternalTerminals.wsl.disabled || !onOpenInternalTerminal,
+        },
+      }
+    : undefined
   const tmuxTerminalContextAction = {
     ...actionProjection.contextMenu.tmuxTerminal,
     disabled: actionProjection.contextMenu.tmuxTerminal.disabled || !onOpenInternalTerminal,
@@ -320,6 +335,7 @@ function BranchWorkspaceMemberRowFrame({
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
+      windowsInternalTerminals={windowsInternalTerminalContextActions}
       tmuxTerminal={tmuxTerminalContextAction}
       restoreTmuxTerminals={restoreTmuxTerminalsContextAction}
       worktreeTerminalKeys={forceDisabled ? [] : terminalKeys}

@@ -857,6 +857,8 @@ export const ko: Record<DictKey, string> = {
   'terminal.new-with-tmux': 'tmux 터미널',
   'terminal.restore-directory-tmux': 'tmux 터미널 복원',
   'terminal.internal': '내부 터미널',
+  'terminal.internal-powershell': 'PowerShell 내부 터미널',
+  'terminal.internal-wsl': 'WSL 내부 터미널',
   'terminal.external': '외부 터미널',
   'terminal.focus': '터미널 최대화',
   'terminal.exit-focus': '터미널 최대화 종료',

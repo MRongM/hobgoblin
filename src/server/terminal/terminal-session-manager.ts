@@ -17,6 +17,7 @@ import {
   type TerminalSessionSummary,
   type TerminalTakeoverResult,
   type TerminalWindowsPty,
+  type WindowsInternalTerminalShellOverride,
 } from '#/shared/terminal.ts'
 import {
   attachTerminalAttachment,
@@ -61,6 +62,7 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   forceNew?: boolean
   command?: string
   args?: string[]
+  windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
   tmuxSessionName?: string
   tmuxWorkingDirectory?: string
   tmuxCloseSupported?: boolean
@@ -74,6 +76,7 @@ interface TerminalSession<TOwner extends string | number> {
   cwd: string
   command?: string
   args?: string[]
+  windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
   tmuxSessionName: string | null
   tmuxWorkingDirectory: string | null
   tmuxCloseSupported: boolean
@@ -147,6 +150,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cwd,
       command: input.command,
       args: input.args,
+      windowsInternalTerminalShell: input.windowsInternalTerminalShell,
       tmuxSessionName: input.tmuxSessionName ?? null,
       tmuxWorkingDirectory: input.tmuxSessionName ? (input.tmuxWorkingDirectory ?? null) : null,
       tmuxCloseSupported: input.tmuxSessionName ? input.tmuxCloseSupported !== false : false,
@@ -544,7 +548,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cwd: session.cwd,
       cols: session.cols,
       rows: session.rows,
-      windowsInternalTerminalShell: this.windowsInternalTerminalShell,
+      windowsInternalTerminalShell: session.windowsInternalTerminalShell ?? this.windowsInternalTerminalShell,
     })
     if (!spawnResult.ok) {
       this.disposeSessionResources(session)

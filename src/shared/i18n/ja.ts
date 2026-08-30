@@ -872,6 +872,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.new-with-tmux': 'tmux ターミナル',
   'terminal.restore-directory-tmux': 'tmux ターミナルを復元',
   'terminal.internal': '内部ターミナル',
+  'terminal.internal-powershell': 'PowerShell 内部ターミナル',
+  'terminal.internal-wsl': 'WSL 内部ターミナル',
   'terminal.external': '外部ターミナル',
   'terminal.focus': 'ターミナルを最大化',
   'terminal.exit-focus': 'ターミナル最大化を終了',

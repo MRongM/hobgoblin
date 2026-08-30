@@ -39,6 +39,7 @@ export type TerminalControllerStatus = 'connected' | 'none'
 export type TerminalAttachmentRole = 'controller' | 'viewer' | 'unowned'
 export type TerminalWindowsPtyBackend = 'conpty' | 'winpty'
 export type TerminalLaunchMode = 'native' | 'tmux-if-available'
+export type WindowsInternalTerminalShellOverride = 'powershell' | 'wsl'
 
 export interface TerminalWindowsPty {
   backend?: TerminalWindowsPtyBackend
@@ -85,6 +86,7 @@ export interface TerminalCreateInput {
   branchWorkspaceId?: string
   kind: 'primary' | 'additional'
   launchMode?: TerminalLaunchMode
+  windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
   cols?: number
   rows?: number
   attachmentId?: string
@@ -445,6 +447,7 @@ const TerminalCreateInputSchema = v.object({
   branchWorkspaceId: v.optional(v.string()),
   kind: v.picklist(['primary', 'additional']),
   launchMode: v.optional(v.unknown()),
+  windowsInternalTerminalShell: v.optional(v.unknown()),
   cols: v.optional(TerminalColsSchema),
   rows: v.optional(TerminalRowsSchema),
   attachmentId: TerminalOptionalAttachmentIdSchema,
@@ -656,6 +659,12 @@ export function normalizeTerminalLaunchMode(value: unknown): TerminalLaunchMode 
   return value === 'tmux-if-available' ? value : 'native'
 }
 
+export function normalizeWindowsInternalTerminalShellOverride(
+  value: unknown,
+): WindowsInternalTerminalShellOverride | undefined {
+  return value === 'powershell' || value === 'wsl' ? value : undefined
+}
+
 export function isValidTerminalSize(cols: unknown, rows: unknown): boolean {
   return normalizeTerminalSize(cols, rows) !== null
 }
@@ -709,6 +718,9 @@ export function normalizeTerminalClientMessage(value: unknown): TerminalClientMe
     input: {
       ...parsed.output.input,
       launchMode: normalizeTerminalLaunchMode(parsed.output.input.launchMode),
+      windowsInternalTerminalShell: normalizeWindowsInternalTerminalShellOverride(
+        parsed.output.input.windowsInternalTerminalShell,
+      ),
     },
   }
 }

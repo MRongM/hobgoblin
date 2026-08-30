@@ -36,6 +36,7 @@ interface EnsureTerminalCatalogInput {
   branchWorkspaceId?: string
   terminalId?: string
   launchMode?: TerminalCreateInput['launchMode']
+  windowsInternalTerminalShell?: TerminalCreateInput['windowsInternalTerminalShell']
   cols?: number
   rows?: number
   attachmentId?: string
@@ -77,6 +78,7 @@ interface TerminalCatalogEnsureSessionInput {
   forceNew?: boolean
   command?: string
   args?: string[]
+  windowsInternalTerminalShell?: TerminalCreateInput['windowsInternalTerminalShell']
   tmuxSessionName?: string
   tmuxWorkingDirectory?: string
   tmuxCloseSupported?: boolean
@@ -409,6 +411,7 @@ class TerminalCatalog {
       forceNew: context.action === 'created',
       command: invocation?.command,
       args: invocation?.args,
+      windowsInternalTerminalShell: input.windowsInternalTerminalShell,
       ...(invocation
         ? {
             tmuxSessionName: invocation.tmuxSessionName,

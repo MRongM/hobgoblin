@@ -819,6 +819,8 @@ export const zh: Record<DictKey, string> = {
   'terminal.new-with-tmux': 'tmux终端',
   'terminal.restore-directory-tmux': '恢复关联的tmux会话',
   'terminal.internal': '内部终端',
+  'terminal.internal-powershell': 'PowerShell 内部终端',
+  'terminal.internal-wsl': 'WSL 内部终端',
   'terminal.external': '外部终端',
   'terminal.focus': '最大化终端',
   'terminal.exit-focus': '退出终端最大化',

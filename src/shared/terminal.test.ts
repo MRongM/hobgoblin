@@ -34,6 +34,48 @@ describe('terminal protocol normalization', () => {
     })
   })
 
+  test.each(['powershell', 'wsl'] as const)(
+    'preserves the supported %s Windows internal terminal shell override',
+    (windowsInternalTerminalShell) => {
+      expect(
+        normalizeTerminalClientMessage({
+          type: 'request',
+          requestId: `request_${windowsInternalTerminalShell}`,
+          action: 'create',
+          input: {
+            repoRoot: '/repo',
+            branch: 'main',
+            worktreePath: '/repo',
+            kind: 'primary',
+            windowsInternalTerminalShell,
+          },
+        }),
+      ).toMatchObject({
+        action: 'create',
+        input: { windowsInternalTerminalShell },
+      })
+    },
+  )
+
+  test('drops unsupported Windows internal terminal shell overrides at the protocol boundary', () => {
+    const message = normalizeTerminalClientMessage({
+      type: 'request',
+      requestId: 'request_cmd_override',
+      action: 'create',
+      input: {
+        repoRoot: '/repo',
+        branch: 'main',
+        worktreePath: '/repo',
+        kind: 'primary',
+        windowsInternalTerminalShell: 'cmd',
+      },
+    })
+
+    expect(message).toMatchObject({ action: 'create' })
+    if (!message || message.action !== 'create') return
+    expect(message.input.windowsInternalTerminalShell).toBeUndefined()
+  })
+
   test('preserves phase, message, input state, and tmux close capability on session summaries', () => {
     const summaries = normalizeTerminalSessionSummaryList([
       {

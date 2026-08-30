@@ -18,6 +18,7 @@ import type {
   TerminalSessionSnapshot,
   TerminalSessionSummary as ServerTerminalSessionSummary,
   TerminalTmuxPageDirection,
+  WindowsInternalTerminalShellOverride,
 } from '#/shared/terminal.ts'
 import {
   branchForTerminalWorktree,
@@ -367,7 +368,11 @@ export class TerminalSessionRegistry {
     }
   }
 
-  createTerminal = async (base: TerminalSessionBase, launchMode: TerminalLaunchMode = 'native'): Promise<string> => {
+  createTerminal = async (
+    base: TerminalSessionBase,
+    launchMode: TerminalLaunchMode = 'native',
+    windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
+  ): Promise<string> => {
     const attachmentId = readOrCreateWebTerminalAttachmentId()
     const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
     const geometry = this.measureCreateGeometry(terminalWorktreeKey)
@@ -387,6 +392,7 @@ export class TerminalSessionRegistry {
         ...requestInput,
         kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
         launchMode,
+        ...(windowsInternalTerminalShell ? { windowsInternalTerminalShell } : {}),
       })
       if (!result.ok) {
         throw new Error(result.message)

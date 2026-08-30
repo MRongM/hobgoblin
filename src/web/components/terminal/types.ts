@@ -5,6 +5,7 @@ import type {
   TerminalLaunchMode,
   TerminalSessionPhase,
   TerminalTmuxPageDirection,
+  WindowsInternalTerminalShellOverride,
 } from '#/shared/terminal.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
@@ -154,7 +155,11 @@ export interface WorktreeTerminalSnapshot {
 }
 
 export interface TerminalSessionContextValue {
-  createTerminal: (base: TerminalSessionBase, launchMode?: TerminalLaunchMode) => Promise<string>
+  createTerminal: (
+    base: TerminalSessionBase,
+    launchMode?: TerminalLaunchMode,
+    windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
+  ) => Promise<string>
   restoreTmuxSessions: (base: TerminalSessionBase) => Promise<number>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void

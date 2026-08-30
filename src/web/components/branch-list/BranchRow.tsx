@@ -17,6 +17,7 @@ import {
 import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { useT } from '#/web/stores/i18n.ts'
+import { supportsWindowsInternalTerminalShellMenu } from '#/web/windows-internal-terminal-shell-menu.ts'
 
 interface BranchRowSortable {
   setNodeRef: (node: HTMLLIElement | null) => void
@@ -65,7 +66,8 @@ export function BranchRow({
     () => (worktreePath ? [worktreeTerminalKey(repo.id, worktreePath)] : []),
     [repo.id, worktreePath],
   )
-  const actions = useBranchActionItems(repo, branch)
+  const windowsInternalTerminalShellMenu = !!worktreePath && supportsWindowsInternalTerminalShellMenu(repo.id)
+  const actions = useBranchActionItems(repo, branch, { windowsInternalTerminalShellMenu })
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: repo.id,
     itemPath: worktreePath,
@@ -177,6 +179,7 @@ export function BranchRow({
       editor={actionProjection.contextMenu.editor}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={actionProjection.contextMenu.internalTerminal}
+      windowsInternalTerminals={actionProjection.contextMenu.windowsInternalTerminals}
       tmuxTerminal={actionProjection.contextMenu.tmuxTerminal}
       restoreTmuxTerminals={actionProjection.contextMenu.restoreTmuxTerminals}
       actions={actionProjection.contextMenu.actions}

@@ -872,6 +872,8 @@ export const en = {
   'terminal.new-with-tmux': 'tmux terminal',
   'terminal.restore-directory-tmux': 'Restore tmux terminals',
   'terminal.internal': 'Internal terminal',
+  'terminal.internal-powershell': 'PowerShell internal terminal',
+  'terminal.internal-wsl': 'WSL internal terminal',
   'terminal.external': 'External terminal',
   'terminal.focus': 'Maximize terminal',
   'terminal.exit-focus': 'Exit terminal focus',

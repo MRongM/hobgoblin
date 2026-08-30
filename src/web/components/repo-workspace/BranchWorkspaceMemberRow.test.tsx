@@ -16,12 +16,19 @@ import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 const actionState = vi.hoisted(() => ({
   editor: vi.fn(),
   terminal: vi.fn(),
+  powershellTerminal: vi.fn(),
+  wslTerminal: vi.fn(),
   externalTerminal: vi.fn(),
   tmuxTerminal: vi.fn(),
   restoreTmuxTerminals: vi.fn(),
   remote: vi.fn(),
   createWorktree: vi.fn(),
   sync: vi.fn(),
+}))
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -42,7 +49,10 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: (
     _repo: unknown,
     _branch: unknown,
-    options?: { onNavigateToInternalTerminal?: (target: unknown) => void | Promise<void> },
+    options?: {
+      onNavigateToInternalTerminal?: (target: unknown) => void | Promise<void>
+      windowsInternalTerminalShellMenu?: boolean
+    },
   ) => ({
     externalItems: [
       branchAction('editor', actionState.editor),
@@ -54,6 +64,18 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
           worktreePath: '/workspace/goblin-feature-auth/api',
         })
       }),
+      ...(options?.windowsInternalTerminalShellMenu
+        ? [
+            branchAction('terminalPowerShell', actionState.powershellTerminal, false, {
+              label: 'terminal.internal-powershell',
+              menuOnly: true,
+            }),
+            branchAction('terminalWsl', actionState.wslTerminal, false, {
+              label: 'terminal.internal-wsl',
+              menuOnly: true,
+            }),
+          ]
+        : []),
       branchAction('terminalTmux', actionState.tmuxTerminal, false, { label: 'terminal.new-with-tmux' }),
       branchAction('restoreTmuxTerminals', actionState.restoreTmuxTerminals, false, {
         label: 'terminal.restore-directory-tmux',
@@ -114,6 +136,7 @@ beforeEach(() => {
   document.body.appendChild(container)
   root = createRoot(container)
   Object.values(actionState).forEach((mock) => mock.mockReset())
+  platformState.hostPlatform = 'linux'
 })
 
 afterEach(() => {
@@ -309,6 +332,53 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(onSelectRepositoryMember).toHaveBeenCalledTimes(2)
     expect(onSelectRepositoryMember).toHaveBeenLastCalledWith(item, member)
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
+  })
+
+  test('offers PowerShell and WSL launches for a Windows local branch-workspace member', async () => {
+    platformState.hostPlatform = 'win32'
+    const item = workspace()
+    const member = repositoryMember()
+    const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
+    const repo = emptyRepo('C:\\workspace\\api', 'api')
+
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: null,
+          navigable: true,
+          repositoryId: repo.id,
+          worktreePath: member.worktreePath,
+          actionTarget: { repo, branch },
+        }}
+        onSelectRepositoryMember={vi.fn()}
+        onOpenInternalTerminal={vi.fn()}
+      />,
+    )
+
+    const menuItems = await openMenu()
+    expect(menuItems.map((entry) => entry.getAttribute('data-action')).slice(0, 2)).toEqual([
+      'terminalPowerShell',
+      'terminalWsl',
+    ])
+    await act(async () => {
+      menuItems[0]?.click()
+      await Promise.resolve()
+    })
+    const row = container.querySelector<HTMLElement>('[data-workspace-list-item]')
+    if (!row) throw new Error('missing member row')
+    expect((await openContextMenu(row)).map((entry) => entry.textContent?.trim()).slice(2, 4)).toEqual([
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+    ])
+
+    await clickContextMenuItem(row, 'terminal.internal-wsl')
+    expect(actionState.powershellTerminal).toHaveBeenCalledTimes(1)
+    expect(actionState.wslTerminal).toHaveBeenCalledTimes(1)
   })
 
   test('keeps the stable safe action set visible and disabled when target resolution fails', async () => {
