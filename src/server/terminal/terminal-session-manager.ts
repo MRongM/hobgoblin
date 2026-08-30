@@ -44,6 +44,7 @@ import {
   type TerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
 import { spawnTerminalPtyRuntime, type TerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
+import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 
 const MAX_TERMINAL_WRITE_CHARS = 1024 * 1024
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{16,64}$/
@@ -109,9 +110,14 @@ export class TerminalSessionManager<TOwner extends string | number> {
   private readonly sessionsById = new Map<string, TerminalSession<TOwner>>()
   private readonly sessionIdByOwnerKey = new Map<string, string>()
   private readonly sink: TerminalEventSink<TOwner>
+  private windowsInternalTerminalShell: WindowsInternalTerminalShellPref = 'auto'
 
   constructor(sink: TerminalEventSink<TOwner>) {
     this.sink = sink
+  }
+
+  setWindowsInternalTerminalShellPreference(preference: WindowsInternalTerminalShellPref): void {
+    this.windowsInternalTerminalShell = normalizeWindowsInternalTerminalShellPref(preference)
   }
 
   ensureSession(input: TerminalEnsureSessionInput<TOwner>): TerminalAttachResult {
@@ -538,6 +544,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cwd: session.cwd,
       cols: session.cols,
       rows: session.rows,
+      windowsInternalTerminalShell: this.windowsInternalTerminalShell,
     })
     if (!spawnResult.ok) {
       this.disposeSessionResources(session)

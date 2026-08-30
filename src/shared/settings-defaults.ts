@@ -12,6 +12,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
+  WindowsInternalTerminalShellPref,
 } from '#/shared/rpc.ts'
 import {
   DEFAULT_TOPBAR_HEIGHT_PX,
@@ -63,6 +64,7 @@ export const DEFAULT_SWAP_CLOSE_SHORTCUTS = false
 export const DEFAULT_TERMINAL_THEME_SYNC_ENABLED = true
 export const DEFAULT_TEMPORARY_FILES_DIRECTORY = ''
 export const DEFAULT_TERMINAL_APP: TerminalPref = 'auto'
+export const DEFAULT_WINDOWS_INTERNAL_TERMINAL_SHELL: WindowsInternalTerminalShellPref = 'auto'
 export const DEFAULT_EDITOR_APP: EditorPref = 'auto'
 export const DEFAULT_FILE_TREE_FONT_SIZE = 13
 export const DEFAULT_APP_FONT_SIZE = DEFAULT_FILE_TREE_FONT_SIZE
@@ -112,6 +114,7 @@ export function defaultSettingsPrefs(overrides: Partial<SettingsPrefs> = {}): Se
     temporaryFilesDirectory: overrides.temporaryFilesDirectory ?? DEFAULT_TEMPORARY_FILES_DIRECTORY,
     globalShortcut: overrides.globalShortcut ?? DEFAULT_GLOBAL_SHORTCUT,
     terminalApp: overrides.terminalApp ?? DEFAULT_TERMINAL_APP,
+    windowsInternalTerminalShell: overrides.windowsInternalTerminalShell ?? DEFAULT_WINDOWS_INTERNAL_TERMINAL_SHELL,
     editorApp: overrides.editorApp ?? DEFAULT_EDITOR_APP,
     topbarHeightPx: overrides.topbarHeightPx ?? DEFAULT_TOPBAR_HEIGHT_PX,
     toolbarHeightPx: overrides.toolbarHeightPx ?? DEFAULT_TOOLBAR_HEIGHT_PX,
@@ -173,6 +176,7 @@ export function initialSettingsFromSnapshot(
     | 'globalShortcut'
     | 'globalShortcutRegistered'
     | 'terminalApp'
+    | 'windowsInternalTerminalShell'
     | 'editorApp'
     | 'topbarHeightPx'
     | 'toolbarHeightPx'
@@ -203,6 +207,7 @@ export function initialSettingsFromSnapshot(
     globalShortcut: snapshot.globalShortcut,
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
+    windowsInternalTerminalShell: snapshot.windowsInternalTerminalShell,
     editorApp: snapshot.editorApp,
     topbarHeightPx: snapshot.topbarHeightPx,
     toolbarHeightPx: snapshot.toolbarHeightPx,

@@ -14,6 +14,7 @@ import type {
   TerminalAppAvailability,
   TerminalPref,
   ThemePref,
+  WindowsInternalTerminalShellPref,
 } from '#/shared/settings.ts'
 import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 import type { RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
@@ -39,6 +40,7 @@ export type {
   TerminalAppAvailability,
   TerminalPref,
   ThemePref,
+  WindowsInternalTerminalShellPref,
 } from '#/shared/settings.ts'
 export type {
   NativeRecentReposProjection,

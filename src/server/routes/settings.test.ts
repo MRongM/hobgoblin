@@ -86,14 +86,18 @@ describe('settings routes', () => {
 
   test('delegates prefs writes to the settings write-path application layer', async () => {
     const onTelegramRuntimeConfigChanged = vi.fn(async () => undefined)
+    const onWindowsInternalTerminalShellChanged = vi.fn()
     mocks.applyServerSettingsPrefsWrite.mockResolvedValue({
       ok: true,
-      settings: { lang: 'ja' },
+      settings: { lang: 'ja', windowsInternalTerminalShell: 'powershell' },
       i18n: { lang: 'ja', pref: 'ja', dict: {} },
     })
 
     const { createSettingsRoutes } = await import('#/server/routes/settings.ts')
-    const app = createSettingsRoutes(createServerSettingsState(), { onTelegramRuntimeConfigChanged })
+    const app = createSettingsRoutes(createServerSettingsState(), {
+      onTelegramRuntimeConfigChanged,
+      onWindowsInternalTerminalShellChanged,
+    })
     const response = await app.request(
       new Request('http://127.0.0.1:32100/prefs', {
         method: 'POST',
@@ -107,7 +111,7 @@ describe('settings routes', () => {
 
     await expect(response.json()).resolves.toEqual({
       ok: true,
-      settings: { lang: 'ja' },
+      settings: { lang: 'ja', windowsInternalTerminalShell: 'powershell' },
       i18n: { lang: 'ja', pref: 'ja', dict: {} },
     })
     expect(mocks.applyServerSettingsPrefsWrite).toHaveBeenCalledWith(
@@ -115,6 +119,7 @@ describe('settings routes', () => {
       { acceptLanguage: 'ja-JP,ja;q=0.9,en;q=0.8', signal: expect.any(AbortSignal) },
     )
     expect(onTelegramRuntimeConfigChanged).toHaveBeenCalledTimes(1)
+    expect(onWindowsInternalTerminalShellChanged).toHaveBeenCalledWith('powershell')
   })
 
   test('does not expose the removed global shortcut registration route', async () => {

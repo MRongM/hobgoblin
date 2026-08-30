@@ -51,6 +51,7 @@ function defaultBootstrap(): RendererBootstrapPayload {
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,
       terminalApp: 'auto',
+      windowsInternalTerminalShell: 'auto',
       editorApp: 'cursor',
       topbarHeightPx: 34,
       toolbarHeightPx: 34,

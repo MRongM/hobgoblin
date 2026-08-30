@@ -65,6 +65,7 @@ import {
   TELEGRAM_TERMINAL_INPUT_MAX_CODE_POINTS,
   type TelegramTerminalInputSubmissionResult,
 } from '#/shared/telegram-terminal-input.ts'
+import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
@@ -126,6 +127,13 @@ const manager = new TerminalSessionManager<string>({
     if (repoRoot) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   },
 })
+
+export function configureServerTerminal(input: {
+  windowsInternalTerminalShell: WindowsInternalTerminalShellPref
+}): void {
+  manager.setWindowsInternalTerminalShellPreference(input.windowsInternalTerminalShell)
+}
+
 const connectionState = new TerminalConnectionState({
   ownershipGraceMs: TERMINAL_OWNERSHIP_GRACE_MS,
   detachedTtlMs: TERMINAL_DETACHED_TTL_MS,

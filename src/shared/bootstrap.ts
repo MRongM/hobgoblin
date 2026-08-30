@@ -5,6 +5,7 @@ import type {
   TerminalCustomButton,
   TerminalCustomButtonSize,
   TerminalPref,
+  WindowsInternalTerminalShellPref,
 } from '#/shared/rpc.ts'
 import type { RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 
@@ -58,6 +59,7 @@ export interface InitialSettingsSnapshot {
   globalShortcut: string
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
+  windowsInternalTerminalShell: WindowsInternalTerminalShellPref
   editorApp: EditorPref
   topbarHeightPx: number
   toolbarHeightPx: number

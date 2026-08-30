@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   workerHostCtor: vi.fn(),
   telegramRuntime: { reconcile: vi.fn(async () => undefined), shutdown: vi.fn() },
   createTelegramTerminalInputRuntime: vi.fn(),
+  readPersistedWindowsInternalTerminalShellPref: vi.fn(),
 }))
 
 vi.mock('#/server/app-factory.ts', () => ({
@@ -24,6 +25,10 @@ vi.mock('#/server/modules/port-forwarding.ts', () => ({
 
 vi.mock('#/server/modules/telegram-terminal-input-runtime.ts', () => ({
   createTelegramTerminalInputRuntime: mocks.createTelegramTerminalInputRuntime,
+}))
+
+vi.mock('#/server/modules/settings-source.ts', () => ({
+  readPersistedWindowsInternalTerminalShellPref: mocks.readPersistedWindowsInternalTerminalShellPref,
 }))
 
 vi.mock('#/server/terminal/terminal-worker-host.ts', () => ({
@@ -60,7 +65,26 @@ vi.mock('#/server/terminal/terminal-worker-host.ts', () => ({
 describe('server runtime', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.readPersistedWindowsInternalTerminalShellPref.mockReturnValue('auto')
     mocks.createTelegramTerminalInputRuntime.mockReturnValue(mocks.telegramRuntime)
+  })
+
+  test('configures a provided terminal host from the persisted Windows internal shell preference', async () => {
+    mocks.readPersistedWindowsInternalTerminalShellPref.mockReturnValue('powershell')
+    const { createServerRuntime } = await import('#/server/runtime.ts')
+    const terminalHost = {
+      setWindowsInternalTerminalShellPreference: vi.fn(),
+      shutdown: vi.fn(),
+    } as unknown as ServerTerminalHost
+
+    createServerRuntime({
+      version: '0.1.0',
+      startedAt: 1,
+      internalSecret: 'secret',
+      terminalHost,
+    })
+
+    expect(terminalHost.setWindowsInternalTerminalShellPreference).toHaveBeenCalledWith('powershell')
   })
 
   test('injects the terminal host into the server app factory', async () => {
@@ -75,12 +99,14 @@ describe('server runtime', () => {
     })
 
     expect(runtime.terminalHost).toBe(terminalHost)
-    expect(mocks.createApp).toHaveBeenCalledWith(expect.objectContaining({
-      version: '0.1.0',
-      startedAt: 1,
-      internalSecret: 'secret',
-      terminalHost,
-    }))
+    expect(mocks.createApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: '0.1.0',
+        startedAt: 1,
+        internalSecret: 'secret',
+        terminalHost,
+      }),
+    )
     expect(mocks.createTelegramTerminalInputRuntime).toHaveBeenCalledWith(
       expect.objectContaining({ terminalHost, settingsState: expect.any(Object) }),
     )
@@ -100,14 +126,19 @@ describe('server runtime', () => {
     expect(runtime.terminalHost).toBe(mocks.workerHostCtor.mock.calls[0]?.[0]?.host)
     expect(mocks.workerHostCtor).toHaveBeenCalledWith({
       host: runtime.terminalHost,
-      options: { workerEntry: '/tmp/entrypoints/terminal-worker.ts' },
+      options: {
+        workerEntry: '/tmp/entrypoints/terminal-worker.ts',
+        windowsInternalTerminalShell: 'auto',
+      },
     })
-    expect(mocks.createApp).toHaveBeenCalledWith(expect.objectContaining({
-      version: '0.1.0',
-      startedAt: 1,
-      internalSecret: 'secret',
-      terminalHost: runtime.terminalHost,
-    }))
+    expect(mocks.createApp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: '0.1.0',
+        startedAt: 1,
+        internalSecret: 'secret',
+        terminalHost: runtime.terminalHost,
+      }),
+    )
   })
 
   test('shutdown is idempotent and stops background sync, port forwarding, and terminal host teardown', async () => {

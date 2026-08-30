@@ -33,6 +33,7 @@ export function buildRuntimeSettingsSnapshot(input: {
     globalShortcut: input.prefs.globalShortcut,
     globalShortcutRegistered: input.globalShortcutRegistered,
     terminalApp: input.prefs.terminalApp,
+    windowsInternalTerminalShell: input.prefs.windowsInternalTerminalShell,
     editorApp: input.prefs.editorApp,
     topbarHeightPx: input.prefs.topbarHeightPx,
     toolbarHeightPx: input.prefs.toolbarHeightPx,
@@ -97,6 +98,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     | 'globalShortcut'
     | 'globalShortcutRegistered'
     | 'terminalApp'
+    | 'windowsInternalTerminalShell'
     | 'editorApp'
     | 'topbarHeightPx'
     | 'toolbarHeightPx'
@@ -130,6 +132,7 @@ export function runtimeSettingsSnapshotFromSettingsSnapshot(
     globalShortcut: snapshot.globalShortcut,
     globalShortcutRegistered: snapshot.globalShortcutRegistered,
     terminalApp: snapshot.terminalApp,
+    windowsInternalTerminalShell: snapshot.windowsInternalTerminalShell,
     editorApp: snapshot.editorApp,
     topbarHeightPx: snapshot.topbarHeightPx,
     toolbarHeightPx: snapshot.toolbarHeightPx,

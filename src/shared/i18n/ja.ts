@@ -1328,6 +1328,9 @@ export const ja: Record<DictKey, string> = {
   'error.commit-message-empty-output': 'コミットメッセージ生成ツールが空のメッセージを返しました。',
   'error.ghostty-not-installed': 'Ghostty がインストールされていません',
   'error.terminal-not-installed': 'ターミナルがインストールされていません',
+  'error.windows-internal-terminal-wsl-unavailable': '内部ターミナル用の WSL を利用できません',
+  'error.windows-internal-terminal-powershell-unavailable': '内部ターミナル用の PowerShell を利用できません',
+  'error.windows-internal-terminal-cmd-unavailable': '内部ターミナル用のコマンド プロンプトを利用できません',
   'error.vscode-not-installed': 'VS Code がインストールされていません',
   'error.editor-not-installed': 'エディタが見つかりません',
   'error.remote-editor-not-supported': '選択したエディタはリモート SSH ワークスペースを開けません',
@@ -1461,9 +1464,11 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.terminal-input-enabled-hint':
     '許可されたグループメンバーが Bot をメンションして、最後にフォーカスされた操作可能なターミナルへ1行送信できます。',
   'settings.telegram.terminal-input-user-ids': '許可するユーザー ID',
-  'settings.telegram.terminal-input-user-ids-hint': '1～32件の数値 Telegram ユーザー ID をカンマまたは空白で区切ります。',
+  'settings.telegram.terminal-input-user-ids-hint':
+    '1～32件の数値 Telegram ユーザー ID をカンマまたは空白で区切ります。',
   'settings.telegram.terminal-input-poll-timeout': 'ロングポーリング待機',
-  'settings.telegram.terminal-input-poll-timeout-hint': 'Telegram がメッセージを待機してからリクエストを更新する時間です。',
+  'settings.telegram.terminal-input-poll-timeout-hint':
+    'Telegram がメッセージを待機してからリクエストを更新する時間です。',
   'settings.telegram.poll-seconds': '秒',
   'settings.telegram.terminal-input-status': 'ポーリング状態',
   'settings.telegram.terminal-input-status-hint': 'サーバー上の Telegram 受信状態です。',
@@ -1472,10 +1477,12 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.terminal-input-status.running': '実行中',
   'settings.telegram.terminal-input-status.retrying': '再試行中',
   'settings.telegram.terminal-input-status.error': '設定エラー',
-  'settings.telegram.terminal-input-error.configuration-incomplete': 'Bot Token、数値グループ Chat ID、またはユーザー ID が不足しています。',
+  'settings.telegram.terminal-input-error.configuration-incomplete':
+    'Bot Token、数値グループ Chat ID、またはユーザー ID が不足しています。',
   'settings.telegram.terminal-input-error.authentication-failed': 'Telegram が Bot Token を拒否しました。',
   'settings.telegram.terminal-input-error.invalid-chat': '設定した Chat ID は対象グループではありません。',
-  'settings.telegram.terminal-input-error.webhook-conflict': 'Webhook が設定済みのためロングポーリングを開始できません。',
+  'settings.telegram.terminal-input-error.webhook-conflict':
+    'Webhook が設定済みのためロングポーリングを開始できません。',
   'settings.telegram.terminal-input-error.network-failed': 'Telegram に一時的に接続できません。自動再試行します。',
   'settings.telegram.terminal-input-error.telegram-rejected': 'Telegram がポーリング要求を拒否しました。',
   'telegram.terminal-input.reply.unauthorized': 'ターミナル入力を使用する権限がありません。',
@@ -1485,8 +1492,7 @@ export const ja: Record<DictKey, string> = {
   'telegram.terminal-input.reply.no-target': '現在、フォーカスされ操作権を持つターミナルがありません。',
   'telegram.terminal-input.reply.target-lost': 'ターミナル対象が変わったため、メッセージを送信しませんでした。',
   'telegram.terminal-input.reply.success': 'ターミナルへ送信しました',
-  'settings.telegram.master-off-hint':
-    'ターミナルベル通知はオフです。Telegram からのターミナル入力には影響しません。',
+  'settings.telegram.master-off-hint': 'ターミナルベル通知はオフです。Telegram からのターミナル入力には影響しません。',
   'settings.telegram.save': 'Telegram 設定を保存',
   'settings.telegram.saving': '保存中…',
   'settings.telegram.saved': 'Telegram 設定を保存しました',
@@ -1584,6 +1590,14 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal.wsl': 'WSL',
   'settings.terminal.powershell': 'PowerShell',
   'settings.terminal.cmd': 'コマンド プロンプト',
+  'settings.windows-internal-terminal-shell.title': 'Windows 内部ターミナル',
+  'settings.windows-internal-terminal-shell.label': 'シェル',
+  'settings.windows-internal-terminal-shell.hint':
+    '新規および再起動したローカル Windows 内部ターミナルに適用されます。プロジェクトの Git 実行環境は変更されません。',
+  'settings.windows-internal-terminal-shell.auto': '自動（WSL 優先）',
+  'settings.windows-internal-terminal-shell.wsl': 'WSL',
+  'settings.windows-internal-terminal-shell.powershell': 'PowerShell',
+  'settings.windows-internal-terminal-shell.cmd': 'コマンド プロンプト',
   'settings.terminal.ghostty': 'Ghostty',
   'settings.terminal.terminal': 'Terminal.app',
   'settings.terminal-font.title': 'フォント',

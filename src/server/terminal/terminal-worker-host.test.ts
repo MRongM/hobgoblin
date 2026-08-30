@@ -29,11 +29,41 @@ describe('worker-backed terminal host', () => {
     worker = new FakeWorker()
   })
 
+  test('configures a new worker before socket registration and reapplies the latest preference after restart', async () => {
+    vi.useFakeTimers()
+    const workerA = new FakeWorker()
+    const workerB = new FakeWorker()
+    const workers = [workerA, workerB]
+    const host = new WorkerBackedTerminalHost({
+      spawnWorker: () => workers.shift() as any,
+      windowsInternalTerminalShell: 'powershell',
+      setTimer: setTimeout,
+      clearTimer: clearTimeout,
+    })
+    const socket: ServerTerminalSocket = { send: vi.fn(), close: vi.fn() }
+
+    host.registerSocket('client_1', 'attachment_a', socket)
+    expect(workerA.sent.slice(0, 2)).toEqual([
+      { type: 'configure', windowsInternalTerminalShell: 'powershell' },
+      expect.objectContaining({ type: 'socket-register', clientId: 'client_1', attachmentId: 'attachment_a' }),
+    ])
+
+    host.setWindowsInternalTerminalShellPreference('cmd')
+    expect(workerA.sent.at(-1)).toEqual({ type: 'configure', windowsInternalTerminalShell: 'cmd' })
+
+    workerA.emit('exit', 1, null)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(workerB.sent.slice(0, 2)).toEqual([
+      { type: 'configure', windowsInternalTerminalShell: 'cmd' },
+      expect.objectContaining({ type: 'socket-register', clientId: 'client_1', attachmentId: 'attachment_a' }),
+    ])
+  })
+
   test('routes terminal requests through the worker and resolves responses', async () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
     const promise = host.write('client_1', { sessionId: 'term_123456789012', data: 'ls', attachmentId: 'attachment_a' })
 
-    const request = worker.sent[0]
+    const request = worker.sent.find((message) => message.type === 'request')
     expect(request?.type).toBe('request')
     if (!request || request.type !== 'request') return
     worker.emit('message', {
@@ -50,7 +80,7 @@ describe('worker-backed terminal host', () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
     const promise = host.closeSessions(['term_123456789012', 'term_abcdefghijkl'])
 
-    const request = worker.sent[0]
+    const request = worker.sent.find((message) => message.type === 'request')
     expect(request).toMatchObject({
       type: 'request',
       action: 'close-sessions',
@@ -74,7 +104,7 @@ describe('worker-backed terminal host', () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
     const promise = host.submitTelegramInput('continue')
 
-    const request = worker.sent[0]
+    const request = worker.sent.find((message) => message.type === 'request')
     expect(request).toMatchObject({
       type: 'request',
       action: 'telegram-input',
@@ -97,7 +127,7 @@ describe('worker-backed terminal host', () => {
     const input = { sessionId: 'term_123456789012', maxCharacters: 400 }
     const promise = host.getOutputExcerpt(input)
 
-    const request = worker.sent[0]
+    const request = worker.sent.find((message) => message.type === 'request')
     expect(request).toMatchObject({ type: 'request', action: 'output-excerpt', clientId: 'server', input })
     if (!request || request.type !== 'request') return
     worker.emit('message', {
@@ -120,7 +150,7 @@ describe('worker-backed terminal host', () => {
 
     host.registerSocket('client_1', 'attachment_a', socket)
 
-    const register = worker.sent[0]
+    const register = worker.sent.find((message) => message.type === 'socket-register')
     expect(register?.type).toBe('socket-register')
     if (!register || register.type !== 'socket-register') return
 
@@ -263,7 +293,7 @@ describe('worker-backed terminal host', () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any, now: () => Date.now() })
     const promise = host.write('client_1', { sessionId: 'term_123456789012', data: 'ls', attachmentId: 'attachment_a' })
 
-    const request = worker.sent[0]
+    const request = worker.sent.find((message) => message.type === 'request')
     expect(request?.type).toBe('request')
     if (!request || request.type !== 'request') return
     worker.emit('message', {

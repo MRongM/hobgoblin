@@ -77,6 +77,50 @@ describe('resolveWindowsTerminalShellCandidates', () => {
     ])
   })
 
+  test.each([
+    ['wsl', ['wsl']],
+    ['powershell', ['powershell-core', 'windows-powershell']],
+    ['cmd', ['cmd']],
+  ] as const)('keeps an explicit %s preference inside its selected shell family', (preference, expectedKinds) => {
+    probeWslMock.mockReturnValue({ status: 0, stdout: 'Ubuntu\n' })
+    const fileExists = existingFiles(
+      'C:\\Windows\\System32\\wsl.exe',
+      'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      'C:\\Windows\\System32\\cmd.exe',
+    )
+
+    const candidates = resolveWindowsTerminalShellCandidates({
+      preference,
+      cwd: 'C:\\src\\repo',
+      env: {
+        ProgramFiles: 'C:\\Program Files',
+        SystemRoot: 'C:\\Windows',
+        COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+      },
+      fileExists,
+    })
+
+    expect(candidates.map(({ kind }) => kind)).toEqual(expectedKinds)
+  })
+
+  test('makes explicit WSL unavailable for a Windows UNC working directory', () => {
+    probeWslMock.mockReturnValue({ status: 0, stdout: 'Ubuntu\n' })
+    const fileExists = existingFiles(
+      'C:\\Windows\\System32\\wsl.exe',
+      'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    )
+
+    expect(
+      resolveWindowsTerminalShellCandidates({
+        preference: 'wsl',
+        cwd: '\\\\server\\share\\repo',
+        env: { SystemRoot: 'C:\\Windows' },
+        fileExists,
+      }),
+    ).toEqual([])
+  })
+
   test('falls back to native Windows shells when no WSL distribution is registered', () => {
     probeWslMock.mockReturnValue({ status: 0, stdout: '' })
     const fileExists = existingFiles(

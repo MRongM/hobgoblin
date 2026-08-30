@@ -3,6 +3,7 @@ import {
   closeAllServerTerminalSessions,
   closeServerTerminal,
   closeServerTerminalSessions,
+  configureServerTerminal,
   createServerTerminal,
   getServerTerminalSessionSnapshot,
   getServerTerminalOutputExcerpt,
@@ -21,6 +22,7 @@ import {
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
 import type { ServerTerminalSocket } from '#/server/terminal/terminal-host.ts'
+import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type {
   TerminalWorkerRequestInputs,
   TerminalWorkerResponseOutputs,
@@ -29,6 +31,7 @@ import type {
 type MaybePromise<T> = T | Promise<T>
 
 export interface TerminalFacade {
+  configure(input: { windowsInternalTerminalShell: WindowsInternalTerminalShellPref }): void
   registerSocket(clientId: string, attachmentId: string, socket: ServerTerminalSocket): void
   unregisterSocket(clientId: string, attachmentId: string, socket: ServerTerminalSocket): void
   attach(
@@ -97,6 +100,7 @@ export interface TerminalFacade {
 
 export function createTerminalFacade(): TerminalFacade {
   return {
+    configure: configureServerTerminal,
     registerSocket: registerTerminalSocket,
     unregisterSocket: unregisterTerminalSocket,
     attach: attachServerTerminal,

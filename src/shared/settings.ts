@@ -6,6 +6,7 @@ export type ResolvedTheme = 'light' | 'dark'
 export type FontFamilyPref = 'mono' | 'maple' | 'system'
 export type LangPref = 'auto' | 'en' | 'zh' | 'ko' | 'ja'
 export type Lang = 'en' | 'zh' | 'ko' | 'ja'
+export type WindowsInternalTerminalShellPref = 'auto' | 'wsl' | 'powershell' | 'cmd'
 export type WindowsExternalTerminalPref = 'wsl' | 'powershell' | 'cmd'
 export type TerminalPref = 'auto' | 'ghostty' | 'terminal' | WindowsExternalTerminalPref
 export type EditorPref = 'auto' | 'vscode' | 'cursor' | 'windsurf'
@@ -13,6 +14,10 @@ export type ResolvedTerminalApp = Exclude<TerminalPref, 'auto'>
 export type ResolvedEditorApp = Exclude<EditorPref, 'auto'>
 export type TerminalAppAvailability = Record<ResolvedTerminalApp, boolean>
 export type EditorAppAvailability = Record<ResolvedEditorApp, boolean>
+
+export function normalizeWindowsInternalTerminalShellPref(value: unknown): WindowsInternalTerminalShellPref {
+  return value === 'wsl' || value === 'powershell' || value === 'cmd' ? value : 'auto'
+}
 
 export const MIN_FILE_TREE_FONT_SIZE = 10
 export const MAX_FILE_TREE_FONT_SIZE = 18
@@ -63,6 +68,7 @@ export interface SettingsPrefs {
   temporaryFilesDirectory: string
   globalShortcut: string
   terminalApp: TerminalPref
+  windowsInternalTerminalShell: WindowsInternalTerminalShellPref
   editorApp: EditorPref
   topbarHeightPx: number
   toolbarHeightPx: number

@@ -31,6 +31,7 @@ import type {
 } from '#/server/terminal/terminal-host.ts'
 import type { TerminalWorkerMessage, TerminalWorkerRequest } from '#/server/terminal/terminal-worker-protocol.ts'
 import { isValidTerminalAttachmentId } from '#/shared/terminal.ts'
+import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import { serverLogger } from '#/server/logger.ts'
 
 interface PendingRequest<T> {
@@ -49,6 +50,7 @@ export interface WorkerBackedTerminalHostOptions {
   now?: () => number
   setTimer?: (callback: () => void, delayMs: number) => WorkerTimerHandle
   clearTimer?: (timer: WorkerTimerHandle) => void
+  windowsInternalTerminalShell?: WindowsInternalTerminalShellPref
 }
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
@@ -86,9 +88,11 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
   private lastExitCode: number | null = null
   private lastExitSignal: NodeJS.Signals | null = null
   private lastWorkerFailure: { kind: 'exit' | 'error' | 'send-failed'; at: number; detail: string } | null = null
+  private windowsInternalTerminalShell: WindowsInternalTerminalShellPref
 
   constructor(options: WorkerBackedTerminalHostOptions = {}) {
     this.options = options
+    this.windowsInternalTerminalShell = normalizeWindowsInternalTerminalShellPref(options.windowsInternalTerminalShell)
   }
 
   isValidClientId(value: unknown): value is string {
@@ -113,6 +117,13 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
       lastExitSignal: this.lastExitSignal,
       lastWorkerFailure: this.lastWorkerFailure,
     }
+  }
+
+  setWindowsInternalTerminalShellPreference(preference: WindowsInternalTerminalShellPref): void {
+    const normalized = normalizeWindowsInternalTerminalShellPref(preference)
+    if (this.windowsInternalTerminalShell === normalized) return
+    this.windowsInternalTerminalShell = normalized
+    if (this.worker) this.sendWorkerConfiguration(this.worker)
   }
 
   registerSocket(clientId: string, attachmentId: string, socket: ServerTerminalSocket): void {
@@ -322,10 +333,29 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
       if (!this.shuttingDown && this.socketMeta.size > 0) this.scheduleRestart()
     })
     this.worker = worker
+    this.sendWorkerConfiguration(worker)
     for (const [socketId, meta] of this.socketMeta.entries()) {
       worker.send?.({ type: 'socket-register', socketId, clientId: meta.clientId, attachmentId: meta.attachmentId })
     }
     return worker
+  }
+
+  private sendWorkerConfiguration(worker: TerminalWorkerChildProcess): void {
+    const sent =
+      worker.send?.({
+        type: 'configure',
+        windowsInternalTerminalShell: this.windowsInternalTerminalShell,
+      }) ?? false
+    if (sent) return
+    this.lastWorkerFailure = {
+      kind: 'send-failed',
+      at: this.now(),
+      detail: 'action=configure',
+    }
+    terminalWorkerLogger.warn(
+      { pid: worker.pid, windowsInternalTerminalShell: this.windowsInternalTerminalShell },
+      'failed to configure terminal worker',
+    )
   }
 
   private handleWorkerMessage(message: TerminalWorkerMessage): void {

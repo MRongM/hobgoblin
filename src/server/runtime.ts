@@ -6,9 +6,12 @@ import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 import { WorkerBackedTerminalHost } from '#/server/terminal/terminal-worker-host.ts'
 import { createServerSettingsState } from '#/server/modules/settings-state.ts'
 import { createTelegramTerminalInputRuntime } from '#/server/modules/telegram-terminal-input-runtime.ts'
+import { readPersistedWindowsInternalTerminalShellPref } from '#/server/modules/settings-source.ts'
 
-export interface ServerRuntimeOptions
-  extends Omit<ServerAppOptions, 'terminalHost' | 'settingsState' | 'onTelegramRuntimeConfigChanged'> {
+export interface ServerRuntimeOptions extends Omit<
+  ServerAppOptions,
+  'terminalHost' | 'settingsState' | 'onTelegramRuntimeConfigChanged'
+> {
   terminalHost?: ServerTerminalHost
   terminalWorkerEntry?: string
 }
@@ -21,7 +24,16 @@ export interface ServerRuntime {
 
 export function createServerRuntime(options: ServerRuntimeOptions): ServerRuntime {
   const { terminalHost: providedTerminalHost, terminalWorkerEntry, ...appOptions } = options
-  const terminalHost = providedTerminalHost ?? new WorkerBackedTerminalHost({ workerEntry: terminalWorkerEntry })
+  const windowsInternalTerminalShell = readPersistedWindowsInternalTerminalShellPref()
+  const terminalHost =
+    providedTerminalHost ??
+    new WorkerBackedTerminalHost({
+      workerEntry: terminalWorkerEntry,
+      windowsInternalTerminalShell,
+    })
+  if (providedTerminalHost) {
+    terminalHost.setWindowsInternalTerminalShellPreference?.(windowsInternalTerminalShell)
+  }
   const settingsState = createServerSettingsState()
   const telegramTerminalInputRuntime = createTelegramTerminalInputRuntime({ terminalHost, settingsState })
   const app = createApp({

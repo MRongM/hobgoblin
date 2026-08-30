@@ -27,6 +27,10 @@ export class TerminalWorkerRuntime {
 
   async handleMessage(message: TerminalWorkerRequest | null | undefined): Promise<void> {
     if (!message || typeof message !== 'object') return
+    if (message.type === 'configure') {
+      this.options.service.configure({ windowsInternalTerminalShell: message.windowsInternalTerminalShell })
+      return
+    }
     if (message.type === 'socket-register') {
       this.registerProxySocket(message.socketId, message.clientId, message.attachmentId)
       return

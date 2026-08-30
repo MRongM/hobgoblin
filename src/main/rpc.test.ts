@@ -53,6 +53,7 @@ function settingsPrefs(overrides: Partial<SettingsPrefs> = {}): SettingsPrefs {
     topbarHeightPx: overrides.topbarHeightPx ?? 34,
     toolbarHeightPx: overrides.toolbarHeightPx ?? 34,
     fontFamily: overrides.fontFamily ?? 'mono',
+    windowsInternalTerminalShell: overrides.windowsInternalTerminalShell ?? 'auto',
   }
 }
 
