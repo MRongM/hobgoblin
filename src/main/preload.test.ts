@@ -16,6 +16,7 @@ import {
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
@@ -209,6 +210,7 @@ describe('preload goblinNative bridge', () => {
     await goblinNative.shell.openFileDialog({ title: 'Upload files' })
     await goblinNative.shell.consumeExternalOpenPaths()
     await goblinNative.shell.openInFinder({ path: '/repo' })
+    await goblinNative.shell.readClipboardImage()
     await goblinNative.shell.readClipboardFilePaths()
     await goblinNative.shell.writeFileTreeClipboardFile({
       name: 'image.bin',
@@ -234,6 +236,7 @@ describe('preload goblinNative bridge', () => {
       SHELL_OPEN_FILE_DIALOG_CHANNEL,
       SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
       SHELL_OPEN_IN_FINDER_CHANNEL,
+      SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
       SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
       SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
       SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,

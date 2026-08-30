@@ -1,6 +1,7 @@
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 import type {
+  ClipboardBinaryFilePayload,
   SaveClipboardBinaryFilesInput,
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
@@ -86,6 +87,10 @@ export function pathForDroppedFile(file: File): string {
 
 export async function readSystemClipboardFilePaths(): Promise<string[]> {
   return (await nativeShell()?.readClipboardFilePaths?.()) ?? []
+}
+
+export async function readSystemClipboardImage(): Promise<ClipboardBinaryFilePayload | null> {
+  return (await nativeShell()?.readClipboardImage?.()) ?? null
 }
 
 export async function saveClipboardBinaryFilesFromPaste(

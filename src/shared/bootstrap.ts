@@ -18,6 +18,7 @@ export type RendererNativeCapability =
   | 'open-file-dialog'
   | 'consume-external-open-paths'
   | 'open-in-finder'
+  | 'clipboard-image'
   | 'clipboard-file-paths'
   | 'clipboard-binary-temp-files'
   | 'file-tree-clipboard'
@@ -34,6 +35,7 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'open-file-dialog',
   'consume-external-open-paths',
   'open-in-finder',
+  'clipboard-image',
   'clipboard-file-paths',
   'clipboard-binary-temp-files',
   'file-tree-clipboard',

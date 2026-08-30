@@ -10,6 +10,7 @@ export const SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL = 'goblin:shell-open-directory-
 export const SHELL_OPEN_FILE_DIALOG_CHANNEL = 'goblin:shell-open-file-dialog'
 export const SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL = 'goblin:shell-consume-external-open-paths'
 export const SHELL_OPEN_IN_FINDER_CHANNEL = 'goblin:shell-open-in-finder'
+export const SHELL_READ_CLIPBOARD_IMAGE_CHANNEL = 'goblin:shell-read-clipboard-image'
 export const SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL = 'goblin:shell-read-clipboard-file-paths'
 export const SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL = 'goblin:shell-save-clipboard-binary-files'
 export const SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL = 'goblin:shell-write-file-tree-clipboard-file'

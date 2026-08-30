@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { activateMainWindow, getMainWindow } from '#/main/window.ts'
 import { saveClipboardBinaryFilesToTemp } from '#/main/clipboard-binary-temp-files.ts'
+import { readClipboardImageFromSystem } from '#/main/clipboard-image.ts'
 import { readClipboardFilePathsFromSystem } from '#/main/clipboard-file-paths.ts'
 import { readFileTreeClipboardFile, writeFileTreeClipboardFile } from '#/main/file-tree-clipboard.ts'
 import { consumeExternalOpenPaths } from '#/main/external-open.ts'
@@ -17,12 +18,14 @@ import {
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
 import type {
+  ClipboardBinaryFilePayload,
   SaveClipboardBinaryFilesInput,
   SaveClipboardBinaryFilesResult,
 } from '#/shared/clipboard-binary-temp-files.ts'
@@ -80,6 +83,12 @@ export function wireShellBridgeIpc(): void {
   ipcMain.handle(
     SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
     async (event): Promise<string[]> => (isTrustedIpcEvent(event) ? consumeExternalOpenPaths() : []),
+  )
+
+  ipcMain.handle(
+    SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
+    async (event): Promise<ClipboardBinaryFilePayload | null> =>
+      isTrustedIpcEvent(event) ? readClipboardImageFromSystem() : null,
   )
 
   ipcMain.handle(

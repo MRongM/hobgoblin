@@ -36,6 +36,7 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'open-file-dialog') return nativeShell?.openFileDialog !== undefined
       if (capability === 'consume-external-open-paths') return nativeShell?.consumeExternalOpenPaths !== undefined
       if (capability === 'open-in-finder') return nativeShell?.openInFinder !== undefined
+      if (capability === 'clipboard-image') return nativeShell?.readClipboardImage !== undefined
       if (capability === 'clipboard-file-paths') return nativeShell?.readClipboardFilePaths !== undefined
       if (capability === 'clipboard-binary-temp-files') return nativeShell?.saveClipboardBinaryFiles !== undefined
       if (capability === 'file-tree-clipboard') {
@@ -291,6 +292,33 @@ describe('app shell client', () => {
   test('returns an empty clipboard file path list without a native shell', async () => {
     const { readSystemClipboardFilePaths } = await import('#/web/app-shell-client.ts')
     await expect(readSystemClipboardFilePaths()).resolves.toEqual([])
+  })
+
+  test('reads a native clipboard image through the shell bridge', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new ArrayBuffer(3) }
+    const readClipboardImage = vi.fn(async () => payload)
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog: vi.fn(),
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: vi.fn(),
+          readClipboardImage,
+        }),
+      }),
+    )
+
+    const { readSystemClipboardImage } = await import('#/web/app-shell-client.ts')
+    await expect(readSystemClipboardImage()).resolves.toBe(payload)
+    expect(readClipboardImage).toHaveBeenCalledTimes(1)
+  })
+
+  test('returns null without a native clipboard image bridge', async () => {
+    const { readSystemClipboardImage } = await import('#/web/app-shell-client.ts')
+    await expect(readSystemClipboardImage()).resolves.toBeNull()
   })
 
   test('saves clipboard binary files through the native shell', async () => {

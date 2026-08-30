@@ -7,6 +7,7 @@ import {
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
@@ -19,6 +20,7 @@ const {
   showOpenDialog,
   sendRendererEffectIntent,
   activateMainWindow,
+  readClipboardImageFromSystem,
   readClipboardFilePathsFromSystem,
   saveClipboardBinaryFilesToTemp,
   readFileTreeClipboardFile,
@@ -29,6 +31,7 @@ const {
   showOpenDialog: vi.fn(),
   sendRendererEffectIntent: vi.fn(),
   activateMainWindow: vi.fn(),
+  readClipboardImageFromSystem: vi.fn(),
   readClipboardFilePathsFromSystem: vi.fn(),
   saveClipboardBinaryFilesToTemp: vi.fn(),
   readFileTreeClipboardFile: vi.fn(),
@@ -57,6 +60,10 @@ vi.mock('#/main/renderer-surface-events.ts', () => ({
 
 vi.mock('#/main/clipboard-file-paths.ts', () => ({
   readClipboardFilePathsFromSystem,
+}))
+
+vi.mock('#/main/clipboard-image.ts', () => ({
+  readClipboardImageFromSystem,
 }))
 
 vi.mock('#/main/clipboard-binary-temp-files.ts', () => ({
@@ -91,6 +98,7 @@ describe('shell bridge IPC', () => {
     expect(ipcHandlers.has(SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_OPEN_FILE_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_IMAGE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
@@ -187,6 +195,29 @@ describe('shell bridge IPC', () => {
     } as any)
 
     expect(result).toEqual([])
+  })
+
+  test('reads a clipboard image for trusted senders', async () => {
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new ArrayBuffer(3) }
+    readClipboardImageFromSystem.mockReturnValue(payload)
+
+    const result = await invoke(SHELL_READ_CLIPBOARD_IMAGE_CHANNEL)
+
+    expect(result).toBe(payload)
+    expect(readClipboardImageFromSystem).toHaveBeenCalledTimes(1)
+  })
+
+  test('returns no clipboard image for untrusted senders', async () => {
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new ArrayBuffer(3) }
+    readClipboardImageFromSystem.mockReturnValue(payload)
+
+    const result = await invokeWithEvent(SHELL_READ_CLIPBOARD_IMAGE_CHANNEL, undefined, {
+      sender: { id: 99, once: vi.fn() },
+      senderFrame: { url: 'https://example.com/' },
+    } as any)
+
+    expect(result).toBeNull()
+    expect(readClipboardImageFromSystem).not.toHaveBeenCalled()
   })
 
   test('saves clipboard binary files for trusted senders', async () => {
