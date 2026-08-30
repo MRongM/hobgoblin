@@ -218,6 +218,37 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test('opens Paste when right-click starts inside the xterm input textarea', async () => {
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue('input paste')
+    const pasteText = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { pasteText })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const xtermInput = document.createElement('textarea')
+      xtermInput.className = 'xterm-helper-textarea'
+      host?.appendChild(xtermInput)
+
+      await act(async () => {
+        xtermInput.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      expect(items.map((item) => item.textContent)).toEqual(['menu.edit.paste'])
+
+      await act(async () => {
+        items[0]?.click()
+        await Promise.resolve()
+      })
+
+      expect(pasteText).toHaveBeenCalledWith('terminal-1', 'input paste')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('orders Copy before Paste for a selected controlling desktop terminal', async () => {
     const { container, root } = await renderTerminalSlotFixture('controller', {
       selectionText: vi.fn(() => 'selected output'),
