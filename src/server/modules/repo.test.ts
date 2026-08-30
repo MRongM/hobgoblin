@@ -2284,6 +2284,50 @@ describe('repo mutation invalidation publishing', () => {
     )
   }, 15_000)
 
+  test('builds a local remote-alignment preview from the abbreviated branch hash in a normal snapshot', async () => {
+    const worktreePath = '/tmp/repo-feature'
+    const snapshot = alignedWorktreeSnapshot({ path: worktreePath })
+    snapshot.branches[0]!.lastCommitHash = '1'.repeat(8)
+    snapshot.branches[0]!.worktree = { path: worktreePath }
+    mocks.getWorktrees.mockResolvedValue([
+      {
+        path: worktreePath,
+        branch: 'feature/a',
+        head: '1'.repeat(40),
+        isBare: false,
+        isPrimary: false,
+      },
+    ])
+    mocks.getBranches.mockResolvedValue(snapshot.branches)
+    mocks.getWorktreeStatusEntries.mockResolvedValue([])
+    const { buildRepositoryRemoteAlignmentPreview } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(buildRepositoryRemoteAlignmentPreview('/tmp/repo', 'feature/a', worktreePath)).resolves.toMatchObject({
+      ok: true,
+      upstream: 'origin/feature/a',
+      ahead: 2,
+      changeCount: 0,
+    })
+  })
+
+  test('builds a WSL remote-alignment preview from the abbreviated branch hash in a normal snapshot', async () => {
+    const worktreePath = '/srv/repo-feature'
+    const snapshot = alignedWorktreeSnapshot({ path: worktreePath })
+    snapshot.branches[0]!.lastCommitHash = '1'.repeat(8)
+    snapshot.branches[0]!.worktree = { path: worktreePath }
+    mocks.getRemoteSnapshot.mockResolvedValue(snapshot)
+    const { buildRepositoryRemoteAlignmentPreview } = await import('#/server/modules/repo-write-paths.ts')
+
+    await expect(
+      buildRepositoryRemoteAlignmentPreview('wsl://Ubuntu-24.04/srv/repo', 'feature/a', worktreePath),
+    ).resolves.toMatchObject({
+      ok: true,
+      upstream: 'origin/feature/a',
+      ahead: 2,
+      changeCount: 0,
+    })
+  })
+
   test('forces alignment after confirmation without rereading local worktree content', async () => {
     mocks.getRemoteSnapshot.mockResolvedValue(alignedWorktreeSnapshot())
     mocks.getRemoteWorktreeContentState

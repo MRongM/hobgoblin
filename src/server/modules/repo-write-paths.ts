@@ -38,7 +38,7 @@ import {
 } from '#/system/ssh/git.ts'
 import { openInPreferredEditor } from '#/system/editors.ts'
 import { openInPreferredTerminal } from '#/system/terminals.ts'
-import type { ExecResult, WorktreeContentState } from '#/shared/git-types.ts'
+import { GIT_HASH_RE, type ExecResult, type WorktreeContentState } from '#/shared/git-types.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { RepoFileTreeBinaryFileReplaceResult, RepoFileTreeTextFileReplaceResult } from '#/shared/file-tree.ts'
 import { isRemoteRepoId, type NetworkOpKind, type RepoSnapshot } from '#/shared/rpc.ts'
@@ -1022,7 +1022,7 @@ function resolveRemoteAlignmentTarget(
     return { ok: false, message: 'error.upstream-required' }
   }
   const head = candidate.worktree.head ?? candidate.lastCommitHash
-  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(head)) {
+  if (!GIT_HASH_RE.test(head)) {
     return { ok: false, message: 'error.failed-read-repo' }
   }
   return { ok: true, upstream: candidate.tracking, head: head.toLowerCase(), ahead: candidate.ahead }

@@ -436,7 +436,7 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     })
   })
 
-  test('rejects batch remote alignment when worktree content changes under the same status', async () => {
+  test('allows batch remote alignment when discardable worktree content changes', async () => {
     const original = await buildBranchWorkspaceGitActionPlan(
       ROOT,
       { kind: 'batch-align-remote', branchWorkspaceId: WORKSPACE_ID },
@@ -463,10 +463,9 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
       }),
     )
 
-    expect(result).toEqual({
-      ok: false,
-      message: 'workspace.branch-workspace.git-action.repository-changed',
-      repositoryName: 'api',
+    expect(result).toMatchObject({
+      ok: true,
+      plan: { kind: 'batch-align-remote' },
     })
   })
 

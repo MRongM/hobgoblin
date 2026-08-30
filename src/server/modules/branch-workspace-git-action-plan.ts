@@ -13,7 +13,6 @@ import {
   getRepositorySnapshot,
   getRepositoryStatus,
   getRepositoryWorktreeStatusEntries,
-  getRepositoryWorktreeContentState,
 } from '#/server/modules/repo-read-paths.ts'
 import {
   normalizeBranchWorkspaceGitActionPlanRequest,
@@ -267,18 +266,6 @@ async function buildBatchAlignRemotePlan(
       memberSignal,
     )
     if (!facts.ok) return facts
-    const contentState = await (dependencies.getWorktreeContentState ?? getRepositoryWorktreeContentState)(
-      facts.repoId,
-      member.worktreePath,
-      memberSignal,
-    )
-    if (!contentState) {
-      return {
-        ok: false as const,
-        message: 'workspace.branch-workspace.git-action.read-failed',
-        repositoryName: member.repositoryName,
-      }
-    }
     const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
     const entries = normalizedStatusEntries(facts.status.entries)
     const upstream = branch.tracking ?? null
@@ -298,11 +285,12 @@ async function buildBatchAlignRemotePlan(
         ready,
         ...(message ? { message } : {}),
         fingerprint: repositoryPlanFingerprint({
-          head: facts.head,
-          status: entries,
-          contentState,
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
           upstream,
-          trackingGone: branch.trackingGone === true,
+          ready,
         }),
       },
     }
