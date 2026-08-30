@@ -229,24 +229,35 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('does not add the Windows terminal selection context menu on macOS', async () => {
-    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
-    const { container, root } = await renderTerminalSlotFixture('controller', {
-      selectionText: vi.fn(() => 'selected output'),
-    })
+  test.each([
+    { platform: 'MacIntel', label: 'macOS' },
+    { platform: 'Linux x86_64', label: 'Linux desktop Web' },
+  ])('opens the desktop terminal selection context menu on $label', async ({ platform }) => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
+    const selectionText = vi.fn(() => 'selected output')
+    const clearMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', { selectionText, clearMobileSelection })
 
     try {
+      clearMobileSelection.mockClear()
       const host = container.querySelector('.goblin-terminal-slot__host')
       await act(async () => {
         host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
         await Promise.resolve()
       })
 
-      expect(
-        [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
-          candidate.textContent?.includes('menu.edit.copy'),
-        ),
-      ).toBeUndefined()
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+        candidate.textContent?.includes('menu.edit.copy'),
+      )
+      expect(item).toBeInstanceOf(HTMLElement)
+
+      await act(async () => {
+        item?.click()
+        await Promise.resolve()
+      })
+
+      expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected output')
+      expect(clearMobileSelection).not.toHaveBeenCalled()
     } finally {
       platformSpy.mockRestore()
       await act(async () => root.unmount())

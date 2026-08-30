@@ -219,7 +219,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
   useEffect(() => {
     setDesktopSelectionCopyText(null)
-  }, [isMobile, isWindowsPlatform, key])
+  }, [isMobile, key])
 
   const cancelTouchInertia = useCallback(() => {
     if (touchInertiaFrameRef.current !== null) window.cancelAnimationFrame(touchInertiaFrameRef.current)
@@ -532,11 +532,11 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         setDesktopSelectionCopyText(null)
         return
       }
-      if (!isWindowsPlatform || isMobile || !key) return
+      if (isMobile || !key) return
       const text = selectionText(key)
       setDesktopSelectionCopyText(text || null)
     },
-    [isMobile, isWindowsPlatform, key, selectionText],
+    [isMobile, key, selectionText],
   )
 
   const copyDesktopTerminalSelection = useCallback(async () => {
@@ -940,7 +940,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     />
   )
   const terminalHostSurface =
-    isWindowsPlatform && !isMobile ? (
+    !isMobile ? (
       <ContextMenu open={desktopSelectionCopyText !== null} onOpenChange={handleDesktopContextMenuOpenChange}>
         <ContextMenuTrigger asChild>{terminalHost}</ContextMenuTrigger>
         {desktopSelectionCopyText !== null && (
