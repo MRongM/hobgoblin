@@ -949,6 +949,7 @@ export const en = {
   'terminal.command-deck.send': 'Send',
   'terminal.mobile-scroll-scrubber': 'Drag to browse terminal history',
   'terminal.selection-copy-failed': 'Could not copy the selected terminal text. Try again.',
+  'terminal.clipboard-paste-failed': 'Could not read clipboard text. Try the keyboard paste shortcut.',
   'terminal.custom-button-presets.confirm-continue.label': 'Confirm, continue',
   'terminal.custom-button-presets.confirm-continue.value': 'Confirm and continue',
   'terminal.custom-button-presets.try-if-needed.label': 'Try if needed',

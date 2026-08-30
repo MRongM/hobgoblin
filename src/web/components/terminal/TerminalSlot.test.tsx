@@ -26,6 +26,7 @@ const i18nMocks = vi.hoisted(() => ({
 }))
 
 const clipboardMocks = vi.hoisted(() => ({
+  readTerminalClipboardText: vi.fn(async (): Promise<string | null> => ''),
   writeTerminalClipboardText: vi.fn(async () => true),
 }))
 
@@ -38,6 +39,7 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/components/terminal/terminal-clipboard.ts', () => ({
+  readTerminalClipboardText: clipboardMocks.readTerminalClipboardText,
   writeTerminalClipboardText: clipboardMocks.writeTerminalClipboardText,
 }))
 
@@ -128,6 +130,8 @@ afterEach(() => {
   editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true })
   clipboardMocks.writeTerminalClipboardText.mockReset()
   clipboardMocks.writeTerminalClipboardText.mockResolvedValue(true)
+  clipboardMocks.readTerminalClipboardText.mockReset()
+  clipboardMocks.readTerminalClipboardText.mockResolvedValue('')
   toastMocks.error.mockReset()
   mobileDetectionMocks.isMobileDevice = false
   runtimeShortcutSettingsMocks.shortcutsDisabled = false
@@ -138,32 +142,75 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
-  test('opens the Windows terminal selection context menu and copies without clearing the selection', async () => {
-    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
-    const selectionText = vi.fn(() => 'selected output')
-    const clearMobileSelection = vi.fn()
-    const { container, root } = await renderTerminalSlotFixture('viewer', { selectionText, clearMobileSelection })
+  test.each(['viewer', 'unowned'] as const)(
+    'offers Copy without Paste for a selected %s desktop terminal',
+    async (role) => {
+      const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+      const selectionText = vi.fn(() => 'selected output')
+      const clearMobileSelection = vi.fn()
+      const { container, root } = await renderTerminalSlotFixture(role, { selectionText, clearMobileSelection })
+
+      try {
+        clearMobileSelection.mockClear()
+        const host = container.querySelector('.goblin-terminal-slot__host')
+        await act(async () => {
+          host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+          await Promise.resolve()
+        })
+
+        const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        expect(items.map((item) => item.textContent)).toEqual(['menu.edit.copy'])
+        const item = items[0]
+        expect(item).toBeInstanceOf(HTMLElement)
+
+        await act(async () => {
+          item?.click()
+          await Promise.resolve()
+        })
+
+        expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected output')
+        expect(clearMobileSelection).not.toHaveBeenCalled()
+      } finally {
+        platformSpy.mockRestore()
+        await act(async () => root.unmount())
+        container.remove()
+      }
+    },
+  )
+
+  test.each([
+    { platform: 'Win32', label: 'Windows' },
+    { platform: 'MacIntel', label: 'macOS' },
+    { platform: 'Linux x86_64', label: 'desktop Web' },
+  ])('opens Paste for a controlling terminal without a selection on $label', async ({ platform }) => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue('echo pasted')
+    const pasteText = vi.fn()
+    const focusTerminal = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => ''),
+      pasteText,
+      focusTerminal,
+    })
 
     try {
-      clearMobileSelection.mockClear()
       const host = container.querySelector('.goblin-terminal-slot__host')
       await act(async () => {
         host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
         await Promise.resolve()
       })
 
-      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
-        candidate.textContent?.includes('menu.edit.copy'),
-      )
-      expect(item).toBeInstanceOf(HTMLElement)
+      const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      expect(items.map((item) => item.textContent)).toEqual(['menu.edit.paste'])
 
       await act(async () => {
-        item?.click()
+        items[0]?.click()
         await Promise.resolve()
       })
 
-      expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected output')
-      expect(clearMobileSelection).not.toHaveBeenCalled()
+      expect(clipboardMocks.readTerminalClipboardText).toHaveBeenCalledTimes(1)
+      expect(pasteText).toHaveBeenCalledWith('terminal-1', 'echo pasted')
+      expect(focusTerminal).toHaveBeenCalledWith('terminal-1')
     } finally {
       platformSpy.mockRestore()
       await act(async () => root.unmount())
@@ -171,9 +218,10 @@ describe('TerminalSlot', () => {
     }
   })
 
-  test('does not open the Windows terminal selection context menu for an empty selection', async () => {
-    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
-    const { container, root } = await renderTerminalSlotFixture('controller', { selectionText: vi.fn(() => '') })
+  test('orders Copy before Paste for a selected controlling desktop terminal', async () => {
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => 'selected output'),
+    })
 
     try {
       const host = container.querySelector('.goblin-terminal-slot__host')
@@ -182,13 +230,26 @@ describe('TerminalSlot', () => {
         await Promise.resolve()
       })
 
-      expect(
-        [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
-          candidate.textContent?.includes('menu.edit.copy'),
-        ),
-      ).toBeUndefined()
+      const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      expect(items.map((item) => item.textContent)).toEqual(['menu.edit.copy', 'menu.edit.paste'])
     } finally {
-      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not open a context menu for an unowned desktop terminal without a selection', async () => {
+    const { container, root } = await renderTerminalSlotFixture('unowned', { selectionText: vi.fn(() => '') })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      expect(document.body.querySelector('[role="menuitem"]')).toBeNull()
+    } finally {
       await act(async () => root.unmount())
       container.remove()
     }
@@ -224,6 +285,67 @@ describe('TerminalSlot', () => {
       expect(clearMobileSelection).not.toHaveBeenCalled()
     } finally {
       platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('reports clipboard read failures without writing terminal input', async () => {
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue(null)
+    i18nMocks.translations['terminal.clipboard-paste-failed'] = 'Paste failed'
+    const pasteText = vi.fn()
+    const focusTerminal = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { pasteText, focusTerminal })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+      const pasteItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.includes('menu.edit.paste'),
+      )
+
+      await act(async () => {
+        pasteItem?.click()
+        await Promise.resolve()
+      })
+
+      expect(toastMocks.error).toHaveBeenCalledWith('Paste failed')
+      expect(pasteText).not.toHaveBeenCalled()
+      expect(focusTerminal).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('ignores an empty text clipboard without reporting an error', async () => {
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue('')
+    const pasteText = vi.fn()
+    const focusTerminal = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { pasteText, focusTerminal })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+      const pasteItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.includes('menu.edit.paste'),
+      )
+
+      await act(async () => {
+        pasteItem?.click()
+        await Promise.resolve()
+      })
+
+      expect(toastMocks.error).not.toHaveBeenCalled()
+      expect(pasteText).not.toHaveBeenCalled()
+      expect(focusTerminal).not.toHaveBeenCalled()
+    } finally {
       await act(async () => root.unmount())
       container.remove()
     }

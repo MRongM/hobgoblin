@@ -50,7 +50,7 @@ import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/mo
 import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
-import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+import { readTerminalClipboardText, writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
 import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
 import { DesktopTerminalDock } from '#/web/components/terminal/DesktopTerminalDock.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -124,6 +124,11 @@ interface MobileTerminalSelectionCopyAction {
   clientY: number
 }
 
+interface DesktopTerminalContextMenuState {
+  key: string
+  selectionText: string
+}
+
 interface TerminalSlotProps {
   repoRoot: string
   worktreePath: string
@@ -152,7 +157,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [mobileSelectionCopyAction, setMobileSelectionCopyAction] = useState<MobileTerminalSelectionCopyAction | null>(
     null,
   )
-  const [desktopSelectionCopyText, setDesktopSelectionCopyText] = useState<string | null>(null)
+  const [desktopContextMenu, setDesktopContextMenu] = useState<DesktopTerminalContextMenuState | null>(null)
   const context = useTerminalSessionContext()
   const {
     clearBell,
@@ -176,6 +181,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     finishMobileSelection,
     cancelMobileSelection,
     selectionText,
+    pasteText,
     mobileSelectionText,
     clearMobileSelection,
     takeover,
@@ -218,8 +224,8 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   }, [attachment?.role, isMobile, key])
 
   useEffect(() => {
-    setDesktopSelectionCopyText(null)
-  }, [isMobile, key])
+    setDesktopContextMenu(null)
+  }, [attachment?.role, isMobile, key])
 
   const cancelTouchInertia = useCallback(() => {
     if (touchInertiaFrameRef.current !== null) window.cancelAnimationFrame(touchInertiaFrameRef.current)
@@ -529,25 +535,39 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const handleDesktopContextMenuOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        setDesktopSelectionCopyText(null)
+        setDesktopContextMenu(null)
         return
       }
       if (isMobile || !key) return
-      const text = selectionText(key)
-      setDesktopSelectionCopyText(text || null)
+      const capturedSelectionText = selectionText(key)
+      if (!capturedSelectionText && !isController) return
+      setDesktopContextMenu({ key, selectionText: capturedSelectionText })
     },
-    [isMobile, key, selectionText],
+    [isController, isMobile, key, selectionText],
   )
 
   const copyDesktopTerminalSelection = useCallback(async () => {
-    const text = desktopSelectionCopyText
+    const text = desktopContextMenu?.selectionText
     if (!text) return
     if (!(await writeTerminalClipboardText(text))) {
       toast.error(t('terminal.selection-copy-failed'))
       return
     }
-    setDesktopSelectionCopyText(null)
-  }, [desktopSelectionCopyText, t])
+    setDesktopContextMenu(null)
+  }, [desktopContextMenu, t])
+
+  const pasteDesktopTerminalText = useCallback(async () => {
+    const action = desktopContextMenu
+    if (!action || !isController || action.key !== key) return
+    const text = await readTerminalClipboardText()
+    if (text === null) {
+      toast.error(t('terminal.clipboard-paste-failed'))
+      return
+    }
+    if (!text) return
+    pasteText(action.key, text)
+    focusTerminal(action.key)
+  }, [desktopContextMenu, focusTerminal, isController, key, pasteText, t])
 
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
@@ -939,21 +959,25 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
     />
   )
-  const terminalHostSurface =
-    !isMobile ? (
-      <ContextMenu open={desktopSelectionCopyText !== null} onOpenChange={handleDesktopContextMenuOpenChange}>
-        <ContextMenuTrigger asChild>{terminalHost}</ContextMenuTrigger>
-        {desktopSelectionCopyText !== null && (
-          <ContextMenuContent>
+  const terminalHostSurface = !isMobile ? (
+    <ContextMenu open={desktopContextMenu !== null} onOpenChange={handleDesktopContextMenuOpenChange}>
+      <ContextMenuTrigger asChild>{terminalHost}</ContextMenuTrigger>
+      {desktopContextMenu !== null && (
+        <ContextMenuContent>
+          {desktopContextMenu.selectionText && (
             <ContextMenuItem onSelect={() => void copyDesktopTerminalSelection()}>
               {t('menu.edit.copy')}
             </ContextMenuItem>
-          </ContextMenuContent>
-        )}
-      </ContextMenu>
-    ) : (
-      terminalHost
-    )
+          )}
+          {isController && desktopContextMenu.key === key && (
+            <ContextMenuItem onSelect={() => void pasteDesktopTerminalText()}>{t('menu.edit.paste')}</ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
+  ) : (
+    terminalHost
+  )
 
   return (
     <div
@@ -1221,8 +1245,7 @@ interface ResolvePastedFilePathsOptions {
 
 async function resolvePastedFilePaths(files: File[], options: ResolvePastedFilePathsOptions): Promise<string[]> {
   const sourcePaths = await readSystemClipboardFilePaths()
-  const payloads =
-    sourcePaths.length > 0 ? [] : await pastedBinaryPayloads(files, options.allowNativeClipboardImage)
+  const payloads = sourcePaths.length > 0 ? [] : await pastedBinaryPayloads(files, options.allowNativeClipboardImage)
   if (isRemoteRepoId(options.repoRoot)) return await resolveRemotePastedFilePaths(payloads, sourcePaths, options)
   if (sourcePaths.length > 0) {
     const result = await saveClipboardBinaryFilesFromPaste({

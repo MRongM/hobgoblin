@@ -934,6 +934,7 @@ export const ko: Record<DictKey, string> = {
   'terminal.command-deck.send': '보내기',
   'terminal.mobile-scroll-scrubber': '드래그하여 터미널 기록 보기',
   'terminal.selection-copy-failed': '선택한 터미널 텍스트를 복사하지 못했습니다. 다시 시도하세요.',
+  'terminal.clipboard-paste-failed': '클립보드 텍스트를 읽을 수 없습니다. 키보드 붙여넣기 단축키를 사용해 보세요.',
   'terminal.custom-button-presets.confirm-continue.label': '확인·계속',
   'terminal.custom-button-presets.confirm-continue.value': '확인하고 계속 진행해 주세요',
   'terminal.custom-button-presets.try-if-needed.label': '필요하면 시도',
