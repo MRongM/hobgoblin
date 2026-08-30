@@ -107,7 +107,7 @@ export function SidebarProjectList({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={projects.map((project) => project.id)} strategy={verticalListSortingStrategy}>
-        <ul id={id} className="max-h-72 overflow-y-auto px-1.5 pb-2">
+        <ul id={id} className="project-list-scrollbar max-h-72 overflow-y-auto px-1.5 pb-2">
           {projects.map((project) => (
             <SortableProjectRow
               key={project.id}

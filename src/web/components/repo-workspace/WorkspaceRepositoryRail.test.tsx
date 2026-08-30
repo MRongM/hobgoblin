@@ -601,6 +601,13 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('uses the shared project list scrollbar contract for the repository list', () => {
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    expect(upperList?.classList.contains('project-list-scrollbar')).toBe(true)
+  })
+
   test('syncs every configured repository with its latest instance token', async () => {
     renderRail()
 

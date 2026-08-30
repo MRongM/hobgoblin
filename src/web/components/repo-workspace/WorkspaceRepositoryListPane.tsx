@@ -60,8 +60,7 @@ export function WorkspaceRepositoryListPane({
 
   const calculateMaximumHeight = useCallback(() => {
     const availableHeight = sectionRef.current?.parentElement?.parentElement?.getBoundingClientRect().height ?? 0
-    const fallbackHeight =
-      typeof window === 'undefined' ? DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT : window.innerHeight
+    const fallbackHeight = typeof window === 'undefined' ? DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT : window.innerHeight
     return Math.min(
       MAX_WORKSPACE_REPOSITORY_LIST_HEIGHT,
       Math.max(
@@ -141,7 +140,7 @@ export function WorkspaceRepositoryListPane({
         {actions}
       </div>
       <div
-        className={cn('relative overflow-y-auto px-1.5 pb-1.5', compact && 'max-h-40')}
+        className={cn('project-list-scrollbar relative overflow-y-auto px-1.5 pb-1.5', compact && 'max-h-40')}
         data-testid="workspace-repository-upper-list"
         style={compact ? undefined : { height }}
       >

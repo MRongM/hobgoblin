@@ -141,6 +141,34 @@ describe('web theme contract', () => {
     expect(scrollAreaSource).toContain('data-slot="scroll-area-thumb"')
   })
 
+  test('uses one exact thin WebKit scrollbar contract for project and repository lists', () => {
+    const contract = readText(new URL('contract.css', THEME_ROOT))
+    const normalizedContract = contract.replace(/\s+/g, ' ')
+    const normalizedProjectAreaSelector = PROJECT_AREA_NATIVE_SCROLLBAR_SELECTOR.replace(/\s+/g, ' ')
+    const scrollbar = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar')
+    const track = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar-track')
+    const corner = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar-corner')
+    const button = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar-button')
+    const thumb = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar-thumb')
+    const thumbHover = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar-thumb:hover')
+    const thumbActive = cssRule(contract, '.project-list-scrollbar::-webkit-scrollbar-thumb:active')
+
+    expect(contract).not.toMatch(/\.project-list-scrollbar\s*\{[^}]*scrollbar-(?:color|width):/s)
+    expect(normalizedContract.indexOf('.project-list-scrollbar::-webkit-scrollbar {')).toBeGreaterThan(
+      normalizedContract.indexOf(`${normalizedProjectAreaSelector}::-webkit-scrollbar {`),
+    )
+    expect(scrollbar).toContain('width: 8px;')
+    expect(track).toContain('background-color: transparent;')
+    expect(corner).toContain('background-color: transparent;')
+    expect(button).toContain('display: none;')
+    expect(thumb).toContain('border: 2px solid transparent;')
+    expect(thumb).toContain('border-radius: 999px;')
+    expect(thumb).toContain('background-color: var(--color-scrollbar-thumb);')
+    expect(thumb).toContain('background-clip: content-box;')
+    expect(thumbHover).toContain('background-color: var(--color-scrollbar-thumb-hover);')
+    expect(thumbActive).toContain('background-color: var(--color-scrollbar-thumb-active);')
+  })
+
   test('uses a thin, hover-enhanced horizontal scrollbar across project navigation and file areas', () => {
     const contract = readText(new URL('contract.css', THEME_ROOT))
     const normalizedContract = contract.replace(/\s+/g, ' ')

@@ -405,6 +405,12 @@ function renderList(
 }
 
 describe('SidebarProjectList', () => {
+  test('uses the shared project list scrollbar contract', () => {
+    renderList()
+
+    expect(container!.querySelector('#project-list')?.classList.contains('project-list-scrollbar')).toBe(true)
+  })
+
   test('registers each project row with a dedicated sortable activator', () => {
     renderList()
 
