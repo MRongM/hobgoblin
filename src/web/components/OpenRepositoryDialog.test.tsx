@@ -261,6 +261,68 @@ describe('OpenRepositoryDialog', () => {
     expect(onOpen).toHaveBeenCalledWith('wsl://Ubuntu/root/src/hobgoblin')
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  test('adapts a WSL UNC path pasted from PowerShell and submits a WSL locator', async () => {
+    wslImportMocks.hostPlatform = 'win32'
+    const onOpen = vi.fn(
+      async (): Promise<OpenRepoResult> => ({
+        ok: true,
+        id: 'wsl://Ubuntu/home/dev/repo',
+      }),
+    )
+    render(<OpenRepositoryDialog open onClose={vi.fn()} onOpen={onOpen} />)
+    await flush()
+
+    setInputValue('#open-repo-path', '\\\\wsl.localhost\\Ubuntu\\home\\dev\\repo')
+    await flush()
+
+    expect(buttonByText('repo-tabs.open-source-wsl').getAttribute('data-variant')).toBe('default')
+    expect(input('#open-repo-wsl-distribution').value).toBe('Ubuntu')
+    expect(input('#open-repo-path').value).toBe('/home/dev/repo')
+    click('button[type="submit"]')
+    await flush()
+
+    expect(onOpen).toHaveBeenCalledWith('wsl://Ubuntu/home/dev/repo')
+  })
+
+  test('preserves a WSL UNC distribution recognized before discovery completes', async () => {
+    wslImportMocks.hostPlatform = 'win32'
+    const distributionLoad = createDeferred<string[]>()
+    wslImportMocks.getDistributions.mockReturnValueOnce(distributionLoad.promise)
+    render(<OpenRepositoryDialog open onClose={vi.fn()} onOpen={vi.fn()} />)
+
+    setInputValue('#open-repo-path', '\\\\wsl.localhost\\Debian\\home\\dev\\repo')
+    await flush()
+    expect(input('#open-repo-wsl-distribution').value).toBe('Debian')
+
+    distributionLoad.resolve(['Ubuntu', 'Debian'])
+    await flush()
+
+    expect(input('#open-repo-wsl-distribution').value).toBe('Debian')
+    expect(input('#open-repo-path').value).toBe('/home/dev/repo')
+  })
+
+  test('adapts a WSL drive mount to a native Local path', async () => {
+    wslImportMocks.hostPlatform = 'win32'
+    const onOpen = vi.fn(
+      async (): Promise<OpenRepoResult> => ({
+        ok: true,
+        id: 'C:\\Users\\dev\\repo',
+      }),
+    )
+    render(<OpenRepositoryDialog open initialSource="wsl" onClose={vi.fn()} onOpen={onOpen} />)
+    await flush()
+
+    setInputValue('#open-repo-path', '/mnt/c/Users/dev/repo')
+    await flush()
+
+    expect(buttonByText('repo-tabs.open-source-local').getAttribute('data-variant')).toBe('default')
+    expect(input('#open-repo-path').value).toBe('C:\\Users\\dev\\repo')
+    click('button[type="submit"]')
+    await flush()
+
+    expect(onOpen).toHaveBeenCalledWith('C:\\Users\\dev\\repo')
+  })
 })
 
 function render(element: ReactNode) {

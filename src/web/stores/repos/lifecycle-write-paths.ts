@@ -33,6 +33,7 @@ import {
   type RemoteRepoTarget,
   type RepoSessionEntry,
 } from '#/shared/remote-repo.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 
 interface ResolvedRepo {
   id: string
@@ -69,6 +70,16 @@ function sessionEntryFromInput(input: string | RepoSessionEntry): RepoSessionEnt
 
 function sessionEntryForReprobe(repo: Pick<ReposStore['repos'][string], 'id' | 'remote'>): string | RepoSessionEntry {
   return repo.remote.target ? remoteRepoSessionEntry(repo.remote.target) : repo.id
+}
+
+function repositoryIdAfterReprobe(
+  current: Pick<ReposStore['repos'][string], 'id' | 'remote'>,
+  resolved: ResolvedRepo,
+): string | null {
+  if (current.remote.target || resolved.target || isRemoteRepoId(current.id) || isRemoteRepoId(resolved.id)) {
+    return current.id === resolved.id ? current.id : null
+  }
+  return sameLocalFilePath(current.id, resolved.id) ? current.id : null
 }
 
 export async function resolveRepoPath(
@@ -240,22 +251,40 @@ export async function reprobeWorkspaceCapability(
     return { kind: 'unavailable', id, token: nextToken, message }
   }
 
-  const resolvedRepo = resolved.repo
+  const canonicalId = repositoryIdAfterReprobe(fresh, resolved.repo)
+  if (!canonicalId) {
+    const message = 'error.repository-root-changed'
+    let nextToken = token
+    set((s) => {
+      const repo = s.repos[id]
+      if (!repo || repo.instanceToken !== token) return s
+      const nextRepo = replaceRepo(repo, (draft) => {
+        rotateRepoInstanceToken(draft)
+        resetRepoOperations(draft)
+        markRepoUnavailable(draft, message)
+      })
+      nextToken = nextRepo.instanceToken
+      return { repos: { ...s.repos, [id]: nextRepo } }
+    })
+    return { kind: 'unavailable', id, token: nextToken, message }
+  }
+
+  const resolvedRepo = { ...resolved.repo, id: canonicalId }
   let changed: boolean | null = null
 
   set((s) => {
-    const repo = s.repos[id]
+    const repo = s.repos[canonicalId]
     if (!repo || repo.instanceToken !== token) return s
     const result = addResolvedRepo(s, resolvedRepo)
     changed = result.changed
     return result.changed ? { repos: result.repos, order: result.order } : s
   })
 
-  const nextRepo = get().repos[resolvedRepo.id]
+  const nextRepo = get().repos[canonicalId]
   if (changed === null || !nextRepo) return { kind: 'stale' }
   return {
     kind: 'available',
-    id: resolvedRepo.id,
+    id: canonicalId,
     token: nextRepo.instanceToken,
     isGitRepo: nextRepo.isGitRepo,
     changed,

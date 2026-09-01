@@ -1225,6 +1225,7 @@ export const ko: Record<DictKey, string> = {
   // ---- Errors / banners --------------------------------------------------
   'error.not-git-repo': 'git 리포지토리가 아닙니다',
   'error.failed-read-repo': '리포지토리 읽기 실패',
+  'error.repository-root-changed': '저장소 루트가 변경되었습니다. 동기화하기 전에 프로젝트를 다시 여세요.',
   'error.merge-out-repository-unavailable': '리포지토리를 사용할 수 없습니다.',
   'error.merge-out-read-failed': '병합 조건을 확인할 수 없습니다.',
   'error.merge-out-source-worktree-required': '소스 브랜치가 이 워크트리에 체크아웃되어 있어야 합니다.',

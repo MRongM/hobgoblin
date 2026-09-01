@@ -1179,6 +1179,7 @@ export const zh: Record<DictKey, string> = {
   // ---- Errors / banners --------------------------------------------------
   'error.not-git-repo': '不是 git 仓库',
   'error.failed-read-repo': '读取仓库失败',
+  'error.repository-root-changed': '仓库根目录已发生变化，请重新打开项目后再同步。',
   'error.merge-out-repository-unavailable': '仓库不可用。',
   'error.merge-out-read-failed': '无法检查合并出条件。',
   'error.merge-out-source-worktree-required': '源分支必须检出在当前工作树中。',

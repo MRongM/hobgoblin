@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { openRepoFromDialog } from '#/web/lib/open-repo-dialog.ts'
+import { openRepoFromDialog, projectOpenRepositoryPathInput } from '#/web/lib/open-repo-dialog.ts'
 import { installGoblinTestBridge } from '#/web/stores/repos/test-utils.ts'
 import type { OpenRepoResult } from '#/web/stores/repos/types.ts'
 const mocks = vi.hoisted(() => ({
@@ -95,5 +95,51 @@ describe('openRepoFromDialog', () => {
     expect(ensureWorkspaceOpen).not.toHaveBeenCalled()
     expect(activateRepo).not.toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+})
+
+describe('projectOpenRepositoryPathInput', () => {
+  test('projects WSL locators and UNC paths into WSL fields', () => {
+    expect(
+      projectOpenRepositoryPathInput('\\\\wsl.localhost\\ubuntu\\home\\dev\\repo', {
+        source: 'local',
+        distribution: '',
+        distributions: ['Ubuntu'],
+      }),
+    ).toEqual({ source: 'wsl', distribution: 'Ubuntu', path: '/home/dev/repo' })
+    expect(
+      projectOpenRepositoryPathInput('wsl://Ubuntu/home/dev/repo', {
+        source: 'local',
+        distribution: '',
+        distributions: ['Ubuntu'],
+      }),
+    ).toEqual({ source: 'wsl', distribution: 'Ubuntu', path: '/home/dev/repo' })
+  })
+
+  test('projects a standard WSL drive mount back to Local', () => {
+    expect(
+      projectOpenRepositoryPathInput('/mnt/c/Users/dev/repo', {
+        source: 'wsl',
+        distribution: 'Ubuntu',
+        distributions: ['Ubuntu'],
+      }),
+    ).toEqual({ source: 'local', distribution: 'Ubuntu', path: 'C:\\Users\\dev\\repo' })
+  })
+
+  test('does not guess a distribution for a bare Linux path', () => {
+    expect(
+      projectOpenRepositoryPathInput('/home/dev/repo', {
+        source: 'local',
+        distribution: '',
+        distributions: ['Ubuntu'],
+      }),
+    ).toEqual({ source: 'local', distribution: '', path: '/home/dev/repo' })
+    expect(
+      projectOpenRepositoryPathInput('/home/dev/repo', {
+        source: 'wsl',
+        distribution: 'Ubuntu',
+        distributions: ['Ubuntu'],
+      }),
+    ).toEqual({ source: 'wsl', distribution: 'Ubuntu', path: '/home/dev/repo' })
   })
 })
