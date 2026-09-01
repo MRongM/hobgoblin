@@ -289,7 +289,7 @@ describe('desktop build scripts', () => {
     expect(releaseScript).toContain("platform === 'macos' ? 'dmg' : 'exe'")
     expect(releaseScript).toContain("path.join('release', plan.artifactName)")
     expect(releaseScript).toContain("const viteCli = path.join(repoRoot, 'node_modules/vite/bin/vite.js')")
-    expect(releaseScript).toContain('await run(process.execPath, [viteCli])')
+    expect(releaseScript).toContain("await run(process.execPath, [viteCli, 'build'])")
     expect(releaseScript).toContain(
       "const electronBuilderCli = path.join(repoRoot, 'node_modules/electron-builder/cli.js')",
     )
