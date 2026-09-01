@@ -1526,7 +1526,7 @@ export const ko: Record<DictKey, string> = {
   'settings.general.open-from-terminal-title': '터미널에서 열기',
   'settings.general.open-from-terminal-body':
     'macOS에서는 터미널이나 스크립트에서 로컬 리포지토리 경로를 Hobgoblin으로 바로 열 수 있습니다.',
-  'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
+  'settings.general.open-from-terminal-command': 'hob /path/to/repo',
   'settings.general.open-app-config-title': '애플리케이션 구성 열기',
   'settings.general.open-app-config-body':
     '선택한 편집기에서 애플리케이션 설정과 워크스페이스 구성이 있는 디렉터리를 엽니다.',

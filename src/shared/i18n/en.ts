@@ -1680,7 +1680,7 @@ export const en = {
   'settings.general.open-from-terminal-title': 'Open from Terminal',
   'settings.general.open-from-terminal-body':
     'On macOS, you can open a local repository directly in Hobgoblin from Terminal or scripts.',
-  'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
+  'settings.general.open-from-terminal-command': 'hob /path/to/repo',
   'settings.general.open-app-config-title': 'Open application configuration',
   'settings.general.open-app-config-body':
     'Open the directory containing application settings and workspace configuration in the selected editor.',

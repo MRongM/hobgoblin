@@ -742,7 +742,7 @@ describe('i18n dictionaries', () => {
       expect(
         dict['settings.general.open-from-terminal-command'],
         `${lang}.settings.general.open-from-terminal-command`,
-      ).toBe('open -b hobgoblin.app /path/to/repo')
+      ).toBe('hob /path/to/repo')
 
       for (const [key, value] of Object.entries(dict)) {
         expect(value, `${lang}.${key}`).not.toContain('Goblin')
