@@ -45,6 +45,7 @@ describe('renderer bootstrap seeding', () => {
         globalShortcut: 'CommandOrControl+Alt+G',
         globalShortcutRegistered: true,
         terminalApp: 'ghostty',
+        windowsInternalTerminalShell: 'auto',
         editorApp: 'cursor',
         topbarHeightPx: 34,
         toolbarHeightPx: 34,

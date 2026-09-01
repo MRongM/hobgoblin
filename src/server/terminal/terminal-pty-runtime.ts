@@ -2,6 +2,7 @@ import * as pty from 'node-pty'
 import os from 'node:os'
 import path from 'node:path'
 import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
+import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 
 export interface TerminalPtyRuntime {
@@ -19,6 +20,7 @@ export interface SpawnTerminalPtyRuntimeInput {
   cwd: string
   cols: number
   rows: number
+  windowsInternalTerminalShell?: WindowsInternalTerminalShellPref
 }
 
 export type SpawnTerminalPtyRuntimeResult =
@@ -60,7 +62,7 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
         lastError instanceof Error
           ? lastError.message
           : process.platform === 'win32' && !input.command
-            ? 'No supported Windows terminal shell found'
+            ? windowsInternalTerminalShellUnavailableMessage(input.windowsInternalTerminalShell)
             : 'error.unknown',
     }
   } catch (error) {
@@ -81,13 +83,27 @@ function resolveTerminalPtySpawnCandidates(
   }
 
   if (process.platform === 'win32') {
-    return resolveWindowsTerminalShellCandidates({ cwd: input.cwd }).map((candidate) => ({
+    return resolveWindowsTerminalShellCandidates({
+      cwd: input.cwd,
+      ...(input.windowsInternalTerminalShell
+        ? { preference: normalizeWindowsInternalTerminalShellPref(input.windowsInternalTerminalShell) }
+        : {}),
+    }).map((candidate) => ({
       command: candidate.command,
       args: input.args ?? candidate.args,
     }))
   }
 
   return [{ command: process.env.SHELL || '/bin/zsh', args: input.args ?? ['-l'] }]
+}
+
+function windowsInternalTerminalShellUnavailableMessage(
+  preference: WindowsInternalTerminalShellPref | undefined,
+): string {
+  const normalized = normalizeWindowsInternalTerminalShellPref(preference)
+  return normalized === 'auto'
+    ? 'No supported Windows terminal shell found'
+    : `error.windows-internal-terminal-${normalized}-unavailable`
 }
 
 export function detectWindowsPtyCompatibility(

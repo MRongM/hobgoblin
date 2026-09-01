@@ -4,6 +4,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { TerminalCustomButton } from '#/shared/settings.ts'
+import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
@@ -25,6 +26,7 @@ const i18nMocks = vi.hoisted(() => ({
 }))
 
 const clipboardMocks = vi.hoisted(() => ({
+  readTerminalClipboardText: vi.fn(async (): Promise<string | null> => ''),
   writeTerminalClipboardText: vi.fn(async () => true),
 }))
 
@@ -37,6 +39,7 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/components/terminal/terminal-clipboard.ts', () => ({
+  readTerminalClipboardText: clipboardMocks.readTerminalClipboardText,
   writeTerminalClipboardText: clipboardMocks.writeTerminalClipboardText,
 }))
 
@@ -45,12 +48,14 @@ vi.mock('sonner', () => ({
 }))
 
 const appShellMocks = vi.hoisted(() => ({
+  readSystemClipboardImage: vi.fn(async (): Promise<ClipboardBinaryFilePayload | null> => null),
   readSystemClipboardFilePaths: vi.fn(async () => [] as string[]),
   saveClipboardBinaryFilesFromPaste: vi.fn(),
 }))
 
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: () => '',
+  readSystemClipboardImage: appShellMocks.readSystemClipboardImage,
   readSystemClipboardFilePaths: appShellMocks.readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste: appShellMocks.saveClipboardBinaryFilesFromPaste,
 }))
@@ -115,6 +120,8 @@ afterEach(() => {
   runtimeSettingsMocks.terminalCustomButtonSize = 'medium'
   runtimeSettingsMocks.terminalCustomButtons = []
   i18nMocks.translations = {}
+  appShellMocks.readSystemClipboardImage.mockReset()
+  appShellMocks.readSystemClipboardImage.mockResolvedValue(null)
   appShellMocks.readSystemClipboardFilePaths.mockReset()
   appShellMocks.readSystemClipboardFilePaths.mockResolvedValue([])
   appShellMocks.saveClipboardBinaryFilesFromPaste.mockReset()
@@ -123,6 +130,8 @@ afterEach(() => {
   editorOpenMocks.openWorktreeEditorTarget.mockResolvedValue({ ok: true })
   clipboardMocks.writeTerminalClipboardText.mockReset()
   clipboardMocks.writeTerminalClipboardText.mockResolvedValue(true)
+  clipboardMocks.readTerminalClipboardText.mockReset()
+  clipboardMocks.readTerminalClipboardText.mockResolvedValue('')
   toastMocks.error.mockReset()
   mobileDetectionMocks.isMobileDevice = false
   runtimeShortcutSettingsMocks.shortcutsDisabled = false
@@ -133,6 +142,282 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test.each(['viewer', 'unowned'] as const)(
+    'offers Copy without Paste for a selected %s desktop terminal',
+    async (role) => {
+      const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+      const selectionText = vi.fn(() => 'selected output')
+      const clearMobileSelection = vi.fn()
+      const { container, root } = await renderTerminalSlotFixture(role, { selectionText, clearMobileSelection })
+
+      try {
+        clearMobileSelection.mockClear()
+        const host = container.querySelector('.goblin-terminal-slot__host')
+        await act(async () => {
+          host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+          await Promise.resolve()
+        })
+
+        const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        expect(items.map((item) => item.textContent)).toEqual(['menu.edit.copy'])
+        const item = items[0]
+        expect(item).toBeInstanceOf(HTMLElement)
+
+        await act(async () => {
+          item?.click()
+          await Promise.resolve()
+        })
+
+        expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected output')
+        expect(clearMobileSelection).not.toHaveBeenCalled()
+      } finally {
+        platformSpy.mockRestore()
+        await act(async () => root.unmount())
+        container.remove()
+      }
+    },
+  )
+
+  test.each([
+    { platform: 'Win32', label: 'Windows' },
+    { platform: 'MacIntel', label: 'macOS' },
+    { platform: 'Linux x86_64', label: 'desktop Web' },
+  ])('opens Paste for a controlling terminal without a selection on $label', async ({ platform }) => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue('echo pasted')
+    const pasteText = vi.fn()
+    const focusTerminal = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => ''),
+      pasteText,
+      focusTerminal,
+    })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      expect(items.map((item) => item.textContent)).toEqual(['menu.edit.paste'])
+
+      await act(async () => {
+        items[0]?.click()
+        await Promise.resolve()
+      })
+
+      expect(clipboardMocks.readTerminalClipboardText).toHaveBeenCalledTimes(1)
+      expect(pasteText).toHaveBeenCalledWith('terminal-1', 'echo pasted')
+      expect(focusTerminal).toHaveBeenCalledWith('terminal-1')
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('opens Paste when right-click starts inside the xterm input textarea', async () => {
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue('input paste')
+    const pasteText = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { pasteText })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const xtermInput = document.createElement('textarea')
+      xtermInput.className = 'xterm-helper-textarea'
+      host?.appendChild(xtermInput)
+
+      await act(async () => {
+        xtermInput.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      expect(items.map((item) => item.textContent)).toEqual(['menu.edit.paste'])
+
+      await act(async () => {
+        items[0]?.click()
+        await Promise.resolve()
+      })
+
+      expect(pasteText).toHaveBeenCalledWith('terminal-1', 'input paste')
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('orders Copy before Paste for a selected controlling desktop terminal', async () => {
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => 'selected output'),
+    })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+      expect(items.map((item) => item.textContent)).toEqual(['menu.edit.copy', 'menu.edit.paste'])
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not open a context menu for an unowned desktop terminal without a selection', async () => {
+    const { container, root } = await renderTerminalSlotFixture('unowned', { selectionText: vi.fn(() => '') })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      expect(document.body.querySelector('[role="menuitem"]')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps the Windows terminal selection when context-menu copy fails', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const clearMobileSelection = vi.fn()
+    clipboardMocks.writeTerminalClipboardText.mockResolvedValue(false)
+    i18nMocks.translations['terminal.selection-copy-failed'] = 'Copy failed'
+    const { container, root } = await renderTerminalSlotFixture('controller', {
+      selectionText: vi.fn(() => 'retry selection'),
+      clearMobileSelection,
+    })
+
+    try {
+      clearMobileSelection.mockClear()
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+        candidate.textContent?.includes('menu.edit.copy'),
+      )
+
+      await act(async () => {
+        item?.click()
+        await Promise.resolve()
+      })
+
+      expect(toastMocks.error).toHaveBeenCalledWith('Copy failed')
+      expect(clearMobileSelection).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('reports clipboard read failures without writing terminal input', async () => {
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue(null)
+    i18nMocks.translations['terminal.clipboard-paste-failed'] = 'Paste failed'
+    const pasteText = vi.fn()
+    const focusTerminal = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { pasteText, focusTerminal })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+      const pasteItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.includes('menu.edit.paste'),
+      )
+
+      await act(async () => {
+        pasteItem?.click()
+        await Promise.resolve()
+      })
+
+      expect(toastMocks.error).toHaveBeenCalledWith('Paste failed')
+      expect(pasteText).not.toHaveBeenCalled()
+      expect(focusTerminal).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('ignores an empty text clipboard without reporting an error', async () => {
+    clipboardMocks.readTerminalClipboardText.mockResolvedValue('')
+    const pasteText = vi.fn()
+    const focusTerminal = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { pasteText, focusTerminal })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+      const pasteItem = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.includes('menu.edit.paste'),
+      )
+
+      await act(async () => {
+        pasteItem?.click()
+        await Promise.resolve()
+      })
+
+      expect(toastMocks.error).not.toHaveBeenCalled()
+      expect(pasteText).not.toHaveBeenCalled()
+      expect(focusTerminal).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test.each([
+    { platform: 'MacIntel', label: 'macOS' },
+    { platform: 'Linux x86_64', label: 'Linux desktop Web' },
+  ])('opens the desktop terminal selection context menu on $label', async ({ platform }) => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(platform)
+    const selectionText = vi.fn(() => 'selected output')
+    const clearMobileSelection = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', { selectionText, clearMobileSelection })
+
+    try {
+      clearMobileSelection.mockClear()
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      await act(async () => {
+        host?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+        await Promise.resolve()
+      })
+
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((candidate) =>
+        candidate.textContent?.includes('menu.edit.copy'),
+      )
+      expect(item).toBeInstanceOf(HTMLElement)
+
+      await act(async () => {
+        item?.click()
+        await Promise.resolve()
+      })
+
+      expect(clipboardMocks.writeTerminalClipboardText).toHaveBeenCalledWith('selected output')
+      expect(clearMobileSelection).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test('marks a desktop controlling terminal as the Telegram target on emulator focus', async () => {
     const markTelegramInputTarget = vi.fn()
     const { container, root } = await renderTerminalSlotFixture('controller', {
@@ -549,6 +834,8 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
+      pasteText: vi.fn(),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -706,6 +993,8 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
+      pasteText: vi.fn(),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -2200,6 +2489,8 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
+      pasteText: vi.fn(),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -2320,6 +2611,8 @@ describe('TerminalSlot', () => {
       extendMobileSelection: vi.fn(),
       finishMobileSelection: vi.fn(),
       cancelMobileSelection: vi.fn(),
+      selectionText: vi.fn(() => ''),
+      pasteText: vi.fn(),
       mobileSelectionText: vi.fn(() => ''),
       clearMobileSelection: vi.fn(),
       writeExtraKey: vi.fn(),
@@ -2637,8 +2930,150 @@ describe('TerminalSlot', () => {
         temporaryFilesDirectory: '/Users/test/project/tmp',
         files: [{ name: 'image.png', type: 'image/png', bytes: expect.any(ArrayBuffer) }],
       })
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
       expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/Users/test/project/tmp/pasted image.png'")
     } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('uses a Windows native clipboard image when a paste event has no DOM files', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new Uint8Array([1, 2, 3]).buffer }
+    appShellMocks.readSystemClipboardImage.mockResolvedValue(payload)
+    appShellMocks.saveClipboardBinaryFilesFromPaste.mockResolvedValue({
+      ok: true,
+      paths: ['C:/project/tmp/pasted-image.png'],
+    })
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+      await vi.waitFor(() => expect(writeInput).toHaveBeenCalled())
+
+      expect(event.defaultPrevented).toBe(true)
+      expect(appShellMocks.readSystemClipboardImage).toHaveBeenCalledTimes(1)
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).toHaveBeenCalledWith({
+        worktreePath: '/worktree',
+        temporaryFilesDirectory: '',
+        files: [payload],
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', 'C:/project/tmp/pasted-image.png')
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('uploads a Windows native clipboard image for a remote terminal', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    appShellMocks.readSystemClipboardImage.mockResolvedValue({
+      name: 'clipboard.png',
+      type: 'image/png',
+      bytes: new Uint8Array([1, 2, 3]).buffer,
+    })
+    repoClientMocks.transferRepositoryFiles.mockResolvedValue({
+      ok: true,
+      copied: [{ destinationPath: '/srv/repo-feature/tmp/pasted-image.png', kind: 'file' }],
+      renamed: [],
+      failed: [],
+    })
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture(
+      'controller',
+      { writeInput },
+      { repoRoot: REMOTE_REPO_ID, worktreePath: '/srv/repo-feature' },
+    )
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+      await vi.waitFor(() => expect(writeInput).toHaveBeenCalled())
+
+      expect(repoClientMocks.transferRepositoryFiles).toHaveBeenCalledWith({
+        repoId: REMOTE_REPO_ID,
+        worktreePath: '/srv/repo-feature',
+        targetDirPath: '/srv/repo-feature/tmp',
+        source: {
+          kind: 'uploadedItems',
+          items: [
+            {
+              name: expect.stringMatching(/^clipboard-20\d{6}-\d{6}\.png$/),
+              mimeType: 'image/png',
+              bytesBase64: 'AQID',
+              byteLength: 3,
+            },
+          ],
+        },
+      })
+      expect(writeInput).toHaveBeenCalledWith('terminal-1', '/srv/repo-feature/tmp/pasted-image.png')
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('keeps Windows terminal paste text ahead of the native image fallback', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('Win32')
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => 'copied text', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+
+      expect(event.defaultPrevented).toBe(false)
+      expect(appShellMocks.readSystemClipboardFilePaths).not.toHaveBeenCalled()
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('does not use the Windows native image fallback on macOS', async () => {
+    const platformSpy = vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('controller', { writeInput })
+
+    try {
+      const host = container.querySelector('.goblin-terminal-slot__host')
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', {
+        value: { getData: () => '', files: [], items: [] },
+      })
+
+      await act(async () => host?.dispatchEvent(event))
+      await vi.waitFor(() => expect(appShellMocks.readSystemClipboardFilePaths).toHaveBeenCalledTimes(1))
+
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
+      expect(appShellMocks.saveClipboardBinaryFilesFromPaste).not.toHaveBeenCalled()
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      platformSpy.mockRestore()
       await act(async () => root.unmount())
       container.remove()
     }
@@ -2701,6 +3136,7 @@ describe('TerminalSlot', () => {
         files: [],
         sourcePaths: ['/Users/test/Desktop/report.pdf'],
       })
+      expect(appShellMocks.readSystemClipboardImage).not.toHaveBeenCalled()
       expect(writeInput).toHaveBeenCalledWith('terminal-1', "'/worktree/tmp/pasted report.pdf'")
     } finally {
       await act(async () => root.unmount())
@@ -2922,7 +3358,7 @@ function controllerFixture(
 async function renderTerminalSlotFixture(
   role: 'controller' | 'viewer' | 'unowned',
   contextOverrides: Partial<TerminalSessionContextValue> = {},
-  fixtureOptions: { tmuxBacked?: boolean } = {},
+  fixtureOptions: { tmuxBacked?: boolean; repoRoot?: string; worktreePath?: string } = {},
 ): Promise<{ container: HTMLDivElement; root: Root }> {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const container = document.createElement('div')
@@ -2943,7 +3379,10 @@ async function renderTerminalSlotFixture(
     root.render(
       <TerminalSessionContext.Provider value={context}>
         <TerminalSessionReadContext.Provider value={readContext}>
-          <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+          <TerminalSlot
+            repoRoot={fixtureOptions.repoRoot ?? '/repo'}
+            worktreePath={fixtureOptions.worktreePath ?? '/worktree'}
+          />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
     )
@@ -3131,6 +3570,8 @@ function terminalContext(overrides: Partial<TerminalSessionContextValue> = {}): 
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     clearBell: vi.fn(() => false),

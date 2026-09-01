@@ -151,6 +151,9 @@ export function createApp(options: ServerAppOptions): Hono {
     createSettingsRoutes(settingsState, {
       revokeAllWebSessions: webAccessAuth.revokeAll,
       onTelegramRuntimeConfigChanged: options.onTelegramRuntimeConfigChanged,
+      onWindowsInternalTerminalShellChanged(preference) {
+        options.terminalHost.setWindowsInternalTerminalShellPreference?.(preference)
+      },
     }),
   )
   app.route(

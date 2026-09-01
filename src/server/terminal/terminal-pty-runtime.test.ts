@@ -53,6 +53,52 @@ describe('spawnTerminalPtyRuntime', () => {
     )
   })
 
+  test('forwards an explicit Windows internal terminal shell preference to candidate resolution', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    resolveWindowsShellCandidatesMock.mockReturnValue([
+      {
+        kind: 'windows-powershell',
+        command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        args: ['-NoLogo'],
+      },
+    ])
+    spawnMock.mockReturnValue(terminalPty('powershell.exe'))
+
+    const result = spawnTerminalPtyRuntime({
+      cwd: 'C:\\repo',
+      cols: 80,
+      rows: 24,
+      windowsInternalTerminalShell: 'powershell',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(resolveWindowsShellCandidatesMock).toHaveBeenCalledWith({
+      cwd: 'C:\\repo',
+      preference: 'powershell',
+    })
+  })
+
+  test.each(['wsl', 'powershell', 'cmd'] as const)(
+    'returns a selection-specific error when explicit %s has no usable candidate',
+    (windowsInternalTerminalShell) => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+      resolveWindowsShellCandidatesMock.mockReturnValue([])
+
+      expect(
+        spawnTerminalPtyRuntime({
+          cwd: 'C:\\repo',
+          cols: 80,
+          rows: 24,
+          windowsInternalTerminalShell,
+        }),
+      ).toEqual({
+        ok: false,
+        message: `error.windows-internal-terminal-${windowsInternalTerminalShell}-unavailable`,
+      })
+      expect(spawnMock).not.toHaveBeenCalled()
+    },
+  )
+
   test('uses bundled ConPTY on Windows to avoid the system console host', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     resolveWindowsShellCandidatesMock.mockReturnValue([
@@ -146,6 +192,7 @@ describe('spawnTerminalPtyRuntime', () => {
     const result = spawnTerminalPtyRuntime({
       command: 'C:\\Tools\\custom-shell.exe',
       args: ['--interactive'],
+      windowsInternalTerminalShell: 'wsl',
       cwd: 'C:\\repo',
       cols: 80,
       rows: 24,

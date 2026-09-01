@@ -128,6 +128,10 @@ _Avoid_: Windows Terminal, terminal emulator, external terminal
 The automatic Windows internal-terminal shell policy that starts a usable WSL session before any native Windows shell, while retaining native-shell fallback when WSL is unavailable or cannot start. It applies equally to the primary application Windows version and the independent Windows version, and is distinct from a user-selected distribution or an external Windows Terminal profile.
 _Avoid_: WSL-only terminal, Windows Terminal integration, configured WSL distribution
 
+**Selectable Windows internal terminal shell**:
+The persisted primary-application Windows preference for ordinary local Windows internal terminals: Automatic preserves the WSL-preferred policy, while explicit WSL, PowerShell, and Command Prompt choices remain within their selected shell family. Preference changes apply to new and restarted terminals without switching running sessions, changing WSL or SSH project routing, or changing the Windows project Git execution environment.
+_Avoid_: External terminal selector, WSL distribution selector, per-project shell, running-session shell switch
+
 **Windows project Git execution environment**:
 The native Windows environment in which Hobgoblin performs application-owned Git, branch, and worktree operations for a local Windows project, independently of that project's internal terminal shell. When its internal shell is WSL, an interactive `git` typed in that shell is the distribution's Linux Git and may have different configuration or credentials; changing the shell never changes the project's identity or Hobgoblin's Git backend. Only a WSL project uses its registered distribution for application-owned Git operations.
 _Avoid_: WSL shell Git backend, terminal-selected Git backend, automatic WSL project
@@ -415,6 +419,14 @@ _Avoid_: Using project as a synonym for every repository inside a multi-reposito
 **Repository**:
 One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project. The same repository may appear simultaneously as its own project and as a multi-repository workspace member; both contexts share one repository state.
 _Avoid_: Workspace repository, subproject
+
+**Repository synchronization**:
+An explicit, non-destructive Git action that refreshes a repository's remote-tracking refs and runtime repository state without opening or importing a Project, changing configured workspace membership, or moving a local branch or worktree.
+_Avoid_: Repository import, workspace discovery, Pull, complete remote alignment
+
+**Local file path bridge**:
+A shared lexical boundary that recognizes Windows drive paths, Windows UNC paths, standard WSL mount paths, WSL UNC paths, and WSL repository locators as stable local-host identities while retaining an authoritative path for the selected execution environment. It never resolves symlinks or selects a Git backend from the active terminal shell.
+_Avoid_: Universal path normalization, real-path resolution, shell-selected Git backend
 
 **Repository primary worktree**:
 The original Git worktree whose normalized path is the repository project path and whose identity is confirmed by Git worktree metadata. It is independent of the branch currently checked out there and is never synonymous with a branch named `main`.

@@ -1,5 +1,5 @@
 import type { BranchWorkspaceRepositorySnapshot } from '#/shared/branch-workspaces.ts'
-import { sameLocalHostPath } from '#/shared/path-semantics.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import type { WorkspaceRepositoryCandidate } from '#/shared/workspace.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
 
@@ -38,7 +38,7 @@ export function resolveBranchWorkspaceMemberTarget({
     return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
   }
   const branchAtMemberPath = repository.data.branches.find(
-    (entry) => entry.worktree?.path && sameLocalHostPath(entry.worktree.path, member.worktreePath),
+    (entry) => entry.worktree?.path && sameLocalFilePath(entry.worktree.path, member.worktreePath),
   )
   if (branchAtMemberPath) {
     const warning =
@@ -65,7 +65,7 @@ export function resolveBranchWorkspaceMemberTarget({
   if (!branch?.worktree?.path) {
     return { ok: false, reason: 'workspace.branch-workspace.member-branch-missing' }
   }
-  if (!sameLocalHostPath(branch.worktree.path, member.worktreePath)) {
+  if (!sameLocalFilePath(branch.worktree.path, member.worktreePath)) {
     return { ok: false, reason: 'workspace.branch-workspace.member-worktree-mismatch' }
   }
 

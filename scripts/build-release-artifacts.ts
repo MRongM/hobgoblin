@@ -50,10 +50,11 @@ export function createReleaseArtifactPlan(
 ): ReleaseArtifactPlan {
   const archFlag = arch === 'arm64' ? '--arm64' : '--x64'
   const platformArgs = platform === 'macos' ? ['--mac', 'dmg'] : ['--win', 'nsis']
+  const nativeDependencyArgs = platform === 'windows' ? ['--config.npmRebuild=false'] : []
   const extension = platform === 'macos' ? 'dmg' : 'exe'
   return {
     requiredHost: platform === 'macos' ? 'darwin' : 'win32',
-    builderArgs: [...platformArgs, archFlag, '--publish', 'never'],
+    builderArgs: [...platformArgs, archFlag, '--publish', 'never', ...nativeDependencyArgs],
     artifactName: `${APP_NAME}-${version}-${arch}.${extension}`,
   }
 }

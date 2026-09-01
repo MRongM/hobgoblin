@@ -872,6 +872,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.new-with-tmux': 'tmux ターミナル',
   'terminal.restore-directory-tmux': 'tmux ターミナルを復元',
   'terminal.internal': '内部ターミナル',
+  'terminal.internal-powershell': 'PowerShell 内部ターミナル',
+  'terminal.internal-wsl': 'WSL 内部ターミナル',
   'terminal.external': '外部ターミナル',
   'terminal.focus': 'ターミナルを最大化',
   'terminal.exit-focus': 'ターミナル最大化を終了',
@@ -947,6 +949,8 @@ export const ja: Record<DictKey, string> = {
   'terminal.command-deck.send': '送信',
   'terminal.mobile-scroll-scrubber': 'ドラッグしてターミナル履歴を表示',
   'terminal.selection-copy-failed': '選択したターミナルテキストをコピーできませんでした。もう一度お試しください。',
+  'terminal.clipboard-paste-failed':
+    'クリップボードのテキストを読み取れませんでした。キーボードの貼り付けショートカットをお試しください。',
   'terminal.custom-button-presets.confirm-continue.label': '確認・続行',
   'terminal.custom-button-presets.confirm-continue.value': '確認して続行してください',
   'terminal.custom-button-presets.try-if-needed.label': '必要なら試す',
@@ -1241,6 +1245,7 @@ export const ja: Record<DictKey, string> = {
   // ---- Errors / banners --------------------------------------------------
   'error.not-git-repo': 'git リポジトリではありません',
   'error.failed-read-repo': 'リポジトリの読み込みに失敗しました',
+  'error.repository-root-changed': 'リポジトリのルートが変更されました。同期する前にプロジェクトを開き直してください。',
   'error.merge-out-repository-unavailable': 'リポジトリを利用できません。',
   'error.merge-out-read-failed': 'マージ条件を確認できませんでした。',
   'error.merge-out-source-worktree-required':
@@ -1328,6 +1333,9 @@ export const ja: Record<DictKey, string> = {
   'error.commit-message-empty-output': 'コミットメッセージ生成ツールが空のメッセージを返しました。',
   'error.ghostty-not-installed': 'Ghostty がインストールされていません',
   'error.terminal-not-installed': 'ターミナルがインストールされていません',
+  'error.windows-internal-terminal-wsl-unavailable': '内部ターミナル用の WSL を利用できません',
+  'error.windows-internal-terminal-powershell-unavailable': '内部ターミナル用の PowerShell を利用できません',
+  'error.windows-internal-terminal-cmd-unavailable': '内部ターミナル用のコマンド プロンプトを利用できません',
   'error.vscode-not-installed': 'VS Code がインストールされていません',
   'error.editor-not-installed': 'エディタが見つかりません',
   'error.remote-editor-not-supported': '選択したエディタはリモート SSH ワークスペースを開けません',
@@ -1461,9 +1469,11 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.terminal-input-enabled-hint':
     '許可されたグループメンバーが Bot をメンションして、最後にフォーカスされた操作可能なターミナルへ1行送信できます。',
   'settings.telegram.terminal-input-user-ids': '許可するユーザー ID',
-  'settings.telegram.terminal-input-user-ids-hint': '1～32件の数値 Telegram ユーザー ID をカンマまたは空白で区切ります。',
+  'settings.telegram.terminal-input-user-ids-hint':
+    '1～32件の数値 Telegram ユーザー ID をカンマまたは空白で区切ります。',
   'settings.telegram.terminal-input-poll-timeout': 'ロングポーリング待機',
-  'settings.telegram.terminal-input-poll-timeout-hint': 'Telegram がメッセージを待機してからリクエストを更新する時間です。',
+  'settings.telegram.terminal-input-poll-timeout-hint':
+    'Telegram がメッセージを待機してからリクエストを更新する時間です。',
   'settings.telegram.poll-seconds': '秒',
   'settings.telegram.terminal-input-status': 'ポーリング状態',
   'settings.telegram.terminal-input-status-hint': 'サーバー上の Telegram 受信状態です。',
@@ -1472,10 +1482,12 @@ export const ja: Record<DictKey, string> = {
   'settings.telegram.terminal-input-status.running': '実行中',
   'settings.telegram.terminal-input-status.retrying': '再試行中',
   'settings.telegram.terminal-input-status.error': '設定エラー',
-  'settings.telegram.terminal-input-error.configuration-incomplete': 'Bot Token、数値グループ Chat ID、またはユーザー ID が不足しています。',
+  'settings.telegram.terminal-input-error.configuration-incomplete':
+    'Bot Token、数値グループ Chat ID、またはユーザー ID が不足しています。',
   'settings.telegram.terminal-input-error.authentication-failed': 'Telegram が Bot Token を拒否しました。',
   'settings.telegram.terminal-input-error.invalid-chat': '設定した Chat ID は対象グループではありません。',
-  'settings.telegram.terminal-input-error.webhook-conflict': 'Webhook が設定済みのためロングポーリングを開始できません。',
+  'settings.telegram.terminal-input-error.webhook-conflict':
+    'Webhook が設定済みのためロングポーリングを開始できません。',
   'settings.telegram.terminal-input-error.network-failed': 'Telegram に一時的に接続できません。自動再試行します。',
   'settings.telegram.terminal-input-error.telegram-rejected': 'Telegram がポーリング要求を拒否しました。',
   'telegram.terminal-input.reply.unauthorized': 'ターミナル入力を使用する権限がありません。',
@@ -1485,8 +1497,7 @@ export const ja: Record<DictKey, string> = {
   'telegram.terminal-input.reply.no-target': '現在、フォーカスされ操作権を持つターミナルがありません。',
   'telegram.terminal-input.reply.target-lost': 'ターミナル対象が変わったため、メッセージを送信しませんでした。',
   'telegram.terminal-input.reply.success': 'ターミナルへ送信しました',
-  'settings.telegram.master-off-hint':
-    'ターミナルベル通知はオフです。Telegram からのターミナル入力には影響しません。',
+  'settings.telegram.master-off-hint': 'ターミナルベル通知はオフです。Telegram からのターミナル入力には影響しません。',
   'settings.telegram.save': 'Telegram 設定を保存',
   'settings.telegram.saving': '保存中…',
   'settings.telegram.saved': 'Telegram 設定を保存しました',
@@ -1508,6 +1519,26 @@ export const ja: Record<DictKey, string> = {
   'settings.group.apps': '外部アプリ',
   'settings.group.sync': '同期',
   'settings.group.status-refresh': '状態更新',
+  'settings.macos-permissions.title': 'macOS システム権限',
+  'settings.macos-permissions.hint':
+    'Codex が Hobgoblin のターミナルから Computer Use を使用するときに必要な権限です。',
+  'settings.macos-permissions.screen-recording': '画面収録',
+  'settings.macos-permissions.screen-recording-hint':
+    'Computer Use がアプリのウインドウと画面の内容を表示できるようにします。',
+  'settings.macos-permissions.accessibility': 'アクセシビリティ',
+  'settings.macos-permissions.accessibility-hint': 'Computer Use がアプリ内でクリック、入力、移動できるようにします。',
+  'settings.macos-permissions.status.not-determined': '未要求',
+  'settings.macos-permissions.status.granted': '許可済み',
+  'settings.macos-permissions.status.denied': '未許可',
+  'settings.macos-permissions.status.restricted': '制限あり',
+  'settings.macos-permissions.status.unknown': '不明',
+  'settings.macos-permissions.status.unsupported': '未対応',
+  'settings.macos-permissions.authorize': '許可する',
+  'settings.macos-permissions.open-system-settings': 'システム設定を開く',
+  'settings.macos-permissions.requesting': '開いています…',
+  'settings.macos-permissions.request-failed': 'macOS の権限設定を開けません',
+  'settings.macos-permissions.restart-hint':
+    '権限を変更しても Computer Use がアプリを表示または操作できない場合は、Hobgoblin を再起動してください。',
   'settings.nav.integrations': '連携',
   'settings.nav.files': 'ファイル領域',
   'settings.nav.notifications': '通知',
@@ -1584,6 +1615,14 @@ export const ja: Record<DictKey, string> = {
   'settings.terminal.wsl': 'WSL',
   'settings.terminal.powershell': 'PowerShell',
   'settings.terminal.cmd': 'コマンド プロンプト',
+  'settings.windows-internal-terminal-shell.title': 'Windows 内部ターミナル',
+  'settings.windows-internal-terminal-shell.label': 'シェル',
+  'settings.windows-internal-terminal-shell.hint':
+    '新規および再起動したローカル Windows 内部ターミナルに適用されます。プロジェクトの Git 実行環境は変更されません。',
+  'settings.windows-internal-terminal-shell.auto': '自動（WSL 優先）',
+  'settings.windows-internal-terminal-shell.wsl': 'WSL',
+  'settings.windows-internal-terminal-shell.powershell': 'PowerShell',
+  'settings.windows-internal-terminal-shell.cmd': 'コマンド プロンプト',
   'settings.terminal.ghostty': 'Ghostty',
   'settings.terminal.terminal': 'Terminal.app',
   'settings.terminal-font.title': 'フォント',
@@ -1653,7 +1692,7 @@ export const ja: Record<DictKey, string> = {
   'settings.general.open-from-terminal-title': 'Terminal から開く',
   'settings.general.open-from-terminal-body':
     'macOS では、Terminal やスクリプトからローカルリポジトリのパスを Hobgoblin に直接渡して開けます。',
-  'settings.general.open-from-terminal-command': 'open -b hobgoblin.app /path/to/repo',
+  'settings.general.open-from-terminal-command': 'hob /path/to/repo',
   'settings.general.open-app-config-title': 'アプリケーション設定を開く',
   'settings.general.open-app-config-body':
     '選択したエディターでアプリケーション設定とワークスペース設定を含むディレクトリを開きます。',

@@ -123,6 +123,37 @@ describe('WorkspaceItemContextMenu', () => {
     expect(itemByText(items, 'terminal.restore-directory-tmux').hasAttribute('data-disabled')).toBe(true)
   })
 
+  test('omits unavailable tmux actions instead of rendering disabled placeholders', async () => {
+    renderMenu({ tmuxActionsVisible: false })
+
+    const labels = (await openContextMenu()).map((item) => item.textContent?.trim())
+
+    expect(labels).not.toContain('terminal.new-with-tmux')
+    expect(labels).not.toContain('terminal.restore-directory-tmux')
+  })
+
+  test('replaces the generic internal terminal entry with explicit Windows shell actions', async () => {
+    const powershell = vi.fn()
+    const wsl = vi.fn()
+    renderMenu({ powershell, wsl })
+
+    expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
+      'worktrees.open-in-editor-label',
+      'terminal.external',
+      'terminal.internal-powershell',
+      'terminal.internal-wsl',
+      'terminal.new-with-tmux',
+      'terminal.restore-directory-tmux',
+      'terminal.close-all',
+    ])
+
+    await clickContextMenuItem('terminal.internal-powershell')
+    await clickContextMenuItem('terminal.internal-wsl')
+
+    expect(powershell).toHaveBeenCalledTimes(1)
+    expect(wsl).toHaveBeenCalledTimes(1)
+  })
+
   test('confirms the live aggregate count before closing every current scoped session', async () => {
     const rootKey = '/workspace\0/workspace'
     const memberKey = '/workspace/api\0/worktrees/api-feature'
@@ -160,9 +191,12 @@ function renderMenu(
     editor?: () => void
     externalTerminal?: () => void
     internalTerminal?: () => void
+    powershell?: () => void
+    wsl?: () => void
     tmuxTerminal?: () => void
     restoreTmuxTerminals?: () => void
     restoreTmuxDisabled?: boolean
+    tmuxActionsVisible?: boolean
     editorDisabled?: boolean
     externalTerminalBusy?: boolean
     internalTerminalDisabled?: boolean
@@ -204,16 +238,36 @@ function renderMenu(
               icon: <span data-testid="internal-terminal-icon" />,
               onSelect: fixture.internalTerminal ?? vi.fn(),
             }}
-            tmuxTerminal={{
-              disabled: fixture.internalTerminalDisabled ?? false,
-              icon: <span data-testid="tmux-terminal-icon" />,
-              onSelect: fixture.tmuxTerminal ?? vi.fn(),
-            }}
-            restoreTmuxTerminals={{
-              disabled: fixture.restoreTmuxDisabled ?? false,
-              icon: <span data-testid="restore-tmux-terminals-icon" />,
-              onSelect: fixture.restoreTmuxTerminals ?? vi.fn(),
-            }}
+            windowsInternalTerminals={
+              fixture.powershell && fixture.wsl
+                ? {
+                    powershell: {
+                      disabled: false,
+                      icon: <span data-testid="powershell-terminal-icon" />,
+                      onSelect: fixture.powershell,
+                    },
+                    wsl: {
+                      disabled: false,
+                      icon: <span data-testid="wsl-terminal-icon" />,
+                      onSelect: fixture.wsl,
+                    },
+                  }
+                : undefined
+            }
+            {...(fixture.tmuxActionsVisible === false
+              ? {}
+              : {
+                  tmuxTerminal: {
+                    disabled: fixture.internalTerminalDisabled ?? false,
+                    icon: <span data-testid="tmux-terminal-icon" />,
+                    onSelect: fixture.tmuxTerminal ?? vi.fn(),
+                  },
+                  restoreTmuxTerminals: {
+                    disabled: fixture.restoreTmuxDisabled ?? false,
+                    icon: <span data-testid="restore-tmux-terminals-icon" />,
+                    onSelect: fixture.restoreTmuxTerminals ?? vi.fn(),
+                  },
+                })}
             actions={fixture.actions}
             worktreeTerminalKeys={fixture.worktreeTerminalKeys ?? []}
           >
@@ -304,6 +358,8 @@ function terminalCommandContext(
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     writeExtraKey: vi.fn(),

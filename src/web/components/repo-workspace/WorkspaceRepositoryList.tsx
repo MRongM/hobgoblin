@@ -39,6 +39,7 @@ import {
   type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { useRepositoryCreationActions } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 
 const restrictToVerticalRepositoryList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
@@ -137,6 +138,7 @@ function SortableWorkspaceRepositoryRow({
   )
   const externalActions = useProjectExternalOpenActions(repository.id)
   const internalTerminalAction = useProjectInternalTerminalAction(repository.id)
+  const tmuxMenuVisible = supportsTmuxMenu(repository.id)
   const repo = useReposStore((state) => state.repos[repository.id])
   const creation = useRepositoryCreationActions(repo, {
     forceDisabled: repository.unavailable,
@@ -178,6 +180,7 @@ function SortableWorkspaceRepositoryRow({
     icon: <Terminal aria-hidden="true" />,
     disabled: internalTerminalAction.disabled,
     busy: internalTerminalAction.busy,
+    visible: tmuxMenuVisible,
     onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
   }
   const handleOpenFileArea = onOpenFileArea
@@ -204,11 +207,15 @@ function SortableWorkspaceRepositoryRow({
         icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
       }}
       internalTerminal={{ ...internalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
-      tmuxTerminal={{
-        ...internalTerminalAction,
-        icon: <Terminal aria-hidden="true" />,
-        onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
-      }}
+      tmuxTerminal={
+        tmuxMenuVisible
+          ? {
+              ...internalTerminalAction,
+              icon: <Terminal aria-hidden="true" />,
+              onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
+            }
+          : undefined
+      }
       worktreeTerminalKeys={terminalWorktreeKeys}
     >
       <WorkspaceListItemFrame

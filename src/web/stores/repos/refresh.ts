@@ -129,7 +129,7 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return null
       const { token } = resolved
-      return await runExclusiveOperation({
+      const result = await runExclusiveOperation({
         set,
         get,
         id,
@@ -151,6 +151,13 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
             )
           }),
       })
+      if (result !== null) return result
+      const repoAfterReprobe = get().repos[id]
+      return repoAfterReprobe?.instanceToken !== token &&
+        repoAfterReprobe?.availability.phase === 'unavailable' &&
+        repoAfterReprobe.availability.reason === 'error.repository-root-changed'
+        ? { ok: false as const, message: repoAfterReprobe.availability.reason }
+        : null
     },
   }
 }

@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+import {
+  readTerminalClipboardText,
+  writeTerminalClipboardText,
+} from '#/web/components/terminal/terminal-clipboard.ts'
 
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
 const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand')
@@ -15,13 +18,44 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function setClipboard(clipboard: { writeText: (text: string) => Promise<void> } | undefined): void {
+interface ClipboardStub {
+  readText?: () => Promise<string>
+  writeText?: (text: string) => Promise<void>
+}
+
+function setClipboard(clipboard: ClipboardStub | undefined): void {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: clipboard })
 }
 
 function setExecCommand(execCommand: (command: string) => boolean): void {
   Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand })
 }
+
+describe('readTerminalClipboardText', () => {
+  test('returns clipboard text including an empty string', async () => {
+    const readText = vi.fn(async () => 'pasted text')
+    setClipboard({ readText })
+
+    await expect(readTerminalClipboardText()).resolves.toBe('pasted text')
+    expect(readText).toHaveBeenCalledTimes(1)
+
+    readText.mockResolvedValueOnce('')
+    await expect(readTerminalClipboardText()).resolves.toBe('')
+  })
+
+  test.each([
+    ['the API is unavailable', undefined],
+    [
+      'the API rejects',
+      async () => {
+        throw new Error('clipboard denied')
+      },
+    ],
+  ])('returns null when %s', async (_label, readText) => {
+    setClipboard(readText ? { readText } : undefined)
+    await expect(readTerminalClipboardText()).resolves.toBeNull()
+  })
+})
 
 describe('writeTerminalClipboardText', () => {
   test('prefers the Clipboard API and reports success', async () => {

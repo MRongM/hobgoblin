@@ -39,6 +39,7 @@ export type {
   TerminalAppAvailability,
   TerminalPref,
   ThemePref,
+  WindowsInternalTerminalShellPref,
 } from '#/shared/settings.ts'
 export type {
   NativeRecentReposProjection,

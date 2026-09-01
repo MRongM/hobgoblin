@@ -1,3 +1,35 @@
+import PQueue from 'p-queue'
+
+interface GitStatusReadScheduleOptions {
+  signal?: AbortSignal
+}
+
+export interface GitStatusReadScheduler {
+  schedule<T>(task: () => Promise<T>, options?: GitStatusReadScheduleOptions): Promise<T>
+}
+
+export function gitStatusReadConcurrency(platform: NodeJS.Platform): number {
+  return platform === 'win32' ? 8 : 16
+}
+
+export function createGitStatusReadScheduler(concurrency: number): GitStatusReadScheduler {
+  const queue = new PQueue({ concurrency })
+  return {
+    async schedule<T>(task: () => Promise<T>, options: GitStatusReadScheduleOptions = {}): Promise<T> {
+      return await queue.add(task, { signal: options.signal })
+    },
+  }
+}
+
+const gitStatusReadScheduler = createGitStatusReadScheduler(gitStatusReadConcurrency(process.platform))
+
+export async function scheduleGitStatusRead<T>(
+  task: () => Promise<T>,
+  options: GitStatusReadScheduleOptions = {},
+): Promise<T> {
+  return await gitStatusReadScheduler.schedule(task, options)
+}
+
 export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,

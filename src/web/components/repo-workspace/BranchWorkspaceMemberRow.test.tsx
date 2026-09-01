@@ -16,12 +16,20 @@ import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
 const actionState = vi.hoisted(() => ({
   editor: vi.fn(),
   terminal: vi.fn(),
+  powershellTerminal: vi.fn(),
+  wslTerminal: vi.fn(),
   externalTerminal: vi.fn(),
   tmuxTerminal: vi.fn(),
   restoreTmuxTerminals: vi.fn(),
   remote: vi.fn(),
   createWorktree: vi.fn(),
   sync: vi.fn(),
+  tmuxVisible: true,
+}))
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -42,7 +50,10 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
   useBranchActionItems: (
     _repo: unknown,
     _branch: unknown,
-    options?: { onNavigateToInternalTerminal?: (target: unknown) => void | Promise<void> },
+    options?: {
+      onNavigateToInternalTerminal?: (target: unknown) => void | Promise<void>
+      windowsInternalTerminalShellMenu?: boolean
+    },
   ) => ({
     externalItems: [
       branchAction('editor', actionState.editor),
@@ -54,9 +65,25 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
           worktreePath: '/workspace/goblin-feature-auth/api',
         })
       }),
-      branchAction('terminalTmux', actionState.tmuxTerminal, false, { label: 'terminal.new-with-tmux' }),
+      ...(options?.windowsInternalTerminalShellMenu
+        ? [
+            branchAction('terminalPowerShell', actionState.powershellTerminal, false, {
+              label: 'terminal.internal-powershell',
+              menuOnly: true,
+            }),
+            branchAction('terminalWsl', actionState.wslTerminal, false, {
+              label: 'terminal.internal-wsl',
+              menuOnly: true,
+            }),
+          ]
+        : []),
+      branchAction('terminalTmux', actionState.tmuxTerminal, false, {
+        label: 'terminal.new-with-tmux',
+        visible: actionState.tmuxVisible,
+      }),
       branchAction('restoreTmuxTerminals', actionState.restoreTmuxTerminals, false, {
         label: 'terminal.restore-directory-tmux',
+        visible: actionState.tmuxVisible,
       }),
       branchAction('externalTerminal', actionState.externalTerminal),
       branchAction('remote', actionState.remote),
@@ -113,7 +140,11 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  Object.values(actionState).forEach((mock) => mock.mockReset())
+  Object.values(actionState).forEach((mock) => {
+    if (typeof mock === 'function') mock.mockReset()
+  })
+  actionState.tmuxVisible = true
+  platformState.hostPlatform = 'linux'
 })
 
 afterEach(() => {
@@ -311,6 +342,54 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(onToggleFileArea).toHaveBeenCalledTimes(1)
   })
 
+  test('offers PowerShell and WSL launches for a Windows local branch-workspace member', async () => {
+    platformState.hostPlatform = 'win32'
+    actionState.tmuxVisible = false
+    const item = workspace()
+    const member = repositoryMember()
+    const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
+    const repo = emptyRepo('C:\\workspace\\api', 'api')
+
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: null,
+          navigable: true,
+          repositoryId: repo.id,
+          worktreePath: member.worktreePath,
+          actionTarget: { repo, branch },
+        }}
+        onSelectRepositoryMember={vi.fn()}
+        onOpenInternalTerminal={vi.fn()}
+      />,
+    )
+
+    const menuItems = await openMenu()
+    const menuActionIds = menuItems.map((entry) => entry.getAttribute('data-action'))
+    expect(menuActionIds.slice(0, 2)).toEqual(['terminalPowerShell', 'terminalWsl'])
+    expect(menuActionIds).not.toContain('terminalTmux')
+    expect(menuActionIds).not.toContain('restoreTmuxTerminals')
+    await act(async () => {
+      menuItems[0]?.click()
+      await Promise.resolve()
+    })
+    const row = container.querySelector<HTMLElement>('[data-workspace-list-item]')
+    if (!row) throw new Error('missing member row')
+    const contextLabels = (await openContextMenu(row)).map((entry) => entry.textContent?.trim())
+    expect(contextLabels.slice(2, 4)).toEqual(['terminal.internal-powershell', 'terminal.internal-wsl'])
+    expect(contextLabels).not.toContain('terminal.new-with-tmux')
+    expect(contextLabels).not.toContain('terminal.restore-directory-tmux')
+
+    await clickContextMenuItem(row, 'terminal.internal-wsl')
+    expect(actionState.powershellTerminal).toHaveBeenCalledTimes(1)
+    expect(actionState.wslTerminal).toHaveBeenCalledTimes(1)
+  })
+
   test('keeps the stable safe action set visible and disabled when target resolution fails', async () => {
     render(
       <BranchWorkspaceMemberRow
@@ -359,6 +438,29 @@ describe('BranchWorkspaceMemberRow', () => {
       'resetHard',
     ])
     expect(menuItems.every((entry) => entry.hasAttribute('data-disabled'))).toBe(true)
+  })
+
+  test('omits tmux placeholders when a native local Windows member target cannot be resolved', async () => {
+    platformState.hostPlatform = 'win32'
+    const item = { ...workspace(), rootId: 'C:\\workspace' }
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={repositoryMember()}
+        selected={false}
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: null,
+          navigable: false,
+          reason: 'workspace.branch-workspace.member-branch-missing',
+        }}
+      />,
+    )
+
+    expect((await openMenu()).map((entry) => entry.getAttribute('data-action'))).not.toEqual(
+      expect.arrayContaining(['terminalTmux', 'restoreTmuxTerminals']),
+    )
   })
 
   test('keeps worktree creation and refresh visible but disabled in an unavailable member context menu', async () => {
@@ -570,6 +672,8 @@ function terminalCommandContext(): TerminalSessionContextValue {
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     writeExtraKey: vi.fn(),

@@ -8,8 +8,12 @@ import { TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
 import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 
 const toastError = vi.hoisted(() => vi.fn())
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
 
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
+}))
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -19,6 +23,7 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 }
 
 beforeEach(() => {
+  platformState.hostPlatform = 'linux'
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   vi.useFakeTimers()
   toastError.mockClear()
@@ -186,6 +191,34 @@ describe('TerminalTabs', () => {
     onNew.mockClear()
     await clickTabContextMenuItem('t1', 'terminal.new')
     expect(onNew).toHaveBeenCalledWith('native')
+  })
+
+  test('omits tmux creation from native local Windows terminal menus', async () => {
+    platformState.hostPlatform = 'win32'
+    render(
+      <TerminalTabs
+        worktreeTerminalKey={'C:\\workspace\\repo\0C:\\workspace\\repo'}
+        detailId="detail"
+        responsiveCompact
+        sessions={[session()]}
+        onNew={() => {}}
+        onSelect={() => {}}
+        onScrollToBottom={() => {}}
+        onClose={() => {}}
+        onReorder={() => {}}
+      />,
+    )
+
+    await openCompactTerminalDropdown()
+    expect(
+      [...document.body.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim()),
+    ).not.toContain('terminal.new-with-tmux')
+    clickElementByText('terminal.new')
+
+    await openTabContextMenu('t1')
+    expect(
+      [...document.body.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim()),
+    ).not.toContain('terminal.new-with-tmux')
   })
 
   test('keeps the compact close action outside the terminal dropdown trigger', () => {

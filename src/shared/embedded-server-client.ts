@@ -18,19 +18,3 @@ export async function requestEmbeddedServerJson<T>(
   if (!response.ok) throw new Error(`Embedded server request failed (${response.status})`)
   return (await response.json()) as T
 }
-
-export async function postEmbeddedServerJson<T>(
-  runtime: EmbeddedServerRuntime,
-  path: string,
-  body: object,
-  options?: { signal?: AbortSignal },
-): Promise<T> {
-  return await requestEmbeddedServerJson<T>(runtime, path, {
-    method: 'POST',
-    signal: options?.signal,
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-}

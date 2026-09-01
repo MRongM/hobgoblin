@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import * as remoteGitOperations from '#/system/ssh/git.ts'
 import {
   bootstrapRemoteWorktreeSelectionsAfterCreate,
@@ -19,6 +19,7 @@ import {
   getRemoteCommitDetail,
   getRemoteHistory,
   getRemoteSnapshot,
+  getRemoteStatus,
   getRemoteTrackingBranchInfo,
   getRemoteTags,
   inventoryRemoteFileTransfer,
@@ -44,6 +45,13 @@ import {
 } from '#/system/ssh/git.ts'
 import type { RemoteCommandResult } from '#/system/ssh/commands.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
+
+const scheduleGitStatusReadMock = vi.hoisted(() => vi.fn())
+
+vi.mock('#/system/git/concurrency.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/system/git/concurrency.ts')>('#/system/git/concurrency.ts')
+  return { ...actual, scheduleGitStatusRead: scheduleGitStatusReadMock }
+})
 
 const TARGET = normalizeRemoteTarget({
   alias: 'prod',
@@ -114,6 +122,11 @@ async function checkoutRemoteTrackingBranch(input: {
 }
 
 describe('remote git helpers', () => {
+  beforeEach(() => {
+    scheduleGitStatusReadMock.mockReset()
+    scheduleGitStatusReadMock.mockImplementation((task: () => Promise<unknown>) => task())
+  })
+
   test('builds browser and pull request URLs from remote verbose output', async () => {
     const run = async (command: { type: string }) => {
       switch (command.type) {
@@ -171,6 +184,7 @@ describe('remote git helpers', () => {
       browserRemoteProvider: 'gitlab',
       hasGitHubRemote: false,
     })
+    expect(scheduleGitStatusReadMock).toHaveBeenCalledTimes(2)
   })
 
   test('skips worktree status and remote metadata for a lightweight snapshot', async () => {
@@ -202,6 +216,7 @@ describe('remote git helpers', () => {
 
     expect(snapshot?.branches.map((branch) => branch.name)).toEqual(['main'])
     expect(run.mock.calls.map(([command]) => command.type).sort()).toEqual(['gitSnapshot', 'gitWorktreeList'])
+    expect(scheduleGitStatusReadMock).not.toHaveBeenCalled()
   })
 
   test('reads status entries directly from one requested remote worktree', async () => {
@@ -221,6 +236,32 @@ describe('remote git helpers', () => {
     ])
     expect(run).toHaveBeenCalledOnce()
     expect(run).toHaveBeenCalledWith({ type: 'gitStatus', path: '/srv/repo-feature' }, TARGET, { signal: undefined })
+    expect(scheduleGitStatusReadMock).toHaveBeenCalledOnce()
+  })
+
+  test('schedules the worktree list and every status command during remote status refresh', async () => {
+    const run = vi.fn(async (command: { type: string }) => {
+      if (command.type === 'gitWorktreeList') {
+        return okRemoteResult(
+          [
+            'worktree /srv/repo',
+            'HEAD aaaaaaa',
+            'branch refs/heads/main',
+            '',
+            'worktree /srv/repo-feature',
+            'HEAD bbbbbbb',
+            'branch refs/heads/feature/test',
+            '',
+          ].join('\n'),
+        )
+      }
+      return okRemoteResult(command.type === 'gitStatus' ? ' M src/app.ts\0' : '')
+    })
+
+    await expect(getRemoteStatus(TARGET, { run: run as any })).resolves.toHaveLength(2)
+
+    expect(scheduleGitStatusReadMock).toHaveBeenCalledTimes(3)
+    expect(run).toHaveBeenCalledTimes(3)
   })
 
   test('reads and validates a remote worktree content state', async () => {
@@ -232,11 +273,7 @@ describe('remote git helpers', () => {
     expect(readContentState).toBeTypeOf('function')
     await expect(
       (
-        readContentState as (
-          target: typeof TARGET,
-          worktreePath: string,
-          options: { run: unknown },
-        ) => Promise<unknown>
+        readContentState as (target: typeof TARGET, worktreePath: string, options: { run: unknown }) => Promise<unknown>
       )(TARGET, '/srv/repo-feature', { run }),
     ).resolves.toEqual({ indexHash, worktreeTree })
     expect(run).toHaveBeenCalledWith({ type: 'gitWorktreeContentState', path: '/srv/repo-feature' }, TARGET, {

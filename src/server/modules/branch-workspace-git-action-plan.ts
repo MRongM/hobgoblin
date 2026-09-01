@@ -13,7 +13,6 @@ import {
   getRepositorySnapshot,
   getRepositoryStatus,
   getRepositoryWorktreeStatusEntries,
-  getRepositoryWorktreeContentState,
 } from '#/server/modules/repo-read-paths.ts'
 import {
   normalizeBranchWorkspaceGitActionPlanRequest,
@@ -31,7 +30,7 @@ import {
   type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
-import type { ExecResult, StatusEntry, WorktreeContentState, WorktreeStatus } from '#/shared/git-types.ts'
+import type { ExecResult, StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
 import { statusEntryPaths } from '#/shared/git-status.ts'
 import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import { parseRemoteBranchRef, type RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
@@ -47,11 +46,6 @@ export interface BranchWorkspaceGitActionPlanDependencies {
     worktreePath: string,
     signal?: AbortSignal,
   ) => Promise<StatusEntry[] | null>
-  getWorktreeContentState?: (
-    repoId: string,
-    worktreePath: string,
-    signal?: AbortSignal,
-  ) => Promise<WorktreeContentState | null>
   getPatch?: (repoId: string, worktreePath: string, signal?: AbortSignal) => Promise<ExecResult>
   getRemoteBranchInfo?: (repoId: string, signal?: AbortSignal) => Promise<RemoteTrackingBranchInfo[]>
 }
@@ -267,18 +261,6 @@ async function buildBatchAlignRemotePlan(
       memberSignal,
     )
     if (!facts.ok) return facts
-    const contentState = await (dependencies.getWorktreeContentState ?? getRepositoryWorktreeContentState)(
-      facts.repoId,
-      member.worktreePath,
-      memberSignal,
-    )
-    if (!contentState) {
-      return {
-        ok: false as const,
-        message: 'workspace.branch-workspace.git-action.read-failed',
-        repositoryName: member.repositoryName,
-      }
-    }
     const branch = facts.snapshot.branches.find((candidate) => candidate.name === member.targetBranch)!
     const entries = normalizedStatusEntries(facts.status.entries)
     const upstream = branch.tracking ?? null
@@ -298,11 +280,12 @@ async function buildBatchAlignRemotePlan(
         ready,
         ...(message ? { message } : {}),
         fingerprint: repositoryPlanFingerprint({
-          head: facts.head,
-          status: entries,
-          contentState,
+          repositoryName: member.repositoryName,
+          repoId: facts.repoId,
+          targetBranch: member.targetBranch,
+          targetWorktreePath: member.worktreePath,
           upstream,
-          trackingGone: branch.trackingGone === true,
+          ready,
         }),
       },
     }

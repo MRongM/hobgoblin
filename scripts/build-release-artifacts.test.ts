@@ -34,7 +34,7 @@ describe('createReleaseArtifactPlan', () => {
   test('creates an architecture-qualified Windows NSIS plan', () => {
     expect(createReleaseArtifactPlan('windows', 'x64', '2.2.7')).toEqual({
       requiredHost: 'win32',
-      builderArgs: ['--win', 'nsis', '--x64', '--publish', 'never'],
+      builderArgs: ['--win', 'nsis', '--x64', '--publish', 'never', '--config.npmRebuild=false'],
       artifactName: 'Hobgoblin-2.2.7-x64.exe',
     })
   })

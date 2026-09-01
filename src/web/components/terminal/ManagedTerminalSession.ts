@@ -196,6 +196,14 @@ export class ManagedTerminalSession {
     this.view.cancelMobileSelection(point)
   }
 
+  selectionText(): string {
+    return this.view.selectionText()
+  }
+
+  pasteText(text: string): void {
+    this.view.pasteText(text)
+  }
+
   mobileSelectionText(): string {
     return this.view.mobileSelectionText()
   }

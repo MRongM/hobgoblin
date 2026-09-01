@@ -53,7 +53,7 @@ Hobgoblin은 [Goblin](https://nano-props.github.io/goblin/)에서 시작했습�
 
 ## 매직 작업
 
-- **`hob`으로 프로젝트 열기(macOS):** 터미널에서 `hob .` 또는 `hob <directory>`를 실행하면 해당 로컬 디렉터리를 Hobgoblin에서 열거나 가져올 수 있습니다.
+- **`hob`으로 프로젝트 열기(macOS 및 Windows):** 터미널에서 `hob .` 또는 `hob <directory>`를 실행하면 해당 로컬 디렉터리를 Hobgoblin에서 열거나 가져올 수 있습니다.
 - **전역 터미널 전환:** 내부 터미널에 포커스가 있을 때 macOS에서는 `Cmd+Option+Up/Down`, Windows/Linux에서는 `Ctrl+Alt+Up/Down`을 사용해 프로젝트와 worktree를 가로질러 열려 있는 모든 내부 터미널을 전환할 수 있습니다.
 - **터미널 입력에 바이너리 붙여넣기:** 터미널 입력창에 바이너리 클립보드 내용을 붙여넣으면 임시 파일을 만들고 생성된 파일 경로를 입력합니다.
 - **파일 트리에서 터미널로 드래그:** 파일 트리의 파일을 터미널로 드래그해 직접 입력하지 않고 shell-safe 경로를 삽입합니다.
@@ -92,6 +92,26 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 Windows에서는 SmartScreen이 서명되지 않은 설치 파일에 대해 경고할 수 있습니다. GitHub Release 출처를 신뢰하는 경우에만 계속하세요.
 
 Windows에서는 WSL과 Unix-like 터미널 환경의 조합을 권장합니다. 사용 가능한 기본 WSL 배포판이 설치되어 있으면 Hobgoblin은 내부 터미널과 외부 Windows Terminal 실행에 WSL을 우선 사용하며, WSL을 사용할 수 없으면 Windows 네이티브 셸로 대체합니다.
+
+### Windows 터미널에서 프로젝트 열기
+
+Windows 설치 프로그램은 Hobgoblin의 `resources\bin` 디렉터리를 현재 사용자 `PATH`에 추가합니다. 설치 후 새 PowerShell 또는 명령 프롬프트 창을 열고 현재 디렉터리를 열거나 가져오세요:
+
+```powershell
+hob .
+```
+
+이 명령은 디렉터리 인수를 0개 또는 1개 받으며, 생략하면 현재 디렉터리를 사용합니다. 다른 `hob` 명령이 먼저 선택되는지 확인하려면 다음을 실행하세요:
+
+```powershell
+Get-Command hob -All
+```
+
+명령 프롬프트에서는 다음을 실행하세요:
+
+```bat
+where.exe hob
+```
 
 ### macOS 터미널에서 프로젝트 열기
 

@@ -1,6 +1,7 @@
 import { statSync } from 'node:fs'
 import path from 'node:path'
 import { pathStyle } from '#/shared/path-semantics.ts'
+import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import { resolveUsableWindowsWslExecutable } from '#/shared/windows-wsl.ts'
 
 export type WindowsTerminalShellKind = 'wsl' | 'powershell-core' | 'windows-powershell' | 'cmd'
@@ -13,6 +14,7 @@ export interface WindowsTerminalShellCandidate {
 
 interface ResolveWindowsTerminalShellOptions {
   cwd?: string
+  preference?: WindowsInternalTerminalShellPref
   env?: NodeJS.ProcessEnv
   fileExists?: (filePath: string) => boolean
 }
@@ -23,6 +25,7 @@ export function resolveWindowsTerminalShellCandidates(
   options: ResolveWindowsTerminalShellOptions = {},
 ): WindowsTerminalShellCandidate[] {
   const env = options.env ?? process.env
+  const preference = normalizeWindowsInternalTerminalShellPref(options.preference)
   const fileExists = options.fileExists ?? isFile
   const candidates: WindowsTerminalShellCandidate[] = []
   const seen = new Set<string>()
@@ -38,31 +41,35 @@ export function resolveWindowsTerminalShellCandidates(
 
   const systemRoot = environmentValue(env, 'SYSTEMROOT') ?? environmentValue(env, 'WINDIR')
   const cwdStyle = options.cwd ? pathStyle(options.cwd) : null
-  if (cwdStyle === null || cwdStyle === 'windowsDriveAbsolute') {
+  if ((preference === 'auto' || preference === 'wsl') && (cwdStyle === null || cwdStyle === 'windowsDriveAbsolute')) {
     const wslExecutable = resolveUsableWindowsWslExecutable({ env, fileExists })
     const wslArgs =
       cwdStyle === 'windowsDriveAbsolute' && options.cwd ? ['--cd', path.win32.normalize(options.cwd)] : []
     if (wslExecutable) addCandidate('wsl', wslExecutable, wslArgs)
   }
 
-  for (const programFiles of uniqueEnvironmentValues(env, ['PROGRAMW6432', 'PROGRAMFILES'])) {
-    addCandidate('powershell-core', path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'), POWERSHELL_ARGS)
+  if (preference === 'auto' || preference === 'powershell') {
+    for (const programFiles of uniqueEnvironmentValues(env, ['PROGRAMW6432', 'PROGRAMFILES'])) {
+      addCandidate('powershell-core', path.win32.join(programFiles, 'PowerShell', '7', 'pwsh.exe'), POWERSHELL_ARGS)
+    }
+
+    for (const directory of windowsPathDirectories(environmentValue(env, 'PATH'))) {
+      addCandidate('powershell-core', path.win32.join(directory, 'pwsh.exe'), POWERSHELL_ARGS)
+    }
+
+    if (systemRoot) {
+      addCandidate(
+        'windows-powershell',
+        path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        POWERSHELL_ARGS,
+      )
+    }
   }
 
-  for (const directory of windowsPathDirectories(environmentValue(env, 'PATH'))) {
-    addCandidate('powershell-core', path.win32.join(directory, 'pwsh.exe'), POWERSHELL_ARGS)
+  if (preference === 'auto' || preference === 'cmd') {
+    addCandidate('cmd', environmentValue(env, 'COMSPEC'), [])
+    if (systemRoot) addCandidate('cmd', path.win32.join(systemRoot, 'System32', 'cmd.exe'), [])
   }
-
-  if (systemRoot) {
-    addCandidate(
-      'windows-powershell',
-      path.win32.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-      POWERSHELL_ARGS,
-    )
-  }
-
-  addCandidate('cmd', environmentValue(env, 'COMSPEC'), [])
-  if (systemRoot) addCandidate('cmd', path.win32.join(systemRoot, 'System32', 'cmd.exe'), [])
 
   return candidates
 }

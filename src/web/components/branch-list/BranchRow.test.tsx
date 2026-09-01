@@ -18,11 +18,19 @@ const branchActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   internalTerminalOnSelect: vi.fn(),
+  powershellTerminalOnSelect: vi.fn(),
+  wslTerminalOnSelect: vi.fn(),
   tmuxTerminalOnSelect: vi.fn(),
   restoreTmuxTerminalsOnSelect: vi.fn(),
   createWorktreeOnSelect: vi.fn(),
   syncOnSelect: vi.fn(),
   pullDisabled: false,
+  tmuxVisible: true,
+}))
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
 }))
 
 vi.mock('#/web/stores/i18n.ts', () => ({
@@ -62,7 +70,11 @@ vi.mock('#/web/stores/i18n.ts', () => ({
 }))
 
 vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
-  useBranchActionItems: () => ({
+  useBranchActionItems: (
+    _repo: unknown,
+    _branch: unknown,
+    options?: { windowsInternalTerminalShellMenu?: boolean },
+  ) => ({
     patchItems: [
       {
         id: 'createTag',
@@ -138,6 +150,28 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         visible: true,
         onSelect: branchActionState.internalTerminalOnSelect,
       },
+      ...(options?.windowsInternalTerminalShellMenu
+        ? [
+            {
+              id: 'terminalPowerShell',
+              label: 'terminal.internal-powershell',
+              icon: <span data-testid="powershell-terminal-icon" />,
+              disabled: false,
+              visible: true,
+              menuOnly: true,
+              onSelect: branchActionState.powershellTerminalOnSelect,
+            },
+            {
+              id: 'terminalWsl',
+              label: 'terminal.internal-wsl',
+              icon: <span data-testid="wsl-terminal-icon" />,
+              disabled: false,
+              visible: true,
+              menuOnly: true,
+              onSelect: branchActionState.wslTerminalOnSelect,
+            },
+          ]
+        : []),
       {
         id: 'terminalTmux',
         label: 'terminal.new-with-tmux',
@@ -146,7 +180,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         icon: <span data-testid="tmux-terminal-icon" />,
         disabled: false,
         busy: false,
-        visible: true,
+        visible: branchActionState.tmuxVisible,
         menuOnly: true,
         onSelect: branchActionState.tmuxTerminalOnSelect,
       },
@@ -158,7 +192,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
         icon: <span data-testid="restore-tmux-terminals-icon" />,
         disabled: false,
         busy: false,
-        visible: true,
+        visible: branchActionState.tmuxVisible,
         menuOnly: true,
         onSelect: branchActionState.restoreTmuxTerminalsOnSelect,
       },
@@ -222,11 +256,15 @@ beforeEach(() => {
   branchActionState.editorOnSelect.mockReset()
   branchActionState.externalTerminalOnSelect.mockReset()
   branchActionState.internalTerminalOnSelect.mockReset()
+  branchActionState.powershellTerminalOnSelect.mockReset()
+  branchActionState.wslTerminalOnSelect.mockReset()
   branchActionState.tmuxTerminalOnSelect.mockReset()
   branchActionState.restoreTmuxTerminalsOnSelect.mockReset()
   branchActionState.createWorktreeOnSelect.mockReset()
   branchActionState.syncOnSelect.mockReset()
   branchActionState.pullDisabled = false
+  branchActionState.tmuxVisible = true
+  platformState.hostPlatform = 'linux'
 })
 
 afterEach(() => {
@@ -1144,6 +1182,47 @@ describe('BranchRow', () => {
     )
   })
 
+  test('offers PowerShell and WSL menu launches for a Windows local worktree', async () => {
+    platformState.hostPlatform = 'win32'
+    branchActionState.tmuxVisible = false
+    const repo = emptyRepo('C:\\workspace\\repo', 'repo')
+    const branch = createRepoBranch('feature/a', { worktree: { path: 'C:\\workspace\\worktree-a' } })
+
+    render(
+      <ul>
+        <BranchRow
+          repo={repo}
+          branch={branch}
+          selected={null}
+          onSelectBranch={vi.fn()}
+          selectedRef={createRef<HTMLLIElement>()}
+          showActions
+        />
+      </ul>,
+    )
+
+    const menuItems = await openRowMenu()
+    const menuLabels = menuItems.map((item) => item.textContent?.trim())
+    expect(menuLabels.slice(0, 2)).toEqual(['terminal.internal-powershell', 'terminal.internal-wsl'])
+    expect(menuLabels).not.toContain('terminal.new-with-tmux')
+    expect(menuLabels).not.toContain('terminal.restore-directory-tmux')
+    await act(async () => {
+      menuItems[0]?.click()
+      await Promise.resolve()
+    })
+    const row = document.body.querySelector('li')
+    if (!(row instanceof HTMLElement)) throw new Error('missing worktree row')
+    const contextLabels = (await openContextMenu(row)).map((item) => item.textContent?.trim())
+    expect(contextLabels.slice(2, 4)).toEqual(['terminal.internal-powershell', 'terminal.internal-wsl'])
+    expect(contextLabels).not.toContain('terminal.new-with-tmux')
+    expect(contextLabels).not.toContain('terminal.restore-directory-tmux')
+
+    await clickContextMenuItem(row, 'terminal.internal-wsl')
+
+    expect(branchActionState.powershellTerminalOnSelect).toHaveBeenCalledTimes(1)
+    expect(branchActionState.wslTerminalOnSelect).toHaveBeenCalledTimes(1)
+  })
+
   test('adds worktree creation and refresh to branch workspace member menus', async () => {
     const repo = emptyRepo('/tmp/repo', 'repo')
     const branch = createRepoBranch('feature/a', { worktree: { path: '/tmp/worktree-a' } })
@@ -1345,6 +1424,8 @@ function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessi
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     writeExtraKey: vi.fn(),

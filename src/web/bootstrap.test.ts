@@ -55,6 +55,7 @@ describe('renderer bootstrap', () => {
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,
       terminalApp: 'auto',
+      windowsInternalTerminalShell: 'auto',
       editorApp: 'windsurf',
       topbarHeightPx: 34,
       toolbarHeightPx: 34,

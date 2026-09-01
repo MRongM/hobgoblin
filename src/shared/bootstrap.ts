@@ -5,6 +5,7 @@ import type {
   TerminalCustomButton,
   TerminalCustomButtonSize,
   TerminalPref,
+  WindowsInternalTerminalShellPref,
 } from '#/shared/rpc.ts'
 import type { RendererSurfaceBootstrap } from '#/shared/file-area.ts'
 
@@ -17,12 +18,14 @@ export type RendererNativeCapability =
   | 'open-file-dialog'
   | 'consume-external-open-paths'
   | 'open-in-finder'
+  | 'clipboard-image'
   | 'clipboard-file-paths'
   | 'clipboard-binary-temp-files'
   | 'file-tree-clipboard'
   | 'terminal-notifications'
   | 'terminal-badge'
   | 'open-detached-file-area-window'
+  | 'macos-computer-use-permissions'
 
 export const RENDERER_BRIDGE_VERSION = 1
 export const ELECTRON_RENDERER_CAPABILITIES = [
@@ -33,12 +36,14 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'open-file-dialog',
   'consume-external-open-paths',
   'open-in-finder',
+  'clipboard-image',
   'clipboard-file-paths',
   'clipboard-binary-temp-files',
   'file-tree-clipboard',
   'terminal-notifications',
   'terminal-badge',
   'open-detached-file-area-window',
+  'macos-computer-use-permissions',
 ] as const satisfies readonly RendererNativeCapability[]
 export const WEB_RENDERER_CAPABILITIES = [] as const satisfies readonly RendererNativeCapability[]
 
@@ -58,6 +63,7 @@ export interface InitialSettingsSnapshot {
   globalShortcut: string
   globalShortcutRegistered: boolean
   terminalApp: TerminalPref
+  windowsInternalTerminalShell: WindowsInternalTerminalShellPref
   editorApp: EditorPref
   topbarHeightPx: number
   toolbarHeightPx: number

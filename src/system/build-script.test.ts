@@ -26,6 +26,7 @@ interface DesktopBuilderConfig {
     oneClick?: boolean
     perMachine?: boolean
     allowToChangeInstallationDirectory?: boolean
+    include?: string
   }
 }
 
@@ -143,6 +144,25 @@ describe('desktop build scripts', () => {
       expect(readme).toContain('$HOME/.local/bin/hob')
       expect(readme).toContain('/Applications/Hobgoblin.app/Contents/Resources/bin/hob')
     }
+  })
+
+  test('documents the Windows hob launcher and command diagnostics in every README language', () => {
+    for (const readmePath of ['README.md', 'README.zh-CN.md', 'README.ja.md', 'README.ko.md']) {
+      const readme = readText(readmePath)
+
+      expect(readme).toContain('PowerShell')
+      expect(readme).toContain('Get-Command hob -All')
+      expect(readme).toContain('where.exe hob')
+    }
+  })
+
+  test('website describes hob as a macOS and Windows terminal command in every language', () => {
+    const website = readText('docs/index.html')
+
+    expect(website).toContain('Open the current project from a macOS or Windows terminal:')
+    expect(website).toContain('从 macOS 或 Windows 终端打开当前项目：')
+    expect(website).toContain('macOS または Windows のターミナルから現在のプロジェクトを開く：')
+    expect(website).toContain('macOS 또는 Windows 터미널에서 현재 프로젝트 열기:')
   })
 
   test('manual release workflow builds macOS, Windows, Android, and Linux artifacts then publishes release assets', () => {
@@ -355,6 +375,13 @@ describe('desktop build scripts', () => {
     expect(statSync(path.join(repoRoot, 'bin/hob')).mode & 0o111).not.toBe(0)
   })
 
+  test('desktop packaging includes the Windows hob launcher outside asar', () => {
+    const config = electronBuilderConfig as unknown as DesktopBuilderConfig
+
+    expect(config.extraResources).toContainEqual({ from: 'bin/hob.cmd', to: 'bin/hob.cmd' })
+    expect(existsSync(path.join(repoRoot, 'bin/hob.cmd'))).toBe(true)
+  })
+
   test('root desktop release packaging supports Windows NSIS installers', () => {
     const config = electronBuilderConfig as unknown as DesktopBuilderConfig
 
@@ -366,7 +393,19 @@ describe('desktop build scripts', () => {
       oneClick: false,
       perMachine: false,
       allowToChangeInstallationDirectory: true,
+      include: 'build/installer.nsh',
     })
+  })
+
+  test('Windows installer adds and removes only its user PATH entry', () => {
+    const installer = readText('build/installer.nsh')
+
+    expect(installer).toContain('!macro customInstall')
+    expect(installer).toContain('!macro customUnInstall')
+    expect(installer).toContain('-Action "Add"')
+    expect(installer).toContain('-Action "Remove"')
+    expect(installer).toContain('$INSTDIR\\resources\\bin')
+    expect(installer).toContain('${WM_SETTINGCHANGE}')
   })
 
   test('Windows test workflow publishes primary installers and isolates independent test artifacts', () => {

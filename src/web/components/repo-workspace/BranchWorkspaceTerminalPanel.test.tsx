@@ -304,6 +304,14 @@ describe('openBranchWorkspaceInternalTerminal', () => {
     expect(selectTerminal).not.toHaveBeenCalled()
     expect(createTerminal).toHaveBeenCalledWith(expect.any(Object), 'tmux-if-available')
   })
+
+  test('forwards an explicit Windows shell launch from a root menu action', async () => {
+    const activate = vi.fn()
+    await openBranchWorkspaceInternalTerminal(branchWorkspaceContext(), { activate, createTerminal }, 'native', 'wsl')
+
+    expect(activate).toHaveBeenCalledTimes(1)
+    expect(createTerminal).toHaveBeenCalledWith(expect.any(Object), 'native', 'wsl')
+  })
 })
 
 async function renderPanel(

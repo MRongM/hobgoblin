@@ -21,6 +21,8 @@ function actionGroups(): BranchActionItemGroups {
     externalItems: [
       action('editor'),
       action('terminal'),
+      action('terminalPowerShell', { menuOnly: true }),
+      action('terminalWsl', { menuOnly: true }),
       action('terminalTmux', { menuOnly: true }),
       action('restoreTmuxTerminals', { menuOnly: true }),
       action('externalTerminal'),
@@ -67,7 +69,7 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.id).toBe('editor')
     expect(projection.internalTerminal?.id).toBe('terminal')
     expect(ids(projection.menuGroups)).toEqual([
-      ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
+      ['terminalPowerShell', 'terminalWsl', 'terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
       [
         'pull',
         'push',
@@ -87,8 +89,10 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
     expect(projection.contextMenu.editor.disabled).toBe(false)
     expect(projection.contextMenu.internalTerminal.disabled).toBe(false)
-    expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
-    expect(projection.contextMenu.restoreTmuxTerminals.disabled).toBe(false)
+    expect(projection.contextMenu.windowsInternalTerminals?.powershell.disabled).toBe(false)
+    expect(projection.contextMenu.windowsInternalTerminals?.wsl.disabled).toBe(false)
+    expect(projection.contextMenu.tmuxTerminal?.disabled).toBe(false)
+    expect(projection.contextMenu.restoreTmuxTerminals?.disabled).toBe(false)
     expect(projection.contextMenu.actions?.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
   })
 
@@ -107,6 +111,21 @@ describe('projectWorktreeListItemActions', () => {
     expect(externalTerminal?.label).toBe('externalTerminal')
   })
 
+  test('omits hidden tmux actions from the worktree context-menu projection', () => {
+    const groups = actionGroups()
+    for (const item of groups.externalItems) {
+      if (item.id === 'terminalTmux' || item.id === 'restoreTmuxTerminals') item.visible = false
+    }
+
+    const projection = projectWorktreeListItemActions(groups, {
+      policy: 'ordinary-worktree',
+      hasWorktree: true,
+    })
+
+    expect(projection.contextMenu.tmuxTerminal).toBeUndefined()
+    expect(projection.contextMenu.restoreTmuxTerminals).toBeUndefined()
+  })
+
   test('retains the ordinary non-worktree branch projection', () => {
     const projection = projectWorktreeListItemActions(actionGroups(), {
       policy: 'ordinary-worktree',
@@ -116,7 +135,16 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor).toBeUndefined()
     expect(projection.internalTerminal).toBeUndefined()
     expect(ids(projection.menuGroups)).toEqual([
-      ['editor', 'terminal', 'terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
+      [
+        'editor',
+        'terminal',
+        'terminalPowerShell',
+        'terminalWsl',
+        'terminalTmux',
+        'restoreTmuxTerminals',
+        'externalTerminal',
+        'remote',
+      ],
       [
         'checkout',
         'pull',
@@ -143,7 +171,7 @@ describe('projectWorktreeListItemActions', () => {
     })
 
     expect(ids(projection.menuGroups)).toEqual([
-      ['terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
+      ['terminalPowerShell', 'terminalWsl', 'terminalTmux', 'restoreTmuxTerminals', 'externalTerminal', 'remote'],
       [
         'pull',
         'push',

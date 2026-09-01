@@ -30,10 +30,11 @@ import { createRepositoryLocalTag } from '#/web/repo-client.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useTerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
-import type { TerminalLaunchMode } from '#/shared/terminal.ts'
+import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import { useCreateWorktreeAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -60,6 +61,7 @@ export interface BranchActionItemGroups {
 
 export interface UseBranchActionItemsOptions {
   onNavigateToInternalTerminal?: (target: TerminalSessionBase) => void | Promise<void>
+  windowsInternalTerminalShellMenu?: boolean
 }
 
 export function visibleBranchActionItems({
@@ -143,13 +145,18 @@ export function useBranchActionItems(
     : null
   const terminalWorktreeKeys = useMemo(() => (terminalWorktreeKey ? [terminalWorktreeKey] : []), [terminalWorktreeKey])
   const closeTerminalScope = useCloseTerminalScope(terminalWorktreeKeys)
+  const tmuxMenuVisible = supportsTmuxMenu(repo.id)
 
-  async function handleNewTerminal(launchMode: TerminalLaunchMode): Promise<void> {
+  async function handleNewTerminal(
+    launchMode: TerminalLaunchMode,
+    windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
+  ): Promise<void> {
     if (!terminalBase) return
     if (options.onNavigateToInternalTerminal) await options.onNavigateToInternalTerminal(terminalBase)
     else navigation.showRepoBranchDetailTab(repo.id, branch.name, 'terminal')
     setDetailCollapsed(false)
-    await createTerminal(terminalBase, launchMode)
+    if (windowsInternalTerminalShell) await createTerminal(terminalBase, launchMode, windowsInternalTerminalShell)
+    else await createTerminal(terminalBase, launchMode)
   }
 
   async function handleRestoreTmuxTerminals(): Promise<void> {
@@ -267,13 +274,39 @@ export function useBranchActionItems(
       icon: createElement(Terminal),
       onSelect: () => handleNewTerminal('native'),
     },
+    ...(options.windowsInternalTerminalShellMenu
+      ? [
+          {
+            id: 'terminalPowerShell' as const,
+            label: t('terminal.internal-powershell'),
+            title: t('terminal.internal-powershell'),
+            ariaLabel: t('terminal.internal-powershell'),
+            disabled: disabled || !terminalBase,
+            visible: true,
+            menuOnly: true,
+            icon: createElement(Terminal),
+            onSelect: () => handleNewTerminal('native', 'powershell'),
+          },
+          {
+            id: 'terminalWsl' as const,
+            label: t('terminal.internal-wsl'),
+            title: t('terminal.internal-wsl'),
+            ariaLabel: t('terminal.internal-wsl'),
+            disabled: disabled || !terminalBase,
+            visible: true,
+            menuOnly: true,
+            icon: createElement(Terminal),
+            onSelect: () => handleNewTerminal('native', 'wsl'),
+          },
+        ]
+      : []),
     {
       id: 'terminalTmux',
       label: t('terminal.new-with-tmux'),
       title: t('terminal.new-with-tmux'),
       ariaLabel: t('terminal.new-with-tmux'),
       disabled: disabled || !terminalBase,
-      visible: true,
+      visible: tmuxMenuVisible,
       menuOnly: true,
       icon: createElement(Terminal),
       onSelect: () => handleNewTerminal('tmux-if-available'),
@@ -284,7 +317,7 @@ export function useBranchActionItems(
       title: t('terminal.restore-directory-tmux'),
       ariaLabel: t('terminal.restore-directory-tmux'),
       disabled: disabled || !terminalBase,
-      visible: true,
+      visible: tmuxMenuVisible,
       menuOnly: true,
       icon: createElement(Terminal),
       onSelect: handleRestoreTmuxTerminals,

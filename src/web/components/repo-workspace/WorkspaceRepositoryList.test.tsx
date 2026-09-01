@@ -48,6 +48,12 @@ const repoClientMocks = vi.hoisted(() => ({
   getRepositoryRemoteBranches: vi.fn(),
 }))
 
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
+}))
+
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core')
   return {
@@ -172,6 +178,7 @@ class MockResizeObserver implements ResizeObserver {
 }
 
 beforeEach(() => {
+  platformState.hostPlatform = 'linux'
   resetReposStore()
   seedRepoState({
     id: '/workspace/api',
@@ -434,6 +441,17 @@ describe('WorkspaceRepositoryList', () => {
     expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
   })
 
+  test('omits tmux actions for native local Windows workspace repositories', async () => {
+    platformState.hostPlatform = 'win32'
+    renderList()
+    const row = repositoryItem('/workspace/api')
+
+    expect((await openRepositoryMenu('/workspace/api')).map((item) => item.textContent?.trim())).not.toContain(
+      'terminal.new-with-tmux',
+    )
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).not.toContain('terminal.new-with-tmux')
+  })
+
   test('uses the shared frame and action dock without activating from row actions', async () => {
     const { onActivate } = renderList()
     const item = repositoryItem('/workspace/api')
@@ -615,6 +633,8 @@ function terminalCommandContext(closeTerminal: CloseTerminalMock): TerminalSessi
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     writeExtraKey: vi.fn(),

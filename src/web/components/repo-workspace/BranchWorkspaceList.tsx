@@ -40,7 +40,7 @@ import {
   X,
 } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
-import type { TerminalLaunchMode } from '#/shared/terminal.ts'
+import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
@@ -80,6 +80,8 @@ import {
 } from '#/web/components/repo-workspace/BranchWorkspaceMemberRow.tsx'
 import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
+import { supportsWindowsInternalTerminalShellMenu } from '#/web/windows-internal-terminal-shell-menu.ts'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 
 const restrictToVerticalBranchWorkspaceList: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
@@ -111,7 +113,11 @@ export interface BranchWorkspaceListProps {
   onOpenRepositoryMemberTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onOpenEditor?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onOpenExternalTerminal?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
-  onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, launchMode?: TerminalLaunchMode) => void | Promise<void>
+  onOpenInternalTerminal?: (
+    item: BranchWorkspaceSnapshot,
+    launchMode?: TerminalLaunchMode,
+    windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
+  ) => void | Promise<void>
   gitActionsDisabled?: boolean
   onGitAction?: (item: BranchWorkspaceSnapshot, kind: BranchWorkspaceGitActionKind) => void
 }
@@ -264,6 +270,8 @@ function BranchWorkspaceRow({
   const creationInterrupted =
     item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'creation-interrupted'
   const context = branchWorkspaceFolderContext(rootId, item)
+  const windowsInternalTerminalShellMenu = supportsWindowsInternalTerminalShellMenu(rootId)
+  const tmuxMenuVisible = supportsTmuxMenu(rootId)
   const externalActions = useFolderExternalOpenActions({ repoId: rootId, path: item.path, available: folderAvailable })
   const terminalContext = useContext(TerminalSessionContext)
   const terminalKey = worktreeTerminalKey(rootId, item.path)
@@ -301,8 +309,15 @@ function BranchWorkspaceRow({
     activate()
     onOpenFileArea?.()
   }
-  const openInternal = async (launchMode: TerminalLaunchMode = 'native') => {
-    if (onOpenInternalTerminal) return await onOpenInternalTerminal(item, launchMode)
+  const openInternal = async (
+    launchMode: TerminalLaunchMode = 'native',
+    windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
+  ) => {
+    if (onOpenInternalTerminal) {
+      return windowsInternalTerminalShell
+        ? await onOpenInternalTerminal(item, launchMode, windowsInternalTerminalShell)
+        : await onOpenInternalTerminal(item, launchMode)
+    }
     if (!terminalContext) return
     await openBranchWorkspaceInternalTerminal(
       context,
@@ -311,6 +326,7 @@ function BranchWorkspaceRow({
         activate,
       },
       launchMode,
+      windowsInternalTerminalShell,
     )
   }
   const openActionsDisabled = disabled || !rootUsable
@@ -341,18 +357,38 @@ function BranchWorkspaceRow({
     : undefined
   const rootOpenMenuActions: BranchWorkspaceItemAction[] = rootUsable
     ? [
-        {
-          label: 'terminal.new-with-tmux',
-          icon: <Terminal aria-hidden="true" />,
-          disabled: openActionsDisabled,
-          onSelect: () => openInternal('tmux-if-available'),
-        },
-        {
-          label: 'terminal.restore-directory-tmux',
-          icon: <Terminal aria-hidden="true" />,
-          disabled: openActionsDisabled,
-          onSelect: restoreTmuxTerminals,
-        },
+        ...(windowsInternalTerminalShellMenu
+          ? [
+              {
+                label: 'terminal.internal-powershell',
+                icon: <Terminal aria-hidden="true" />,
+                disabled: openActionsDisabled,
+                onSelect: () => openInternal('native', 'powershell'),
+              },
+              {
+                label: 'terminal.internal-wsl',
+                icon: <Terminal aria-hidden="true" />,
+                disabled: openActionsDisabled,
+                onSelect: () => openInternal('native', 'wsl'),
+              },
+            ]
+          : []),
+        ...(tmuxMenuVisible
+          ? [
+              {
+                label: 'terminal.new-with-tmux',
+                icon: <Terminal aria-hidden="true" />,
+                disabled: openActionsDisabled,
+                onSelect: () => openInternal('tmux-if-available'),
+              },
+              {
+                label: 'terminal.restore-directory-tmux',
+                icon: <Terminal aria-hidden="true" />,
+                disabled: openActionsDisabled,
+                onSelect: restoreTmuxTerminals,
+              },
+            ]
+          : []),
         {
           label: 'terminal.external',
           icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
@@ -622,16 +658,40 @@ function BranchWorkspaceRow({
         icon: <Terminal aria-hidden="true" />,
         onSelect: () => openInternal('native'),
       }}
-      tmuxTerminal={{
-        disabled: openActionsDisabled,
-        icon: <Terminal aria-hidden="true" />,
-        onSelect: () => openInternal('tmux-if-available'),
-      }}
-      restoreTmuxTerminals={{
-        disabled: openActionsDisabled,
-        icon: <Terminal aria-hidden="true" />,
-        onSelect: restoreTmuxTerminals,
-      }}
+      windowsInternalTerminals={
+        windowsInternalTerminalShellMenu
+          ? {
+              powershell: {
+                disabled: openActionsDisabled,
+                icon: <Terminal aria-hidden="true" />,
+                onSelect: () => openInternal('native', 'powershell'),
+              },
+              wsl: {
+                disabled: openActionsDisabled,
+                icon: <Terminal aria-hidden="true" />,
+                onSelect: () => openInternal('native', 'wsl'),
+              },
+            }
+          : undefined
+      }
+      tmuxTerminal={
+        tmuxMenuVisible
+          ? {
+              disabled: openActionsDisabled,
+              icon: <Terminal aria-hidden="true" />,
+              onSelect: () => openInternal('tmux-if-available'),
+            }
+          : undefined
+      }
+      restoreTmuxTerminals={
+        tmuxMenuVisible
+          ? {
+              disabled: openActionsDisabled,
+              icon: <Terminal aria-hidden="true" />,
+              onSelect: restoreTmuxTerminals,
+            }
+          : undefined
+      }
       worktreeTerminalKeys={terminalKeys}
       additionalActions={[
         ...readyGitActions.filter(

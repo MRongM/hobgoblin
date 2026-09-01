@@ -3,26 +3,8 @@ import {
   joinWorktreeRelativePath,
   pathStyle,
   safeRelativePath,
-  sameLocalHostPath,
   worktreeRelativePathFromAbsolute,
 } from '#/shared/path-semantics.ts'
-
-describe('sameLocalHostPath', () => {
-  test('matches Windows drive paths with conventional WSL drive mounts', () => {
-    expect(sameLocalHostPath('C:\\Users\\dev\\repo', '/mnt/c/Users/dev/repo')).toBe(true)
-    expect(sameLocalHostPath('c:/users/dev/repo/./src', '/mnt/C/Users/dev/repo/src')).toBe(true)
-  })
-
-  test('matches lexically equivalent POSIX paths without using Node path APIs', () => {
-    expect(sameLocalHostPath('/srv/projects/other/../repo', '/srv/projects/repo')).toBe(true)
-  })
-
-  test('keeps unrelated local paths distinct', () => {
-    expect(sameLocalHostPath('C:\\repo', '/mnt/d/repo')).toBe(false)
-    expect(sameLocalHostPath('/mnt/c/repo', '/srv/repo')).toBe(false)
-    expect(sameLocalHostPath('/srv/Repo', '/srv/repo')).toBe(false)
-  })
-})
 
 describe('pathStyle', () => {
   test('classifies posix, windows drive, UNC, and relative paths', () => {

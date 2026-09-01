@@ -17,6 +17,7 @@ import {
 } from '#/server/modules/settings-write-paths.ts'
 import { getLanUrls, isLanAddress } from '#/shared/lan-addresses.ts'
 import type { LanInfo } from '#/shared/rpc.ts'
+import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 
 const WEB_ACCESS_ERROR_CODES = new Set([
   'username-required',
@@ -39,7 +40,11 @@ function readTelegramSettingsErrorCode(error: unknown): string | null {
 
 export function createSettingsRoutes(
   settingsState: ServerSettingsState,
-  options: { revokeAllWebSessions?: () => void; onTelegramRuntimeConfigChanged?: () => void | Promise<void> } = {},
+  options: {
+    revokeAllWebSessions?: () => void
+    onTelegramRuntimeConfigChanged?: () => void | Promise<void>
+    onWindowsInternalTerminalShellChanged?: (preference: WindowsInternalTerminalShellPref) => void
+  } = {},
 ) {
   const app = new Hono()
   app.get('/', async (c) => c.json(await getSettingsSnapshot(settingsState)))
@@ -64,6 +69,7 @@ export function createSettingsRoutes(
       acceptLanguage: c.req.header('accept-language'),
       signal: c.req.raw.signal,
     })
+    options.onWindowsInternalTerminalShellChanged?.(result.settings.windowsInternalTerminalShell)
     await options.onTelegramRuntimeConfigChanged?.()
     return c.json(result)
   })

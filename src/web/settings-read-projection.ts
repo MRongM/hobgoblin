@@ -7,7 +7,7 @@ import type {
   RuntimeSettingsSnapshot,
   SettingsSnapshot,
 } from '#/shared/rpc.ts'
-import type { EditorPref, TerminalPref } from '#/shared/rpc.ts'
+import type { EditorPref, TerminalPref, WindowsInternalTerminalShellPref } from '#/shared/rpc.ts'
 import {
   runtimeRecentReposStateFromSettingsSnapshot,
   runtimeSettingsSnapshotFromSettingsSnapshot,
@@ -149,6 +149,16 @@ export function readRuntimeTerminalSettings(data: RuntimeSettingsSnapshot | unde
     terminalCustomButtonSize:
       data?.terminalCustomButtonSize ?? fallback?.terminalCustomButtonSize ?? DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE,
     terminalCustomButtons: data?.terminalCustomButtons ?? fallback?.terminalCustomButtons ?? [],
+  }
+}
+
+export function readRuntimeWindowsInternalTerminalShellSettings(data: RuntimeSettingsSnapshot | undefined) {
+  const fallback = fallbackInitialSettings()
+  return {
+    windowsInternalTerminalShell:
+      data?.windowsInternalTerminalShell ??
+      fallback?.windowsInternalTerminalShell ??
+      ('auto' as WindowsInternalTerminalShellPref),
   }
 }
 

@@ -36,6 +36,7 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'open-file-dialog') return nativeShell?.openFileDialog !== undefined
       if (capability === 'consume-external-open-paths') return nativeShell?.consumeExternalOpenPaths !== undefined
       if (capability === 'open-in-finder') return nativeShell?.openInFinder !== undefined
+      if (capability === 'clipboard-image') return nativeShell?.readClipboardImage !== undefined
       if (capability === 'clipboard-file-paths') return nativeShell?.readClipboardFilePaths !== undefined
       if (capability === 'clipboard-binary-temp-files') return nativeShell?.saveClipboardBinaryFiles !== undefined
       if (capability === 'file-tree-clipboard') {
@@ -46,6 +47,14 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
       if (capability === 'open-detached-file-area-window') {
         return (
           (nativeShell as { openDetachedFileAreaWindow?: unknown } | null)?.openDetachedFileAreaWindow !== undefined
+        )
+      }
+      if (capability === 'macos-computer-use-permissions') {
+        return (
+          (nativeShell as { getMacosComputerUsePermissions?: unknown } | null)?.getMacosComputerUsePermissions !==
+            undefined &&
+          (nativeShell as { requestMacosComputerUsePermission?: unknown } | null)?.requestMacosComputerUsePermission !==
+            undefined
         )
       }
       return false
@@ -140,6 +149,47 @@ describe('app shell client', () => {
         tab: 'history',
       }),
     ).resolves.toEqual({ ok: false, message: 'error.unsupported-native-bridge' })
+  })
+
+  test('reads and requests macOS Computer Use permissions through the native shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const permissions = { screenRecording: 'granted' as const, accessibility: 'denied' as const }
+    const getMacosComputerUsePermissions = vi.fn(async () => permissions)
+    const requestMacosComputerUsePermission = vi.fn(async () => ({ ok: true as const, permissions }))
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        kind: () => 'electron',
+        hasCapability: (capability) => capability === 'macos-computer-use-permissions',
+        shell: () =>
+          ({
+            getMacosComputerUsePermissions,
+            requestMacosComputerUsePermission,
+          }) as never,
+      }),
+    )
+
+    const client = await import('#/web/app-shell-client.ts')
+    expect(client.canManageMacosComputerUsePermissions()).toBe(true)
+    await expect(client.getMacosComputerUsePermissions()).resolves.toEqual(permissions)
+    await expect(client.requestMacosComputerUsePermission('accessibility')).resolves.toEqual({
+      ok: true,
+      permissions,
+    })
+    expect(requestMacosComputerUsePermission).toHaveBeenCalledWith({ kind: 'accessibility' })
+  })
+
+  test('returns unsupported macOS Computer Use permissions without the native capability', async () => {
+    const client = await import('#/web/app-shell-client.ts')
+
+    expect(client.canManageMacosComputerUsePermissions()).toBe(false)
+    await expect(client.getMacosComputerUsePermissions()).resolves.toEqual({
+      screenRecording: 'unsupported',
+      accessibility: 'unsupported',
+    })
+    await expect(client.requestMacosComputerUsePermission('screen-recording')).resolves.toEqual({
+      ok: false,
+      permissions: { screenRecording: 'unsupported', accessibility: 'unsupported' },
+    })
   })
 
   test('opens external URLs in the browser when no native shell is available', async () => {
@@ -291,6 +341,33 @@ describe('app shell client', () => {
   test('returns an empty clipboard file path list without a native shell', async () => {
     const { readSystemClipboardFilePaths } = await import('#/web/app-shell-client.ts')
     await expect(readSystemClipboardFilePaths()).resolves.toEqual([])
+  })
+
+  test('reads a native clipboard image through the shell bridge', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new ArrayBuffer(3) }
+    const readClipboardImage = vi.fn(async () => payload)
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        shell: () => ({
+          openSettingsWindow: vi.fn(),
+          openExternalUrl: vi.fn(),
+          openDirectoryDialog: vi.fn(),
+          consumeExternalOpenPaths: vi.fn(),
+          openInFinder: vi.fn(),
+          readClipboardImage,
+        }),
+      }),
+    )
+
+    const { readSystemClipboardImage } = await import('#/web/app-shell-client.ts')
+    await expect(readSystemClipboardImage()).resolves.toBe(payload)
+    expect(readClipboardImage).toHaveBeenCalledTimes(1)
+  })
+
+  test('returns null without a native clipboard image bridge', async () => {
+    const { readSystemClipboardImage } = await import('#/web/app-shell-client.ts')
+    await expect(readSystemClipboardImage()).resolves.toBeNull()
   })
 
   test('saves clipboard binary files through the native shell', async () => {

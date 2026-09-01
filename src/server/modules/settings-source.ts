@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
@@ -21,9 +22,11 @@ import type {
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
+  WindowsInternalTerminalShellPref,
   WorkspaceActiveContext,
   WebAccessSettingsSnapshot,
 } from '#/shared/rpc.ts'
+import { normalizeWindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   effectiveDetailCollapsed,
@@ -119,6 +122,7 @@ interface ServerSettingsData {
   temporaryFilesDirectory: string
   globalShortcut: string
   terminalApp: TerminalPref
+  windowsInternalTerminalShell: WindowsInternalTerminalShellPref
   editorApp: EditorPref
   topbarHeightPx: number
   toolbarHeightPx: number
@@ -155,6 +159,7 @@ export type ServerSettingsPrefsPatch = Partial<SettingsPrefs>
 
 let cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 let settingsPromise: Promise<ServerSettingsData> | null = null
+let settingsWriteQueue: Promise<void> = Promise.resolve()
 const listeners = new Set<FetchIntervalListener>()
 const MAX_TERMINAL_CUSTOM_BUTTONS = 20
 const MAX_WEB_ACCESS_USERNAME_LENGTH = 128
@@ -434,6 +439,7 @@ function settingsPrefsFromData(data: ServerSettingsData): SettingsPrefs {
     temporaryFilesDirectory: data.temporaryFilesDirectory,
     globalShortcut: data.globalShortcut,
     terminalApp: data.terminalApp,
+    windowsInternalTerminalShell: data.windowsInternalTerminalShell,
     editorApp: data.editorApp,
     topbarHeightPx: data.topbarHeightPx,
     toolbarHeightPx: data.toolbarHeightPx,
@@ -712,6 +718,7 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
       temporaryFilesDirectory: normalizeTemporaryFilesDirectory(parsed.temporaryFilesDirectory),
       globalShortcut: normalizeGlobalShortcut(parsed.globalShortcut),
       terminalApp: normalizeTerminalPref(parsed.terminalApp),
+      windowsInternalTerminalShell: normalizeWindowsInternalTerminalShellPref(parsed.windowsInternalTerminalShell),
       editorApp: normalizeEditorPref(parsed.editorApp),
       topbarHeightPx: normalizeTopbarHeightPx(parsed.topbarHeightPx),
       toolbarHeightPx: normalizeToolbarHeightPx(parsed.toolbarHeightPx),
@@ -772,10 +779,25 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
   }
 }
 
-async function writeServerSettingsFile(data: ServerSettingsData): Promise<void> {
+function writeServerSettingsFile(data: ServerSettingsData): Promise<void> {
   const file = serverDataFile('server-settings.json')
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, JSON.stringify(data, null, 2), 'utf-8')
+  const contents = JSON.stringify(data, null, 2)
+  const write = settingsWriteQueue.then(async () => {
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, contents, 'utf-8')
+  })
+  settingsWriteQueue = write.catch(() => undefined)
+  return write
+}
+
+export function readPersistedWindowsInternalTerminalShellPref(): WindowsInternalTerminalShellPref {
+  try {
+    const raw = readFileSync(serverDataFile('server-settings.json'), 'utf-8')
+    const parsed = JSON.parse(raw) as { windowsInternalTerminalShell?: unknown }
+    return normalizeWindowsInternalTerminalShellPref(parsed.windowsInternalTerminalShell)
+  } catch {
+    return 'auto'
+  }
 }
 
 async function loadServerSettings(): Promise<ServerSettingsData> {
@@ -883,10 +905,7 @@ export async function updateServerTelegramNotificationSettings(
   }
   const terminalInputEnabled =
     input.terminalInputEnabled === undefined ? data.telegramTerminalInputEnabled : input.terminalInputEnabled === true
-  if (
-    terminalInputEnabled &&
-    (!botToken || !/^-\d+$/u.test(chatId) || terminalInputAllowedUserIds.length === 0)
-  ) {
+  if (terminalInputEnabled && (!botToken || !/^-\d+$/u.test(chatId) || terminalInputAllowedUserIds.length === 0)) {
     throw new TelegramNotificationSettingsError('configuration-incomplete')
   }
   if (
@@ -1033,6 +1052,10 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   const nextGlobalShortcut =
     patch.globalShortcut === undefined ? data.globalShortcut : normalizeGlobalShortcut(patch.globalShortcut)
   const nextTerminalApp = patch.terminalApp === undefined ? data.terminalApp : normalizeTerminalPref(patch.terminalApp)
+  const nextWindowsInternalTerminalShell =
+    patch.windowsInternalTerminalShell === undefined
+      ? data.windowsInternalTerminalShell
+      : normalizeWindowsInternalTerminalShellPref(patch.windowsInternalTerminalShell)
   const nextEditorApp = patch.editorApp === undefined ? data.editorApp : normalizeEditorPref(patch.editorApp)
   const nextTopbarHeightPx =
     patch.topbarHeightPx === undefined ? data.topbarHeightPx : normalizeTopbarHeightPx(patch.topbarHeightPx)
@@ -1082,6 +1105,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
     data.temporaryFilesDirectory !== nextTemporaryFilesDirectory ||
     data.globalShortcut !== nextGlobalShortcut ||
     data.terminalApp !== nextTerminalApp ||
+    data.windowsInternalTerminalShell !== nextWindowsInternalTerminalShell ||
     data.editorApp !== nextEditorApp ||
     data.topbarHeightPx !== nextTopbarHeightPx ||
     data.toolbarHeightPx !== nextToolbarHeightPx ||
@@ -1111,6 +1135,7 @@ export async function updateServerSettingsPrefs(patch: ServerSettingsPrefsPatch)
   data.temporaryFilesDirectory = nextTemporaryFilesDirectory
   data.globalShortcut = nextGlobalShortcut
   data.terminalApp = nextTerminalApp
+  data.windowsInternalTerminalShell = nextWindowsInternalTerminalShell
   data.editorApp = nextEditorApp
   data.topbarHeightPx = nextTopbarHeightPx
   data.toolbarHeightPx = nextToolbarHeightPx
@@ -1197,6 +1222,7 @@ export async function clearServerRecentRepos(): Promise<void> {
 
 export function resetServerSettingsSourceForTests(): void {
   settingsPromise = null
+  settingsWriteQueue = Promise.resolve()
   listeners.clear()
   cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 }

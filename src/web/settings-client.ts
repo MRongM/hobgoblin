@@ -20,6 +20,7 @@ import type {
   TerminalPref,
   ThemePref,
   ThemeState,
+  WindowsInternalTerminalShellPref,
   WebAccessSettingsSnapshot,
   WebAccessSettingsUpdateInput,
   TelegramBellNotificationContext,
@@ -247,6 +248,13 @@ export async function setTemporaryFilesDirectory(path: string): Promise<void> {
 export async function setPreferredTerminalApp(pref: TerminalPref): Promise<TerminalAppState> {
   const result = await updateSettingsPrefsPatch({ terminalApp: pref })
   return result.externalApps?.terminal ?? (await getExternalAppsSnapshot()).terminal
+}
+
+export async function setWindowsInternalTerminalShell(
+  pref: WindowsInternalTerminalShellPref,
+): Promise<WindowsInternalTerminalShellPref> {
+  const result = await updateSettingsPrefsPatch({ windowsInternalTerminalShell: pref })
+  return result.settings.windowsInternalTerminalShell
 }
 
 export async function setPreferredEditorApp(pref: EditorPref): Promise<EditorAppState> {

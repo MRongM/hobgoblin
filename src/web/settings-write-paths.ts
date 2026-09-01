@@ -8,6 +8,7 @@ import type {
   TerminalCustomButtonSize,
   TerminalAppState,
   TerminalPref,
+  WindowsInternalTerminalShellPref,
   WebAccessSettingsSnapshot,
   WebAccessSettingsUpdateInput,
   TelegramNotificationSettingsSnapshot,
@@ -28,6 +29,7 @@ import {
   setServerPort,
   setPreferredEditorApp,
   setPreferredTerminalApp,
+  setWindowsInternalTerminalShell,
   setProjectColorTheme,
   setSettingsFetchInterval,
   setStatusRefreshInterval,
@@ -133,6 +135,14 @@ export async function setTerminalAppPreference(pref: TerminalPref): Promise<Term
   updateExternalAppsCache(mainWindowQueryClient, (current) => ({ ...current, terminal: state }))
   updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({ ...current, terminalApp: state.pref }))
   return state
+}
+
+export async function setWindowsInternalTerminalShellPreference(pref: WindowsInternalTerminalShellPref): Promise<void> {
+  const windowsInternalTerminalShell = await setWindowsInternalTerminalShell(pref)
+  updateRuntimeSettingsSnapshotCache(mainWindowQueryClient, (current) => ({
+    ...current,
+    windowsInternalTerminalShell,
+  }))
 }
 
 export async function setEditorAppPreference(pref: EditorPref): Promise<EditorAppState> {

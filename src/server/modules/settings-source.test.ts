@@ -75,6 +75,7 @@ test('initializes server-settings.json with defaults when no persisted settings 
     temporaryFilesDirectory: '',
     globalShortcut: 'Alt+G',
     terminalApp: 'auto',
+    windowsInternalTerminalShell: 'auto',
     editorApp: 'auto',
     topbarHeightPx: 34,
     toolbarHeightPx: 34,
@@ -117,6 +118,36 @@ test.each(['wsl', 'powershell', 'cmd'] as const)(
     vi.resetModules()
     const reloaded = await import('#/server/modules/settings-source.ts')
     await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ terminalApp: pref })
+  },
+)
+
+test.each(['auto', 'wsl', 'powershell', 'cmd'] as const)(
+  'persists the Windows internal terminal shell preference %s',
+  async (pref) => {
+    useTempServerSettingsDir()
+    const mod = await import('#/server/modules/settings-source.ts')
+
+    await expect(mod.updateServerSettingsPrefs({ windowsInternalTerminalShell: pref })).resolves.toMatchObject({
+      windowsInternalTerminalShell: pref,
+    })
+    expect(mod.readPersistedWindowsInternalTerminalShellPref()).toBe(pref)
+
+    mod.resetServerSettingsSourceForTests()
+    vi.resetModules()
+    const reloaded = await import('#/server/modules/settings-source.ts')
+    await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ windowsInternalTerminalShell: pref })
+  },
+)
+
+test.each([undefined, 'invalid', 1, null])(
+  'normalizes a legacy or invalid Windows internal terminal shell preference %p to automatic',
+  async (pref) => {
+    useTempServerSettingsDir()
+    writeSettingsFile({ windowsInternalTerminalShell: pref })
+    const mod = await import('#/server/modules/settings-source.ts')
+
+    expect(mod.readPersistedWindowsInternalTerminalShellPref()).toBe('auto')
+    await expect(mod.getServerSettingsPrefs()).resolves.toMatchObject({ windowsInternalTerminalShell: 'auto' })
   },
 )
 
@@ -245,9 +276,9 @@ test.each([
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
 
-  await expect(
-    mod.updateServerTelegramNotificationSettings(telegramSettingsUpdate(overrides)),
-  ).rejects.toMatchObject({ code: 'invalid-input' })
+  await expect(mod.updateServerTelegramNotificationSettings(telegramSettingsUpdate(overrides))).rejects.toMatchObject({
+    code: 'invalid-input',
+  })
 })
 
 test('requires token, group Chat ID, and an allowlist before enabling Telegram terminal input', async () => {

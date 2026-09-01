@@ -45,10 +45,3 @@ export async function getWorktreeContentState(
     await fs.rm(temporaryDirectory, { recursive: true, force: true }).catch(() => undefined)
   }
 }
-
-export function worktreeContentStatesEqual(
-  left: WorktreeContentState,
-  right: WorktreeContentState,
-): boolean {
-  return left.indexHash === right.indexHash && left.worktreeTree === right.worktreeTree
-}

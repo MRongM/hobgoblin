@@ -16,7 +16,7 @@ import type {
   BranchWorkspaceSnapshot,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { sameLocalHostPath } from '#/shared/path-semantics.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 interface BranchWorkspaceReadDependencies {
@@ -232,7 +232,7 @@ function projectState(
 function sameHostPath(rootId: string, left: string, right: string): boolean {
   return isRemoteRepoId(rootId)
     ? path.posix.normalize(left) === path.posix.normalize(right)
-    : sameLocalHostPath(left, right)
+    : sameLocalFilePath(left, right)
 }
 
 function safeReadMessage(error: unknown): string {

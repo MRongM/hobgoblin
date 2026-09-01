@@ -3,12 +3,15 @@ import { registerTrustedAppUrl, registerTrustedWebContents } from '#/main/ipc/tr
 import { wireShellBridgeIpc } from '#/main/shell-bridge.ts'
 import {
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
+  SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
+  SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
@@ -19,20 +22,26 @@ const {
   showOpenDialog,
   sendRendererEffectIntent,
   activateMainWindow,
+  readClipboardImageFromSystem,
   readClipboardFilePathsFromSystem,
   saveClipboardBinaryFilesToTemp,
   readFileTreeClipboardFile,
   writeFileTreeClipboardFile,
+  getMacosComputerUsePermissions,
+  requestMacosComputerUsePermission,
 } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, (_event: unknown, input: any) => unknown>(),
   browserWindowFromWebContents: vi.fn(),
   showOpenDialog: vi.fn(),
   sendRendererEffectIntent: vi.fn(),
   activateMainWindow: vi.fn(),
+  readClipboardImageFromSystem: vi.fn(),
   readClipboardFilePathsFromSystem: vi.fn(),
   saveClipboardBinaryFilesToTemp: vi.fn(),
   readFileTreeClipboardFile: vi.fn(),
   writeFileTreeClipboardFile: vi.fn(),
+  getMacosComputerUsePermissions: vi.fn(),
+  requestMacosComputerUsePermission: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -59,6 +68,10 @@ vi.mock('#/main/clipboard-file-paths.ts', () => ({
   readClipboardFilePathsFromSystem,
 }))
 
+vi.mock('#/main/clipboard-image.ts', () => ({
+  readClipboardImageFromSystem,
+}))
+
 vi.mock('#/main/clipboard-binary-temp-files.ts', () => ({
   saveClipboardBinaryFilesToTemp,
 }))
@@ -66,6 +79,11 @@ vi.mock('#/main/clipboard-binary-temp-files.ts', () => ({
 vi.mock('#/main/file-tree-clipboard.ts', () => ({
   readFileTreeClipboardFile,
   writeFileTreeClipboardFile,
+}))
+
+vi.mock('#/main/macos-computer-use-permissions.ts', () => ({
+  getMacosComputerUsePermissions,
+  requestMacosComputerUsePermission,
 }))
 
 const trustedSender = { id: 1, once: vi.fn() }
@@ -83,6 +101,14 @@ describe('shell bridge IPC', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    getMacosComputerUsePermissions.mockReturnValue({
+      screenRecording: 'granted',
+      accessibility: 'denied',
+    })
+    requestMacosComputerUsePermission.mockResolvedValue({
+      ok: true,
+      permissions: { screenRecording: 'granted', accessibility: 'denied' },
+    })
   })
 
   test('wires shell bridge handlers', () => {
@@ -91,10 +117,43 @@ describe('shell bridge IPC', () => {
     expect(ipcHandlers.has(SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_OPEN_FILE_DIALOG_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_IMAGE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL)).toBe(true)
     expect(ipcHandlers.has(SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL)).toBe(true)
+    expect(ipcHandlers.has(SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL)).toBe(true)
+  })
+
+  test('reads and requests macOS Computer Use permissions for trusted senders', async () => {
+    await expect(invoke(SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL)).resolves.toEqual({
+      screenRecording: 'granted',
+      accessibility: 'denied',
+    })
+    await expect(
+      invoke(SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL, { kind: 'accessibility' }),
+    ).resolves.toEqual({
+      ok: true,
+      permissions: { screenRecording: 'granted', accessibility: 'denied' },
+    })
+    expect(requestMacosComputerUsePermission).toHaveBeenCalledWith('accessibility')
+  })
+
+  test('rejects invalid or untrusted macOS Computer Use permission requests', async () => {
+    const unsupported = { screenRecording: 'unsupported', accessibility: 'unsupported' }
+
+    await expect(invoke(SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL, { kind: 'camera' })).resolves.toEqual({
+      ok: false,
+      permissions: unsupported,
+    })
+    await expect(
+      invokeWithEvent(SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL, undefined, {
+        sender: { id: 99, once: vi.fn() },
+        senderFrame: { url: 'https://example.com/' },
+      } as any),
+    ).resolves.toEqual(unsupported)
+    expect(requestMacosComputerUsePermission).not.toHaveBeenCalled()
   })
 
   test('parents directory dialogs to the sender window', async () => {
@@ -187,6 +246,29 @@ describe('shell bridge IPC', () => {
     } as any)
 
     expect(result).toEqual([])
+  })
+
+  test('reads a clipboard image for trusted senders', async () => {
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new ArrayBuffer(3) }
+    readClipboardImageFromSystem.mockReturnValue(payload)
+
+    const result = await invoke(SHELL_READ_CLIPBOARD_IMAGE_CHANNEL)
+
+    expect(result).toBe(payload)
+    expect(readClipboardImageFromSystem).toHaveBeenCalledTimes(1)
+  })
+
+  test('returns no clipboard image for untrusted senders', async () => {
+    const payload = { name: 'clipboard.png', type: 'image/png', bytes: new ArrayBuffer(3) }
+    readClipboardImageFromSystem.mockReturnValue(payload)
+
+    const result = await invokeWithEvent(SHELL_READ_CLIPBOARD_IMAGE_CHANNEL, undefined, {
+      sender: { id: 99, once: vi.fn() },
+      senderFrame: { url: 'https://example.com/' },
+    } as any)
+
+    expect(result).toBeNull()
+    expect(readClipboardImageFromSystem).not.toHaveBeenCalled()
   })
 
   test('saves clipboard binary files for trusted senders', async () => {

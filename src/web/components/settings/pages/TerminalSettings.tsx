@@ -33,6 +33,7 @@ import {
 } from '#/web/runtime-settings-terminal-buttons.ts'
 import { useFontSettingsController } from '#/web/runtime-settings-fonts.ts'
 import { useI18nStore, useT, type Dict } from '#/web/stores/i18n.ts'
+import { WindowsInternalTerminalShellSettings } from '#/web/components/settings/pages/WindowsInternalTerminalShellSettings.tsx'
 
 type EditableTerminalCustomButton = TerminalCustomButton & {
   id: string
@@ -131,6 +132,7 @@ export function TerminalSettings() {
 
   return (
     <>
+      <WindowsInternalTerminalShellSettings />
       <SettingsGroup label={t('settings.terminal-font.title')}>
         <SettingsList>
           <SettingsRow

@@ -24,6 +24,7 @@ import type {
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
+import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 
 export interface TerminalWorkerRequestInputs {
   attach: TerminalAttachInput
@@ -77,6 +78,10 @@ export type TerminalWorkerActionRequest = {
 
 export type TerminalWorkerRequest =
   | TerminalWorkerActionRequest
+  | {
+      type: 'configure'
+      windowsInternalTerminalShell: WindowsInternalTerminalShellPref
+    }
   | {
       type: 'socket-register'
       socketId: string

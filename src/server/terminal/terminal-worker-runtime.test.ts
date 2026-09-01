@@ -17,6 +17,7 @@ function createTerminalFacadeStub(): TerminalFacade {
     message: null,
   }
   return {
+    configure: vi.fn(),
     registerSocket: vi.fn(),
     unregisterSocket: vi.fn(),
     attach: vi.fn(async () => ({ ok: true as const, ...firstFrame, replay: '', replaySeq: 0, replayTruncated: false })),
@@ -62,6 +63,20 @@ function createTerminalFacadeStub(): TerminalFacade {
 }
 
 describe('terminal worker runtime', () => {
+  test('applies server-owned shell configuration without emitting a request response', async () => {
+    const service = createTerminalFacadeStub()
+    const emitted: TerminalWorkerMessage[] = []
+    const runtime = new TerminalWorkerRuntime({ service, emit: (message) => emitted.push(message), exit: vi.fn() })
+
+    await runtime.handleMessage({
+      type: 'configure',
+      windowsInternalTerminalShell: 'powershell',
+    })
+
+    expect(service.configure).toHaveBeenCalledWith({ windowsInternalTerminalShell: 'powershell' })
+    expect(emitted).toEqual([])
+  })
+
   test('dispatches requests through the terminal facade and emits responses', async () => {
     const service = createTerminalFacadeStub()
     const emitted: TerminalWorkerMessage[] = []

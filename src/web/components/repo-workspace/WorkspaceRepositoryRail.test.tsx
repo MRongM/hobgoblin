@@ -601,6 +601,13 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('uses the shared project list scrollbar contract for the repository list', () => {
+    renderRail()
+
+    const upperList = container?.querySelector<HTMLElement>('[data-testid="workspace-repository-upper-list"]')
+    expect(upperList?.classList.contains('project-list-scrollbar')).toBe(true)
+  })
+
   test('syncs every configured repository with its latest instance token', async () => {
     renderRail()
 
@@ -2115,6 +2122,8 @@ function terminalCommandContext(): TerminalSessionContextValue {
     extendMobileSelection: vi.fn(),
     finishMobileSelection: vi.fn(),
     cancelMobileSelection: vi.fn(),
+    selectionText: vi.fn(() => ''),
+    pasteText: vi.fn(),
     mobileSelectionText: vi.fn(() => ''),
     clearMobileSelection: vi.fn(),
     writeExtraKey: vi.fn(),

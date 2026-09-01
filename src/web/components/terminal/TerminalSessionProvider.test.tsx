@@ -178,6 +178,8 @@ vi.mock('#/web/components/terminal/ManagedTerminalSession.ts', () => {
 
     writeInput() {}
 
+    pasteText() {}
+
     takeover() {}
 
     serialize(): string {
@@ -599,6 +601,17 @@ beforeEach(() => {
 })
 
 describe('TerminalSessionProvider', () => {
+  test('exposes renderer-local selection and paste through the command context', async () => {
+    const { getContext, unmount } = await renderProvider()
+
+    try {
+      expect(getContext().selectionText).toBeTypeOf('function')
+      expect(getContext().pasteText).toBeTypeOf('function')
+    } finally {
+      await unmount()
+    }
+  })
+
   test('keeps terminal detail open and switches the selected session when one of multiple terminals exits', async () => {
     seedRepoState({
       id: REPO_ID,

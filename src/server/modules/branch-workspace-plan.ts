@@ -29,7 +29,7 @@ import {
   type BranchWorkspaceRepositoryPlan,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { sameLocalHostPath } from '#/shared/path-semantics.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import { PROTECTED_BRANCHES, type WorktreeInfo } from '#/shared/git-types.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchRef } from '#/shared/remote-branches.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
@@ -1172,7 +1172,7 @@ function planToken(plan: Omit<BranchWorkspacePlan, 'token'>): string {
 function sameHostPath(rootId: string, left: string, right: string): boolean {
   return isRemoteRepoId(rootId)
     ? path.posix.normalize(left) === path.posix.normalize(right)
-    : sameLocalHostPath(left, right)
+    : sameLocalFilePath(left, right)
 }
 
 function sameCreationBase(left: WorktreeCreationBase, right: WorktreeCreationBase): boolean {

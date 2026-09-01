@@ -79,6 +79,12 @@ describe('settings defaults', () => {
     )
   })
 
+  test('defaults the Windows internal terminal shell to automatic without overriding an explicit choice', () => {
+    expect(defaultSettingsPrefs().windowsInternalTerminalShell).toBe('auto')
+    expect(defaultInitialSettingsSnapshot().windowsInternalTerminalShell).toBe('auto')
+    expect(defaultSettingsPrefs({ windowsInternalTerminalShell: 'cmd' }).windowsInternalTerminalShell).toBe('cmd')
+  })
+
   test('returns isolated built-in terminal button preset defaults', () => {
     const first = defaultSettingsPrefs().terminalCustomButtons
     const second = defaultSettingsPrefs().terminalCustomButtons

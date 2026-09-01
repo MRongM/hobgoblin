@@ -55,6 +55,7 @@ const appDataClientMocks = vi.hoisted(() => ({
     appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
     detectedAt: 0,
   })),
+  setWindowsInternalTerminalShell: vi.fn(async (pref) => pref),
   setProjectColorTheme: vi.fn<() => Promise<RepoSettingsEntry[]>>(async () => []),
   setSettingsFetchInterval: vi.fn(async (sec) => sec),
   setStatusRefreshInterval: vi.fn(async (sec) => sec),
@@ -99,6 +100,7 @@ vi.mock('#/web/settings-client.ts', () => ({
   setLanEnabled: appDataClientMocks.setLanEnabled,
   setPreferredEditorApp: appDataClientMocks.setPreferredEditorApp,
   setPreferredTerminalApp: appDataClientMocks.setPreferredTerminalApp,
+  setWindowsInternalTerminalShell: appDataClientMocks.setWindowsInternalTerminalShell,
   setProjectColorTheme: appDataClientMocks.setProjectColorTheme,
   setSettingsFetchInterval: appDataClientMocks.setSettingsFetchInterval,
   setStatusRefreshInterval: appDataClientMocks.setStatusRefreshInterval,
@@ -172,6 +174,8 @@ describe('settings write paths', () => {
       appAvailability: { ghostty: false, terminal: false, wsl: false, powershell: false, cmd: false },
       detectedAt: 0,
     }))
+    appDataClientMocks.setWindowsInternalTerminalShell.mockReset()
+    appDataClientMocks.setWindowsInternalTerminalShell.mockImplementation(async (pref) => pref)
     appDataClientMocks.setProjectColorTheme.mockReset()
     appDataClientMocks.setProjectColorTheme.mockResolvedValue([])
     appDataClientMocks.setSettingsFetchInterval.mockReset()
@@ -297,6 +301,19 @@ describe('settings write paths', () => {
     expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({ terminalApp: 'ghostty' })
     expect(mainWindowQueryClient.getQueryData(externalAppsQueryKey())).toMatchObject({
       terminal: expect.objectContaining({ pref: 'ghostty' }),
+    })
+  })
+
+  test('setWindowsInternalTerminalShellPreference caches the authoritative server value', async () => {
+    mainWindowQueryClient.setQueryData(settingsSnapshotQueryKey(), defaultSettingsSnapshot())
+    appDataClientMocks.setWindowsInternalTerminalShell.mockResolvedValue('cmd')
+    const { setWindowsInternalTerminalShellPreference } = await import('#/web/settings-write-paths.ts')
+
+    await setWindowsInternalTerminalShellPreference('wsl')
+
+    expect(appDataClientMocks.setWindowsInternalTerminalShell).toHaveBeenCalledWith('wsl')
+    expect(mainWindowQueryClient.getQueryData(settingsSnapshotQueryKey())).toMatchObject({
+      windowsInternalTerminalShell: 'cmd',
     })
   })
 

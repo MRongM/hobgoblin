@@ -54,6 +54,7 @@ describe('native shell projection helpers', () => {
         temporaryFilesDirectory: '',
         globalShortcut: 'Alt+K',
         terminalApp: 'auto',
+        windowsInternalTerminalShell: 'auto',
         editorApp: 'auto',
         topbarHeightPx: 39,
         toolbarHeightPx: 41,

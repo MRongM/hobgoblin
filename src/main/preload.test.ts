@@ -10,14 +10,17 @@ import {
   RPC_CHANNEL,
   RPC_EVENT_CHANNEL,
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
+  SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_DETACHED_FILE_AREA_WINDOW_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
   SHELL_OPEN_IN_FINDER_CHANNEL,
   SHELL_OPEN_SETTINGS_WINDOW_CHANNEL,
+  SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
+  SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
   TERMINAL_NOTIFY_BELL_CHANNEL,
@@ -51,6 +54,7 @@ function defaultBootstrap(): RendererBootstrapPayload {
       globalShortcut: 'CommandOrControl+Shift+G',
       globalShortcutRegistered: false,
       terminalApp: 'auto',
+      windowsInternalTerminalShell: 'auto',
       editorApp: 'cursor',
       topbarHeightPx: 34,
       toolbarHeightPx: 34,
@@ -208,6 +212,9 @@ describe('preload goblinNative bridge', () => {
     await goblinNative.shell.openFileDialog({ title: 'Upload files' })
     await goblinNative.shell.consumeExternalOpenPaths()
     await goblinNative.shell.openInFinder({ path: '/repo' })
+    await goblinNative.shell.getMacosComputerUsePermissions()
+    await goblinNative.shell.requestMacosComputerUsePermission({ kind: 'accessibility' })
+    await goblinNative.shell.readClipboardImage()
     await goblinNative.shell.readClipboardFilePaths()
     await goblinNative.shell.writeFileTreeClipboardFile({
       name: 'image.bin',
@@ -233,6 +240,9 @@ describe('preload goblinNative bridge', () => {
       SHELL_OPEN_FILE_DIALOG_CHANNEL,
       SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
       SHELL_OPEN_IN_FINDER_CHANNEL,
+      SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL,
+      SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL,
+      SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
       SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
       SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
       SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,

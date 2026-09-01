@@ -38,6 +38,7 @@ import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpe
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { useHostTmuxInventory } from '#/web/hooks/useHostTmuxInventory.tsx'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 import { useWorkspaceConfigurationRecovery } from '#/web/hooks/useWorkspaceConfigurationRecovery.tsx'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -107,7 +108,7 @@ export function SidebarProjectList({
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={projects.map((project) => project.id)} strategy={verticalListSortingStrategy}>
-        <ul id={id} className="max-h-72 overflow-y-auto px-1.5 pb-2">
+        <ul id={id} className="project-list-scrollbar max-h-72 overflow-y-auto px-1.5 pb-2">
           {projects.map((project) => (
             <SortableProjectRow
               key={project.id}
@@ -170,6 +171,7 @@ function SortableProjectRow({
     disabled: false,
   })
   const hostTmuxInventory = useHostTmuxInventory({ projectRoot: project.id, disabled: false })
+  const tmuxMenuVisible = supportsTmuxMenu(project.id)
   const workspaceRecovery = useWorkspaceConfigurationRecovery({
     rootId: project.id,
     workspace,
@@ -220,6 +222,7 @@ function SortableProjectRow({
     icon: <Terminal aria-hidden="true" />,
     disabled: projectInternalTerminalAction.disabled,
     busy: projectInternalTerminalAction.busy,
+    visible: tmuxMenuVisible,
     onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
   }
   const closeAction: WorkspaceListItemAction = {
@@ -304,11 +307,15 @@ function SortableProjectRow({
           icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
         }}
         internalTerminal={{ ...projectInternalTerminalAction, icon: <Terminal aria-hidden="true" /> }}
-        tmuxTerminal={{
-          ...projectInternalTerminalAction,
-          icon: <Terminal aria-hidden="true" />,
-          onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
-        }}
+        tmuxTerminal={
+          tmuxMenuVisible
+            ? {
+                ...projectInternalTerminalAction,
+                icon: <Terminal aria-hidden="true" />,
+                onSelect: () => projectInternalTerminalAction.onSelect('tmux-if-available'),
+              }
+            : undefined
+        }
         worktreeTerminalKeys={project.terminalWorktreeKeys}
         additionalActions={[
           ...(hostTmuxInventory.visible ? [hostTmuxInventory.contextAction] : []),

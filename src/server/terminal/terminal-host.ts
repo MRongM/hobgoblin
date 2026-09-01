@@ -22,6 +22,7 @@ import type {
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
+import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 
 type MaybePromise<T> = T | Promise<T>
 
@@ -59,6 +60,7 @@ export interface ServerTerminalHostDiagnostics {
 export interface ServerTerminalHost {
   isValidClientId(value: unknown): value is string
   getDiagnostics(): MaybePromise<ServerTerminalHostDiagnostics>
+  setWindowsInternalTerminalShellPreference?(preference: WindowsInternalTerminalShellPref): void
   registerSocket(clientId: string, attachmentId: string, socket: ServerTerminalSocket): void
   unregisterSocket(clientId: string, attachmentId: string, socket: ServerTerminalSocket): void
   attach(clientId: string, input: TerminalAttachInput): MaybePromise<TerminalAttachResult>

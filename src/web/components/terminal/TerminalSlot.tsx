@@ -15,6 +15,12 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 import { Button } from '#/web/components/ui/button.tsx'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '#/web/components/ui/context-menu.tsx'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
@@ -24,6 +30,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import {
   pathForDroppedFile,
+  readSystemClipboardImage,
   readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste,
 } from '#/web/app-shell-client.ts'
@@ -43,7 +50,7 @@ import { generatedTimestampedPasteFileName } from '#/web/components/file-tree/mo
 import { uploadedItemFromFile } from '#/web/components/file-tree/clipboard.ts'
 import { openWorktreeEditorTarget } from '#/web/lib/editor-open-targets.ts'
 import { resolveTerminalCustomButtonPreset } from '#/shared/terminal-custom-button-presets.ts'
-import { writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
+import { readTerminalClipboardText, writeTerminalClipboardText } from '#/web/components/terminal/terminal-clipboard.ts'
 import { TerminalCycleButtons } from '#/web/components/terminal/TerminalCycleButtons.tsx'
 import { DesktopTerminalDock } from '#/web/components/terminal/DesktopTerminalDock.tsx'
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
@@ -117,6 +124,11 @@ interface MobileTerminalSelectionCopyAction {
   clientY: number
 }
 
+interface DesktopTerminalContextMenuState {
+  key: string
+  selectionText: string
+}
+
 interface TerminalSlotProps {
   repoRoot: string
   worktreePath: string
@@ -145,6 +157,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [mobileSelectionCopyAction, setMobileSelectionCopyAction] = useState<MobileTerminalSelectionCopyAction | null>(
     null,
   )
+  const [desktopContextMenu, setDesktopContextMenu] = useState<DesktopTerminalContextMenuState | null>(null)
   const context = useTerminalSessionContext()
   const {
     clearBell,
@@ -167,6 +180,8 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     extendMobileSelection,
     finishMobileSelection,
     cancelMobileSelection,
+    selectionText,
+    pasteText,
     mobileSelectionText,
     clearMobileSelection,
     takeover,
@@ -198,12 +213,18 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
-  const isMacPlatform = isMacNavigatorPlatform(globalThis.navigator?.platform ?? '')
+  const navigatorPlatform = globalThis.navigator?.platform ?? ''
+  const isMacPlatform = isMacNavigatorPlatform(navigatorPlatform)
+  const isWindowsPlatform = /^Win/i.test(navigatorPlatform)
   const isMobileTerminal = isMobile && (isController || isReadonly) && !!key
   const isMobileFocusMode = isMobile && isController && !!key && mobileFocusMode
 
   useEffect(() => {
     setMobileFocusMode(false)
+  }, [attachment?.role, isMobile, key])
+
+  useEffect(() => {
+    setDesktopContextMenu(null)
   }, [attachment?.role, isMobile, key])
 
   const cancelTouchInertia = useCallback(() => {
@@ -511,6 +532,43 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     setMobileSelectionCopyAction((current) => (current === action ? null : current))
   }, [clearMobileSelection, mobileSelectionCopyAction, mobileSelectionText, t])
 
+  const handleDesktopContextMenuOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setDesktopContextMenu(null)
+        return
+      }
+      if (isMobile || !key) return
+      const capturedSelectionText = selectionText(key)
+      if (!capturedSelectionText && !isController) return
+      setDesktopContextMenu({ key, selectionText: capturedSelectionText })
+    },
+    [isController, isMobile, key, selectionText],
+  )
+
+  const copyDesktopTerminalSelection = useCallback(async () => {
+    const text = desktopContextMenu?.selectionText
+    if (!text) return
+    if (!(await writeTerminalClipboardText(text))) {
+      toast.error(t('terminal.selection-copy-failed'))
+      return
+    }
+    setDesktopContextMenu(null)
+  }, [desktopContextMenu, t])
+
+  const pasteDesktopTerminalText = useCallback(async () => {
+    const action = desktopContextMenu
+    if (!action || !isController || action.key !== key) return
+    const text = await readTerminalClipboardText()
+    if (text === null) {
+      toast.error(t('terminal.clipboard-paste-failed'))
+      return
+    }
+    if (!text) return
+    pasteText(action.key, text)
+    focusTerminal(action.key)
+  }, [desktopContextMenu, focusTerminal, isController, key, pasteText, t])
+
   useLayoutEffect(() => {
     registerWorktreeHost(terminalWorktreeKey, hostRef.current)
     return () => registerWorktreeHost(terminalWorktreeKey, null)
@@ -637,12 +695,17 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       const files = binaryPasteFiles(event.clipboardData)
       event.preventDefault()
       event.stopPropagation()
-      void resolvePastedFilePaths(files, { repoRoot, worktreePath, temporaryFilesDirectory }).then((paths) => {
+      void resolvePastedFilePaths(files, {
+        repoRoot,
+        worktreePath,
+        temporaryFilesDirectory,
+        allowNativeClipboardImage: isWindowsPlatform,
+      }).then((paths) => {
         if (paths.length === 0) return
         writeInput(key, paths.map(shellEscapePath).join(' '))
       })
     },
-    [isController, key, repoRoot, temporaryFilesDirectory, worktreePath, writeInput],
+    [isController, isWindowsPlatform, key, repoRoot, temporaryFilesDirectory, worktreePath, writeInput],
   )
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -878,6 +941,43 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       {customButtonElements}
     </div>
   ) : null
+  const terminalHost = (
+    <div
+      id={terminalHostId}
+      ref={hostRef}
+      className={cn(
+        'goblin-terminal-slot__host',
+        isReadonly && 'goblin-terminal-slot__host--canonical-readonly',
+        isMobileTerminal && 'goblin-terminal-slot__host--touch-scroll',
+        isMobileTerminal && !fitToWidth && 'goblin-terminal-slot__host--original-width',
+      )}
+      aria-readonly={(!isController && hasSessions) || undefined}
+      onPointerDown={isMobileTerminal ? handleTouchScrollStart : undefined}
+      onPointerMove={isMobileTerminal ? handleTouchScrollMove : undefined}
+      onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
+      onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
+      onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
+    />
+  )
+  const terminalHostSurface = !isMobile ? (
+    <ContextMenu open={desktopContextMenu !== null} onOpenChange={handleDesktopContextMenuOpenChange}>
+      <ContextMenuTrigger asChild>{terminalHost}</ContextMenuTrigger>
+      {desktopContextMenu !== null && (
+        <ContextMenuContent>
+          {desktopContextMenu.selectionText && (
+            <ContextMenuItem onSelect={() => void copyDesktopTerminalSelection()}>
+              {t('menu.edit.copy')}
+            </ContextMenuItem>
+          )}
+          {isController && desktopContextMenu.key === key && (
+            <ContextMenuItem onSelect={() => void pasteDesktopTerminalText()}>{t('menu.edit.paste')}</ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      )}
+    </ContextMenu>
+  ) : (
+    terminalHost
+  )
 
   return (
     <div
@@ -908,22 +1008,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           )}
         </div>
       )}
-      <div
-        id={terminalHostId}
-        ref={hostRef}
-        className={cn(
-          'goblin-terminal-slot__host',
-          isReadonly && 'goblin-terminal-slot__host--canonical-readonly',
-          isMobileTerminal && 'goblin-terminal-slot__host--touch-scroll',
-          isMobileTerminal && !fitToWidth && 'goblin-terminal-slot__host--original-width',
-        )}
-        aria-readonly={(!isController && hasSessions) || undefined}
-        onPointerDown={isMobileTerminal ? handleTouchScrollStart : undefined}
-        onPointerMove={isMobileTerminal ? handleTouchScrollMove : undefined}
-        onPointerUp={isMobileTerminal ? handleTouchScrollEnd : undefined}
-        onPointerCancel={isMobileTerminal ? handleTouchScrollCancel : undefined}
-        onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
-      />
+      {terminalHostSurface}
       {mobileSelectionCopyAction && (
         <Button
           type="button"
@@ -1155,11 +1240,13 @@ interface ResolvePastedFilePathsOptions {
   repoRoot: string
   worktreePath: string
   temporaryFilesDirectory: string
+  allowNativeClipboardImage: boolean
 }
 
 async function resolvePastedFilePaths(files: File[], options: ResolvePastedFilePathsOptions): Promise<string[]> {
   const sourcePaths = await readSystemClipboardFilePaths()
-  if (isRemoteRepoId(options.repoRoot)) return await resolveRemotePastedFilePaths(files, sourcePaths, options)
+  const payloads = sourcePaths.length > 0 ? [] : await pastedBinaryPayloads(files, options.allowNativeClipboardImage)
+  if (isRemoteRepoId(options.repoRoot)) return await resolveRemotePastedFilePaths(payloads, sourcePaths, options)
   if (sourcePaths.length > 0) {
     const result = await saveClipboardBinaryFilesFromPaste({
       worktreePath: options.worktreePath,
@@ -1169,18 +1256,17 @@ async function resolvePastedFilePaths(files: File[], options: ResolvePastedFileP
     })
     return result.ok ? result.paths : []
   }
-  if (files.length === 0) return []
-  const payload = await Promise.all(files.map(fileToClipboardPayload))
+  if (payloads.length === 0) return []
   const result = await saveClipboardBinaryFilesFromPaste({
     worktreePath: options.worktreePath,
     temporaryFilesDirectory: options.temporaryFilesDirectory,
-    files: payload,
+    files: payloads,
   })
   return result.ok ? result.paths : []
 }
 
 async function resolveRemotePastedFilePaths(
-  files: File[],
+  payloads: ClipboardBinaryFilePayload[],
   sourcePaths: string[],
   options: ResolvePastedFilePathsOptions,
 ): Promise<string[]> {
@@ -1197,8 +1283,8 @@ async function resolveRemotePastedFilePaths(
     })
     return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
   }
-  if (files.length === 0) return []
-  const items = await Promise.all(files.map(uploadedItemFromFile))
+  if (payloads.length === 0) return []
+  const items = await Promise.all(payloads.map((payload) => uploadedItemFromFile(fileFromClipboardPayload(payload))))
   const result = await transferRepositoryFiles({
     repoId: options.repoRoot,
     worktreePath: options.worktreePath,
@@ -1209,6 +1295,20 @@ async function resolveRemotePastedFilePaths(
     },
   })
   return result.ok ? result.copied.map((entry) => entry.destinationPath) : []
+}
+
+async function pastedBinaryPayloads(
+  files: File[],
+  allowNativeClipboardImage: boolean,
+): Promise<ClipboardBinaryFilePayload[]> {
+  if (files.length > 0) return await Promise.all(files.map(fileToClipboardPayload))
+  if (!allowNativeClipboardImage) return []
+  const image = await readSystemClipboardImage()
+  return image ? [image] : []
+}
+
+function fileFromClipboardPayload(payload: ClipboardBinaryFilePayload): File {
+  return new File([payload.bytes], payload.name ?? 'clipboard', { type: payload.type ?? '' })
 }
 
 function remoteTerminalPasteTargetDir(worktreePath: string): string {

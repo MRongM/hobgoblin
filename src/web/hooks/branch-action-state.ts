@@ -10,6 +10,8 @@ export type BranchActionItemId =
   | 'sync'
   | 'remote'
   | 'terminal'
+  | 'terminalPowerShell'
+  | 'terminalWsl'
   | 'terminalTmux'
   | 'restoreTmuxTerminals'
   | 'externalTerminal'

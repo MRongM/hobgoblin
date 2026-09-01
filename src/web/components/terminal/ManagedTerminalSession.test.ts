@@ -81,6 +81,7 @@ const xtermMocks = vi.hoisted(() => {
     })
     themeAssignments = 0
     reset = vi.fn()
+    paste = vi.fn()
     scrollToBottom = vi.fn()
     scrollLines = vi.fn((amount: number) => {
       const active = this.buffer.active
@@ -1066,7 +1067,10 @@ describe('ManagedTerminalSession', () => {
     expect(mouseDown).toHaveBeenCalledTimes(1)
     expect(mouseMove).toHaveBeenCalledTimes(1)
     expect(mouseUp).toHaveBeenCalledTimes(1)
+    expect(session.selectionText()).toBe('copy me')
     expect(session.mobileSelectionText()).toBe('copy me')
+    session.pasteText('line one\nline two')
+    expect(term.paste).toHaveBeenCalledWith('line one\nline two')
 
     session.clearMobileSelection()
     expect(term.clearSelection).toHaveBeenCalledTimes(1)

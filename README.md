@@ -53,7 +53,7 @@ Hobgoblin started from [Goblin](https://nano-props.github.io/goblin/), a small, 
 
 ## Magic Operations
 
-- **Open a project with `hob` (macOS):** Run `hob .` or `hob <directory>` from a terminal to open or import that local directory in Hobgoblin.
+- **Open a project with `hob` (macOS and Windows):** Run `hob .` or `hob <directory>` from a terminal to open or import that local directory in Hobgoblin.
 - **Global terminal switching:** While an internal terminal is focused, use `Cmd+Option+Up/Down` on macOS or `Ctrl+Alt+Up/Down` on Windows/Linux to move through all open internal terminals across projects and worktrees.
 - **Binary paste into terminal input:** Paste binary clipboard content into the terminal input to create temporary files and insert the generated file paths.
 - **Drag from file tree to terminal:** Drag files from the file tree into the terminal to insert shell-safe paths without typing them manually.
@@ -92,6 +92,26 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 On Windows, SmartScreen may warn about the unsigned installer. Continue only if you trust the GitHub Release source.
 
 On Windows, WSL with a Unix-like terminal environment is recommended. When a usable default WSL distribution is installed, Hobgoblin prefers it for internal terminals and external Windows Terminal launches, while retaining native Windows shell fallbacks when WSL is unavailable.
+
+### Open Projects from the Terminal on Windows
+
+The Windows installer adds Hobgoblin's `resources\bin` directory to your current-user `PATH`. Open a new PowerShell or Command Prompt window after installation, then open or import the current directory:
+
+```powershell
+hob .
+```
+
+The command accepts zero or one directory argument and defaults to the current directory. To diagnose another `hob` command taking precedence, run:
+
+```powershell
+Get-Command hob -All
+```
+
+Or from Command Prompt:
+
+```bat
+where.exe hob
+```
 
 ### Open Projects from the Terminal on macOS
 
