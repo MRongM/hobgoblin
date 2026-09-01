@@ -52,7 +52,10 @@ const config: Configuration = {
     '!src/**/*.test.ts',
     '!**/*.map',
   ],
-  extraResources: [{ from: 'bin/hob', to: 'bin/hob' }],
+  extraResources: [
+    { from: 'bin/hob', to: 'bin/hob' },
+    { from: 'bin/hob.cmd', to: 'bin/hob.cmd' },
+  ],
   asarUnpack: [
     'node_modules/node-pty/prebuilds/**/*',
     'node_modules/node-pty/build/Release/**/*',
@@ -99,6 +102,7 @@ const config: Configuration = {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
+    include: 'build/installer.nsh',
   },
 }
 
