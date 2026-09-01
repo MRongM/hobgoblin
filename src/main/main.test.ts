@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
     resolveLang: vi.fn(() => 'en'),
     setCurrentLang: vi.fn(),
     enqueueExternalOpenPath: vi.fn(() => true),
+    windowsCliProjectOpenPathFromArgv: vi.fn((): string | null => null),
     wireRpcIpc: vi.fn(),
     diagnosticsLog: vi.fn(),
     broadcastRendererEffectIntent: vi.fn(),
@@ -142,6 +143,10 @@ vi.mock('#/main/external-open.ts', () => ({
   enqueueExternalOpenPath: mocks.enqueueExternalOpenPath,
 }))
 
+vi.mock('#/main/windows-cli-project-open.ts', () => ({
+  windowsCliProjectOpenPathFromArgv: mocks.windowsCliProjectOpenPathFromArgv,
+}))
+
 describe('main process startup lifecycle', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -150,6 +155,7 @@ describe('main process startup lifecycle', () => {
     mocks.handlers.clear()
     mocks.resetReady()
     mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot())
+    mocks.windowsCliProjectOpenPathFromArgv.mockReturnValue(null)
   })
 
   test('applies the startup user data override before app readiness', async () => {
@@ -193,10 +199,55 @@ describe('main process startup lifecycle', () => {
     expect(secondPassEvent.preventDefault).not.toHaveBeenCalled()
   })
 
+  test('queues a Windows hob path from the primary instance argv', async () => {
+    mocks.windowsCliProjectOpenPathFromArgv.mockReturnValueOnce('C:\\workspace')
+
+    await import('#/main/main.ts')
+
+    expect(mocks.requestSingleInstanceLock).toHaveBeenCalledWith({ hobOpenPath: 'C:\\workspace' })
+    expect(mocks.windowsCliProjectOpenPathFromArgv).toHaveBeenCalledWith(process.argv)
+    expect(mocks.enqueueExternalOpenPath).toHaveBeenCalledWith('C:\\workspace')
+  })
+
+  test('queues a Windows hob path from a second instance before activation', async () => {
+    await import('#/main/main.ts')
+    const commandLine = ['Hobgoblin.exe', '--hob-open', 'C:\\workspace']
+    mocks.windowsCliProjectOpenPathFromArgv.mockReturnValueOnce('C:\\workspace')
+
+    await emit('second-instance', {}, commandLine)
+    await Promise.resolve()
+
+    expect(mocks.windowsCliProjectOpenPathFromArgv).toHaveBeenCalledWith(commandLine)
+    expect(mocks.enqueueExternalOpenPath).toHaveBeenCalledWith('C:\\workspace')
+    expect(mocks.activateMainWindow).not.toHaveBeenCalled()
+
+    mocks.resolveReady()
+    await vi.waitFor(() => {
+      expect(mocks.activateMainWindow).toHaveBeenCalled()
+    })
+  })
+
+  test('queues a Windows hob path from second-instance additional data when Electron rewrites argv', async () => {
+    await import('#/main/main.ts')
+    const commandLine = [
+      'Hobgoblin.exe',
+      '--hob-open',
+      '--allow-file-access-from-files',
+      '.',
+      'C:\\workspace',
+    ]
+
+    await emit('second-instance', {}, commandLine, 'C:\\cwd', { hobOpenPath: 'C:\\workspace' })
+    await Promise.resolve()
+
+    expect(mocks.windowsCliProjectOpenPathFromArgv).toHaveBeenCalledWith(commandLine)
+    expect(mocks.enqueueExternalOpenPath).toHaveBeenCalledWith('C:\\workspace')
+  })
+
   test('defers second-instance activation until startup initialization finishes', async () => {
     await import('#/main/main.ts')
 
-    await emit('second-instance')
+    await emit('second-instance', {}, ['Hobgoblin.exe'])
     await Promise.resolve()
     expect(mocks.activateMainWindow).not.toHaveBeenCalled()
 
@@ -210,7 +261,7 @@ describe('main process startup lifecycle', () => {
   test('does not activate or create a window if quit starts before initialization finishes', async () => {
     await import('#/main/main.ts')
 
-    await emit('second-instance')
+    await emit('second-instance', {}, ['Hobgoblin.exe'])
     await emit('before-quit', { preventDefault: vi.fn() })
     mocks.resolveReady()
 
