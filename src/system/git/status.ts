@@ -1,6 +1,6 @@
 import { git } from '#/system/git/helper.ts'
 import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
-import { mapWithConcurrency } from '#/system/git/concurrency.ts'
+import { mapWithConcurrency, scheduleGitStatusRead } from '#/system/git/concurrency.ts'
 import type { StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
 
 const WORKTREE_STATUS_CONCURRENCY = 16
@@ -10,7 +10,10 @@ export async function getWorktreeStatusEntries(
   options?: { signal?: AbortSignal },
 ): Promise<StatusEntry[] | null> {
   try {
-    const output = await git(cwd, ['status', '--porcelain', '-z'], { signal: options?.signal })
+    const output = await scheduleGitStatusRead(
+      async () => await git(cwd, ['status', '--porcelain', '-z'], { signal: options?.signal }),
+      { signal: options?.signal },
+    )
     return options?.signal?.aborted ? null : parseStatus(output)
   } catch {
     return null
@@ -27,7 +30,10 @@ export async function getWorktreeStatusEntries(
 export async function getWorkingStatus(cwd: string, options?: { signal?: AbortSignal }): Promise<WorktreeStatus[]> {
   let worktrees
   try {
-    const out = await git(cwd, ['worktree', 'list', '--porcelain'], { signal: options?.signal })
+    const out = await scheduleGitStatusRead(
+      async () => await git(cwd, ['worktree', 'list', '--porcelain'], { signal: options?.signal }),
+      { signal: options?.signal },
+    )
     if (options?.signal?.aborted) return []
     worktrees = parseWorktrees(out)
   } catch {

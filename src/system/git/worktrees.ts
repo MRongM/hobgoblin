@@ -1,6 +1,6 @@
 import { git, gitResultWithOptions } from '#/system/git/helper.ts'
 import { parseStatus, parseWorktrees } from '#/system/git/parsers.ts'
-import { mapWithConcurrency } from '#/system/git/concurrency.ts'
+import { mapWithConcurrency, scheduleGitStatusRead } from '#/system/git/concurrency.ts'
 import { recordBranchCreatedFrom } from '#/system/git/branches.ts'
 import type { ExecResult, WorktreeInfo } from '#/shared/git-types.ts'
 import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
@@ -14,10 +14,15 @@ interface GetWorktreesOptions {
 }
 
 export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): Promise<WorktreeInfo[]> {
+  const includeStatus = options?.includeStatus !== false
   try {
-    const output = await git(cwd, ['worktree', 'list', '--porcelain', '--expire', 'now'], { signal: options?.signal })
+    const listWorktrees = async () =>
+      await git(cwd, ['worktree', 'list', '--porcelain', '--expire', 'now'], { signal: options?.signal })
+    const output = includeStatus
+      ? await scheduleGitStatusRead(listWorktrees, { signal: options?.signal })
+      : await listWorktrees()
     const worktrees = parseWorktrees(output)
-    if (options?.includeStatus === false) return worktrees
+    if (!includeStatus) return worktrees
 
     await mapWithConcurrency(
       worktrees,
@@ -29,7 +34,10 @@ export async function getWorktrees(cwd: string, options?: GetWorktreesOptions): 
           // counted as two changes. Reuse parseStatus so rename / copy
           // pairs (R/C take TWO records under -z) collapse into one
           // entry — matching what `git status` shows the user.
-          const out = await git(wt.path, ['status', '--porcelain', '-z'], { signal: options?.signal })
+          const out = await scheduleGitStatusRead(
+            async () => await git(wt.path, ['status', '--porcelain', '-z'], { signal: options?.signal }),
+            { signal: options?.signal },
+          )
           const entries = parseStatus(out)
           wt.isDirty = entries.length > 0
           wt.changeCount = entries.length

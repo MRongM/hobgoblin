@@ -85,6 +85,7 @@ import {
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import { buildGitNetworkEnv, type GitNetworkOptions } from '#/system/git/helper.ts'
+import { scheduleGitStatusRead } from '#/system/git/concurrency.ts'
 
 type RemoteGitRunner = (
   command: RemoteCommandKind,
@@ -198,14 +199,26 @@ export async function getRemoteStatus(
   options: { signal?: AbortSignal; run?: RemoteGitRunner } = {},
 ): Promise<WorktreeStatus[]> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run({ type: 'gitWorktreeList', path: target.remotePath }, target, { signal: options.signal })
+  let result: RemoteCommandResult
+  try {
+    result = await scheduleGitStatusRead(
+      async () => await run({ type: 'gitWorktreeList', path: target.remotePath }, target, { signal: options.signal }),
+      { signal: options.signal },
+    )
+  } catch (err) {
+    if (options.signal?.aborted) return []
+    throw err
+  }
   if (!result.ok || options.signal?.aborted) return []
   const worktrees = parseWorktrees(result.stdout).filter((worktree) => !worktree.isBare)
   const statuses = await mapWithConcurrency(
     worktrees,
     REMOTE_WORKTREE_STATUS_CONCURRENCY,
     async (worktree): Promise<WorktreeStatus | null> => {
-      const status = await run({ type: 'gitStatus', path: worktree.path }, target, { signal: options.signal })
+      const status = await scheduleGitStatusRead(
+        async () => await run({ type: 'gitStatus', path: worktree.path }, target, { signal: options.signal }),
+        { signal: options.signal },
+      )
       if (options.signal?.aborted) return null
       if (!status.ok) return null
       return {
@@ -228,7 +241,16 @@ export async function getRemoteWorktreeStatusEntries(
 ): Promise<StatusEntry[] | null> {
   if (!isValidRemotePath(worktreePath)) return null
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run({ type: 'gitStatus', path: worktreePath }, target, { signal: options.signal })
+  let result: RemoteCommandResult
+  try {
+    result = await scheduleGitStatusRead(
+      async () => await run({ type: 'gitStatus', path: worktreePath }, target, { signal: options.signal }),
+      { signal: options.signal },
+    )
+  } catch (err) {
+    if (options.signal?.aborted) return null
+    throw err
+  }
   return !result.ok || options.signal?.aborted ? null : parseStatus(result.stdout)
 }
 
@@ -1009,10 +1031,7 @@ export async function alignRemoteWorktreeToRemoteRef(
 }
 
 function remoteFailureHasExactMarker(result: RemoteCommandResult, marker: string): boolean {
-  return (
-    result.message?.trim() === marker ||
-    result.stderr.split(/\r?\n/u).some((line) => line.trim() === marker)
-  )
+  return result.message?.trim() === marker || result.stderr.split(/\r?\n/u).some((line) => line.trim() === marker)
 }
 
 export async function discardRemoteChangesForPaths(
@@ -1517,9 +1536,17 @@ export async function getRemoteWorktrees(
   options: { signal?: AbortSignal; run?: RemoteGitRunner; includeStatus?: boolean } = {},
 ): Promise<WorktreeInfo[]> {
   const run: RemoteGitRunner = options.run ?? ((command, t, runOptions) => runRemoteCommand(t, command, runOptions))
-  const result = await run({ type: 'gitWorktreeList', path: target.remotePath }, target, {
-    signal: options.signal,
-  })
+  const listWorktrees = async () =>
+    await run({ type: 'gitWorktreeList', path: target.remotePath }, target, { signal: options.signal })
+  let result: RemoteCommandResult
+  try {
+    result = options.includeStatus
+      ? await scheduleGitStatusRead(listWorktrees, { signal: options.signal })
+      : await listWorktrees()
+  } catch (err) {
+    if (options.signal?.aborted) return []
+    throw err
+  }
   if (!result.ok || options.signal?.aborted) return []
   const worktrees = parseWorktrees(result.stdout)
   if (!options.includeStatus) return worktrees
@@ -1528,7 +1555,10 @@ export async function getRemoteWorktrees(
     REMOTE_WORKTREE_STATUS_CONCURRENCY,
     async (worktree) => {
       if (worktree.isBare) return
-      const status = await run({ type: 'gitStatus', path: worktree.path }, target, { signal: options.signal })
+      const status = await scheduleGitStatusRead(
+        async () => await run({ type: 'gitStatus', path: worktree.path }, target, { signal: options.signal }),
+        { signal: options.signal },
+      )
       if (options.signal?.aborted) return
       if (!status.ok) {
         worktree.isDirty = undefined
