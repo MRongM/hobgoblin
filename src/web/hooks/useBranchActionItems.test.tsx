@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import React from 'react'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
+import { normalizeRemoteRepoId, normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { InlineCommitDraftProvider } from '#/web/components/branch-list/InlineCommitDraftProvider.tsx'
@@ -37,6 +37,8 @@ const repoClientMocks = vi.hoisted(() => ({
 const settingsQueryMocks = vi.hoisted(() => ({
   useSettingsSnapshotQuery: vi.fn(),
 }))
+
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
 
 let container: HTMLDivElement
 let root: Root | null = null
@@ -79,10 +81,14 @@ vi.mock('#/web/repo-client.ts', async () => {
 vi.mock('#/web/settings-queries.ts', () => ({
   useSettingsSnapshotQuery: settingsQueryMocks.useSettingsSnapshotQuery,
 }))
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
+}))
 
 describe('useBranchActionItems', () => {
   beforeEach(() => {
     resetReposStore()
+    platformState.hostPlatform = 'linux'
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
     Object.defineProperty(globalThis, 'ResizeObserver', {
       configurable: true,
@@ -190,6 +196,31 @@ describe('useBranchActionItems', () => {
     expect(itemIds).toContain('externalTerminal')
     expect(itemIds).toContain('editor')
     expect(groups.externalItems.find((item) => item.id === 'externalTerminal')?.disabled).toBe(false)
+  })
+
+  test.each([
+    { kind: 'local', projectId: 'C:\\workspace\\repo', expectedVisible: false },
+    {
+      kind: 'SSH',
+      projectId: normalizeRemoteRepoId({ alias: 'host', remotePath: '/workspace/repo' }),
+      expectedVisible: true,
+    },
+    {
+      kind: 'WSL',
+      projectId: normalizeRemoteRepoId({ alias: 'distribution', remotePath: '/workspace/repo', transport: 'wsl' }),
+      expectedVisible: true,
+    },
+  ])('sets tmux action visibility for a Windows $kind project', async ({ projectId, expectedVisible }) => {
+    platformState.hostPlatform = 'win32'
+    const branch = createRepoBranch('feature/terminal', { worktree: { path: '/workspace/repo-feature' } })
+    const repo = seedRepoState({ id: projectId, branches: [branch] })
+    const { useBranchActionItems: useItems } = await import('#/web/hooks/useBranchActionItems.tsx')
+    const groups = await renderItemGroups(useItems, repo, branch)
+    const tmuxActions = groups.externalItems.filter(
+      (item) => item.id === 'terminalTmux' || item.id === 'restoreTmuxTerminals',
+    )
+
+    expect(tmuxActions.map((item) => item.visible)).toEqual([expectedVisible, expectedVisible])
   })
 
   test('keeps the push action label concise while exposing the configured upstream in its title', async () => {

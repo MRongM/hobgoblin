@@ -91,8 +91,8 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.contextMenu.internalTerminal.disabled).toBe(false)
     expect(projection.contextMenu.windowsInternalTerminals?.powershell.disabled).toBe(false)
     expect(projection.contextMenu.windowsInternalTerminals?.wsl.disabled).toBe(false)
-    expect(projection.contextMenu.tmuxTerminal.disabled).toBe(false)
-    expect(projection.contextMenu.restoreTmuxTerminals.disabled).toBe(false)
+    expect(projection.contextMenu.tmuxTerminal?.disabled).toBe(false)
+    expect(projection.contextMenu.restoreTmuxTerminals?.disabled).toBe(false)
     expect(projection.contextMenu.actions?.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
   })
 
@@ -109,6 +109,21 @@ describe('projectWorktreeListItemActions', () => {
     expect(tmuxTerminal?.label).toBe('terminalTmux')
     expect(restoreTmuxTerminals?.label).toBe('restoreTmuxTerminals')
     expect(externalTerminal?.label).toBe('externalTerminal')
+  })
+
+  test('omits hidden tmux actions from the worktree context-menu projection', () => {
+    const groups = actionGroups()
+    for (const item of groups.externalItems) {
+      if (item.id === 'terminalTmux' || item.id === 'restoreTmuxTerminals') item.visible = false
+    }
+
+    const projection = projectWorktreeListItemActions(groups, {
+      policy: 'ordinary-worktree',
+      hasWorktree: true,
+    })
+
+    expect(projection.contextMenu.tmuxTerminal).toBeUndefined()
+    expect(projection.contextMenu.restoreTmuxTerminals).toBeUndefined()
   })
 
   test('retains the ordinary non-worktree branch projection', () => {

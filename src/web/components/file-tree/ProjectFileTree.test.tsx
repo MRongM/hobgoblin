@@ -1259,6 +1259,115 @@ describe('ProjectFileTree', () => {
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
   })
 
+  test('refreshes the root and expanded directories from the file tree toolbar', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    await act(async () => {
+      treeItemByText('src').click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(container?.textContent).toContain('app.ts')
+
+    getRepositoryFileTree.mockClear()
+    getRepositoryFileTree
+      .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' },
+          { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' },
+          { name: 'ROOT_NEW.md', absolutePath: '/repo/ROOT_NEW.md', relativePath: 'ROOT_NEW.md', kind: 'file' },
+        ],
+      }))
+      .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          { name: 'app.ts', absolutePath: '/repo/src/app.ts', relativePath: 'src/app.ts', kind: 'file' },
+          { name: 'new.ts', absolutePath: '/repo/src/new.ts', relativePath: 'src/new.ts', kind: 'file' },
+        ],
+      }))
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    if (!refreshButton) throw new Error('missing refresh button')
+
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(getRepositoryFileTree).toHaveBeenCalledTimes(2)
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo', undefined)
+    expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
+    expect(treeItemByText('src').getAttribute('aria-selected')).toBe('true')
+    expect(container?.textContent).toContain('ROOT_NEW.md')
+    expect(container?.textContent).toContain('new.ts')
+  })
+
+  test('ignores a stale expanded-directory response after a newer refresh completes', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+
+    await render(<ProjectFileTree repoId="/repo" />)
+
+    let resolveStaleDirectory = (_result: RepoFileTreeResult) => {}
+    const staleDirectoryRequest = new Promise<RepoFileTreeResult>((resolve) => {
+      resolveStaleDirectory = resolve
+    })
+    getRepositoryFileTree.mockImplementationOnce(async () => await staleDirectoryRequest)
+
+    await act(async () => {
+      treeItemByText('src').click()
+      await Promise.resolve()
+    })
+
+    getRepositoryFileTree
+      .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [
+          { name: 'src', absolutePath: '/repo/src', relativePath: 'src', kind: 'directory' },
+          { name: 'README.md', absolutePath: '/repo/README.md', relativePath: 'README.md', kind: 'file' },
+        ],
+      }))
+      .mockImplementationOnce(async (_repoId, worktreePath, dirPath) => ({
+        ok: true,
+        worktreePath,
+        dirPath,
+        entries: [{ name: 'new.ts', absolutePath: '/repo/src/new.ts', relativePath: 'src/new.ts', kind: 'file' }],
+      }))
+
+    const refreshButton = container?.querySelector<HTMLButtonElement>('button[aria-label="file-tree.refresh"]')
+    if (!refreshButton) throw new Error('missing refresh button')
+
+    await act(async () => {
+      refreshButton.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(container?.textContent).toContain('new.ts')
+
+    await act(async () => {
+      resolveStaleDirectory({
+        ok: true,
+        worktreePath: '/repo',
+        dirPath: '/repo/src',
+        entries: [{ name: 'old.ts', absolutePath: '/repo/src/old.ts', relativePath: 'src/old.ts', kind: 'file' }],
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container?.textContent).toContain('new.ts')
+    expect(container?.textContent).not.toContain('old.ts')
+  })
+
   test('uses compact action bar chrome by default', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 

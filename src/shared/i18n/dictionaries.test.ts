@@ -799,6 +799,35 @@ describe('i18n dictionaries', () => {
     }
   })
 
+  test('includes macOS Computer Use permission copy in every dictionary', () => {
+    const keys = [
+      'settings.macos-permissions.title',
+      'settings.macos-permissions.hint',
+      'settings.macos-permissions.screen-recording',
+      'settings.macos-permissions.screen-recording-hint',
+      'settings.macos-permissions.accessibility',
+      'settings.macos-permissions.accessibility-hint',
+      'settings.macos-permissions.status.not-determined',
+      'settings.macos-permissions.status.granted',
+      'settings.macos-permissions.status.denied',
+      'settings.macos-permissions.status.restricted',
+      'settings.macos-permissions.status.unknown',
+      'settings.macos-permissions.status.unsupported',
+      'settings.macos-permissions.authorize',
+      'settings.macos-permissions.open-system-settings',
+      'settings.macos-permissions.requesting',
+      'settings.macos-permissions.request-failed',
+      'settings.macos-permissions.restart-hint',
+    ] as const
+
+    for (const [lang, dict] of Object.entries(dicts)) {
+      for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(zh['settings.macos-permissions.title' as keyof typeof zh]).toBe('macOS 系统权限')
+    expect(zh['settings.macos-permissions.screen-recording' as keyof typeof zh]).toBe('屏幕录制')
+    expect(zh['settings.macos-permissions.accessibility' as keyof typeof zh]).toBe('辅助功能')
+  })
+
   test('uses Hobgoblin in user-visible product copy', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       expect(dict['about.app'], `${lang}.about.app`).toBe('Hobgoblin')

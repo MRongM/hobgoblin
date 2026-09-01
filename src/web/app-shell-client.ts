@@ -13,7 +13,17 @@ import type {
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
 import { openWebDetachedFileAreaWindow } from '#/web/lib/web-detached-file-area.ts'
+import type {
+  MacosComputerUsePermissionKind,
+  MacosComputerUsePermissionResult,
+  MacosComputerUsePermissionsSnapshot,
+} from '#/shared/macos-computer-use-permissions.ts'
 const PROJECT_GITHUB_URL = 'https://github.com/MRongM/hobgoblin'
+
+const UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS: MacosComputerUsePermissionsSnapshot = {
+  screenRecording: 'unsupported',
+  accessibility: 'unsupported',
+}
 
 function nativeShell() {
   try {
@@ -54,6 +64,38 @@ export function canOpenDetachedFileAreaWindow(): boolean {
   } catch {
     return false
   }
+}
+
+export function canManageMacosComputerUsePermissions(): boolean {
+  try {
+    const bridge = getRendererBridge()
+    return bridge.kind() === 'electron' && bridge.hasCapability('macos-computer-use-permissions')
+  } catch {
+    return false
+  }
+}
+
+export async function getMacosComputerUsePermissions(): Promise<MacosComputerUsePermissionsSnapshot> {
+  if (!canManageMacosComputerUsePermissions()) return { ...UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS }
+  return (
+    (await nativeShell()?.getMacosComputerUsePermissions?.()) ?? {
+      ...UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS,
+    }
+  )
+}
+
+export async function requestMacosComputerUsePermission(
+  kind: MacosComputerUsePermissionKind,
+): Promise<MacosComputerUsePermissionResult> {
+  if (!canManageMacosComputerUsePermissions()) {
+    return { ok: false, permissions: { ...UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS } }
+  }
+  return (
+    (await nativeShell()?.requestMacosComputerUsePermission?.({ kind })) ?? {
+      ok: false,
+      permissions: { ...UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS },
+    }
+  )
 }
 
 export async function openDetachedFileAreaWindow(

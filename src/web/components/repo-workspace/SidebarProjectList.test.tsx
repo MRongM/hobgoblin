@@ -82,6 +82,12 @@ const branchWorkspaceQueryState = vi.hoisted(() => ({
   resultByRoot: {} as Record<string, BranchWorkspaceReadResult | undefined>,
 }))
 
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+
+vi.mock('#/web/bootstrap.ts', () => ({
+  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
+}))
+
 const rescanWorkspace = vi.fn(async (_rootId: string) => {})
 
 vi.mock('@dnd-kit/core', async () => {
@@ -302,6 +308,7 @@ class MockResizeObserver implements ResizeObserver {
 }
 
 beforeEach(() => {
+  platformState.hostPlatform = 'linux'
   resetReposStore()
   seedRepoState({
     id: '/repo-a',
@@ -637,6 +644,19 @@ describe('SidebarProjectList', () => {
 
     expect(onClose).toHaveBeenCalledWith('/repo-a')
     expect(onActivate).not.toHaveBeenCalled()
+  })
+
+  test('omits tmux actions for native local Windows projects', async () => {
+    platformState.hostPlatform = 'win32'
+    tmuxCleanupState.visible = false
+    hostTmuxInventoryState.visible = false
+    renderList()
+    const row = projectRow('/repo-a')
+
+    expect((await openProjectMenu('/repo-a')).map((item) => item.textContent?.trim())).not.toContain(
+      'terminal.new-with-tmux',
+    )
+    expect((await openContextMenu(row)).map((item) => item.textContent?.trim())).not.toContain('terminal.new-with-tmux')
   })
 
   test('offers repository creation only for Git projects without activating or closing them', async () => {

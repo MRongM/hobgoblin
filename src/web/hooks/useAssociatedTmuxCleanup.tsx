@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { Unplug } from 'lucide-react'
 import { toast } from 'sonner'
-import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import type { TmuxCleanupPreviewResult } from '#/shared/tmux-cleanup.ts'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
 import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
-import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { cleanupAssociatedTmuxSessions, previewAssociatedTmuxSessions } from '#/web/tmux-cleanup-client.ts'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 
 interface AssociatedTmuxCleanupOptions {
   projectRoot?: string
@@ -149,13 +148,7 @@ export function useAssociatedTmuxCleanup({
 }
 
 function cleanupVisible(projectRoot?: string, itemPath?: string): boolean {
-  if (!projectRoot || !itemPath) return false
-  if (isRemoteRepoId(projectRoot)) return true
-  try {
-    return getInitialBootstrap().hostPlatform !== 'win32'
-  } catch {
-    return true
-  }
+  return !!itemPath && supportsTmuxMenu(projectRoot)
 }
 
 function errorMessage(error: unknown): string {

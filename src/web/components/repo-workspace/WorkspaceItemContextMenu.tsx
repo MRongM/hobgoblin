@@ -34,7 +34,7 @@ interface WorkspaceItemContextMenuProps {
     powershell: WorkspaceItemOpenAction
     wsl: WorkspaceItemOpenAction
   }
-  tmuxTerminal: WorkspaceItemOpenAction
+  tmuxTerminal?: WorkspaceItemOpenAction
   restoreTmuxTerminals?: WorkspaceItemOpenAction
   actions?: readonly WorkspaceItemContextAction[]
   worktreeTerminalKeys: readonly string[]
@@ -78,7 +78,7 @@ export function WorkspaceItemContextMenu({
           ) : (
             <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
           )}
-          <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem>
+          {tmuxTerminal ? <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem> : null}
           {restoreTmuxTerminals ? (
             <OpenActionItem action={restoreTmuxTerminals}>{t('terminal.restore-directory-tmux')}</OpenActionItem>
           ) : null}

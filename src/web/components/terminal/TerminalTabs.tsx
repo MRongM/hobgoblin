@@ -45,6 +45,8 @@ import { useFocusRegistry, type FocusRegistry } from '#/web/components/tab-strip
 import { useSortableTab } from '#/web/components/tab-strip/useSortableTab.ts'
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '#/web/components/ui/context-menu.tsx'
 import type { TerminalLaunchMode } from '#/shared/terminal.ts'
+import { parseWorktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 
 interface TerminalTabsProps {
   worktreeTerminalKey: string
@@ -99,6 +101,7 @@ export function TerminalTabs({
   const [pendingCloseKey, setPendingCloseKey] = useState<string | null>(null)
   const [closeTmuxSession, setCloseTmuxSession] = useState(false)
   const [pendingBulkClose, setPendingBulkClose] = useState<PendingBulkClose | null>(null)
+  const tmuxMenuVisible = tmuxMenuVisibleForWorktreeKey(worktreeTerminalKey)
   const pendingCloseSession = sessions.find((session) => session.key === pendingCloseKey) ?? null
   const pendingBulkCloseKeys =
     pendingBulkClose?.kind === 'others'
@@ -369,10 +372,12 @@ export function TerminalTabs({
               <Plus size={14} />
               {t('terminal.new')}
             </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2" onSelect={() => onNew('tmux-if-available')}>
-              <Terminal size={14} />
-              {t('terminal.new-with-tmux')}
-            </DropdownMenuItem>
+            {tmuxMenuVisible ? (
+              <DropdownMenuItem className="gap-2" onSelect={() => onNew('tmux-if-available')}>
+                <Terminal size={14} />
+                {t('terminal.new-with-tmux')}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="gap-2"
@@ -559,6 +564,7 @@ function TerminalTabChrome({
   onKeyDown,
   t,
 }: TerminalTabChromeProps) {
+  const tmuxMenuVisible = tmuxMenuVisibleForWorktreeKey(session.worktreeTerminalKey)
   const terminalLabelBase = session.originalTitle ?? session.fullTitle ?? session.title
   const terminalLabel = session.hasBell ? `${terminalLabelBase} — ${t('terminal.bell-unread')}` : terminalLabelBase
   const collectionAria =
@@ -587,6 +593,7 @@ function TerminalTabChrome({
         <TerminalTabContextMenu
           sessionKey={session.key}
           sessionCount={contextSessionCount ?? total ?? 1}
+          tmuxMenuVisible={tmuxMenuVisible}
           onNew={onNew}
           onRequestClose={onRequestClose}
           t={t}
@@ -680,12 +687,14 @@ function SortableTerminalTab({
 function TerminalTabContextMenu({
   sessionKey,
   sessionCount,
+  tmuxMenuVisible,
   onNew,
   onRequestClose,
   t,
 }: {
   sessionKey: string
   sessionCount: number
+  tmuxMenuVisible: boolean
   onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
@@ -696,10 +705,12 @@ function TerminalTabContextMenu({
         <Plus />
         {t('terminal.new')}
       </ContextMenuItem>
-      <ContextMenuItem onSelect={() => onNew('tmux-if-available')}>
-        <Terminal />
-        {t('terminal.new-with-tmux')}
-      </ContextMenuItem>
+      {tmuxMenuVisible ? (
+        <ContextMenuItem onSelect={() => onNew('tmux-if-available')}>
+          <Terminal />
+          {t('terminal.new-with-tmux')}
+        </ContextMenuItem>
+      ) : null}
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={() => onRequestClose('current', sessionKey)}>
         <X />
@@ -720,6 +731,11 @@ function TerminalTabContextMenu({
       </ContextMenuItem>
     </ContextMenuContent>
   )
+}
+
+function tmuxMenuVisibleForWorktreeKey(worktreeTerminalKey: string): boolean {
+  const parsed = parseWorktreeTerminalKey(worktreeTerminalKey)
+  return parsed ? supportsTmuxMenu(parsed.repoRoot) : true
 }
 
 interface TerminalTabTooltipLayerProps extends ComponentPropsWithoutRef<'div'> {

@@ -11,6 +11,7 @@ import { SshRemoteSettings } from '#/web/components/settings/pages/SshRemoteSett
 import { SecuritySettings } from '#/web/components/settings/pages/SecuritySettings.tsx'
 import { SyncSettings } from '#/web/components/settings/pages/SyncSettings.tsx'
 import { TerminalSettings } from '#/web/components/settings/pages/TerminalSettings.tsx'
+import { MacosComputerUsePermissionSettings } from '#/web/components/settings/pages/MacosComputerUsePermissionSettings.tsx'
 import { getRendererBridge } from '#/web/renderer-bridge.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import type { SettingsPage } from '#/shared/rpc.ts'
@@ -30,6 +31,7 @@ export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSel
         {page === 'general' && (
           <>
             <GeneralSettings />
+            <MacosComputerUsePermissionSettings />
             <FileAreaSettings />
           </>
         )}

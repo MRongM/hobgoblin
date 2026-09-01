@@ -46,6 +46,7 @@ import { formatShortCommitHashTag } from '#/web/lib/commit-hash.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { supportsWindowsInternalTerminalShellMenu } from '#/web/windows-internal-terminal-shell-menu.ts'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 
 export interface BranchWorkspaceMemberActionTarget {
   repo: BranchActionRepo
@@ -108,7 +109,12 @@ function ResolvedBranchWorkspaceMemberRow({
 
 function DisabledBranchWorkspaceMemberRow(props: BranchWorkspaceMemberRowProps) {
   const t = useT()
-  return <BranchWorkspaceMemberRowFrame {...props} actions={disabledMemberActionGroups(t)} />
+  return (
+    <BranchWorkspaceMemberRowFrame
+      {...props}
+      actions={disabledMemberActionGroups(t, supportsTmuxMenu(props.item.rootId))}
+    />
+  )
 }
 
 function BranchWorkspaceMemberRowFrame({
@@ -188,14 +194,18 @@ function BranchWorkspaceMemberRowFrame({
         },
       }
     : undefined
-  const tmuxTerminalContextAction = {
-    ...actionProjection.contextMenu.tmuxTerminal,
-    disabled: actionProjection.contextMenu.tmuxTerminal.disabled || !onOpenInternalTerminal,
-  }
-  const restoreTmuxTerminalsContextAction = {
-    ...actionProjection.contextMenu.restoreTmuxTerminals,
-    disabled: actionProjection.contextMenu.restoreTmuxTerminals.disabled || !onOpenInternalTerminal,
-  }
+  const tmuxTerminalContextAction = actionProjection.contextMenu.tmuxTerminal
+    ? {
+        ...actionProjection.contextMenu.tmuxTerminal,
+        disabled: actionProjection.contextMenu.tmuxTerminal.disabled || !onOpenInternalTerminal,
+      }
+    : undefined
+  const restoreTmuxTerminalsContextAction = actionProjection.contextMenu.restoreTmuxTerminals
+    ? {
+        ...actionProjection.contextMenu.restoreTmuxTerminals,
+        disabled: actionProjection.contextMenu.restoreTmuxTerminals.disabled || !onOpenInternalTerminal,
+      }
+    : undefined
   const row = (
     <WorkspaceListItemFrame
       size="member"
@@ -346,21 +356,25 @@ function BranchWorkspaceMemberRowFrame({
   )
 }
 
-function disabledMemberActionGroups(t: ReturnType<typeof useT>): BranchActionItemGroups {
+function disabledMemberActionGroups(t: ReturnType<typeof useT>, tmuxMenuVisible: boolean): BranchActionItemGroups {
   const disabledAction = (
     id: Parameters<typeof createDisabledAction>[0],
     label: string,
     icon: ReactNode,
-    options: { destructive?: boolean; menuOnly?: boolean } = {},
+    options: { destructive?: boolean; menuOnly?: boolean; visible?: boolean } = {},
   ) => createDisabledAction(id, t(label), icon, options)
 
   return {
     externalItems: [
       disabledAction('editor', 'worktrees.open-in-editor-label', <EditorAppIcon pref="auto" />),
       disabledAction('terminal', 'terminal.internal', <Terminal aria-hidden="true" />),
-      disabledAction('terminalTmux', 'terminal.new-with-tmux', <Terminal aria-hidden="true" />, { menuOnly: true }),
+      disabledAction('terminalTmux', 'terminal.new-with-tmux', <Terminal aria-hidden="true" />, {
+        menuOnly: true,
+        visible: tmuxMenuVisible,
+      }),
       disabledAction('restoreTmuxTerminals', 'terminal.restore-directory-tmux', <Terminal aria-hidden="true" />, {
         menuOnly: true,
+        visible: tmuxMenuVisible,
       }),
       disabledAction('externalTerminal', 'terminal.external', <TerminalAppIcon pref="auto" />),
       disabledAction('remote', 'action.remote', <ExternalLink aria-hidden="true" />),
@@ -414,7 +428,7 @@ function createDisabledAction(
     | 'resetHard',
   label: string,
   icon: ReactNode,
-  options: { destructive?: boolean; menuOnly?: boolean },
+  options: { destructive?: boolean; menuOnly?: boolean; visible?: boolean },
 ) {
   return {
     id,

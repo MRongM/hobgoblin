@@ -34,6 +34,7 @@ import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#
 import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import { useCreateWorktreeAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -144,6 +145,7 @@ export function useBranchActionItems(
     : null
   const terminalWorktreeKeys = useMemo(() => (terminalWorktreeKey ? [terminalWorktreeKey] : []), [terminalWorktreeKey])
   const closeTerminalScope = useCloseTerminalScope(terminalWorktreeKeys)
+  const tmuxMenuVisible = supportsTmuxMenu(repo.id)
 
   async function handleNewTerminal(
     launchMode: TerminalLaunchMode,
@@ -304,7 +306,7 @@ export function useBranchActionItems(
       title: t('terminal.new-with-tmux'),
       ariaLabel: t('terminal.new-with-tmux'),
       disabled: disabled || !terminalBase,
-      visible: true,
+      visible: tmuxMenuVisible,
       menuOnly: true,
       icon: createElement(Terminal),
       onSelect: () => handleNewTerminal('tmux-if-available'),
@@ -315,7 +317,7 @@ export function useBranchActionItems(
       title: t('terminal.restore-directory-tmux'),
       ariaLabel: t('terminal.restore-directory-tmux'),
       disabled: disabled || !terminalBase,
-      visible: true,
+      visible: tmuxMenuVisible,
       menuOnly: true,
       icon: createElement(Terminal),
       onSelect: handleRestoreTmuxTerminals,

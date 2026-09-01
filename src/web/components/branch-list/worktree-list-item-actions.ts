@@ -22,8 +22,8 @@ export interface WorktreeListItemActionProjection {
       powershell: WorkspaceItemOpenAction
       wsl: WorkspaceItemOpenAction
     }
-    tmuxTerminal: WorkspaceItemOpenAction
-    restoreTmuxTerminals: WorkspaceItemOpenAction
+    tmuxTerminal?: WorkspaceItemOpenAction
+    restoreTmuxTerminals?: WorkspaceItemOpenAction
     actions: WorkspaceListItemAction[]
   }
 }
@@ -43,6 +43,12 @@ export function projectWorktreeListItemActions(
     ? groups.externalItems.find((item) => item.id === 'terminalPowerShell')
     : undefined
   const wslTerminalItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'terminalWsl') : undefined
+  const tmuxTerminalItem = hasWorktree
+    ? groups.externalItems.find((item) => item.id === 'terminalTmux' && item.visible)
+    : undefined
+  const restoreTmuxTerminalsItem = hasWorktree
+    ? groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals' && item.visible)
+    : undefined
   const externalItems = hasWorktree
     ? groups.externalItems.filter((item) => item.id !== 'editor' && item.id !== 'terminal')
     : groups.externalItems
@@ -86,14 +92,10 @@ export function projectWorktreeListItemActions(
             },
           }
         : {}),
-      tmuxTerminal: branchContextMenuAction(
-        groups.externalItems.find((item) => item.id === 'terminalTmux'),
-        forceDisabled,
-      ),
-      restoreTmuxTerminals: branchContextMenuAction(
-        groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals'),
-        forceDisabled,
-      ),
+      ...(tmuxTerminalItem ? { tmuxTerminal: branchContextMenuAction(tmuxTerminalItem, forceDisabled) } : {}),
+      ...(restoreTmuxTerminalsItem
+        ? { restoreTmuxTerminals: branchContextMenuAction(restoreTmuxTerminalsItem, forceDisabled) }
+        : {}),
       actions: contextActions,
     },
   }

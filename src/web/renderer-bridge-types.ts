@@ -41,6 +41,11 @@ import type {
 } from '#/shared/terminal.ts'
 import type { TerminalOwnershipViewModel } from '#/web/components/terminal/types.ts'
 import type { DetachedFileAreaWindowRequest, OpenDetachedFileAreaWindowResult } from '#/shared/file-area.ts'
+import type {
+  MacosComputerUsePermissionKind,
+  MacosComputerUsePermissionResult,
+  MacosComputerUsePermissionsSnapshot,
+} from '#/shared/macos-computer-use-permissions.ts'
 
 export interface RendererTerminalBridge {
   attach: (input: TerminalAttachInput) => Promise<TerminalAttachResult>
@@ -81,6 +86,10 @@ export interface RendererShellBridge {
   writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
   readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
   openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
+  getMacosComputerUsePermissions?: () => Promise<MacosComputerUsePermissionsSnapshot>
+  requestMacosComputerUsePermission?: (input: {
+    kind: MacosComputerUsePermissionKind
+  }) => Promise<MacosComputerUsePermissionResult>
 }
 
 export interface RendererBridge {

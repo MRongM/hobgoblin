@@ -16,6 +16,8 @@ export const SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL = 'goblin:shell-save-clip
 export const SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL = 'goblin:shell-write-file-tree-clipboard-file'
 export const SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL = 'goblin:shell-read-file-tree-clipboard-file'
 export const SHELL_OPEN_DETACHED_FILE_AREA_WINDOW_CHANNEL = 'goblin:shell-open-detached-file-area-window'
+export const SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL = 'goblin:shell-get-macos-computer-use-permissions'
+export const SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL = 'goblin:shell-request-macos-computer-use-permission'
 
 export const TERMINAL_NOTIFY_BELL_CHANNEL = 'goblin:terminal-notify-bell'
 export const TERMINAL_SEND_TEST_NOTIFICATION_CHANNEL = 'goblin:terminal-send-test-notification'

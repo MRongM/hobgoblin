@@ -49,6 +49,14 @@ function testBridge(overrides: Partial<RendererBridge> = {}): RendererBridge {
           (nativeShell as { openDetachedFileAreaWindow?: unknown } | null)?.openDetachedFileAreaWindow !== undefined
         )
       }
+      if (capability === 'macos-computer-use-permissions') {
+        return (
+          (nativeShell as { getMacosComputerUsePermissions?: unknown } | null)?.getMacosComputerUsePermissions !==
+            undefined &&
+          (nativeShell as { requestMacosComputerUsePermission?: unknown } | null)?.requestMacosComputerUsePermission !==
+            undefined
+        )
+      }
       return false
     },
     getBootstrap: () => ({
@@ -141,6 +149,47 @@ describe('app shell client', () => {
         tab: 'history',
       }),
     ).resolves.toEqual({ ok: false, message: 'error.unsupported-native-bridge' })
+  })
+
+  test('reads and requests macOS Computer Use permissions through the native shell', async () => {
+    const bridgeModule = await import('#/web/renderer-bridge.ts')
+    const permissions = { screenRecording: 'granted' as const, accessibility: 'denied' as const }
+    const getMacosComputerUsePermissions = vi.fn(async () => permissions)
+    const requestMacosComputerUsePermission = vi.fn(async () => ({ ok: true as const, permissions }))
+    bridgeModule.setRendererBridgeForTests(
+      testBridge({
+        kind: () => 'electron',
+        hasCapability: (capability) => capability === 'macos-computer-use-permissions',
+        shell: () =>
+          ({
+            getMacosComputerUsePermissions,
+            requestMacosComputerUsePermission,
+          }) as never,
+      }),
+    )
+
+    const client = await import('#/web/app-shell-client.ts')
+    expect(client.canManageMacosComputerUsePermissions()).toBe(true)
+    await expect(client.getMacosComputerUsePermissions()).resolves.toEqual(permissions)
+    await expect(client.requestMacosComputerUsePermission('accessibility')).resolves.toEqual({
+      ok: true,
+      permissions,
+    })
+    expect(requestMacosComputerUsePermission).toHaveBeenCalledWith({ kind: 'accessibility' })
+  })
+
+  test('returns unsupported macOS Computer Use permissions without the native capability', async () => {
+    const client = await import('#/web/app-shell-client.ts')
+
+    expect(client.canManageMacosComputerUsePermissions()).toBe(false)
+    await expect(client.getMacosComputerUsePermissions()).resolves.toEqual({
+      screenRecording: 'unsupported',
+      accessibility: 'unsupported',
+    })
+    await expect(client.requestMacosComputerUsePermission('screen-recording')).resolves.toEqual({
+      ok: false,
+      permissions: { screenRecording: 'unsupported', accessibility: 'unsupported' },
+    })
   })
 
   test('opens external URLs in the browser when no native shell is available', async () => {
