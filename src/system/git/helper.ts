@@ -1,6 +1,7 @@
 import { execa, ExecaError } from 'execa'
 import type { ExecResult } from '#/shared/git-types.ts'
 import { resolveGitExecutable } from '#/system/git/executable.ts'
+import { resolveNativeWindowsOpenSshExecutable } from '#/system/ssh/executable.ts'
 
 /** Default per-call timeout. Network ops (push/pull/fetch) override via opts. */
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -91,26 +92,78 @@ async function probeGitAvailable(): Promise<GitAvailability> {
  * or abort. Wraps execa so all git invocations share timeout, buffering
  * and cancellation behavior.
  */
-export function git(cwd: string, args: string[], opts?: GitOptions): Promise<string> {
-  const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+export async function git(cwd: string, args: string[], opts?: GitOptions): Promise<string> {
   const executable = resolveGitExecutable()
-  if (!executable) return Promise.reject(gitExecutableNotFoundError())
-  return execa(executable, args, {
+  if (!executable) throw gitExecutableNotFoundError()
+  const env = gitEnvironment(opts?.env)
+  try {
+    return await runGit(executable, cwd, args, opts, env)
+  } catch (error) {
+    const fallbackSsh = windowsOpenSshFallback(error, opts)
+    if (!fallbackSsh) throw error
+    return await runGit(executable, cwd, args, opts, {
+      ...env,
+      GIT_SSH: fallbackSsh,
+      GIT_SSH_VARIANT: 'ssh',
+    })
+  }
+}
+
+async function runGit(
+  executable: string,
+  cwd: string,
+  args: string[],
+  opts: GitOptions | undefined,
+  env: Record<string, string>,
+): Promise<string> {
+  const { stdout } = await execa(executable, args, {
     cwd,
-    timeout: timeoutMs,
+    timeout: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     cancelSignal: opts?.signal,
-    env: {
-      ...(opts?.env ?? {}),
-      LANGUAGE: 'en',
-      LC_ALL: 'en_US.UTF-8',
-      LANG: 'en_US.UTF-8',
-      GIT_PAGER: 'cat',
-    },
+    env,
     forceKillAfterDelay: 500,
     // Some repos can produce large outputs (log, for-each-ref). 10MB headroom.
     maxBuffer: 10 * 1024 * 1024,
     input: opts?.stdin,
-  }).then(({ stdout }) => stdout.trimEnd())
+  })
+  return stdout.trimEnd()
+}
+
+function gitEnvironment(env: Record<string, string> | undefined): Record<string, string> {
+  return {
+    ...(env ?? {}),
+    LANGUAGE: 'en',
+    LC_ALL: 'en_US.UTF-8',
+    LANG: 'en_US.UTF-8',
+    GIT_PAGER: 'cat',
+  }
+}
+
+function windowsOpenSshFallback(error: unknown, opts: GitOptions | undefined): string | null {
+  if (opts?.signal?.aborted || hasExplicitGitSshEnvironment(opts?.env)) return null
+  if (!(error instanceof ExecaError) || typeof error.stderr !== 'string' || !isMsysSshStartupFailure(error.stderr)) {
+    return null
+  }
+  return resolveNativeWindowsOpenSshExecutable()
+}
+
+function hasExplicitGitSshEnvironment(env: Record<string, string> | undefined): boolean {
+  return [process.env, env].some((values) =>
+    Object.keys(values ?? {}).some(
+      (name) => name.toUpperCase() === 'GIT_SSH' || name.toUpperCase() === 'GIT_SSH_COMMAND',
+    ),
+  )
+}
+
+function isMsysSshStartupFailure(stderr: string): boolean {
+  return stderr
+    .split(/\r?\n/u)
+    .some(
+      (line) =>
+        /(?:^|[\\/:\s])ssh(?:\.exe)?(?:[\s:(]|$)/iu.test(line) &&
+        line.includes('*** fatal error - add_item (') &&
+        line.includes('", "/", ...) failed, errno 1'),
+    )
 }
 
 function gitExecutableNotFoundError(): NodeJS.ErrnoException {
