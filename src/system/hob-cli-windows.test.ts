@@ -19,13 +19,7 @@ function installCaptureCommand(directory: string): { capturePath: string; execut
   const executablePath = path.join(directory, 'capture.cmd')
   writeFileSync(
     executablePath,
-    [
-      '@echo off',
-      '> "%HOB_TEST_CAPTURE%" echo(%~1',
-      '>> "%HOB_TEST_CAPTURE%" echo(%~2',
-      'exit /b 0',
-      '',
-    ].join('\r\n'),
+    ['@echo off', '> "%HOB_TEST_CAPTURE%" echo(%~1', '>> "%HOB_TEST_CAPTURE%" echo(%~2', 'exit /b 0', ''].join('\r\n'),
   )
   return { capturePath, executablePath }
 }

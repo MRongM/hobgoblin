@@ -161,17 +161,14 @@ Cover the exact API:
 expect(windowsCliProjectOpenPathFromArgv(['Hobgoblin.exe', '--hob-open', 'C:\\work tree'], 'win32')).toBe(
   'C:\\work tree',
 )
-expect(
-  windowsCliProjectOpenPathFromArgv(['electron.exe', '.', '--hob-open', '\\\\server\\share'], 'win32'),
-).toBe('\\\\server\\share')
+expect(windowsCliProjectOpenPathFromArgv(['electron.exe', '.', '--hob-open', '\\\\server\\share'], 'win32')).toBe(
+  '\\\\server\\share',
+)
 expect(windowsCliProjectOpenPathFromArgv(['Hobgoblin.exe'], 'win32')).toBeNull()
 expect(windowsCliProjectOpenPathFromArgv(['Hobgoblin.exe', '--hob-open'], 'win32')).toBeNull()
 expect(windowsCliProjectOpenPathFromArgv(['Hobgoblin.exe', '--hob-open', '--inspect'], 'win32')).toBeNull()
 expect(
-  windowsCliProjectOpenPathFromArgv(
-    ['Hobgoblin.exe', '--hob-open', 'C:\\a', '--hob-open', 'C:\\b'],
-    'win32',
-  ),
+  windowsCliProjectOpenPathFromArgv(['Hobgoblin.exe', '--hob-open', 'C:\\a', '--hob-open', 'C:\\b'], 'win32'),
 ).toBeNull()
 expect(windowsCliProjectOpenPathFromArgv(['Hobgoblin', '--hob-open', '/tmp/repo'], 'darwin')).toBeNull()
 ```
