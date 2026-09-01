@@ -25,6 +25,8 @@ const IPC = {
     writeFileTreeClipboardFile: 'goblin:shell-write-file-tree-clipboard-file',
     readFileTreeClipboardFile: 'goblin:shell-read-file-tree-clipboard-file',
     openDetachedFileAreaWindow: 'goblin:shell-open-detached-file-area-window',
+    getMacosComputerUsePermissions: 'goblin:shell-get-macos-computer-use-permissions',
+    requestMacosComputerUsePermission: 'goblin:shell-request-macos-computer-use-permission',
   },
   terminal: {
     notifyBell: 'goblin:terminal-notify-bell',
@@ -186,6 +188,8 @@ contextBridge.exposeInMainWorld('goblinNative', {
     writeFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.writeFileTreeClipboardFile, input),
     readFileTreeClipboardFile: (input) => safeInvoke(IPC.shell.readFileTreeClipboardFile, input),
     openDetachedFileAreaWindow: (input) => safeInvoke(IPC.shell.openDetachedFileAreaWindow, input),
+    getMacosComputerUsePermissions: () => safeInvoke(IPC.shell.getMacosComputerUsePermissions),
+    requestMacosComputerUsePermission: (input) => safeInvoke(IPC.shell.requestMacosComputerUsePermission, input),
   },
   terminal: {
     notifyBell: (input) => safeInvoke(IPC.terminal.notifyBell, input),

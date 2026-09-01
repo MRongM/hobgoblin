@@ -1344,10 +1344,10 @@ describe('BranchWorkspaceList', () => {
     if (!(row instanceof HTMLElement)) throw new Error('missing branch workspace row')
 
     const menuItems = await openMenuItems(row)
-    expect(menuItems.map((entry) => entry.textContent?.trim()).slice(0, 2)).toEqual([
-      'terminal.internal-powershell',
-      'terminal.internal-wsl',
-    ])
+    const menuLabels = menuItems.map((entry) => entry.textContent?.trim())
+    expect(menuLabels.slice(0, 2)).toEqual(['terminal.internal-powershell', 'terminal.internal-wsl'])
+    expect(menuLabels).not.toContain('terminal.new-with-tmux')
+    expect(menuLabels).not.toContain('terminal.restore-directory-tmux')
     await act(async () => {
       menuItems[0]?.click()
       await Promise.resolve()
@@ -1358,10 +1358,10 @@ describe('BranchWorkspaceList', () => {
       'powershell',
     )
 
-    expect((await openContextMenu(row)).map((entry) => entry.textContent?.trim()).slice(2, 4)).toEqual([
-      'terminal.internal-powershell',
-      'terminal.internal-wsl',
-    ])
+    const contextLabels = (await openContextMenu(row)).map((entry) => entry.textContent?.trim())
+    expect(contextLabels.slice(2, 4)).toEqual(['terminal.internal-powershell', 'terminal.internal-wsl'])
+    expect(contextLabels).not.toContain('terminal.new-with-tmux')
+    expect(contextLabels).not.toContain('terminal.restore-directory-tmux')
     await clickContextMenuItem(row, 'terminal.internal-wsl')
     expect(createTerminal).toHaveBeenLastCalledWith(
       expect.objectContaining({ worktreePath: item.path }),

@@ -26,6 +26,11 @@ import type {
   OpenDetachedFileAreaWindowResult,
   RendererSurfaceBootstrap,
 } from '#/shared/file-area.ts'
+import type {
+  MacosComputerUsePermissionKind,
+  MacosComputerUsePermissionResult,
+  MacosComputerUsePermissionsSnapshot,
+} from '#/shared/macos-computer-use-permissions.ts'
 
 interface GoblinNativeBridge {
   runtime: RendererRuntimeSnapshot
@@ -53,6 +58,10 @@ interface GoblinNativeBridge {
     writeFileTreeClipboardFile?: (input: FileTreeClipboardFilePayload) => Promise<FileTreeClipboardWriteResult>
     readFileTreeClipboardFile?: (input: FileTreeClipboardReadInput) => Promise<FileTreeClipboardReadResult>
     openDetachedFileAreaWindow?: (input: DetachedFileAreaWindowRequest) => Promise<OpenDetachedFileAreaWindowResult>
+    getMacosComputerUsePermissions?: () => Promise<MacosComputerUsePermissionsSnapshot>
+    requestMacosComputerUsePermission?: (input: {
+      kind: MacosComputerUsePermissionKind
+    }) => Promise<MacosComputerUsePermissionResult>
   }
   terminal: {
     notifyBell: (input: TerminalNotifyBellInput) => Promise<TerminalMutationResult>

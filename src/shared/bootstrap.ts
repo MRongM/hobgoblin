@@ -25,6 +25,7 @@ export type RendererNativeCapability =
   | 'terminal-notifications'
   | 'terminal-badge'
   | 'open-detached-file-area-window'
+  | 'macos-computer-use-permissions'
 
 export const RENDERER_BRIDGE_VERSION = 1
 export const ELECTRON_RENDERER_CAPABILITIES = [
@@ -42,6 +43,7 @@ export const ELECTRON_RENDERER_CAPABILITIES = [
   'terminal-notifications',
   'terminal-badge',
   'open-detached-file-area-window',
+  'macos-computer-use-permissions',
 ] as const satisfies readonly RendererNativeCapability[]
 export const WEB_RENDERER_CAPABILITIES = [] as const satisfies readonly RendererNativeCapability[]
 

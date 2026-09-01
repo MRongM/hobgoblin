@@ -123,6 +123,15 @@ describe('WorkspaceItemContextMenu', () => {
     expect(itemByText(items, 'terminal.restore-directory-tmux').hasAttribute('data-disabled')).toBe(true)
   })
 
+  test('omits unavailable tmux actions instead of rendering disabled placeholders', async () => {
+    renderMenu({ tmuxActionsVisible: false })
+
+    const labels = (await openContextMenu()).map((item) => item.textContent?.trim())
+
+    expect(labels).not.toContain('terminal.new-with-tmux')
+    expect(labels).not.toContain('terminal.restore-directory-tmux')
+  })
+
   test('replaces the generic internal terminal entry with explicit Windows shell actions', async () => {
     const powershell = vi.fn()
     const wsl = vi.fn()
@@ -187,6 +196,7 @@ function renderMenu(
     tmuxTerminal?: () => void
     restoreTmuxTerminals?: () => void
     restoreTmuxDisabled?: boolean
+    tmuxActionsVisible?: boolean
     editorDisabled?: boolean
     externalTerminalBusy?: boolean
     internalTerminalDisabled?: boolean
@@ -244,16 +254,20 @@ function renderMenu(
                   }
                 : undefined
             }
-            tmuxTerminal={{
-              disabled: fixture.internalTerminalDisabled ?? false,
-              icon: <span data-testid="tmux-terminal-icon" />,
-              onSelect: fixture.tmuxTerminal ?? vi.fn(),
-            }}
-            restoreTmuxTerminals={{
-              disabled: fixture.restoreTmuxDisabled ?? false,
-              icon: <span data-testid="restore-tmux-terminals-icon" />,
-              onSelect: fixture.restoreTmuxTerminals ?? vi.fn(),
-            }}
+            {...(fixture.tmuxActionsVisible === false
+              ? {}
+              : {
+                  tmuxTerminal: {
+                    disabled: fixture.internalTerminalDisabled ?? false,
+                    icon: <span data-testid="tmux-terminal-icon" />,
+                    onSelect: fixture.tmuxTerminal ?? vi.fn(),
+                  },
+                  restoreTmuxTerminals: {
+                    disabled: fixture.restoreTmuxDisabled ?? false,
+                    icon: <span data-testid="restore-tmux-terminals-icon" />,
+                    onSelect: fixture.restoreTmuxTerminals ?? vi.fn(),
+                  },
+                })}
             actions={fixture.actions}
             worktreeTerminalKeys={fixture.worktreeTerminalKeys ?? []}
           >

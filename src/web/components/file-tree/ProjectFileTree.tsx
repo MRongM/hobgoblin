@@ -196,6 +196,7 @@ export function ProjectFileTree({
   const worktreePath = view.worktreePath
   const activeWorktreeRef = useRef<string | null>(worktreePath)
   const directoriesRef = useRef<Record<string, DirectoryState>>({})
+  const latestDirectoryRequestTokensRef = useRef(new Map<string, symbol>())
   const revealRequestRef = useRef<number | null>(null)
   const undoStackRef = useRef<FileTreeUndoAction[]>([])
   const undoPendingRef = useRef(false)
@@ -234,6 +235,8 @@ export function ProjectFileTree({
   const loadDirectory = useCallback(
     async (relativePath: string, absolutePath: string, signal?: AbortSignal): Promise<RepoFileTreeResult | null> => {
       if (!worktreePath) return null
+      const requestToken = Symbol(relativePath)
+      latestDirectoryRequestTokensRef.current.set(relativePath, requestToken)
       setDirectories((current) => {
         const next = {
           ...current,
@@ -243,7 +246,13 @@ export function ProjectFileTree({
         return next
       })
       const result = await getRepositoryFileTree(repoId, worktreePath, absolutePath, signal)
-      if (signal?.aborted || activeWorktreeRef.current !== worktreePath) return null
+      if (
+        signal?.aborted ||
+        activeWorktreeRef.current !== worktreePath ||
+        latestDirectoryRequestTokensRef.current.get(relativePath) !== requestToken
+      ) {
+        return null
+      }
       setDirectories((current) => {
         const next = {
           ...current,
@@ -260,6 +269,7 @@ export function ProjectFileTree({
   )
 
   useEffect(() => {
+    latestDirectoryRequestTokensRef.current.clear()
     directoriesRef.current = {}
     revealRequestRef.current = null
     undoStackRef.current = []
@@ -644,6 +654,19 @@ export function ProjectFileTree({
     },
     [loadDirectory],
   )
+
+  const refreshVisibleTree = useCallback(() => {
+    if (!worktreePath) return
+    const targets = [
+      { relativePath: ROOT_DIR, absolutePath: worktreePath },
+      ...flatNodes
+        .filter((node) => node.expanded && isExpandableNode(node))
+        .map((node) => ({ relativePath: node.relativePath, absolutePath: node.absolutePath })),
+    ]
+    for (const target of targets) {
+      void loadDirectory(target.relativePath, target.absolutePath)
+    }
+  }, [flatNodes, loadDirectory, worktreePath])
 
   const refreshDirectoryForContextNode = useCallback(
     (node: FileTreeNode | null) => {
@@ -1186,7 +1209,7 @@ export function ProjectFileTree({
             onCollapseAll={collapseAllDirectories}
             onCreateFile={() => beginCreateEntry('file', selectedCreateEntryTarget())}
             onCreateDirectory={() => beginCreateEntry('directory', selectedCreateEntryTarget())}
-            onRefresh={() => refreshTreeDirectory(rootCreateEntryTarget())}
+            onRefresh={refreshVisibleTree}
             canOpenLocally={canOpenLocally}
             onOpenLocal={() => void openWorktreeLocally()}
           />
@@ -1270,7 +1293,7 @@ export function ProjectFileTree({
                     onUpload={() => runUploadForNode(null)}
                     onCreateFile={() => beginCreateEntry('file', rootCreateEntryTarget())}
                     onCreateDirectory={() => beginCreateEntry('directory', rootCreateEntryTarget())}
-                    onRefresh={() => refreshTreeDirectory(rootCreateEntryTarget())}
+                    onRefresh={refreshVisibleTree}
                   />
                 </ContextMenu>
               </>

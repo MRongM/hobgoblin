@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { AlertTriangle, ExternalLink, Folder, Loader2, ScanSearch, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import type { TmuxHostSessionIdentity, TmuxHostSessionRecord } from '#/shared/tmux-cleanup.ts'
-import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { Checkbox } from '#/web/components/ui/checkbox.tsx'
@@ -14,10 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '#/web/components/ui/dialog.tsx'
-import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { closeHostTmuxSessions, openHostTmuxSession, previewHostTmuxSessions } from '#/web/tmux-cleanup-client.ts'
+import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 
 interface HostTmuxInventoryOptions {
   projectRoot?: string
@@ -290,13 +289,7 @@ function tmuxSessionIdentityKey(identity: TmuxHostSessionIdentity | TmuxHostSess
 }
 
 function hostInventoryVisible(projectRoot?: string): boolean {
-  if (!projectRoot) return false
-  if (isRemoteRepoId(projectRoot)) return true
-  try {
-    return getInitialBootstrap().hostPlatform !== 'win32'
-  } catch {
-    return true
-  }
+  return supportsTmuxMenu(projectRoot)
 }
 
 function errorMessage(error: unknown): string {

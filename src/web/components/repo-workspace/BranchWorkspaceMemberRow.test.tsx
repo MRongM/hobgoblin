@@ -24,6 +24,7 @@ const actionState = vi.hoisted(() => ({
   remote: vi.fn(),
   createWorktree: vi.fn(),
   sync: vi.fn(),
+  tmuxVisible: true,
 }))
 const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
 
@@ -76,9 +77,13 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
             }),
           ]
         : []),
-      branchAction('terminalTmux', actionState.tmuxTerminal, false, { label: 'terminal.new-with-tmux' }),
+      branchAction('terminalTmux', actionState.tmuxTerminal, false, {
+        label: 'terminal.new-with-tmux',
+        visible: actionState.tmuxVisible,
+      }),
       branchAction('restoreTmuxTerminals', actionState.restoreTmuxTerminals, false, {
         label: 'terminal.restore-directory-tmux',
+        visible: actionState.tmuxVisible,
       }),
       branchAction('externalTerminal', actionState.externalTerminal),
       branchAction('remote', actionState.remote),
@@ -135,7 +140,10 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  Object.values(actionState).forEach((mock) => mock.mockReset())
+  Object.values(actionState).forEach((mock) => {
+    if (typeof mock === 'function') mock.mockReset()
+  })
+  actionState.tmuxVisible = true
   platformState.hostPlatform = 'linux'
 })
 
@@ -336,6 +344,7 @@ describe('BranchWorkspaceMemberRow', () => {
 
   test('offers PowerShell and WSL launches for a Windows local branch-workspace member', async () => {
     platformState.hostPlatform = 'win32'
+    actionState.tmuxVisible = false
     const item = workspace()
     const member = repositoryMember()
     const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
@@ -361,20 +370,20 @@ describe('BranchWorkspaceMemberRow', () => {
     )
 
     const menuItems = await openMenu()
-    expect(menuItems.map((entry) => entry.getAttribute('data-action')).slice(0, 2)).toEqual([
-      'terminalPowerShell',
-      'terminalWsl',
-    ])
+    const menuActionIds = menuItems.map((entry) => entry.getAttribute('data-action'))
+    expect(menuActionIds.slice(0, 2)).toEqual(['terminalPowerShell', 'terminalWsl'])
+    expect(menuActionIds).not.toContain('terminalTmux')
+    expect(menuActionIds).not.toContain('restoreTmuxTerminals')
     await act(async () => {
       menuItems[0]?.click()
       await Promise.resolve()
     })
     const row = container.querySelector<HTMLElement>('[data-workspace-list-item]')
     if (!row) throw new Error('missing member row')
-    expect((await openContextMenu(row)).map((entry) => entry.textContent?.trim()).slice(2, 4)).toEqual([
-      'terminal.internal-powershell',
-      'terminal.internal-wsl',
-    ])
+    const contextLabels = (await openContextMenu(row)).map((entry) => entry.textContent?.trim())
+    expect(contextLabels.slice(2, 4)).toEqual(['terminal.internal-powershell', 'terminal.internal-wsl'])
+    expect(contextLabels).not.toContain('terminal.new-with-tmux')
+    expect(contextLabels).not.toContain('terminal.restore-directory-tmux')
 
     await clickContextMenuItem(row, 'terminal.internal-wsl')
     expect(actionState.powershellTerminal).toHaveBeenCalledTimes(1)
@@ -429,6 +438,29 @@ describe('BranchWorkspaceMemberRow', () => {
       'resetHard',
     ])
     expect(menuItems.every((entry) => entry.hasAttribute('data-disabled'))).toBe(true)
+  })
+
+  test('omits tmux placeholders when a native local Windows member target cannot be resolved', async () => {
+    platformState.hostPlatform = 'win32'
+    const item = { ...workspace(), rootId: 'C:\\workspace' }
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={repositoryMember()}
+        selected={false}
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: null,
+          navigable: false,
+          reason: 'workspace.branch-workspace.member-branch-missing',
+        }}
+      />,
+    )
+
+    expect((await openMenu()).map((entry) => entry.getAttribute('data-action'))).not.toEqual(
+      expect.arrayContaining(['terminalTmux', 'restoreTmuxTerminals']),
+    )
   })
 
   test('keeps worktree creation and refresh visible but disabled in an unavailable member context menu', async () => {

@@ -10,9 +10,19 @@ import { sendRendererEffectIntent } from '#/main/renderer-surface-events.ts'
 import { isValidAbsolutePath } from '#/shared/input-validation.ts'
 import { isTrustedIpcEvent } from '#/main/ipc/trusted-webcontents.ts'
 import { openHttpExternal, openHttpsExternal } from '#/main/external-url.ts'
+import {
+  getMacosComputerUsePermissions,
+  requestMacosComputerUsePermission,
+} from '#/main/macos-computer-use-permissions.ts'
 import type { SettingsPage } from '#/shared/rpc.ts'
 import {
+  MACOS_COMPUTER_USE_PERMISSION_KINDS,
+  type MacosComputerUsePermissionKind,
+  type MacosComputerUsePermissionsSnapshot,
+} from '#/shared/macos-computer-use-permissions.ts'
+import {
   SHELL_CONSUME_EXTERNAL_OPEN_PATHS_CHANNEL,
+  SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL,
   SHELL_OPEN_DIRECTORY_DIALOG_CHANNEL,
   SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   SHELL_OPEN_FILE_DIALOG_CHANNEL,
@@ -21,6 +31,7 @@ import {
   SHELL_READ_CLIPBOARD_IMAGE_CHANNEL,
   SHELL_READ_CLIPBOARD_FILE_PATHS_CHANNEL,
   SHELL_READ_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
+  SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL,
   SHELL_SAVE_CLIPBOARD_BINARY_FILES_CHANNEL,
   SHELL_WRITE_FILE_TREE_CLIPBOARD_FILE_CHANNEL,
 } from '#/shared/ipc-channels.ts'
@@ -35,7 +46,27 @@ function callerWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null 
   return BrowserWindow.fromWebContents(event.sender) ?? focusedRegisteredSurface()?.window ?? getMainWindow() ?? null
 }
 
+const UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS: MacosComputerUsePermissionsSnapshot = {
+  screenRecording: 'unsupported',
+  accessibility: 'unsupported',
+}
+
+function isMacosComputerUsePermissionKind(value: unknown): value is MacosComputerUsePermissionKind {
+  return MACOS_COMPUTER_USE_PERMISSION_KINDS.some((kind) => kind === value)
+}
+
 export function wireShellBridgeIpc(): void {
+  ipcMain.handle(SHELL_GET_MACOS_COMPUTER_USE_PERMISSIONS_CHANNEL, async (event) =>
+    isTrustedIpcEvent(event) ? getMacosComputerUsePermissions() : { ...UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS },
+  )
+
+  ipcMain.handle(SHELL_REQUEST_MACOS_COMPUTER_USE_PERMISSION_CHANNEL, async (event, input?: { kind?: unknown }) => {
+    if (!isTrustedIpcEvent(event) || !isMacosComputerUsePermissionKind(input?.kind)) {
+      return { ok: false, permissions: { ...UNSUPPORTED_MACOS_COMPUTER_USE_PERMISSIONS } }
+    }
+    return await requestMacosComputerUsePermission(input.kind)
+  })
+
   ipcMain.handle(SHELL_OPEN_SETTINGS_WINDOW_CHANNEL, async (event, input?: { page?: SettingsPage }) => {
     if (!isTrustedIpcEvent(event)) return false
     const win = await activateMainWindow()
