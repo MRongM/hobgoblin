@@ -53,7 +53,7 @@ Hobgoblin 起源于 [Goblin](https://nano-props.github.io/goblin/)。Goblin 是�
 
 ## 魔法操作
 
-- **使用 `hob` 打开项目（macOS）：** 在终端运行 `hob .` 或 `hob <目录>`，即可在 Hobgoblin 中打开或导入对应的本地目录。
+- **使用 `hob` 打开项目（macOS 与 Windows）：** 在终端运行 `hob .` 或 `hob <目录>`，即可在 Hobgoblin 中打开或导入对应的本地目录。
 - **全局终端切换：** 聚焦内部终端后，在 macOS 使用 `Cmd+Option+↑/↓`，在 Windows/Linux 使用 `Ctrl+Alt+↑/↓`，可在不同项目和工作树的所有已打开内部终端之间切换。
 - **终端二进制粘贴：** 在终端输入框粘贴二进制剪贴板内容，自动生成临时文件，并把生成的文件路径插入输入框。
 - **从文件树拖拽到终端：** 将文件树中的文件拖到终端，直接插入 shell 安全的文件路径，避免手动输入。
@@ -92,6 +92,26 @@ xattr -dr com.apple.quarantine /Applications/Hobgoblin.app
 在 Windows 上，SmartScreen 可能会对未签名安装程序发出警告。只有在信任该 GitHub Release 来源时才继续安装。
 
 在 Windows 上，推荐使用 WSL + Unix-like 终端环境。安装并配置可用的默认 WSL 发行版后，Hobgoblin 会优先为内部终端和外部 Windows Terminal 启动使用 WSL；WSL 不可用时仍会回退到原生 Windows Shell。
+
+### 在 Windows 终端中打开项目
+
+Windows 安装程序会把 Hobgoblin 的 `resources\bin` 目录加入当前用户的 `PATH`。安装后请打开新的 PowerShell 或命令提示符窗口，然后打开或导入当前目录：
+
+```powershell
+hob .
+```
+
+该命令接受零个或一个目录参数，未传参数时默认使用当前目录。如果需要排查其他同名 `hob` 命令抢先匹配，请运行：
+
+```powershell
+Get-Command hob -All
+```
+
+或在命令提示符中运行：
+
+```bat
+where.exe hob
+```
 
 ### 在 macOS 终端中打开项目
 
