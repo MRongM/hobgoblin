@@ -1,8 +1,16 @@
-import { afterEach, describe, expect, test } from 'vitest'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { git } from '#/system/git/helper.ts'
+
+const { resolveGitExecutableMock } = vi.hoisted(() => ({
+  resolveGitExecutableMock: vi.fn(),
+}))
+
+vi.mock('#/system/git/executable.ts', () => ({
+  resolveGitExecutable: resolveGitExecutableMock,
+}))
 
 let tmp: string | null = null
 
@@ -14,29 +22,20 @@ afterEach(() => {
 describe('git', () => {
   test('times out promptly when git ignores SIGTERM', async () => {
     tmp = mkdtempSync(path.join(os.tmpdir(), 'gbl-helper-test-'))
-    const bin = path.join(tmp, 'bin')
-    mkdirSync(bin)
-    const fakeGit = path.join(bin, 'git')
-    writeFileSync(fakeGit, '#!/bin/sh\ntrap "" TERM\nwhile :; do sleep 1; done\n')
-    chmodSync(fakeGit, 0o755)
-    const originalPath = process.env.PATH
-    process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ''}`
+    const fakeGit = path.join(tmp, 'fake-git.mjs')
+    writeFileSync(fakeGit, "process.on('SIGTERM', () => {}); setInterval(() => {}, 1_000)\n")
+    resolveGitExecutableMock.mockReturnValue(process.execPath)
 
+    const started = performance.now()
+    let err: unknown
     try {
-      const started = performance.now()
-      let err: unknown
-      try {
-        await git(tmp, ['status'], { timeoutMs: 300 })
-      } catch (caught) {
-        err = caught
-      }
-
-      expect(err).toBeInstanceOf(Error)
-      expect((err as { timedOut?: boolean }).timedOut).toBe(true)
-      expect(performance.now() - started).toBeLessThan(1_500)
-    } finally {
-      if (originalPath === undefined) delete process.env.PATH
-      else process.env.PATH = originalPath
+      await git(tmp, [fakeGit], { timeoutMs: 300 })
+    } catch (caught) {
+      err = caught
     }
+
+    expect(err).toBeInstanceOf(Error)
+    expect((err as { timedOut?: boolean }).timedOut).toBe(true)
+    expect(performance.now() - started).toBeLessThan(1_500)
   })
 })

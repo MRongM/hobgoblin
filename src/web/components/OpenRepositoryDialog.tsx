@@ -15,7 +15,7 @@ import type { OpenRepoResult } from '#/web/stores/repos/types.ts'
 import { getWindowsWslDistributions } from '#/web/remote-client.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
-import type { OpenRepositorySource } from '#/web/lib/open-repo-dialog.ts'
+import { projectOpenRepositoryPathInput, type OpenRepositorySource } from '#/web/lib/open-repo-dialog.ts'
 interface Props {
   open: boolean
   initialSource?: OpenRepositorySource
@@ -61,7 +61,7 @@ export function OpenRepositoryDialog({ open, initialSource = 'local', onClose, o
       .then((items) => {
         if (cancelled) return
         setDistributions(items)
-        setDistribution(items[0] ?? '')
+        setDistribution((current) => current || items[0] || '')
       })
       .catch(() => {
         if (!cancelled) setDistributions([])
@@ -178,7 +178,19 @@ export function OpenRepositoryDialog({ open, initialSource = 'local', onClose, o
               disabled={pending}
               value={path}
               onChange={(event) => {
-                setPath(event.target.value)
+                const input = event.target.value
+                if (!supportsWslImport) {
+                  setPath(input)
+                } else {
+                  const projection = projectOpenRepositoryPathInput(input, {
+                    source,
+                    distribution,
+                    distributions,
+                  })
+                  setSource(projection.source)
+                  setDistribution(projection.distribution)
+                  setPath(projection.path)
+                }
                 setError(null)
               }}
               placeholder={

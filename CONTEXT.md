@@ -420,6 +420,14 @@ _Avoid_: Using project as a synonym for every repository inside a multi-reposito
 One Git operation boundary. Branches, worktrees, status, history, and Git writes always belong to exactly one repository, even when several repositories share a project. The same repository may appear simultaneously as its own project and as a multi-repository workspace member; both contexts share one repository state.
 _Avoid_: Workspace repository, subproject
 
+**Repository synchronization**:
+An explicit, non-destructive Git action that refreshes a repository's remote-tracking refs and runtime repository state without opening or importing a Project, changing configured workspace membership, or moving a local branch or worktree.
+_Avoid_: Repository import, workspace discovery, Pull, complete remote alignment
+
+**Local file path bridge**:
+A shared lexical boundary that recognizes Windows drive paths, Windows UNC paths, standard WSL mount paths, WSL UNC paths, and WSL repository locators as stable local-host identities while retaining an authoritative path for the selected execution environment. It never resolves symlinks or selects a Git backend from the active terminal shell.
+_Avoid_: Universal path normalization, real-path resolution, shell-selected Git backend
+
 **Repository primary worktree**:
 The original Git worktree whose normalized path is the repository project path and whose identity is confirmed by Git worktree metadata. It is independent of the branch currently checked out there and is never synonymous with a branch named `main`.
 _Avoid_: Main branch, default branch, protected branch

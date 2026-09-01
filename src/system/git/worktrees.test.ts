@@ -11,6 +11,7 @@ function pruneWorktrees(cwd: string, options: { signal?: AbortSignal }) {
 
 const gitResultWithOptionsMock = vi.hoisted(() => vi.fn())
 const gitMock = vi.hoisted(() => vi.fn())
+const scheduleGitStatusReadMock = vi.hoisted(() => vi.fn())
 
 vi.mock('#/system/git/helper.ts', async () => {
   const actual = await vi.importActual<typeof import('#/system/git/helper.ts')>('#/system/git/helper.ts')
@@ -23,10 +24,17 @@ vi.mock('#/system/git/helper.ts', async () => {
   }
 })
 
+vi.mock('#/system/git/concurrency.ts', async () => {
+  const actual = await vi.importActual<typeof import('#/system/git/concurrency.ts')>('#/system/git/concurrency.ts')
+  return { ...actual, scheduleGitStatusRead: scheduleGitStatusReadMock }
+})
+
 describe('worktree git operations', () => {
   beforeEach(() => {
     gitMock.mockReset()
     gitMock.mockResolvedValue('')
+    scheduleGitStatusReadMock.mockReset()
+    scheduleGitStatusReadMock.mockImplementation((task: () => Promise<unknown>) => task())
     gitResultWithOptionsMock.mockReset()
     gitResultWithOptionsMock.mockResolvedValue({ ok: false, message: 'cancelled' })
   })
@@ -39,6 +47,20 @@ describe('worktree git operations', () => {
     expect(gitMock).toHaveBeenCalledWith('/tmp/repo', ['worktree', 'list', '--porcelain', '--expire', 'now'], {
       signal,
     })
+    expect(scheduleGitStatusReadMock).not.toHaveBeenCalled()
+  })
+
+  test('schedules the worktree list and statuses for a status-inclusive snapshot', async () => {
+    gitMock
+      .mockResolvedValueOnce('worktree /tmp/repo\nHEAD aaaaaaa\nbranch refs/heads/main\n')
+      .mockResolvedValueOnce(' M src/app.ts\0')
+
+    await expect(getWorktrees('/tmp/repo')).resolves.toMatchObject([
+      { path: '/tmp/repo', isDirty: true, changeCount: 1 },
+    ])
+
+    expect(scheduleGitStatusReadMock).toHaveBeenCalledTimes(2)
+    expect(gitMock).toHaveBeenCalledTimes(2)
   })
 
   test.each([
@@ -71,7 +93,17 @@ describe('worktree git operations', () => {
         mode: { kind: 'trackRemoteBranch' as const, remoteRef: 'origin/feature/branch', localBranch: 'feature/branch' },
         syncBeforeCreate: false,
       },
-      ['worktree', 'add', '--relative-paths', '-b', 'feature/branch', '--track', '--', '/tmp/repo-feature', 'origin/feature/branch'],
+      [
+        'worktree',
+        'add',
+        '--relative-paths',
+        '-b',
+        'feature/branch',
+        '--track',
+        '--',
+        '/tmp/repo-feature',
+        'origin/feature/branch',
+      ],
     ],
     [
       'detached',

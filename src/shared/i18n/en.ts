@@ -1241,6 +1241,7 @@ export const en = {
   // ---- Errors / banners ---------------------------------------------------
   'error.not-git-repo': 'Not a git repository',
   'error.failed-read-repo': 'Failed to read repository',
+  'error.repository-root-changed': 'The repository root changed. Reopen the project before synchronizing.',
   'error.merge-out-repository-unavailable': 'The repository is unavailable.',
   'error.merge-out-read-failed': 'Could not inspect merge-out readiness.',
   'error.merge-out-source-worktree-required': 'The source branch must be checked out in this worktree.',

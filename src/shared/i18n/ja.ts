@@ -1245,6 +1245,7 @@ export const ja: Record<DictKey, string> = {
   // ---- Errors / banners --------------------------------------------------
   'error.not-git-repo': 'git リポジトリではありません',
   'error.failed-read-repo': 'リポジトリの読み込みに失敗しました',
+  'error.repository-root-changed': 'リポジトリのルートが変更されました。同期する前にプロジェクトを開き直してください。',
   'error.merge-out-repository-unavailable': 'リポジトリを利用できません。',
   'error.merge-out-read-failed': 'マージ条件を確認できませんでした。',
   'error.merge-out-source-worktree-required':

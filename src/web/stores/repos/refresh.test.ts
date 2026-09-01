@@ -918,6 +918,97 @@ describe('core refresh request ordering', () => {
     expect(useReposStore.getState().repos[REPO_ID]?.operations.manualRefresh.phase).toBe('idle')
   })
 
+  test('manual sync keeps an equivalent Git-for-Windows root on the original workspace member', async () => {
+    const memberId = 'C:\\workspace\\api'
+    const reportedId = 'C:/Workspace/api'
+    const workspaceRootId = 'C:\\workspace'
+    const token = seedRepoState({
+      id: memberId,
+      remote: { remotes: ['origin'], hasRemotes: true },
+    }).instanceToken
+    useReposStore.setState((state) => ({
+      order: [workspaceRootId],
+      repos: {
+        ...state.repos,
+        [memberId]: replaceRepo(state.repos[memberId]!, (repo) => {
+          repo.workspaceRootId = workspaceRootId
+        }),
+      },
+    }))
+    const calls = { fetch: [] as string[], snapshot: [] as string[], status: [] as string[] }
+    rpcHandlers['repo.probe'] = async () => ({ ok: true, root: reportedId, name: 'api', isGitRepo: true })
+    rpcHandlers['repo.fetch'] = async ({ cwd }: { cwd: string }) => {
+      calls.fetch.push(cwd)
+      return { ok: true, message: 'ok' }
+    }
+    rpcHandlers['repo.snapshot'] = async ({ cwd }: { cwd: string }) => {
+      calls.snapshot.push(cwd)
+      return { branches: [branch('main')], current: 'main' }
+    }
+    rpcHandlers['repo.status'] = async ({ cwd }: { cwd: string }) => {
+      calls.status.push(cwd)
+      return []
+    }
+
+    await expect(useReposStore.getState().syncAndRefresh(memberId, { token })).resolves.toEqual({
+      ok: true,
+      message: 'ok',
+    })
+
+    const state = useReposStore.getState()
+    expect(state.order).toEqual([workspaceRootId])
+    expect(state.repos[reportedId]).toBeUndefined()
+    expect(state.repos[memberId]?.workspaceRootId).toBe(workspaceRootId)
+    expect(calls).toEqual({ fetch: [memberId], snapshot: [memberId], status: [memberId] })
+  })
+
+  test('manual sync rejects a genuinely different repository root without importing it', async () => {
+    const memberId = 'C:\\workspace\\api'
+    const movedId = 'D:/moved/api'
+    const workspaceRootId = 'C:\\workspace'
+    const token = seedRepoState({
+      id: memberId,
+      remote: { remotes: ['origin'], hasRemotes: true },
+    }).instanceToken
+    useReposStore.setState((state) => ({
+      order: [workspaceRootId],
+      repos: {
+        ...state.repos,
+        [memberId]: replaceRepo(state.repos[memberId]!, (repo) => {
+          repo.workspaceRootId = workspaceRootId
+        }),
+      },
+    }))
+    const calls = { fetch: 0, snapshot: 0, status: 0 }
+    rpcHandlers['repo.probe'] = async () => ({ ok: true, root: movedId, name: 'api', isGitRepo: true })
+    rpcHandlers['repo.fetch'] = async () => {
+      calls.fetch += 1
+      return { ok: true, message: 'ok' }
+    }
+    rpcHandlers['repo.snapshot'] = async () => {
+      calls.snapshot += 1
+      return { branches: [], current: '' }
+    }
+    rpcHandlers['repo.status'] = async () => {
+      calls.status += 1
+      return []
+    }
+
+    await expect(useReposStore.getState().syncAndRefresh(memberId, { token })).resolves.toEqual({
+      ok: false,
+      message: 'error.repository-root-changed',
+    })
+
+    const state = useReposStore.getState()
+    expect(state.order).toEqual([workspaceRootId])
+    expect(state.repos[movedId]).toBeUndefined()
+    expect(state.repos[memberId]?.availability).toMatchObject({
+      phase: 'unavailable',
+      reason: 'error.repository-root-changed',
+    })
+    expect(calls).toEqual({ fetch: 0, snapshot: 0, status: 0 })
+  })
+
   test('manual refresh reprobes a plain workspace and skips git reads when it remains plain', async () => {
     const token = seedRepoState({
       id: REPO_ID,
