@@ -65,18 +65,12 @@ function dependencies(
     head?: string
     upstream?: string
     entries?: StatusEntry[]
-    indexHash?: string
-    worktreeTree?: string
   } = {},
 ): BranchWorkspaceGitActionPlanDependencies {
   return {
     readManifests: vi.fn(async () => ({ kind: 'ready' as const, manifests: [manifest()] })),
     getSnapshot: vi.fn(async () => snapshot(options.head ?? INITIAL_HEAD, options.upstream)),
     getWorktreeStatusEntries: vi.fn(async () => options.entries ?? []),
-    getWorktreeContentState: vi.fn(async () => ({
-      indexHash: options.indexHash ?? '3'.repeat(40),
-      worktreeTree: options.worktreeTree ?? '4'.repeat(40),
-    })),
   }
 }
 
@@ -103,8 +97,6 @@ describe('branch workspace force remote alignment plan', () => {
           { x: 'M', y: ' ', path: 'src/changed.ts' },
           { x: '?', y: '?', path: 'scratch/new.txt' },
         ],
-        indexHash: '5'.repeat(40),
-        worktreeTree: '6'.repeat(40),
       }),
     )
 

@@ -1449,7 +1449,7 @@ async function executeBatchSetUpstream(
     updateActive(context.active.get(context.rootId), index + 1, state.completed.size)
     publishActiveOperation(context)
   }
-  return successResult(state.plan, state.completed, skippedRepositoryNames)
+  return successResult(state.plan, state.completed)
 }
 
 async function executeSync(
@@ -1618,7 +1618,6 @@ function updateConcurrentActive(
 function successResult(
   plan: BranchWorkspaceGitActionPlan,
   completed: ReadonlySet<string>,
-  satisfied: ReadonlySet<string> = new Set(),
 ): BranchWorkspaceGitActionResult {
   return {
     ok: true,
@@ -1639,7 +1638,7 @@ function executionResult(
   satisfied: ReadonlySet<string> = new Set(),
   retryable = true,
 ): BranchWorkspaceGitActionResult {
-  if (failures.size === 0) return successResult(plan, completed, satisfied)
+  if (failures.size === 0) return successResult(plan, completed)
   return {
     ok: false,
     kind: plan.kind,

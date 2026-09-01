@@ -6,9 +6,6 @@ import {
   sendTelegramMessage,
   type TelegramBotApiErrorCode,
   type TelegramBotApiResult,
-  type TelegramBotIdentity,
-  type TelegramChat,
-  type TelegramWebhookInfo,
 } from '#/server/modules/telegram-bot-api-source.ts'
 import {
   parseTelegramTerminalInputUpdate,

@@ -3,7 +3,6 @@ import * as resetOperations from '#/system/git/reset.ts'
 import { discardChangesForPaths, resetHardToCurrentHead } from '#/system/git/reset.ts'
 
 const gitResultWithOptionsMock = vi.hoisted(() => vi.fn())
-const getWorktreeContentStateMock = vi.hoisted(() => vi.fn())
 
 vi.mock('#/system/git/helper.ts', async () => {
   const actual = await vi.importActual<typeof import('#/system/git/helper.ts')>('#/system/git/helper.ts')
@@ -14,14 +13,6 @@ vi.mock('#/system/git/helper.ts', async () => {
     ),
   }
 })
-
-vi.mock('#/system/git/worktree-content-state.ts', () => ({
-  getWorktreeContentState: getWorktreeContentStateMock,
-  worktreeContentStatesEqual: (
-    left: { indexHash: string; worktreeTree: string },
-    right: { indexHash: string; worktreeTree: string },
-  ) => left.indexHash === right.indexHash && left.worktreeTree === right.worktreeTree,
-}))
 
 describe('resetHardToCurrentHead', () => {
   beforeEach(() => {
@@ -55,14 +46,11 @@ describe('alignWorktreeToRemoteRef', () => {
     remoteRef: 'origin/main',
     remoteHead: '2222222222222222222222222222222222222222',
     expectedFingerprint: `sha256:${'3'.repeat(64)}`,
-    expectedContentState: { indexHash: '4'.repeat(40), worktreeTree: '5'.repeat(40) },
   }
 
   beforeEach(() => {
     gitResultWithOptionsMock.mockReset()
     gitResultWithOptionsMock.mockResolvedValue({ ok: true, message: '' })
-    getWorktreeContentStateMock.mockReset()
-    getWorktreeContentStateMock.mockResolvedValue(target.expectedContentState)
   })
 
   test('resets directly to the confirmed remote oid and removes non-ignored files', async () => {

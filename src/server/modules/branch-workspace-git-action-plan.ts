@@ -30,7 +30,7 @@ import {
   type BranchWorkspaceSyncMemberPlan,
 } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
-import type { ExecResult, StatusEntry, WorktreeContentState, WorktreeStatus } from '#/shared/git-types.ts'
+import type { ExecResult, StatusEntry, WorktreeStatus } from '#/shared/git-types.ts'
 import { statusEntryPaths } from '#/shared/git-status.ts'
 import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import { parseRemoteBranchRef, type RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
@@ -46,11 +46,6 @@ export interface BranchWorkspaceGitActionPlanDependencies {
     worktreePath: string,
     signal?: AbortSignal,
   ) => Promise<StatusEntry[] | null>
-  getWorktreeContentState?: (
-    repoId: string,
-    worktreePath: string,
-    signal?: AbortSignal,
-  ) => Promise<WorktreeContentState | null>
   getPatch?: (repoId: string, worktreePath: string, signal?: AbortSignal) => Promise<ExecResult>
   getRemoteBranchInfo?: (repoId: string, signal?: AbortSignal) => Promise<RemoteTrackingBranchInfo[]>
 }

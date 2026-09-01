@@ -123,10 +123,6 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       ]
     }),
     getRemoteBranchInfo: vi.fn(async () => []),
-    getWorktreeContentState: vi.fn(async () => ({
-      indexHash: '3'.repeat(40),
-      worktreeTree: '4'.repeat(40),
-    })),
     getPatch: vi.fn(async () => ({ ok: true, message: 'diff --git a/src/a.ts b/src/a.ts\n+change' })),
     ...overrides,
   }
@@ -456,10 +452,6 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
         getSnapshot: vi.fn(async (repoId: string) =>
           snapshot(repoId.endsWith('/api') ? 'api' : 'web', { targetTracking: 'origin/feature/a' }),
         ),
-        getWorktreeContentState: vi.fn(async (repoId: string) => ({
-          indexHash: repoId.endsWith('/api') ? '5'.repeat(40) : '3'.repeat(40),
-          worktreeTree: repoId.endsWith('/api') ? '6'.repeat(40) : '4'.repeat(40),
-        })),
       }),
     )
 

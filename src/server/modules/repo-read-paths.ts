@@ -29,7 +29,6 @@ import {
   type StatusEntry,
   type WorktreeInfo,
   type WorktreeStatus,
-  type WorktreeContentState,
 } from '#/shared/git-types.ts'
 import { isRemoteRepoId, type ProbeResult, type RepoSnapshot } from '#/shared/rpc.ts'
 import type { RemoteTrackingBranchInfo } from '#/shared/remote-branches.ts'
@@ -67,16 +66,6 @@ export async function getRepositoryWorktreeStatusEntries(
         if (!backend.getWorktreeStatusEntries) return null
         return await backend.getWorktreeStatusEntries(worktreePath, signal)
       })
-}
-
-export async function getRepositoryWorktreeContentState(
-  cwd: string,
-  worktreePath: string,
-  signal?: AbortSignal,
-): Promise<WorktreeContentState | null> {
-  return signal?.aborted
-    ? null
-    : await runWithRepoBackend(cwd, async (backend) => await backend.getWorktreeContentState(worktreePath, signal))
 }
 
 export async function getRepositoryRemoteBranchInfo(
