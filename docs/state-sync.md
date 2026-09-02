@@ -60,7 +60,7 @@ Notes:
 Representative examples:
 
 - saved session state
-- fixed desktop detail pane size
+- desktop terminal and per-project file-area pane sizes
 - per-workspace desktop repository-list height
 - application-global desktop Terminal Focus preference
 - active repo and open repo set for next launch

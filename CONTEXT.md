@@ -180,6 +180,10 @@ _Avoid_: Fixed terminal action, translated shell command, mandatory terminal but
 A restorable, application-global desktop presentation preference that maximizes the selected internal terminal by hiding workspace navigation and file surfaces until the user explicitly exits Focus. It remains active while switching projects, repositories, branches, branch workspaces, and terminals without first restoring the split; on compact viewports or destinations without an eligible terminal it remains latent and reapplies when an eligible desktop terminal destination returns. It is distinct from compact focus surfaces and from maximizing an arbitrary detail surface.
 _Avoid_: Detail focus mode, workspace focus mode
 
+**Desktop three-column workspace layout**:
+The wide-viewport workspace presentation shared by Electron Desktop and browser Web, ordering workspace navigation, the selected terminal/detail surface, and the file area from left to right. The file area can collapse independently, while Terminal focus mode hides both auxiliary surfaces; compact Web, Android, and the independent Windows version do not use this layout.
+_Avoid_: Mobile Web layout, top-bottom workspace layout, three-panel terminal
+
 **Selected internal terminal**:
 The specific internal terminal session selected within one branch or worktree terminal area. It is distinct from the selected branch context and from the attachment that currently controls terminal input; a terminal deep link targets this session when it still exists and restores an encoded branch workspace member context when that relationship remains valid.
 _Avoid_: Current terminal, active terminal
