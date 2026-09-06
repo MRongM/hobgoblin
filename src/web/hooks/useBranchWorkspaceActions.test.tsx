@@ -54,6 +54,17 @@ const plan = {
   terminalSessionIds: [],
 } satisfies BranchWorkspacePlan
 
+const reducePlan = {
+  ...plan,
+  token: 'sha256:reduce-plan',
+  operation: 'reduce',
+} satisfies BranchWorkspacePlan
+
+const freshPlan = {
+  ...plan,
+  token: 'sha256:fresh-plan',
+} satisfies BranchWorkspacePlan
+
 const readySnapshot = {
   id: 'branch-1',
   rootId: '/workspace',
@@ -343,6 +354,91 @@ describe('useBranchWorkspaceActions', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: branchWorkspaceQueryKey('/workspace'), exact: true })
     await act(async () => state!.cancel())
     expect(mocks.abort).toHaveBeenCalledWith('/workspace')
+  })
+
+  test('waits for cancelled execution settlement before planning the next dialog operation', async () => {
+    const execution = deferred<Awaited<ReturnType<typeof mocks.execute>>>()
+    mocks.plan.mockResolvedValueOnce({ ok: true, plan }).mockResolvedValueOnce({ ok: true, plan: reducePlan })
+    mocks.execute.mockImplementation(async () => await execution.promise)
+    mocks.abort.mockResolvedValue({ ok: true })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    const createRequest = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [],
+      auxiliaryEntries: [],
+    }
+    const reduceRequest = {
+      operation: 'reduce' as const,
+      branchWorkspaceId: 'branch-1',
+      repositories: ['api'],
+    }
+
+    await act(async () => state!.requestPlan(createRequest))
+    let confirmation!: ReturnType<ReturnType<typeof useBranchWorkspaceActions>['confirm']>
+    act(() => {
+      confirmation = state!.confirm([])
+    })
+    await act(async () => state!.cancel())
+    act(() => state!.reset())
+    expect(state!.executing).toBe(true)
+
+    let nextPlanRequest!: Promise<boolean>
+    act(() => {
+      nextPlanRequest = state!.requestPlan(reduceRequest)
+    })
+    await act(async () => await Promise.resolve())
+    const planCallsBeforeExecutionSettled = mocks.plan.mock.calls.length
+
+    await act(async () => {
+      execution.resolve({ ok: false, message: 'cancelled', branchWorkspaceId: 'branch-1' })
+      await confirmation
+      await nextPlanRequest
+    })
+
+    expect(planCallsBeforeExecutionSettled).toBe(1)
+    expect(mocks.plan).toHaveBeenNthCalledWith(2, '/workspace', reduceRequest, undefined)
+    expect(state!.plan).toEqual(reducePlan)
+    expect(state!.error).toBeNull()
+  })
+
+  test('replans a stale execution after releasing the active execution slot', async () => {
+    mocks.plan.mockResolvedValueOnce({ ok: true, plan }).mockResolvedValueOnce({ ok: true, plan: freshPlan })
+    mocks.execute.mockResolvedValue({
+      ok: false,
+      message: 'workspace.branch-workspace.plan-stale',
+      branchWorkspaceId: 'branch-1',
+    })
+    let state: ReturnType<typeof useBranchWorkspaceActions> | null = null
+    await act(async () =>
+      root!.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    const request = {
+      operation: 'create' as const,
+      branch: 'feature/auth',
+      repositories: [],
+      auxiliaryEntries: [],
+    }
+
+    await act(async () => state!.requestPlan(request))
+    await act(async () => state!.confirm([]))
+
+    expect(mocks.plan).toHaveBeenCalledTimes(2)
+    expect(mocks.plan).toHaveBeenNthCalledWith(2, '/workspace', request, undefined)
+    expect(state!.plan).toEqual(freshPlan)
+    expect(state!.result).toBeNull()
+    expect(state!.error).toBeNull()
   })
 
   test('returns a failed execution to selection without discarding its request', async () => {

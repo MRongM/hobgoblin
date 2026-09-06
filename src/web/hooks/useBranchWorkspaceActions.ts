@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type {
@@ -17,15 +17,18 @@ import {
 } from '#/web/workspace-client.ts'
 import { useT } from '#/web/stores/i18n.ts'
 
+type BranchWorkspacePendingPhase = 'planning' | 'executing' | null
+
 export function useBranchWorkspaceActions(rootId: string | null) {
   const t = useT()
   const queryClient = useQueryClient()
   const [plan, setPlan] = useState<BranchWorkspacePlan | null>(null)
   const [request, setRequest] = useState<BranchWorkspacePlanRequest | null>(null)
   const [result, setResult] = useState<BranchWorkspaceExecuteResult | null>(null)
-  const [planning, setPlanning] = useState(false)
-  const [executing, setExecuting] = useState(false)
+  const [pendingPhase, setPendingPhase] = useState<BranchWorkspacePendingPhase>(null)
   const [error, setError] = useState<string | null>(null)
+  const activeExecutionRef = useRef<Promise<BranchWorkspaceExecuteResult | null> | null>(null)
+  const viewGenerationRef = useRef(0)
 
   const invalidate = useCallback(async () => {
     if (!rootId) return
@@ -35,7 +38,13 @@ export function useBranchWorkspaceActions(rootId: string | null) {
   const requestPlan = useCallback(
     async (nextRequest: BranchWorkspacePlanRequest, signal?: AbortSignal) => {
       if (!rootId) return false
-      setPlanning(true)
+      const activeExecution = activeExecutionRef.current
+      if (activeExecution) await activeExecution
+      if (signal?.aborted) return false
+
+      const generation = viewGenerationRef.current + 1
+      viewGenerationRef.current = generation
+      setPendingPhase('planning')
       setError(null)
       setResult(null)
       setRequest(nextRequest)
@@ -48,7 +57,8 @@ export function useBranchWorkspaceActions(rootId: string | null) {
               message: 'workspace.branch-workspace.plan-failed',
             },
       )
-      setPlanning(false)
+      if (viewGenerationRef.current !== generation) return false
+      setPendingPhase(null)
       if (!response || signal?.aborted) return false
       if (!response.ok) {
         setPlan(null)
@@ -62,65 +72,91 @@ export function useBranchWorkspaceActions(rootId: string | null) {
   )
 
   const confirm = useCallback(
-    async (approvals: BranchWorkspaceApproval[], options: { force?: boolean } = {}) => {
-      if (!rootId || !plan) return null
-      setExecuting(true)
+    (approvals: BranchWorkspaceApproval[], options: { force?: boolean } = {}) => {
+      if (!rootId || !plan || activeExecutionRef.current) return Promise.resolve(null)
+      const generation = viewGenerationRef.current
+      setPendingPhase('executing')
       setError(null)
-      const response = await executeBranchWorkspace(rootId, {
-        planToken: plan.token,
-        approvals,
-        ...(options.force === true ? { force: true } : {}),
-      }).catch(() => ({
-        ok: false as const,
-        message: 'workspace.branch-workspace.execute-failed',
-        branchWorkspaceId: plan.branchWorkspaceId,
-      }))
-      setExecuting(false)
-      if (!response.ok && response.message === 'workspace.branch-workspace.plan-stale' && request) {
-        await requestPlan(request)
-        return response
-      }
-      setResult(response)
-      if (!response.ok) setError(response.message)
-      if (response.ok && response.warnings?.length) {
-        const cleanupWarning = response.warnings.some((warning) => warning.kind === 'member-worktree-cleanup-failed')
-        toast.warning(
-          t(
-            cleanupWarning
-              ? 'workspace.branch-workspace.force-delete-cleanup-warning'
-              : 'workspace.branch-workspace.dependency-warning',
-            { count: response.warnings.length },
-          ),
-          {
-            description: response.warnings
-              .map((warning) => {
-                const name = 'repositoryName' in warning ? warning.repositoryName : warning.entryName
-                return `${name}: ${t(warning.message)}`
-              })
-              .join('\n'),
-          },
-        )
-      }
-      if (response.ok && response.snapshot) {
-        const snapshot = response.snapshot
-        queryClient.setQueryData<BranchWorkspaceReadResult>(branchWorkspaceQueryKey(rootId), (current) => {
-          const items = current?.ok ? current.items : []
-          const existingIndex = items.findIndex((item) => item.id === snapshot.id)
-          const nextItems =
-            existingIndex < 0
-              ? [...items, snapshot]
-              : items.map((item, index) => (index === existingIndex ? snapshot : item))
-          return {
-            ok: true,
-            rootId,
-            items: nextItems,
-            auxiliaryCandidates: current?.ok ? current.auxiliaryCandidates : [],
+
+      let execution!: Promise<BranchWorkspaceExecuteResult>
+      execution = (async () => {
+        try {
+          const response = await executeBranchWorkspace(rootId, {
+            planToken: plan.token,
+            approvals,
+            ...(options.force === true ? { force: true } : {}),
+          }).catch(() => ({
+            ok: false as const,
+            message: 'workspace.branch-workspace.execute-failed',
+            branchWorkspaceId: plan.branchWorkspaceId,
+          }))
+          const stalePlan =
+            !response.ok && response.message === 'workspace.branch-workspace.plan-stale' && request !== null
+          if (stalePlan) return response
+
+          if (viewGenerationRef.current === generation) {
+            setResult(response)
+            if (!response.ok) setError(response.message)
           }
-        })
-      } else {
-        await invalidate().catch(() => undefined)
-      }
-      return response
+          if (response.ok && response.warnings?.length) {
+            const cleanupWarning = response.warnings.some(
+              (warning) => warning.kind === 'member-worktree-cleanup-failed',
+            )
+            toast.warning(
+              t(
+                cleanupWarning
+                  ? 'workspace.branch-workspace.force-delete-cleanup-warning'
+                  : 'workspace.branch-workspace.dependency-warning',
+                { count: response.warnings.length },
+              ),
+              {
+                description: response.warnings
+                  .map((warning) => {
+                    const name = 'repositoryName' in warning ? warning.repositoryName : warning.entryName
+                    return `${name}: ${t(warning.message)}`
+                  })
+                  .join('\n'),
+              },
+            )
+          }
+          if (response.ok && response.snapshot) {
+            const snapshot = response.snapshot
+            queryClient.setQueryData<BranchWorkspaceReadResult>(branchWorkspaceQueryKey(rootId), (current) => {
+              const items = current?.ok ? current.items : []
+              const existingIndex = items.findIndex((item) => item.id === snapshot.id)
+              const nextItems =
+                existingIndex < 0
+                  ? [...items, snapshot]
+                  : items.map((item, index) => (index === existingIndex ? snapshot : item))
+              return {
+                ok: true,
+                rootId,
+                items: nextItems,
+                auxiliaryCandidates: current?.ok ? current.auxiliaryCandidates : [],
+              }
+            })
+          } else {
+            await invalidate().catch(() => undefined)
+          }
+          return response
+        } finally {
+          if (activeExecutionRef.current === execution) activeExecutionRef.current = null
+          setPendingPhase((current) => (current === 'executing' ? null : current))
+        }
+      })()
+      activeExecutionRef.current = execution
+
+      return execution.then(async (response) => {
+        if (
+          viewGenerationRef.current === generation &&
+          !response.ok &&
+          response.message === 'workspace.branch-workspace.plan-stale' &&
+          request
+        ) {
+          await requestPlan(request)
+        }
+        return response
+      })
     },
     [invalidate, plan, queryClient, request, requestPlan, rootId, t],
   )
@@ -159,15 +195,17 @@ export function useBranchWorkspaceActions(rootId: string | null) {
   }, [])
 
   const reset = useCallback(() => {
+    viewGenerationRef.current += 1
     setPlan(null)
     setRequest(null)
     setResult(null)
-    setPlanning(false)
-    setExecuting(false)
     setError(null)
+    setPendingPhase(activeExecutionRef.current ? 'executing' : null)
   }, [])
 
-  const pending = planning || executing
+  const planning = pendingPhase === 'planning'
+  const executing = pendingPhase === 'executing'
+  const pending = pendingPhase !== null
 
   return {
     plan,
