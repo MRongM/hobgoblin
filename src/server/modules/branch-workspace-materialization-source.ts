@@ -23,6 +23,7 @@ import {
   removeRemoteBranchWorkspaceEntry,
 } from '#/system/ssh/branch-workspaces.ts'
 import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
+import { withBranchWorkspaceRetry } from '#/server/modules/branch-workspace-retry.ts'
 
 export interface BranchWorkspaceMaterializationDependencies {
   resolveRemoteTarget?: typeof resolveRepositoryRemoteTarget
@@ -119,9 +120,16 @@ export async function createBranchWorkspaceDirectory(
   const rootPath = requiredRootPath(rootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
-    await (dependencies.createRemoteDirectory ?? createRemoteBranchWorkspaceDirectory)(target, rootPath, targetPath, {
-      signal,
-    })
+    await withBranchWorkspaceRetry(
+      async () =>
+        await (dependencies.createRemoteDirectory ?? createRemoteBranchWorkspaceDirectory)(
+          target,
+          rootPath,
+          targetPath,
+          { signal },
+        ),
+      { signal },
+    )
     return
   }
   await assertSafeTargetParents(rootPath, targetPath)
@@ -131,7 +139,7 @@ export async function createBranchWorkspaceDirectory(
   ) {
     throw new Error('workspace.branch-workspace.invalid-path')
   }
-  await mkdir(targetPath)
+  await withBranchWorkspaceRetry(async () => await mkdir(targetPath), { signal })
 }
 
 export async function materializeBranchWorkspaceSymlink(
@@ -145,18 +153,22 @@ export async function materializeBranchWorkspaceSymlink(
   const rootPath = requiredRootPath(rootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
-    await (dependencies.materializeRemoteSymlink ?? materializeRemoteBranchWorkspaceSymlink)(
-      target,
-      rootPath,
-      sourcePath,
-      targetPath,
+    await withBranchWorkspaceRetry(
+      async () =>
+        await (dependencies.materializeRemoteSymlink ?? materializeRemoteBranchWorkspaceSymlink)(
+          target,
+          rootPath,
+          sourcePath,
+          targetPath,
+          { signal },
+        ),
       { signal },
     )
     return
   }
   assertDirectChildSource(rootPath, sourcePath)
   await assertSafeTargetParents(rootPath, targetPath)
-  await symlinkAbsolute(sourcePath, targetPath)
+  await withBranchWorkspaceRetry(async () => await symlinkAbsolute(sourcePath, targetPath), { signal })
 }
 
 export async function copyBranchWorkspaceEntry(
@@ -170,9 +182,17 @@ export async function copyBranchWorkspaceEntry(
   const rootPath = requiredRootPath(rootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
-    await (dependencies.copyRemoteEntry ?? copyRemoteBranchWorkspaceEntry)(target, rootPath, sourcePath, targetPath, {
-      signal,
-    })
+    await withBranchWorkspaceRetry(
+      async () =>
+        await (dependencies.copyRemoteEntry ?? copyRemoteBranchWorkspaceEntry)(
+          target,
+          rootPath,
+          sourcePath,
+          targetPath,
+          { signal },
+        ),
+      { signal },
+    )
     return
   }
   assertDirectChildSource(rootPath, sourcePath)
@@ -180,14 +200,18 @@ export async function copyBranchWorkspaceEntry(
   const sourceStat = await lstat(sourcePath)
   const copySource = sourceStat.isSymbolicLink() ? await realpath(sourcePath) : sourcePath
   signal?.throwIfAborted()
-  await cp(copySource, targetPath, {
-    recursive: true,
-    dereference: false,
-    errorOnExist: true,
-    force: false,
-    preserveTimestamps: true,
-    verbatimSymlinks: true,
-  })
+  await withBranchWorkspaceRetry(
+    async () =>
+      await cp(copySource, targetPath, {
+        recursive: true,
+        dereference: false,
+        errorOnExist: true,
+        force: false,
+        preserveTimestamps: true,
+        verbatimSymlinks: true,
+      }),
+    { signal },
+  )
 }
 
 export async function fingerprintBranchWorkspaceEntry(
@@ -200,16 +224,20 @@ export async function fingerprintBranchWorkspaceEntry(
   const rootPath = requiredRootPath(rootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
-    return await (dependencies.fingerprintRemoteEntry ?? fingerprintRemoteBranchWorkspaceEntry)(
-      target,
-      rootPath,
-      targetPath,
+    return await withBranchWorkspaceRetry(
+      async () =>
+        await (dependencies.fingerprintRemoteEntry ?? fingerprintRemoteBranchWorkspaceEntry)(
+          target,
+          rootPath,
+          targetPath,
+          { signal },
+        ),
       { signal },
     )
   }
   await assertSafeTargetParents(rootPath, targetPath)
   const hash = createHash('sha256')
-  await hashLocalEntry(hash, targetPath, '.', signal)
+  await withBranchWorkspaceRetry(async () => await hashLocalEntry(hash, targetPath, '.', signal), { signal })
   return hash.digest('hex')
 }
 
@@ -223,13 +251,17 @@ export async function removeBranchWorkspaceEntry(
   const rootPath = requiredRootPath(rootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
-    await (dependencies.removeRemoteEntry ?? removeRemoteBranchWorkspaceEntry)(target, rootPath, targetPath, {
-      signal,
-    })
+    await withBranchWorkspaceRetry(
+      async () =>
+        await (dependencies.removeRemoteEntry ?? removeRemoteBranchWorkspaceEntry)(target, rootPath, targetPath, {
+          signal,
+        }),
+      { signal },
+    )
     return
   }
   await assertSafeTargetParents(rootPath, targetPath)
-  await removeLocalEntryNoFollow(targetPath, signal)
+  await withBranchWorkspaceRetry(async () => await removeLocalEntryNoFollow(targetPath, signal), { signal })
 }
 
 export async function listBranchWorkspaceChildren(
@@ -246,7 +278,7 @@ export async function listBranchWorkspaceChildren(
       signal,
     })
   }
-  await assertSafeTargetParents(rootPath, targetPath)
+  if (path.resolve(rootPath) !== path.resolve(targetPath)) await assertSafeTargetParents(rootPath, targetPath)
   const targetStat = await lstat(targetPath)
   if (!targetStat.isDirectory() || targetStat.isSymbolicLink()) {
     throw new Error('workspace.branch-workspace.not-directory')

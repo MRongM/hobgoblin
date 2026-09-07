@@ -977,7 +977,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
       ])
     case 'listBranchWorkspaceChildren':
       return remoteBranchWorkspacePython(command.rootPath, [
-        `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
+        `target_path = checked_path(${pythonString(command.targetPath)}, True)`,
         'ensure_safe_parents(target_path)',
         'info = os.lstat(target_path)',
         'if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):',

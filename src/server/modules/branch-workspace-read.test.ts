@@ -121,7 +121,7 @@ describe('branch workspace read model', () => {
     })
   })
 
-  test('does not read an unconfigured repository referenced by a stale manifest', async () => {
+  test('reads a repository referenced by a stale manifest without configuration gating', async () => {
     const current = manifest()
     current.repositories[0] = {
       ...current.repositories[0]!,
@@ -134,12 +134,12 @@ describe('branch workspace read model', () => {
       ok: true,
       items: [
         {
-          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
-          issues: [{ kind: 'repository-unavailable', repositoryName: 'legacy' }],
+          state: { kind: 'ready' },
+          issues: [],
         },
       ],
     })
-    expect(deps.readRepositorySnapshot).not.toHaveBeenCalled()
+    expect(deps.readRepositorySnapshot).toHaveBeenCalled()
   })
 
   test('reports a read failure when a referenced repository snapshot read fails', async () => {
@@ -147,9 +147,9 @@ describe('branch workspace read model', () => {
     const deps = dependencies([current])
     deps.readRepositorySnapshot.mockRejectedValue(new Error('temporary SSH failure'))
 
-    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toEqual({
-      ok: false,
-      message: 'workspace.branch-workspace.read-failed',
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [{ issues: [{ kind: 'repository-unavailable', repositoryName: 'api' }] }],
     })
   })
 
@@ -341,13 +341,13 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: unavailable.id,
-          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+          state: { kind: 'ready' },
           issues: [{ kind: 'repository-unavailable', repositoryName: 'api' }],
         },
         {
           id: moved.id,
-          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
-          issues: [{ kind: 'worktree-path-mismatch', repositoryName: 'web' }],
+          state: { kind: 'ready' },
+          issues: [{ kind: 'worktree-missing', repositoryName: 'web' }],
         },
       ],
     })
@@ -367,7 +367,7 @@ describe('branch workspace read model', () => {
       ok: true,
       items: [
         {
-          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+          state: { kind: 'ready' },
           issues: [{ kind: 'worktree-missing', repositoryName: 'api' }],
           repositories: [{ repositoryName: 'api', ready: false }],
         },

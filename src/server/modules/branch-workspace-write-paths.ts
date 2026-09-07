@@ -16,6 +16,7 @@ import {
   readBranchWorkspaceManifests,
   updateBranchWorkspaceManifests,
 } from '#/server/modules/branch-workspace-source.ts'
+import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import {
   cleanupRepositoryWorktree,
@@ -36,6 +37,7 @@ import type {
 import type { TerminalCloseSessionsResult } from '#/shared/terminal.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { parseRemoteBranchRef } from '#/shared/remote-branches.ts'
+import { isTransientBranchWorkspaceFailure, withBranchWorkspaceRetry } from '#/server/modules/branch-workspace-retry.ts'
 
 const BRANCH_WORKSPACE_CREATE_CONCURRENCY = 4
 
@@ -80,19 +82,46 @@ export function createBranchWorkspaceWriteService(
   const pendingByRoot = new Map<string, PendingBranchWorkspacePlan>()
   const activeByRoot = new Map<string, AbortController>()
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspacePlan
-  const readManifests = dependencies.readManifests ?? readBranchWorkspaceManifests
+  const readManifests = dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId))
   const readSnapshot = dependencies.readSnapshot ?? readBranchWorkspaceSnapshot
   const updateManifests = dependencies.updateManifests ?? updateBranchWorkspaceManifests
+  const retryUpdateManifests = (rootId: string, mutate: Parameters<typeof updateBranchWorkspaceManifests>[1]) =>
+    withBranchWorkspaceRetry(async () => await updateManifests(rootId, mutate))
   const createDirectory = dependencies.createDirectory ?? createBranchWorkspaceDirectory
-  const createWorktree = dependencies.createWorktree ?? createRepositoryWorktree
-  const cleanupWorktree = dependencies.cleanupWorktree ?? cleanupRepositoryWorktree
+  const rawCreateWorktree = dependencies.createWorktree ?? createRepositoryWorktree
+  const createWorktree = (...args: Parameters<typeof createRepositoryWorktree>) =>
+    withBranchWorkspaceRetry(async () => await rawCreateWorktree(...args), {
+      signal: args[3],
+      retryResult: (value) => !value.ok && isTransientBranchWorkspaceFailure(value.message),
+    })
+  const rawCleanupWorktree = dependencies.cleanupWorktree ?? cleanupRepositoryWorktree
+  const cleanupWorktree = (...args: Parameters<typeof cleanupRepositoryWorktree>) =>
+    withBranchWorkspaceRetry(async () => await rawCleanupWorktree(...args), {
+      signal: args[2],
+      retryResult: (value) => !value.ok && isTransientBranchWorkspaceFailure(value.message),
+    })
   const materializeSymlink = dependencies.materializeSymlink ?? materializeBranchWorkspaceSymlink
   const copyEntry = dependencies.copyEntry ?? copyBranchWorkspaceEntry
   const fingerprintEntry = dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry
   const removeEntry = dependencies.removeEntry ?? removeBranchWorkspaceEntry
-  const removeWorktree = dependencies.removeWorktree ?? removeRepositoryWorktree
-  const deleteBranch = dependencies.deleteBranch ?? deleteRepositoryBranch
-  const deleteRemoteBranch = dependencies.deleteRemoteBranch ?? deleteRepositoryRemoteBranch
+  const rawRemoveWorktree = dependencies.removeWorktree ?? removeRepositoryWorktree
+  const removeWorktree = (...args: Parameters<typeof removeRepositoryWorktree>) =>
+    withBranchWorkspaceRetry(async () => await rawRemoveWorktree(...args), {
+      signal: args[2],
+      retryResult: (value) => !value.ok && isTransientBranchWorkspaceFailure(value.message),
+    })
+  const rawDeleteBranch = dependencies.deleteBranch ?? deleteRepositoryBranch
+  const deleteBranch = (...args: Parameters<typeof deleteRepositoryBranch>) =>
+    withBranchWorkspaceRetry(async () => await rawDeleteBranch(...args), {
+      signal: args[3],
+      retryResult: (value) => !value.ok && isTransientBranchWorkspaceFailure(value.message),
+    })
+  const rawDeleteRemoteBranch = dependencies.deleteRemoteBranch ?? deleteRepositoryRemoteBranch
+  const deleteRemoteBranch = (...args: Parameters<typeof deleteRepositoryRemoteBranch>) =>
+    withBranchWorkspaceRetry(async () => await rawDeleteRemoteBranch(...args), {
+      signal: args[3],
+      retryResult: (value) => !value.ok && isTransientBranchWorkspaceFailure(value.message),
+    })
   const closeSessions =
     dependencies.closeSessions ?? (async (sessionIds: string[]) => ({ closed: [], missing: [...new Set(sessionIds)] }))
   const publishInvalidation = dependencies.publishInvalidation ?? publishWorkspaceInvalidation
@@ -108,7 +137,7 @@ export function createBranchWorkspaceWriteService(
     sourceToken?: string,
   ): Promise<void> {
     let found = false
-    await updateManifests(rootId, (manifests) =>
+    await retryUpdateManifests(rootId, (manifests) =>
       manifests.map((manifest) => {
         if (manifest.id !== branchWorkspaceId) return manifest
         found = true
@@ -208,7 +237,7 @@ export function createBranchWorkspaceWriteService(
           }
 
           try {
-            await updateManifests(rootId, (manifests) =>
+            await retryUpdateManifests(rootId, (manifests) =>
               manifests.filter((manifest) => manifest.id !== plan.branchWorkspaceId),
             )
           } catch (error) {
@@ -267,7 +296,7 @@ export function createBranchWorkspaceWriteService(
             }
             pending.terminalsClosed = true
           }
-          await updateManifests(rootId, (manifests) => {
+          await retryUpdateManifests(rootId, (manifests) => {
             const nextManifest: BranchWorkspaceManifest = {
               ...plan.manifest,
               repositories: plan.manifest.repositories.map((member) => ({
@@ -516,7 +545,7 @@ export function createBranchWorkspaceWriteService(
               return failOperation(plan.branchWorkspaceId, operationMessage(error))
             }
           }
-          await updateManifests(rootId, (manifests) =>
+          await retryUpdateManifests(rootId, (manifests) =>
             manifests.filter((manifest) => manifest.id !== plan.branchWorkspaceId),
           )
           publishChange(rootId, input.sourceToken)
@@ -711,7 +740,7 @@ export function createBranchWorkspaceWriteService(
         ...orderedIds.map((id) => byId.get(id)!),
         ...manifests.filter((manifest) => !selected.has(manifest.id)),
       ]
-      await updateManifests(rootId, () => reordered)
+      await retryUpdateManifests(rootId, () => reordered)
       publishInvalidation(rootId)
       return { ok: true }
     },

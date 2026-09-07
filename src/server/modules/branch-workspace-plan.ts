@@ -6,6 +6,8 @@ import {
   listBranchWorkspaceChildren,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
+import { discoverBranchWorkspaceDirectories } from '#/server/modules/branch-workspace-discovery-source.ts'
 import type { RepoSnapshotOptions } from '#/server/modules/repo-backend.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import {
@@ -42,6 +44,7 @@ import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef
 export interface BranchWorkspacePlanDependencies {
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
   readManifests?: typeof readBranchWorkspaceManifests
+  discoverDirectories?: typeof discoverBranchWorkspaceDirectories
   getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
   getWorktrees?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeInfo[]>
   getRemoteBranches?: (repoId: string, signal?: AbortSignal) => Promise<string[]>
@@ -68,15 +71,12 @@ export async function buildBranchWorkspacePlan(
     return { ok: false, message: 'workspace.branch-workspace.invalid-branch' }
   }
   const normalizedRootId = workspaceRootId(rootId)
-  const resources = await readPlanResources(normalizedRootId, dependencies)
+  const resources = await readPlanResources(normalizedRootId, dependencies, signal)
   if (!resources.ok) return resources
   const { config, manifests } = resources
   const selectedRepositories = new Map(
     createRequest.repositories.map((repository) => [repository.repositoryName, repository]),
   )
-  if ([...selectedRepositories.keys()].some((name) => !config.repo.includes(name))) {
-    return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-  }
   if (createRequest.auxiliaryEntries.some((entry) => config.repo.includes(entry.name))) {
     return { ok: false, message: 'workspace.branch-workspace.invalid-entry' }
   }
@@ -134,10 +134,12 @@ export async function buildBranchWorkspacePlan(
     }
   }
 
-  const repositorySelections = config.repo.flatMap((repositoryName) => {
-    const selection = selectedRepositories.get(repositoryName)
-    return !selection || fixedRepositories.has(repositoryName) ? [] : [selection]
-  })
+  const repositorySelections = [...new Set([...config.repo, ...selectedRepositories.keys()])].flatMap(
+    (repositoryName) => {
+      const selection = selectedRepositories.get(repositoryName)
+      return !selection || fixedRepositories.has(repositoryName) ? [] : [selection]
+    },
+  )
   const plannedRepositories = await Promise.all(
     repositorySelections.map(async (selection) => {
       signal?.throwIfAborted()
@@ -238,7 +240,7 @@ async function buildExistingBranchWorkspacePlan(
   signal?: AbortSignal,
 ): Promise<BranchWorkspacePlanResult> {
   const normalizedRootId = workspaceRootId(rootId)
-  const resources = await readPlanResources(normalizedRootId, dependencies)
+  const resources = await readPlanResources(normalizedRootId, dependencies, signal)
   if (!resources.ok) return resources
   const manifest = resources.manifests.find((candidate) => candidate.id === request.branchWorkspaceId)
   if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
@@ -246,10 +248,21 @@ async function buildExistingBranchWorkspacePlan(
     if (manifest.operation?.kind === 'remove') {
       return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
     }
-    return await buildRepairPlan(manifest, resources.config.repo, dependencies, signal)
+    return await buildRepairPlan(
+      manifest,
+      manifest.repositories.map((member) => member.repositoryName),
+      dependencies,
+      signal,
+    )
   }
   if (request.operation === 'reduce') {
-    return await buildReducePlan(manifest, resources.config.repo, request, dependencies, signal)
+    return await buildReducePlan(
+      manifest,
+      manifest.repositories.map((member) => member.repositoryName),
+      request,
+      dependencies,
+      signal,
+    )
   }
   return await buildRemovePlan(manifest, request, dependencies, signal)
 }
@@ -293,7 +306,7 @@ async function buildReducePlan(
   const repositories: BranchWorkspaceRepositoryPlan[] = []
   for (const member of selectedMembers) {
     signal?.throwIfAborted()
-    const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
+    const repoId = member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName)
     if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
     if (member.progress === 'removed' && manifest.operation?.kind === 'reduce') {
       repositories.push(reduceRepositoryPlan(member, repoId, 'satisfied'))
@@ -495,7 +508,7 @@ async function planRepairRepository(
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
 ): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
-  const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
+  const repoId = member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
     includeWorktreeStatus: false,
@@ -700,7 +713,7 @@ async function planRemoveRepository(
 ): Promise<
   { ok: true; repository: BranchWorkspaceRepositoryPlan; unmanagedEntry?: string } | { ok: false; message: string }
 > {
-  const repoId = workspaceRepositoryId(manifest.rootId, member.repositoryName)
+  const repoId = member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
     includeWorktreeStatus: false,
@@ -773,8 +786,9 @@ async function descendantTerminalSessionIds(
   if (!dependencies.listTerminalSessions) return []
   const scopes = [
     manifest.rootId,
-    ...configuredRepositories
-      .map((repositoryName) => workspaceRepositoryId(manifest.rootId, repositoryName))
+    ...manifest.repositories
+      .filter((member) => configuredRepositories.includes(member.repositoryName))
+      .map((member) => member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName))
       .filter((repoId): repoId is string => !!repoId),
   ]
   try {
@@ -810,8 +824,9 @@ async function terminalSessionIdsForPaths(
   if (!dependencies.listTerminalSessions) return []
   const scopes = [
     manifest.rootId,
-    ...configuredRepositories
-      .map((repositoryName) => workspaceRepositoryId(manifest.rootId, repositoryName))
+    ...manifest.repositories
+      .filter((member) => configuredRepositories.includes(member.repositoryName))
+      .map((member) => member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName))
       .filter((repoId): repoId is string => !!repoId),
   ]
   try {
@@ -921,6 +936,7 @@ function buildRemoveSteps(
 async function readPlanResources(
   rootId: string,
   dependencies: BranchWorkspacePlanDependencies,
+  signal?: AbortSignal,
 ): Promise<
   | {
       ok: true
@@ -932,16 +948,19 @@ async function readPlanResources(
   try {
     const [configSnapshot, manifestSnapshot] = await Promise.all([
       (dependencies.readConfig ?? readWorkspaceConfig)(rootId),
-      (dependencies.readManifests ?? readBranchWorkspaceManifests)(rootId),
+      readBranchWorkspaceCatalog(rootId, signal, {
+        readManifests: dependencies.readManifests,
+        discoverDirectories: dependencies.discoverDirectories,
+      }),
     ])
-    if (configSnapshot.kind !== 'ready') return { ok: false, message: 'workspace.configuration-required' }
     if (manifestSnapshot.kind === 'invalid') return { ok: false, message: manifestSnapshot.message }
     return {
       ok: true,
-      config: configSnapshot.config,
+      config: configSnapshot.kind === 'ready' ? configSnapshot.config : { repo: [] },
       manifests: manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : [],
     }
   } catch (error) {
+    signal?.throwIfAborted()
     return { ok: false, message: safePlanMessage(error, 'workspace.branch-workspace.read-failed') }
   }
 }

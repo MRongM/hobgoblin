@@ -5,6 +5,8 @@ import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { readBranchWorkspaces } from '#/web/workspace-client.ts'
 import { subscribeBranchWorkspaceInvalidation } from '#/web/branch-workspace-invalidation.ts'
 import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
+import { projectDiscoveredBranchWorkspaceRepositories } from '#/web/branch-workspace-repository-projection.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
 
 export { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
 
@@ -28,6 +30,13 @@ export function branchWorkspaceQueryOptions(rootId: string) {
 export function useBranchWorkspaceQuery(rootId: string) {
   const queryClient = useQueryClient()
   const query = useQuery(branchWorkspaceQueryOptions(rootId))
+  useEffect(() => {
+    if (!query.data?.ok) return
+    const projection = projectDiscoveredBranchWorkspaceRepositories(useReposStore.getState(), rootId, query.data.items)
+    if (projection.repos !== useReposStore.getState().repos)
+      useReposStore.setState({ repos: projection.repos, order: projection.order })
+    for (const id of projection.refreshIds) void useReposStore.getState().refreshCoreData(id)
+  }, [query.data, rootId])
   const refresh = useCallback(async () => await refreshBranchWorkspaceQuery(queryClient, rootId), [queryClient, rootId])
   return { ...query, refresh }
 }

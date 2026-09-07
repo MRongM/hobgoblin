@@ -28,7 +28,10 @@ export function resolveBranchWorkspaceMemberTarget({
   candidates,
   repos,
 }: ResolveBranchWorkspaceMemberTargetInput): BranchWorkspaceMemberResolution {
-  const candidate = candidates.find((entry) => entry.name === member.repositoryName && repositoryIds.includes(entry.id))
+  const discoveredRepositoryId = member.repositoryId
+  const candidate = discoveredRepositoryId
+    ? { id: discoveredRepositoryId, name: member.repositoryName }
+    : candidates.find((entry) => entry.name === member.repositoryName && repositoryIds.includes(entry.id))
   if (!candidate) {
     return { ok: false, reason: 'workspace.branch-workspace.member-unconfigured' }
   }

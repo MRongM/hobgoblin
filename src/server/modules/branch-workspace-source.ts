@@ -102,11 +102,7 @@ export async function discardBranchWorkspaceRecords(
           ? cloneManifests(workspace.branchWorkspaces.filter((manifest) => !discardedIds.has(manifest.id)))
           : cloneManifests(workspace.branchWorkspaces),
     }))
-    await writeJsonRegistryAtomically(
-      dataFile,
-      { version: 1, workspaces },
-      dependencies.randomId?.() ?? randomUUID(),
-    )
+    await writeJsonRegistryAtomically(dataFile, { version: 1, workspaces }, dependencies.randomId?.() ?? randomUUID())
   })
 }
 
@@ -247,7 +243,6 @@ function recoverRegistry(value: unknown): { registry: BranchWorkspaceRegistry; r
     roots.add(rootId)
     const branchWorkspaces: BranchWorkspaceManifest[] = []
     const ids = new Set<string>()
-    const branches = new Set<string>()
     const directoryNames = new Set<string>()
     for (const candidate of workspace.branchWorkspaces) {
       let manifest: BranchWorkspaceManifest
@@ -257,12 +252,11 @@ function recoverRegistry(value: unknown): { registry: BranchWorkspaceRegistry; r
         removedRecords += 1
         continue
       }
-      if (ids.has(manifest.id) || branches.has(manifest.branch) || directoryNames.has(manifest.directoryName)) {
+      if (ids.has(manifest.id) || directoryNames.has(manifest.directoryName)) {
         removedRecords += 1
         continue
       }
       ids.add(manifest.id)
-      branches.add(manifest.branch)
       directoryNames.add(manifest.directoryName)
       branchWorkspaces.push(manifest)
     }
@@ -279,15 +273,13 @@ function normalizeManifestList(value: unknown, rootId: string): BranchWorkspaceM
   if (!Array.isArray(value)) throw new Error(invalidRegistryMessage)
   const manifests: BranchWorkspaceManifest[] = []
   const ids = new Set<string>()
-  const branches = new Set<string>()
   const directoryNames = new Set<string>()
   for (const item of value) {
     const manifest = normalizeManifest(item, rootId)
-    if (ids.has(manifest.id) || branches.has(manifest.branch) || directoryNames.has(manifest.directoryName)) {
+    if (ids.has(manifest.id) || directoryNames.has(manifest.directoryName)) {
       throw new Error(invalidRegistryMessage)
     }
     ids.add(manifest.id)
-    branches.add(manifest.branch)
     directoryNames.add(manifest.directoryName)
     manifests.push(manifest)
   }
@@ -378,7 +370,7 @@ function normalizeRepositoryMember(
     !member ||
     !repositoryName ||
     !isWorkspaceRepositoryName(repositoryName) ||
-    member.targetBranch !== branch ||
+    !exactText(member.targetBranch) ||
     !creationBase ||
     typeof syncBeforeCreate !== 'boolean' ||
     (member.branchOrigin !== 'created' && member.branchOrigin !== 'pre-existing') ||
@@ -392,7 +384,7 @@ function normalizeRepositoryMember(
   const upstreamCleanupProgress = optionalProgress(member.upstreamCleanupProgress)
   return {
     repositoryName,
-    targetBranch: branch,
+    targetBranch: exactText(member.targetBranch)!,
     creationBase,
     syncBeforeCreate,
     branchOrigin: member.branchOrigin,

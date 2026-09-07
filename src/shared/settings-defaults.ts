@@ -8,7 +8,6 @@ import type {
   SessionState,
   SettingsPrefs,
   SettingsSnapshot,
-  TerminalCustomButton,
   TerminalCustomButtonSize,
   TerminalPref,
   ThemePref,
@@ -72,7 +71,6 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 14
 export const DEFAULT_TERMINAL_NAVIGATION_CONTROLS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTONS_VISIBLE = true
 export const DEFAULT_TERMINAL_CUSTOM_BUTTON_SIZE: TerminalCustomButtonSize = 'medium'
-export const DEFAULT_TERMINAL_CUSTOM_BUTTONS: TerminalCustomButton[] = createDefaultTerminalCustomButtons()
 export const DEFAULT_LAN_ENABLED = false
 export const DEFAULT_SERVER_PORT = 32200
 export const DEFAULT_PROJECT_LIST_EXPANDED = false

@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import { workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
@@ -7,11 +8,7 @@ export type BranchWorkspaceFileMutationInput = {
   rootId: string
   worktreePath: string
   paths: string[]
-} & (
-  | { kind: 'delete' }
-  | { kind: 'rename'; newName: string }
-  | { kind: 'move'; targetDirPath: string }
-)
+} & ({ kind: 'delete' } | { kind: 'rename'; newName: string } | { kind: 'move'; targetDirPath: string })
 
 interface BranchWorkspaceProtectedPathDependencies {
   readManifests?: typeof readBranchWorkspaceManifests
@@ -21,7 +18,9 @@ export async function assertBranchWorkspaceFileMutationAllowed(
   input: BranchWorkspaceFileMutationInput,
   dependencies: BranchWorkspaceProtectedPathDependencies = {},
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const snapshot = await (dependencies.readManifests ?? readBranchWorkspaceManifests)(input.rootId).catch(() => null)
+  const snapshot = await (dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId)))(
+    input.rootId,
+  ).catch(() => null)
   if (!snapshot || snapshot.kind === 'invalid') {
     return { ok: false, message: 'workspace.branch-workspace.read-failed' }
   }

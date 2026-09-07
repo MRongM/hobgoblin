@@ -56,6 +56,8 @@ export interface BranchWorkspaceAuxiliaryCandidate {
 
 export interface BranchWorkspaceRepositoryMember {
   repositoryName: string
+  /** Runtime identity discovered from Git; omitted from persisted registry records. */
+  repositoryId?: string
   targetBranch: string
   creationBase: WorktreeCreationBase
   syncBeforeCreate: boolean
