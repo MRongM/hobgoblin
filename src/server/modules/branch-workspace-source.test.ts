@@ -59,6 +59,19 @@ afterEach(async () => {
 })
 
 describe('branch workspace source', () => {
+  test('keeps actual member branches independently of the workspace label without persisting discovery metadata', async () => {
+    const { dataFile, root } = await createFixture()
+    const current = manifest(root, 'feature/label')
+    current.repositories[0]!.targetBranch = 'feature/actual'
+    current.repositories[0]!.repositoryId = path.join(root, 'api')
+    await replaceBranchWorkspaceManifests(root, [current], { dataFile })
+    const result = await readBranchWorkspaceManifests(root, { dataFile })
+    expect(result).toMatchObject({
+      kind: 'ready',
+      manifests: [{ branch: 'feature/label', repositories: [{ targetBranch: 'feature/actual' }] }],
+    })
+    expect(await readFile(dataFile, 'utf8')).not.toContain('repositoryId')
+  })
   test('reports an unregistered workspace as missing', async () => {
     const { dataFile, root } = await createFixture()
 
@@ -314,7 +327,7 @@ describe('branch workspace source', () => {
 
   test.each([
     [
-      'duplicate branches',
+      'duplicate directories',
       (root: string) => [manifest(root, 'feature/a'), { ...manifest(root, 'feature/a'), id: 'different' }],
     ],
     [
@@ -326,11 +339,11 @@ describe('branch workspace source', () => {
     ],
     ['path mismatch', (root: string) => [{ ...manifest(root, 'feature/a'), path: path.join(root, 'somewhere-else') }]],
     [
-      'target branch mismatch',
+      'empty member branch',
       (root: string) => [
         {
           ...manifest(root, 'feature/a'),
-          repositories: [{ ...manifest(root, 'feature/a').repositories[0]!, targetBranch: 'feature/b' }],
+          repositories: [{ ...manifest(root, 'feature/a').repositories[0]!, targetBranch: '' }],
         },
       ],
     ],

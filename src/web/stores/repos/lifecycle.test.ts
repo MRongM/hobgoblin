@@ -268,6 +268,44 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().repos[web]?.workspaceRootId).toBe(root)
   })
 
+  test('manual rescan removes unavailable configured members from the workspace list', async () => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    const web = `${root}/web`
+    let scan = 0
+    installGoblin({
+      probe: (cwd: string) => ({
+        ok: true,
+        root: cwd,
+        name: cwd.split('/').at(-1) ?? cwd,
+        isGitRepo: cwd !== root,
+      }),
+      'workspace.discover': () => {
+        scan += 1
+        return {
+          ok: true,
+          rootId: root,
+          repositories: [{ id: api, name: 'api' }, ...(scan === 1 ? [{ id: web, name: 'web' }] : [])],
+          candidates: [
+            { id: api, name: 'api', selected: true, available: true },
+            { id: web, name: 'web', selected: true, available: scan === 1 },
+          ],
+          configuration: { kind: 'ready', config: { repo: ['api', 'web'] } },
+          skipped: [],
+        }
+      },
+    })
+
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    useReposStore.setState({ activeId: web, activeProjectId: root })
+
+    await useReposStore.getState().rescanWorkspace(root)
+
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([api])
+    expect(useReposStore.getState().repos[web]?.workspaceRootId).toBeUndefined()
+    expect(useReposStore.getState().activeId).toBe(root)
+  })
+
   test('rescan refreshes an unchanged logical member after a repository symlink is retargeted', async () => {
     const root = '/tmp/gbl-workspace'
     const linked = `${root}/linked`

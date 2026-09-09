@@ -1,5 +1,6 @@
 import { isBranchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import {
   findRepositoryStatus,
   normalizeRepositoryPath,
@@ -38,6 +39,7 @@ import type { RepoSnapshot } from '#/shared/rpc.ts'
 import { isSafeRemoteName } from '#/shared/worktree-create.ts'
 
 export interface BranchWorkspaceGitActionPlanDependencies {
+  repositoryIds?: ReadonlyMap<string, string>
   readManifests?: typeof readBranchWorkspaceManifests
   getSnapshot?: typeof getRepositorySnapshot
   getStatus?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeStatus[]>
@@ -62,7 +64,9 @@ export async function buildBranchWorkspaceGitActionPlan(
   try {
     signal?.throwIfAborted()
     const normalizedRootId = workspaceRootId(rootId)
-    const source = await (dependencies.readManifests ?? readBranchWorkspaceManifests)(normalizedRootId)
+    const source = await (dependencies.readManifests ?? ((root: string) => readBranchWorkspaceCatalog(root, signal)))(
+      normalizedRootId,
+    )
     if (source.kind === 'invalid') return { ok: false, message: source.message }
     const manifest =
       source.kind === 'ready'
@@ -71,6 +75,14 @@ export async function buildBranchWorkspaceGitActionPlan(
     const unavailable = validateManifest(manifest)
     if (unavailable) return unavailable
     if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
+    dependencies = {
+      ...dependencies,
+      repositoryIds: new Map(
+        manifest.repositories.flatMap((member) =>
+          member.repositoryId ? [[member.repositoryName, member.repositoryId]] : [],
+        ),
+      ),
+    }
 
     if (normalized.request.kind === 'batch-commit') {
       return await buildBatchCommitPlan(normalizedRootId, manifest, dependencies, signal)
@@ -627,7 +639,7 @@ function unreadableBatchSetUpstreamMember(
   member: BranchWorkspaceManifest['repositories'][number],
   message: string,
 ): BranchWorkspaceBatchSetUpstreamMemberPlan {
-  const repoId = workspaceRepositoryId(rootId, member.repositoryName) ?? member.repositoryName
+  const repoId = member.repositoryId ?? workspaceRepositoryId(rootId, member.repositoryName) ?? member.repositoryName
   const identity = {
     repositoryName: member.repositoryName,
     repoId,
@@ -670,7 +682,7 @@ async function readMemberFacts(
     }
   | { ok: false; message: string; repositoryName: string }
 > {
-  const repoId = workspaceRepositoryId(rootId, repositoryName)
+  const repoId = dependencies.repositoryIds?.get(repositoryName) ?? workspaceRepositoryId(rootId, repositoryName)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable', repositoryName }
   const targetStatusReader =
     dependencies.getWorktreeStatusEntries ?? (dependencies.getStatus ? undefined : getRepositoryWorktreeStatusEntries)

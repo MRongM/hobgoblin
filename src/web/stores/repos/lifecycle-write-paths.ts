@@ -351,7 +351,7 @@ export function createRuntimeRepoLifecycleActions(
     },
 
     async rescanWorkspace(rootId: string): Promise<void> {
-      await reconcileWorkspaceProject(set, get, rootId)
+      await reconcileWorkspaceProject(set, get, rootId, importWorkspaceProject, { pruneUnavailable: true })
     },
 
     async configureWorkspace(
@@ -481,6 +481,7 @@ export async function reconcileWorkspaceProject(
   get: ReposGet,
   rootId: string,
   readWorkspace: (rootPath: string) => Promise<WorkspaceDiscoveryResult> = importWorkspaceProject,
+  options: { pruneUnavailable?: boolean } = {},
 ): Promise<void> {
   const root = get().repos[rootId]
   if (!root || root.isGitRepo !== false) return
@@ -523,7 +524,7 @@ export async function reconcileWorkspaceProject(
     return
   }
 
-  applyWorkspaceDiscoveryResult(set, get, rootId, result)
+  applyWorkspaceDiscoveryResult(set, get, rootId, result, options)
 }
 
 async function importWorkspaceProject(rootPath: string): Promise<WorkspaceDiscoveryResult> {
@@ -535,6 +536,7 @@ export function applyWorkspaceDiscoveryResult(
   get: ReposGet,
   rootId: string,
   result: Extract<WorkspaceDiscoveryResult, { ok: true }>,
+  options: { pruneUnavailable?: boolean } = {},
 ): void {
   const refreshes: InitialRepoRefresh[] = []
   set((state) => {
@@ -614,7 +616,9 @@ export function applyWorkspaceDiscoveryResult(
               }),
             )
         : result.configuration.kind === 'ready'
-          ? effectiveCandidates.map((candidate) => candidate.id)
+          ? effectiveCandidates
+              .filter((candidate) => !options.pruneUnavailable || candidate.available)
+              .map((candidate) => candidate.id)
           : []
     const repositoryIdSet = new Set(repositoryIds)
     for (const [repoId, repo] of Object.entries(repos)) {

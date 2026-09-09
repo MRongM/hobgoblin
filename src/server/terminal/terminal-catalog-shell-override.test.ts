@@ -6,7 +6,7 @@ const { getWorktreesMock } = vi.hoisted(() => ({ getWorktreesMock: vi.fn() }))
 
 vi.mock('#/system/git/worktrees.ts', () => ({ getWorktrees: getWorktreesMock }))
 
-const repoRoot = 'C:\\workspace\\repo'
+const repoRoot = '/workspace/repo'
 const attachmentId = 'attachment_a'
 const sessionId = 'session_abcdefghijklmnop'
 const sessionKey = `${repoRoot}\0${repoRoot}\0terminal-1`

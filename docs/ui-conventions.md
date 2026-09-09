@@ -31,11 +31,13 @@ Use this doc for UI language and presentation rules.
 
 ## Responsive workspace presentation
 
-- Desktop workspaces use the fixed left/right split. Do not add a user-selectable top/bottom workspace layout.
+- Wide Electron and browser workspaces use the fixed left/center/right Desktop three-column workspace layout: workspace navigation on the left, the selected terminal/detail surface in the center, and the complete file area on the right. Keep both dividers horizontal and resizable; do not add a user-selectable top/bottom workspace layout.
+- Keep the right file area independently collapsible through the existing file-area intents, including its status-bar control, item double-clicks, context-menu open action, and explicit file reveal. Collapsing it must not unmount or retarget workspace navigation or the selected terminal.
 - Desktop Focus always means explicitly maximizing an internal terminal. It hides navigation/file surfaces until the user explicitly restores the split.
 - Keep project, workspace/repository, branch, branch-workspace, and terminal switching reachable from the desktop Focus topbar. Switching to another eligible destination keeps Focus active and routes that destination to its terminal without first restoring the split.
 - Keep Desktop Focus as one application-global, restorable preference. Preserve it across project/context navigation and relaunch; if a deleted or unavailable destination has no terminal target, keep the preference latent while rendering the nearest usable fallback.
 - Compact workspaces render one focus surface at a time: detail, scope, or files. Do not mount a resizable split for compact workspace composition.
+- Keep compact Mobile Web presentation unchanged when evolving the Desktop three-column workspace layout.
 - Keep compact surface selection in component-local state. Responsive changes must not mutate the Desktop Focus preference; returning to an eligible desktop destination reapplies it.
 - Preserve terminal-first entry when an internal terminal target exists; otherwise fall back to the nearest navigable scope surface.
 - In a branch workspace, compact member navigation must keep the branch workspace active and reuse the ordinary member file and detail surfaces.

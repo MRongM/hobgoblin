@@ -9,9 +9,6 @@ export const DEFAULT_TOOLBAR_HEIGHT_PX = 34
 export const MIN_CHROME_HEIGHT_PX = 30
 export const MAX_CHROME_HEIGHT_PX = 48
 
-export const WINDOW_TOPBAR_HEIGHT_PX = DEFAULT_TOPBAR_HEIGHT_PX
-export const APP_TOOLBAR_HEIGHT_PX = DEFAULT_TOOLBAR_HEIGHT_PX
-
 export interface NativeWindowChromeThemeProjection {
   theme: ResolvedTheme
   colorTheme: ColorTheme

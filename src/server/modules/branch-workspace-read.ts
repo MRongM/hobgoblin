@@ -4,6 +4,8 @@ import {
   listBranchWorkspaceAuxiliaryCandidates,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
+import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
+import { discoverBranchWorkspaceDirectories } from '#/server/modules/branch-workspace-discovery-source.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import { workspaceRepositoryId } from '#/server/modules/workspace-paths.ts'
 import { getRepositorySnapshot } from '#/server/modules/repo-read-paths.ts'
@@ -23,6 +25,7 @@ interface BranchWorkspaceReadDependencies {
   readManifests?: typeof readBranchWorkspaceManifests
   readConfig?: typeof readWorkspaceConfig
   readRepositorySnapshot?: typeof getRepositorySnapshot
+  discoverDirectories?: typeof discoverBranchWorkspaceDirectories
   inspectPath?: typeof inspectBranchWorkspacePath
   listCandidates?: typeof listBranchWorkspaceAuxiliaryCandidates
   readActiveOperation?: (
@@ -41,27 +44,29 @@ export async function readBranchWorkspaceSnapshot(
   try {
     signal?.throwIfAborted()
     const [manifestSnapshot, configSnapshot] = await Promise.all([
-      (dependencies.readManifests ?? readBranchWorkspaceManifests)(rootId),
+      readBranchWorkspaceCatalog(rootId, signal, {
+        readManifests: dependencies.readManifests,
+        discoverDirectories: dependencies.discoverDirectories,
+      }),
       (dependencies.readConfig ?? readWorkspaceConfig)(rootId),
     ])
-    if (manifestSnapshot.kind === 'invalid') return { ok: false, message: manifestSnapshot.message }
-    if (configSnapshot.kind === 'invalid') return { ok: false, message: configSnapshot.message }
-    if (configSnapshot.kind === 'missing') return { ok: false, message: 'workspace.config.missing' }
-
     const manifests = manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : []
-    const repositoryNames = new Set(configSnapshot.config.repo)
-    const referencedRepositoryNames = Array.from(
+    const configuredRepositories = configSnapshot.kind === 'ready' ? configSnapshot.config.repo : []
+    const repositoryNames = new Set([
+      ...configuredRepositories,
+      ...manifests.flatMap((manifest) => manifest.repositories.map((member) => member.repositoryName)),
+    ])
+    const referencedRepositoryIds = Array.from(
       new Set(
         manifests.flatMap((manifest) =>
           manifest.repositories
-            .map((member) => member.repositoryName)
-            .filter((repositoryName) => repositoryNames.has(repositoryName)),
+            .map((member) => member.repositoryId ?? workspaceRepositoryId(rootId, member.repositoryName))
+            .filter((id): id is string => !!id),
         ),
       ),
     )
     const repositorySnapshots = repositorySnapshotCache(
-      rootId,
-      referencedRepositoryNames,
+      referencedRepositoryIds,
       dependencies.readRepositorySnapshot ?? getRepositorySnapshot,
       signal,
     )
@@ -72,8 +77,7 @@ export async function readBranchWorkspaceSnapshot(
     )
     const items = await Promise.all(
       manifests.map(
-        async (manifest) =>
-          await projectBranchWorkspace(manifest, repositoryNames, repositorySnapshots, signal, dependencies),
+        async (manifest) => await projectBranchWorkspace(manifest, repositorySnapshots, signal, dependencies),
       ),
     )
     return { ok: true, rootId, items, auxiliaryCandidates }
@@ -83,33 +87,28 @@ export async function readBranchWorkspaceSnapshot(
 }
 
 function repositorySnapshotCache(
-  rootId: string,
-  repositoryNames: string[],
+  repositoryIds: string[],
   readRepositorySnapshot: typeof getRepositorySnapshot,
   signal?: AbortSignal,
 ): Map<string, Promise<RepositorySnapshotRead>> {
   return new Map(
-    repositoryNames.map((repositoryName) => {
-      const repoId = workspaceRepositoryId(rootId, repositoryName)
-      const snapshot = repoId
-        ? readRepositorySnapshot(repoId, signal, {
-            includeWorktreeStatus: false,
-            includeRemote: false,
-          })
-            .then((value) => {
-              signal?.throwIfAborted()
-              return { ok: true as const, snapshot: value }
-            })
-            .catch((error: unknown) => ({ ok: false as const, error }))
-        : Promise.resolve({ ok: true as const, snapshot: null })
-      return [repositoryName, snapshot]
+    repositoryIds.map((repoId) => {
+      const snapshot = readRepositorySnapshot(repoId, signal, {
+        includeWorktreeStatus: false,
+        includeRemote: false,
+      })
+        .then((value) => {
+          signal?.throwIfAborted()
+          return { ok: true as const, snapshot: value }
+        })
+        .catch((error: unknown) => ({ ok: false as const, error }))
+      return [repoId, snapshot]
     }),
   )
 }
 
 async function projectBranchWorkspace(
   manifest: BranchWorkspaceManifest,
-  configuredRepositories: ReadonlySet<string>,
   repositorySnapshots: Map<string, Promise<RepositorySnapshotRead>>,
   signal: AbortSignal | undefined,
   dependencies: BranchWorkspaceReadDependencies,
@@ -130,8 +129,9 @@ async function projectBranchWorkspace(
         await reconcileRepositoryMember(
           manifest,
           member,
-          configuredRepositories,
-          repositorySnapshots.get(member.repositoryName),
+          repositorySnapshots.get(
+            member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName) ?? '',
+          ),
           issues,
         ),
     ),
@@ -161,7 +161,6 @@ async function projectBranchWorkspace(
 async function reconcileRepositoryMember(
   manifest: BranchWorkspaceManifest,
   member: BranchWorkspaceManifest['repositories'][number],
-  configuredRepositories: ReadonlySet<string>,
   snapshotPromise: Promise<RepositorySnapshotRead> | undefined,
   issues: BranchWorkspaceIssue[],
 ): Promise<BranchWorkspaceRepositorySnapshot> {
@@ -183,19 +182,20 @@ async function reconcileRepositoryMember(
     })
     return { ...member, ready: false }
   }
-  if (!configuredRepositories.has(member.repositoryName) || !snapshotPromise) {
+  if (!snapshotPromise) {
     issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
     return { ...member, ready: false }
   }
 
   const snapshotRead = await snapshotPromise
-  if (!snapshotRead.ok) throw snapshotRead.error
-  const { snapshot } = snapshotRead
+  const snapshot = snapshotRead.ok ? snapshotRead.snapshot : null
   if (!snapshot) {
     issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
     return { ...member, ready: false }
   }
-  const branch = snapshot.branches.find((item) => item.name === member.targetBranch)
+  const branch = snapshot.branches.find(
+    (item) => item.worktree && sameHostPath(manifest.rootId, item.worktree.path, member.worktreePath),
+  )
   if (!branch?.worktree) {
     issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
     return { ...member, ready: false }
@@ -208,7 +208,7 @@ async function reconcileRepositoryMember(
     issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
     return { ...member, ready: false }
   }
-  return { ...member, ready: true }
+  return { ...member, targetBranch: branch.name, ready: true }
 }
 
 function projectState(
@@ -226,7 +226,9 @@ function projectState(
   if (hasCreateProgress) {
     return { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
   }
-  return issues.length > 0 ? { kind: 'needs-action', action: 'repair', reason: 'drift' } : { kind: 'ready' }
+  return issues.some((issue) => issue.kind === 'root-missing' || issue.kind === 'root-not-directory')
+    ? { kind: 'needs-action', action: 'repair', reason: 'drift' }
+    : { kind: 'ready' }
 }
 
 function sameHostPath(rootId: string, left: string, right: string): boolean {
