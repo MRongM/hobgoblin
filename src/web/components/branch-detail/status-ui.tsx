@@ -51,7 +51,9 @@ export const StatusChip = forwardRef<HTMLSpanElement, StatusChipProps>(function 
 export function StatusRows({ children, density = 'default' }: { children: ReactNode; density?: StatusRowsDensity }) {
   return (
     <StatusRowsDensityContext.Provider value={density}>
-      <div role="list">{children}</div>
+      <div role="list" className="select-text cursor-text">
+        {children}
+      </div>
     </StatusRowsDensityContext.Provider>
   )
 }

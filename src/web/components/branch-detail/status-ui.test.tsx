@@ -19,6 +19,9 @@ test('uses compact row and column spacing for dense status tables', () => {
   )
 
   const row = container.querySelector('[role="listitem"]')
+  const rows = container.querySelector('[role="list"]')
+  expect(rows?.classList.contains('select-text')).toBe(true)
+  expect(rows?.classList.contains('cursor-text')).toBe(true)
   expect(row?.classList.contains('h-8')).toBe(true)
   expect(row?.classList.contains('grid-cols-[1rem_5rem_minmax(0,1fr)]')).toBe(true)
   expect(row?.classList.contains('gap-1.5')).toBe(true)
