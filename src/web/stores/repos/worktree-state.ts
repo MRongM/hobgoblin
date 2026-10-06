@@ -1,5 +1,6 @@
 import type { BranchSnapshotInfo, WorktreeStatus } from '#/web/types.ts'
 import type { RepoBranchState, RepoState, RepoWorktreeState } from '#/web/stores/repos/types.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 export interface BranchWorktreeState {
   path: string
   dirty: boolean
@@ -13,6 +14,15 @@ export interface BranchWorktreeState {
 
 export interface BranchWorktreeRepo {
   data: Pick<RepoState['data'], 'worktreesByPath' | 'status'>
+}
+
+export function getWorktreeChangeCount(repo: BranchWorktreeRepo, worktreePath: string): number {
+  const status = repo.data.status.find((entry) => sameLocalFilePath(entry.path, worktreePath))
+  if (status) return status.entries.length
+  const worktree =
+    repo.data.worktreesByPath[worktreePath] ??
+    Object.values(repo.data.worktreesByPath).find((entry) => sameLocalFilePath(entry.path, worktreePath))
+  return worktree?.changeCount ?? 0
 }
 
 export function worktreeStatesFromBranches(

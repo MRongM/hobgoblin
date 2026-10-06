@@ -63,7 +63,92 @@ describe('branch workspace file area members', () => {
     expect(members.map(branchWorkspaceFileAreaMemberChangeCount)).toEqual([2, 1])
     expect(branchWorkspaceFileAreaTotalChangeCount(members)).toBe(3)
   })
+
+  test.each([
+    ['drive paths', 'C:\\workspace\\hob-auth', 'c:/workspace/hob-auth'],
+    ['UNC paths', '\\\\host\\share\\workspace\\hob-auth', '//HOST/share/workspace/hob-auth'],
+  ])('counts equivalent Windows %s in member and aggregate badges', (_label, memberRoot, gitRoot) => {
+    const members = resolveBranchWorkspaceFileAreaMembers(countedMemberInput(memberRoot, gitRoot))
+    expect(members.map(branchWorkspaceFileAreaMemberChangeCount)).toEqual([2, 3])
+    expect(branchWorkspaceFileAreaTotalChangeCount(members)).toBe(5)
+  })
+
+  test('uses known snapshot counts before status arrives and honors a clean status result', () => {
+    const input = countedMemberInput('/workspace/hob-auth', '/workspace/hob-auth')
+    for (const repo of Object.values(input.repos)) repo.data.status = []
+    expect(branchWorkspaceFileAreaTotalChangeCount(resolveBranchWorkspaceFileAreaMembers(input))).toBe(5)
+    input.repos['/workspace/api']!.data.status = [
+      { path: '/workspace/hob-auth/api', branch: 'feature/auth', isMain: false, entries: [] },
+    ]
+    expect(resolveBranchWorkspaceFileAreaMembers(input).map(branchWorkspaceFileAreaMemberChangeCount)).toEqual([0, 3])
+  })
+
+  test('excludes removed and unavailable members', () => {
+    const input = countedMemberInput('/workspace/hob-auth', '/workspace/hob-auth')
+    input.workspace.repositories[0]!.progress = 'removed'
+    const members = resolveBranchWorkspaceFileAreaMembers(input)
+    expect(members.map((member) => member.repositoryName)).toEqual(['web'])
+    expect(branchWorkspaceFileAreaTotalChangeCount(members)).toBe(3)
+    input.repos['/workspace/web']!.availability = { phase: 'unavailable', reason: 'missing', checkedAt: 1 }
+    expect(branchWorkspaceFileAreaTotalChangeCount(resolveBranchWorkspaceFileAreaMembers(input))).toBe(0)
+  })
+
+  test('keeps POSIX path case significant and excludes another worktree', () => {
+    const input = countedMemberInput('/workspace/Hob-auth', '/workspace/hob-auth')
+    expect(branchWorkspaceFileAreaTotalChangeCount(resolveBranchWorkspaceFileAreaMembers(input))).toBe(0)
+    input.workspace.repositories[0]!.worktreePath = '/workspace/hob-auth/api'
+    input.repos['/workspace/api']!.data.status.push({
+      path: '/workspace/another/api',
+      branch: 'feature/another',
+      isMain: false,
+      entries: [{ x: 'M', y: ' ', path: 'unrelated.ts' }],
+    })
+    expect(branchWorkspaceFileAreaTotalChangeCount(resolveBranchWorkspaceFileAreaMembers(input))).toBe(2)
+  })
 })
+
+function countedMemberInput(memberRoot: string, gitRoot: string) {
+  const workspace = branchWorkspace()
+  const names = ['api', 'web']
+  workspace.repositories = workspace.repositories.map((member) => ({
+    ...member,
+    worktreePath: `${memberRoot}${memberRoot.includes('\\') ? '\\' : '/'}${member.repositoryName}`,
+  }))
+  const repos = Object.fromEntries(
+    names.map((name, index) => {
+      const id = `/workspace/${name}`
+      const worktreePath = `${gitRoot}/${name}`
+      const repo = seedRepoState({
+        id,
+        branches: [createRepoBranch('feature/auth', { worktree: { path: worktreePath } })],
+      })
+      repo.data.worktreesByPath[worktreePath] = {
+        path: worktreePath,
+        branch: 'feature/auth',
+        isMain: false,
+        isDirty: true,
+        changeCount: index + 2,
+      }
+      repo.data.status = [
+        {
+          path: worktreePath,
+          branch: 'feature/auth',
+          isMain: false,
+          entries: Array.from({ length: index + 2 }, (_, entry) => ({ x: 'M', y: ' ', path: `file-${entry}.ts` })),
+        },
+      ]
+      return [id, repo]
+    }),
+  )
+  return {
+    workspace,
+    project: {
+      repositoryIds: names.map((name) => `/workspace/${name}`),
+      candidates: names.map((name) => ({ id: `/workspace/${name}`, name, selected: true, available: true })),
+    },
+    repos,
+  }
+}
 
 function branchWorkspace(): BranchWorkspaceSnapshot {
   const member = (repositoryName: string) => ({

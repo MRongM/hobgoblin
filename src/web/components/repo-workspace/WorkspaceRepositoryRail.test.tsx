@@ -1812,6 +1812,74 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceListState.props?.changeCountById?.['branch-1']).toBe(0)
   })
 
+  test('sums equivalent Windows member paths using authoritative repository identities', () => {
+    const originalItems = branchWorkspaceState.items
+    const item = originalItems[0]!
+    const state = useReposStore.getState()
+    const members = item.repositories.map((member) => ({
+      ...member,
+      repositoryId: `/repositories/${member.repositoryName}`,
+      worktreePath: `C:\\workspace\\goblin-feature-auth\\${member.repositoryName}`,
+    }))
+    branchWorkspaceState.items = [{ ...item, repositories: members }]
+    const countedRepos = Object.fromEntries(
+      members.map((member, index) => {
+        const repo = replaceRepo(emptyRepo(member.repositoryId, member.repositoryName), (draft) => {
+          const gitPath = `c:/workspace/goblin-feature-auth/${member.repositoryName}`
+          draft.data.branches = [createRepoBranch('feature/auth', { worktree: { path: gitPath } })]
+          draft.data.status = [
+            {
+              path: gitPath,
+              branch: 'feature/auth',
+              isMain: false,
+              entries: Array.from({ length: index + 2 }, (_, entry) => ({ x: 'M', y: ' ', path: `file-${entry}.ts` })),
+            },
+          ]
+        })
+        return [member.repositoryId, repo]
+      }),
+    )
+    useReposStore.setState({ repos: { ...state.repos, ...countedRepos } })
+    try {
+      renderRail({ currentRepoId: ROOT })
+      expect(branchWorkspaceListState.props?.changeCountById?.['branch-1']).toBe(5)
+      expect(
+        members.map((member) => branchWorkspaceListState.props?.getMemberPresentation?.(item, member).changeCount),
+      ).toEqual([2, 3])
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
+  })
+
+  test('excludes removed members from the root change count', () => {
+    const originalItems = branchWorkspaceState.items
+    const item = originalItems[0]!
+    branchWorkspaceState.items = [
+      {
+        ...item,
+        repositories: item.repositories.map((member) => ({ ...member, progress: 'removed' as const })),
+      },
+    ]
+    const state = useReposStore.getState()
+    const api = replaceRepo(state.repos[API]!, (repo) => {
+      repo.data.status = [
+        {
+          path: item.repositories[0]!.worktreePath,
+          branch: 'feature/auth',
+          isMain: false,
+          entries: [{ x: 'M', y: ' ', path: 'removed.ts' }],
+        },
+      ]
+    })
+    useReposStore.setState({ repos: { ...state.repos, [API]: api } })
+    try {
+      renderRail({ currentRepoId: ROOT })
+      expect(branchWorkspaceListState.props?.changeCountById?.['branch-1']).toBe(0)
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
+  })
+
   test('does not show terminal status in Overview without an open root terminal', () => {
     renderRail()
 

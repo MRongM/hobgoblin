@@ -163,8 +163,16 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx', () =
   openBranchWorkspaceInternalTerminal: vi.fn(async () => {}),
 }))
 vi.mock('#/web/components/repo-workspace/RepoWorktreeExplorer.tsx', () => ({
-  RepoWorktreeExplorer: ({ repoId, toolbarLeading }: { repoId: string; toolbarLeading?: ReactNode }) => (
-    <div data-testid="repo-worktree-explorer">
+  RepoWorktreeExplorer: ({
+    repoId,
+    toolbarLeading,
+    changeCount,
+  }: {
+    repoId: string
+    toolbarLeading?: ReactNode
+    changeCount: number
+  }) => (
+    <div data-testid="repo-worktree-explorer" data-change-count={changeCount}>
       {toolbarLeading ? <div data-testid="mock-file-toolbar-leading">{toolbarLeading}</div> : null}
       {repoId}
     </div>
@@ -249,12 +257,28 @@ vi.mock('#/web/components/SplitPane.tsx', () => ({
 
 let container: HTMLDivElement
 let root: Root
+const originalRefreshStatus = useReposStore.getState().refreshStatus
+const refreshStatus = vi.fn(async (id: string) => {
+  const state = useReposStore.getState()
+  useReposStore.setState({
+    repos: {
+      ...state.repos,
+      [id]: replaceRepo(state.repos[id]!, (repo) => {
+        repo.data.statusLoaded = true
+        repo.resources.status.loadedAt = Date.now()
+        repo.resources.status.stale = false
+      }),
+    },
+  })
+})
 
 beforeEach(() => {
   compactUi = false
   aggregateSelectedRepositoryRenders.length = 0
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
+  refreshStatus.mockClear()
+  useReposStore.setState({ refreshStatus })
   seedRepoState({ id: '/workspace', isGitRepo: false, branches: [], currentBranch: '', selectedBranch: null })
   container = document.createElement('div')
   document.body.append(container)
@@ -264,6 +288,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   container.remove()
+  useReposStore.setState({ refreshStatus: originalRefreshStatus })
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false
 })
 
@@ -903,6 +928,75 @@ describe('BranchWorkspacePane', () => {
     expect(container.querySelector('[data-testid="status"]')?.getAttribute('data-file-area-collapsed')).toBe('unset')
     expect(container.querySelector('[data-testid="file-area-toggle"]')).toBeNull()
   })
+})
+
+test('refreshes stale members on entry and when opening Changes without changing parent selection', async () => {
+  seedMemberChangeCounts()
+  const targetWorkspace = { ...workspace(), repositories: [repositoryMember('api'), repositoryMember('web')] }
+  const markMembersStale = () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: Object.fromEntries(
+        Object.entries(state.repos).map(([id, repo]) => [
+          id,
+          replaceRepo(repo, (draft) => {
+            draft.data.statusLoaded = true
+            draft.resources.status.loadedAt = Date.now() - 20_000
+          }),
+        ]),
+      ),
+    })
+  }
+  markMembersStale()
+  const initialActiveId = useReposStore.getState().activeId
+  await act(async () =>
+    root.render(<BranchWorkspacePane rootId="/workspace" workspace={targetWorkspace} layout="left-right" />),
+  )
+  expect(refreshStatus).toHaveBeenCalledTimes(2)
+  expect(refreshStatus).toHaveBeenCalledWith('/workspace/api', { token: expect.any(Number) })
+  expect(refreshStatus).toHaveBeenCalledWith('/workspace/web', { token: expect.any(Number) })
+  refreshStatus.mockClear()
+  act(markMembersStale)
+  await act(async () => {
+    Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+      .find((tab) => tab.textContent?.startsWith('tab.changes'))
+      ?.click()
+  })
+  expect(refreshStatus).toHaveBeenCalledTimes(2)
+  expect(useReposStore.getState().activeId).toBe(initialActiveId)
+})
+
+test('counts a selected Windows member by path identity', () => {
+  seedMemberChangeCounts()
+  const memberPath = 'C:\\workspace\\goblin-feature-auth\\api'
+  const targetWorkspace = {
+    ...workspace(),
+    repositories: [{ ...repositoryMember('api'), worktreePath: memberPath }],
+  }
+  const state = useReposStore.getState()
+  const api = replaceRepo(state.repos['/workspace/api']!, (repo) => {
+    const gitPath = 'c:/workspace/goblin-feature-auth/api'
+    repo.data.branches = [createRepoBranch('feature/auth', { worktree: { path: gitPath } })]
+    repo.data.status[0]!.path = gitPath
+  })
+  useReposStore.setState({ repos: { ...state.repos, [api.id]: api } })
+  act(() =>
+    root.render(
+      <BranchWorkspacePane
+        rootId="/workspace"
+        workspace={targetWorkspace}
+        layout="left-right"
+        memberTarget={{
+          repositoryId: api.id,
+          repositoryName: 'api',
+          targetBranch: 'feature/auth',
+          checkedOutBranch: 'feature/auth',
+          worktreePath: memberPath,
+        }}
+      />,
+    ),
+  )
+  expect(container.querySelector('[data-testid="repo-worktree-explorer"]')?.getAttribute('data-change-count')).toBe('2')
 })
 
 function fileAreaSplitPane(): Element | null {
