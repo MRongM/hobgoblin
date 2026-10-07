@@ -58,6 +58,8 @@
     <string name="settings_failure_threshold_range">范围：%1$d–%2$d。</string>
     <string name="settings_keepalive_strategy">当前策略：SSH keepalive @openssh.com</string>
     <string name="settings_privacy_policy">隐私政策</string>
+    <string name="settings_desktop_download">下载桌面版</string>
+    <string name="settings_desktop_download_description">在电脑上安装 Hobgoblin Desktop，与安卓客户端联动使用。点击前往 GitHub 下载最新桌面版。</string>
     <string name="host_add_title">添加主机</string>
     <string name="host_edit_title">编辑主机</string>
     <string name="host_save">保存主机</string>

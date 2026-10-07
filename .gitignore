@@ -16,3 +16,10 @@ tmp
 .gstack/
 .loop-runs/
 .spec-workflow/
+
+# External reference repositories (local symlinks)
+/GooglePlayCompass
+/software-copyright-spec
+
+# Session implementation plans remain local; stable notes live in android/docs.
+/android/docs/superpowers/

@@ -297,6 +297,10 @@ fun SettingsScreen(
                 Text(stringResource(R.string.common_save))
             }
             Text(stringResource(R.string.settings_keepalive_strategy))
+            Text(stringResource(R.string.settings_desktop_download_description))
+            TextButton(onClick = { uriHandler.openUri(DesktopDownload.url) }) {
+                Text(stringResource(R.string.settings_desktop_download))
+            }
             TextButton(onClick = { uriHandler.openUri(PrivacyPolicy.url) }) {
                 Text(stringResource(R.string.settings_privacy_policy))
             }

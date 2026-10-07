@@ -44,3 +44,12 @@ Before implementing a feature, use `/grill-with-docs` to stress-test the plan ag
   - `src/main/**` must not import `src/web/**` or `src/server/**`.
   - `src/web/**` must not import `src/main/**`.
   - `src/server/**` and `src/shared/**` must not import `electron`.
+
+## External reference repositories
+
+Consult these references before preparing Google Play releases or software copyright registration materials:
+
+- [`GooglePlayCompass/README.md`](GooglePlayCompass/README.md): Google Play publishing workflows, store listings, release assets, compliance declarations, and release validation.
+- [`software-copyright-spec/README.md`](software-copyright-spec/README.md): software copyright registration standards, preparation workflows, templates, and review checklists.
+
+Both directories are local symlinks to independently managed repositories and are ignored by Git. Recreate the links in other checkouts as needed. Keep Hobgoblin-specific release and registration materials in this repository, using this project's actual facts rather than copying the reference repositories' example application data.

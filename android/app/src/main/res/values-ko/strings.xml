@@ -58,6 +58,8 @@
     <string name="settings_failure_threshold_range">범위: %1$d~%2$d.</string>
     <string name="settings_keepalive_strategy">현재 방식: SSH keepalive @openssh.com</string>
     <string name="settings_privacy_policy">개인정보 처리방침</string>
+    <string name="settings_desktop_download">데스크톱 앱 다운로드</string>
+    <string name="settings_desktop_download_description">컴퓨터에 Hobgoblin Desktop을 설치하여 Android 앱과 함께 사용하세요. GitHub에서 최신 데스크톱 버전을 다운로드하세요.</string>
     <string name="host_add_title">호스트 추가</string>
     <string name="host_edit_title">호스트 편집</string>
     <string name="host_save">호스트 저장</string>
