@@ -4,7 +4,7 @@
 
 **Goal:** Publish Windows x64 and ARM64 installers from the primary root application while retaining the independent Windows package only as a separately named test build.
 
-**Architecture:** Generalize the root single-artifact release script and Electron Builder configuration to support native Windows NSIS output. Keep `.github/workflows/windows-test.yml` as the reusable native-runner boundary, but make its always-on matrix build and smoke-test root `src/`; an independent-package matrix runs only for non-reusable test events, so Release downloads cannot receive independent installers.
+**Architecture:** Generalize the root single-artifact release script and Electron Builder configuration to support native Windows NSIS output. Keep `.github/workflows/windows-test.yml` as the reusable native-runner boundary, but make its always-on matrix build and smoke-test root `src/`; the Release caller explicitly sets `official_release: true` to suppress the independent-package matrix, so Release downloads cannot receive independent installers.
 
 **Tech Stack:** Bun 1.3.11, TypeScript strip-only mode, Vitest 4, Electron 42, electron-builder 26, GitHub Actions, PowerShell.
 
@@ -275,7 +275,7 @@ Expected: PASS, including unchanged macOS release-plan coverage and both root Wi
 
 - Modify: `src/system/build-script.test.ts`
 - Modify: `.github/workflows/windows-test.yml`
-- Verify unchanged publication contract: `.github/workflows/release.yml`
+- Modify: `.github/workflows/release.yml`
 
 **Interfaces:**
 
@@ -297,7 +297,8 @@ expect(windowsWorkflow).toContain('bun scripts/build-release-artifacts.ts --plat
 expect(windowsWorkflow).toContain('name: hobgoblin-primary-windows-${{ matrix.arch }}-${{ github.sha }}')
 expect(windowsWorkflow).toContain('path: release/Hobgoblin-*-${{ matrix.arch }}.exe')
 expect(windowsWorkflow).toContain('build-independent-windows:')
-expect(windowsWorkflow).toContain("if: ${{ github.event_name != 'workflow_call' }}")
+expect(windowsWorkflow).toContain('if: ${{ inputs.official_release != true }}')
+expect(releaseWorkflow).toContain('official_release: true')
 expect(windowsWorkflow).toContain('name: hobgoblin-independent-windows-${{ matrix.arch }}-${{ github.sha }}')
 expect(windowsWorkflow).toContain('path: windows/release/Hobgoblin-*-${{ matrix.arch }}.exe')
 expect(windowsWorkflow).toContain('$releaseRoot = Join-Path $env:GITHUB_WORKSPACE "release"')
@@ -323,6 +324,11 @@ Change the workflow triggers to remove `include_primary` and include official-so
 ```yaml
 on:
   workflow_call:
+    inputs:
+      official_release:
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
   pull_request:
     paths:
@@ -431,11 +437,11 @@ Use primary-specific failure and artifact uploads:
 
 - [ ] **Step 4: Retain independent builds only for standalone test events**
 
-Add a separate independent matrix guarded from reusable Release calls:
+Add a separate independent matrix guarded by the explicit typed input. Do not infer this boundary from `github.event_name`, because reusable workflows inherit their caller's GitHub context:
 
 ```yaml
 build-independent-windows:
-  if: ${{ github.event_name != 'workflow_call' }}
+  if: ${{ inputs.official_release != true }}
   name: Test independent Windows ${{ matrix.arch }}
   strategy:
     fail-fast: false

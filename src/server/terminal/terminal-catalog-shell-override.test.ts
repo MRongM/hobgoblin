@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { createTerminalCatalog } from '#/server/terminal/terminal-catalog.ts'
 import type { TerminalAttachResult, TerminalSessionSummary } from '#/shared/terminal.ts'
@@ -6,7 +7,7 @@ const { getWorktreesMock } = vi.hoisted(() => ({ getWorktreesMock: vi.fn() }))
 
 vi.mock('#/system/git/worktrees.ts', () => ({ getWorktrees: getWorktreesMock }))
 
-const repoRoot = '/workspace/repo'
+const repoRoot = path.resolve('/workspace/repo')
 const attachmentId = 'attachment_a'
 const sessionId = 'session_abcdefghijklmnop'
 const sessionKey = `${repoRoot}\0${repoRoot}\0terminal-1`

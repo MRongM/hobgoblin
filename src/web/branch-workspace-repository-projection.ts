@@ -2,6 +2,7 @@ import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { addResolvedRepo } from '#/web/stores/repos/lifecycle-write-paths.ts'
 import type { ReposStore } from '#/web/stores/repos/types.ts'
 import { normalizeRemoteTarget, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 
 export function projectDiscoveredBranchWorkspaceRepositories(
   state: Pick<ReposStore, 'repos' | 'order' | 'restorableRepoCache'>,
@@ -36,7 +37,10 @@ export function projectDiscoveredBranchWorkspaceRepositories(
       if (
         opened.changed ||
         !existing?.data.branches.some(
-          (branch) => branch.name === member.targetBranch && branch.worktree?.path === member.worktreePath,
+          (branch) =>
+            branch.name === member.targetBranch &&
+            !!branch.worktree &&
+            sameLocalFilePath(branch.worktree.path, member.worktreePath),
         )
       )
         refreshIds.push(member.repositoryId)

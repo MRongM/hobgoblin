@@ -21,9 +21,11 @@ import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/Workspa
 import { Button } from '#/web/components/ui/button.tsx'
 import type { BranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
+import { useBranchWorkspaceStatusRefresh } from '#/web/hooks/useBranchWorkspaceStatusRefresh.ts'
 import { explorerTabForRepo } from '#/web/stores/repos/helpers.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { getWorktreeChangeCount } from '#/web/stores/repos/worktree-state.ts'
 import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import type { CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
 
@@ -68,9 +70,9 @@ export function BranchWorkspacePane({
   const setDetailFocusMode = useReposStore((state) => state.setDetailFocusMode)
   const memberRepo = useReposStore((state) => (memberTarget ? state.repos[memberTarget.repositoryId] : undefined))
   const memberActiveTab = memberRepo ? explorerTabForRepo(memberRepo) : 'files'
-  const memberChangeCount = memberTarget
-    ? (memberRepo?.data.status.find((status) => status.path === memberTarget.worktreePath)?.entries.length ?? 0)
-    : 0
+  useBranchWorkspaceStatusRefresh(workspace, memberTarget ? `${memberTarget.worktreePath}\0${memberActiveTab}` : '')
+  const memberChangeCount =
+    memberTarget && memberRepo ? getWorktreeChangeCount(memberRepo, memberTarget.worktreePath) : 0
   const detailPaneSize = useReposStore((state) => state.detailPaneSizes[layout])
   const setDetailPaneSize = useReposStore((state) => state.setDetailPaneSize)
   const fileAreaRepoId = memberTarget?.repositoryId ?? rootId

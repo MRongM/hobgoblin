@@ -25,6 +25,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useDetachFileArea } from '#/web/hooks/useDetachFileArea.ts'
+import { useBranchWorkspaceStatusRefresh } from '#/web/hooks/useBranchWorkspaceStatusRefresh.ts'
 
 export type BranchWorkspaceFileAreaTab = 'status' | 'files' | 'changes' | 'history' | 'local' | 'remoteBranches'
 
@@ -79,6 +80,7 @@ export function BranchWorkspaceFileArea({
     workspace.repositories.some((member) => member.repositoryName === requestedRepositoryName)
       ? requestedRepositoryName
       : firstRepositoryName
+  useBranchWorkspaceStatusRefresh(workspace, `${activeTab}\0${selectedAggregateRepositoryName ?? ''}`)
 
   useEffect(() => {
     if (

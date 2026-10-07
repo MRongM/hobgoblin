@@ -2,6 +2,12 @@ name: Windows Test Build
 
 on:
   workflow_call:
+    inputs:
+      official_release:
+        description: Skip independent-package jobs when producing official release assets
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
   pull_request:
     paths:
@@ -470,7 +476,7 @@ jobs:
           retention-days: 7
 
   build-independent-windows:
-    if: ${{ github.event_name != 'workflow_call' }}
+    if: ${{ inputs.official_release != true }}
     name: Test independent Windows ${{ matrix.arch }}
     strategy:
       fail-fast: false

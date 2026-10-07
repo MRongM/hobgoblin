@@ -22,21 +22,30 @@ interface ResolveBranchWorkspaceMemberTargetInput {
   repos: Readonly<Record<string, RepoState | undefined>>
 }
 
+export function branchWorkspaceMemberRepositoryId(
+  member: BranchWorkspaceRepositorySnapshot,
+  repositoryIds: readonly string[],
+  candidates: readonly WorkspaceRepositoryCandidate[],
+): string | null {
+  return (
+    member.repositoryId ??
+    candidates.find((entry) => entry.name === member.repositoryName && repositoryIds.includes(entry.id))?.id ??
+    null
+  )
+}
+
 export function resolveBranchWorkspaceMemberTarget({
   member,
   repositoryIds,
   candidates,
   repos,
 }: ResolveBranchWorkspaceMemberTargetInput): BranchWorkspaceMemberResolution {
-  const discoveredRepositoryId = member.repositoryId
-  const candidate = discoveredRepositoryId
-    ? { id: discoveredRepositoryId, name: member.repositoryName }
-    : candidates.find((entry) => entry.name === member.repositoryName && repositoryIds.includes(entry.id))
-  if (!candidate) {
+  const repositoryId = branchWorkspaceMemberRepositoryId(member, repositoryIds, candidates)
+  if (!repositoryId) {
     return { ok: false, reason: 'workspace.branch-workspace.member-unconfigured' }
   }
 
-  const repository = repos[candidate.id]
+  const repository = repos[repositoryId]
   if (!repository || repository.availability.phase !== 'available') {
     return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
   }
@@ -53,7 +62,7 @@ export function resolveBranchWorkspaceMemberTarget({
     return {
       ok: true,
       target: {
-        repositoryId: candidate.id,
+        repositoryId,
         repositoryName: member.repositoryName,
         targetBranch: member.targetBranch,
         checkedOutBranch: branchAtMemberPath.name,
@@ -75,7 +84,7 @@ export function resolveBranchWorkspaceMemberTarget({
   return {
     ok: true,
     target: {
-      repositoryId: candidate.id,
+      repositoryId,
       repositoryName: member.repositoryName,
       targetBranch: member.targetBranch,
       checkedOutBranch: member.targetBranch,

@@ -52,10 +52,13 @@ import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { getBranchWorktreeState } from '#/web/stores/repos/worktree-state.ts'
+import { getBranchWorktreeState, getWorktreeChangeCount } from '#/web/stores/repos/worktree-state.ts'
 import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
-import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
+import {
+  branchWorkspaceMemberRepositoryId,
+  resolveBranchWorkspaceMemberTarget,
+} from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
 import { fetchWorkspaceRepositories } from '#/web/workspace-repository-fetch.ts'
@@ -202,33 +205,28 @@ export function WorkspaceRepositoryRail({
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
   )
-  const repositoryIdByName = useMemo(
-    () =>
-      new Map(
-        (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
-          const name = candidateNameById.get(repositoryId)
-          return name ? [[name, repositoryId] as const] : []
-        }),
-      ),
-    [candidateNameById, workspace?.repositoryIds],
-  )
   const branchWorkspaceChangeCountById = useMemo(
     () =>
       Object.fromEntries(
         branchItems.map((item) => [
           item.id,
           item.repositories.reduce((total, member) => {
-            const repositoryId = repositoryIdByName.get(member.repositoryName)
+            if (member.progress === 'removed') return total
+            const repositoryId = branchWorkspaceMemberRepositoryId(
+              member,
+              workspace?.repositoryIds ?? [],
+              workspace?.candidates ?? [],
+            )
             const repository = repositoryId ? repos[repositoryId] : undefined
-            const status =
+            const count =
               repository?.availability.phase === 'available'
-                ? repository.data.status.find((entry) => entry.path === member.worktreePath)
-                : undefined
-            return total + (status?.entries.length ?? 0)
+                ? getWorktreeChangeCount(repository, member.worktreePath)
+                : 0
+            return total + count
           }, 0),
         ]),
       ),
-    [branchItems, repos, repositoryIdByName],
+    [branchItems, repos, workspace?.repositoryIds, workspace?.candidates],
   )
   const repositoryOptions = useMemo(
     () =>
