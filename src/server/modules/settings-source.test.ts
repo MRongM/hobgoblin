@@ -183,17 +183,26 @@ test('defaults legacy terminal navigation controls to visible and persists opt-o
   await expect(reloaded.getServerSettingsPrefs()).resolves.toMatchObject({ terminalNavigationControlsVisible: false })
 })
 
-test('retains the 30 most recently opened repositories', async () => {
+test('retains the 50 most recently opened repositories', async () => {
   useTempServerSettingsDir()
   const mod = await import('#/server/modules/settings-source.ts')
 
-  for (let index = 0; index <= 30; index += 1) {
+  for (let index = 0; index <= 50; index += 1) {
     await mod.addServerRecentRepo({ kind: 'local', id: `/repo-${index}` })
   }
 
   expect(await mod.getServerRecentRepos()).toEqual(
-    Array.from({ length: 30 }, (_, index) => ({ kind: 'local', id: `/repo-${30 - index}` })),
+    Array.from({ length: 50 }, (_, index) => ({ kind: 'local', id: `/repo-${50 - index}` })),
   )
+})
+
+test('restores the 50 most recently opened repositories from persisted settings', async () => {
+  useTempServerSettingsDir()
+  const recentRepos = Array.from({ length: 51 }, (_, index) => ({ kind: 'local', id: `/repo-${index}` }))
+  writeSettingsFile({ recentRepos })
+  const mod = await import('#/server/modules/settings-source.ts')
+
+  expect(await mod.getServerRecentRepos()).toEqual(recentRepos.slice(0, 50))
 })
 
 test('defaults a missing terminal notification preference on and preserves explicit off', async () => {
