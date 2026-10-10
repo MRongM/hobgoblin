@@ -51,6 +51,7 @@ export type RemoteCommandKind =
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
   | { type: 'testWorkspaceGitDirectory'; path: string }
   | { type: 'testPathExists'; path: string }
+  | { type: 'discoverBranchWorkspaceDirectories'; rootPath: string; directoryNames?: readonly string[] }
   | { type: 'listBranchWorkspaceCandidates'; rootPath: string; excludedNames: string[] }
   | { type: 'inspectBranchWorkspacePath'; rootPath: string; candidatePath: string }
   | { type: 'createBranchWorkspaceDirectory'; rootPath: string; targetPath: string }
@@ -434,6 +435,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'fi',
       ].join('\n')
     }
+    case 'discoverBranchWorkspaceDirectories':
     case 'listBranchWorkspaceCandidates':
     case 'inspectBranchWorkspacePath':
     case 'createBranchWorkspaceDirectory':
@@ -808,6 +810,7 @@ type RemoteBranchWorkspaceCommand = Extract<
   RemoteCommandKind,
   {
     type:
+      | 'discoverBranchWorkspaceDirectories'
       | 'listBranchWorkspaceCandidates'
       | 'inspectBranchWorkspacePath'
       | 'createBranchWorkspaceDirectory'
@@ -821,6 +824,52 @@ type RemoteBranchWorkspaceCommand = Extract<
 
 function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): string {
   switch (command.type) {
+    case 'discoverBranchWorkspaceDirectories':
+      return remoteBranchWorkspacePython(command.rootPath, [
+        `selected_names = json.loads(${pythonString(JSON.stringify(command.directoryNames ?? null))})`,
+        `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
+        'def directories(parent):',
+        '    try:',
+        '        with os.scandir(parent) as entries:',
+        '            return sorted(entry.name for entry in entries if entry.is_dir(follow_symlinks=False))',
+        '    except OSError:',
+        '        return []',
+        'def worktrees(member_path):',
+        '    try:',
+        '        output = subprocess.check_output(["git", "-C", member_path, "worktree", "list", "--porcelain", "-z"], stderr=subprocess.DEVNULL)',
+        '    except (OSError, subprocess.CalledProcessError):',
+        '        return []',
+        '    records, record = [], {}',
+        '    for field in output.decode("utf-8", "surrogateescape").split("\\0"):',
+        '        if not field:',
+        '            if record: records.append(record)',
+        '            record = {}',
+        '        else:',
+        '            key, _, value = field.partition(" ")',
+        '            record[key] = value',
+        '    if record: records.append(record)',
+        '    return records',
+        'found = []',
+        'for name in directories(root_path):',
+        '    if selected_names is not None and name not in selected_names: continue',
+        '    if not name.startswith(managed_prefixes) or name.strip() != name or "\\\\" in name: continue',
+        '    workspace_path = os.path.join(root_path, name)',
+        '    members = []',
+        '    for repository_name in directories(workspace_path):',
+        '        if repository_name.strip() != repository_name or "\\\\" in repository_name: continue',
+        '        member_path = os.path.join(workspace_path, repository_name)',
+        '        records = worktrees(member_path)',
+        '        for record in records:',
+        '            if "bare" in record or "prunable" in record: continue',
+        '            if os.path.normpath(record.get("worktree", "")) != member_path: continue',
+        '            branch = record.get("branch", "")',
+        '            if not branch.startswith("refs/heads/"): continue',
+        '            members.append({"repositoryName": repository_name, "repositoryPath": records[0].get("worktree", member_path), "worktreePath": member_path, "branch": branch[len("refs/heads/"):]})',
+        '            break',
+        '    if members:',
+        '        found.append({"directoryName": name, "path": workspace_path, "branch": members[0]["branch"], "members": members})',
+        'print(json.dumps({"ok": True, "directories": found}, ensure_ascii=True))',
+      ])
     case 'listBranchWorkspaceCandidates':
       return remoteBranchWorkspacePython(command.rootPath, [
         `excluded_names = set(json.loads(${pythonString(JSON.stringify(command.excludedNames))}))`,

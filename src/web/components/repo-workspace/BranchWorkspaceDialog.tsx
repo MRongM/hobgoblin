@@ -164,7 +164,6 @@ export function BranchWorkspaceDialog({
   const [alsoDeleteBranch, setAlsoDeleteBranch] = useState(false)
   const [alsoDeleteUpstream, setAlsoDeleteUpstream] = useState(false)
   const [approvals, setApprovals] = useState<BranchWorkspaceApproval[]>([])
-  const [planRevision, setPlanRevision] = useState(0)
   const [planNotBefore, setPlanNotBefore] = useState(0)
   const dialogStateKey = open ? JSON.stringify([mode, workspace?.id ?? null, fixedReduceRepositoryName]) : null
   const [initializedDialogStateKey, setInitializedDialogStateKey] = useState<string | null>(null)
@@ -217,12 +216,16 @@ export function BranchWorkspaceDialog({
     setBranch(initialBranch)
     setSelectedRepositories(
       Object.fromEntries(
-        initial.repositories.map((repository) => [
-          repository.name,
-          mode === 'reduce'
-            ? repository.name === fixedReduceRepositoryName
-            : initial.fixedRepositories.has(repository.name),
-        ]),
+        mode === 'reduce' &&
+          initial.workspace?.state.kind === 'needs-action' &&
+          initial.workspace.state.action === 'continue-reduce'
+          ? initial.workspace.repositories.map((member) => [member.repositoryName, member.progress !== 'complete'])
+          : initial.repositories.map((repository) => [
+              repository.name,
+              mode === 'reduce'
+                ? repository.name === fixedReduceRepositoryName
+                : initial.fixedRepositories.has(repository.name),
+            ]),
       ),
     )
     setRepositoryDependenciesEnabled({})
@@ -252,10 +255,12 @@ export function BranchWorkspaceDialog({
     setAuxiliaryChoices({})
     setAuxiliaryRefreshPending(false)
     setAuxiliaryRefreshError(null)
-    setAlsoDeleteBranch(mode === 'remove')
+    setAlsoDeleteBranch(
+      mode === 'remove' &&
+        !(initial.workspace?.state.kind === 'needs-action' && initial.workspace.state.action === 'continue-delete'),
+    )
     setAlsoDeleteUpstream(false)
     setApprovals([])
-    setPlanRevision(0)
     setPlanNotBefore(0)
     setInitializedDialogStateKey(dialogStateKey)
   }, [dialogStateKey, fixedReduceRepositoryName, mode, open, workspace?.id])
@@ -299,7 +304,6 @@ export function BranchWorkspaceDialog({
       setAuxiliaryRefreshError('workspace.branch-workspace.read-failed')
     } finally {
       setAuxiliaryRefreshPending(false)
-      if (!closeOnSuccess) setPlanRevision((current) => current + 1)
     }
   }
 
@@ -368,12 +372,11 @@ export function BranchWorkspaceDialog({
       showWorkspaceRepositoryFetchError(t, repositories.length, fetchError)
     } finally {
       setFetchAllPending(false)
-      setPlanRevision((current) => current + 1)
     }
   }
 
   const applyBranchChange = (nextBranch: string) => {
-    setPlanNotBefore(Date.now() + 300)
+    if (nextBranch.trim() !== branch.trim()) setPlanNotBefore(Date.now() + 300)
     setBranch(nextBranch)
     setSyncBeforeCreate((current) =>
       Object.fromEntries(
@@ -520,12 +523,16 @@ export function BranchWorkspaceDialog({
     enabled: open && oneStep && !fetchAllPending && !auxiliaryRefreshPending && !dependencyReadPending,
     request: currentRequest,
     requestKey: currentRequestKey,
-    revision: planRevision,
+    debounceMs: 200,
     notBefore: planNotBefore,
-    requestPlan: async (nextRequest, signal) => (await onPreview(nextRequest, signal)) !== false,
+    requestPlan: async (nextRequest, signal) =>
+      plan && result === null && plannedRequestKey === JSON.stringify(nextRequest)
+        ? true
+        : (await onPreview(nextRequest, signal)) !== false,
   })
   const currentPlanReady =
     plan !== null &&
+    (!oneStep || result === null) &&
     (!oneStep ||
       plannedRequest === undefined ||
       (autoPlan.status === 'ready' && currentRequestKey !== null && plannedRequestKey === currentRequestKey))

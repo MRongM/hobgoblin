@@ -113,7 +113,11 @@ export function BranchWorkspaceDependencyDialog({
     request: nextRequest,
     requestKey,
     revision: planRevision,
-    requestPlan: async (next, signal) => (await onPreview(next, signal)) !== false,
+    debounceMs: 200,
+    requestPlan: async (next, signal) =>
+      plan && result === null && plannedRequestKey === JSON.stringify(next)
+        ? true
+        : (await onPreview(next, signal)) !== false,
   })
   const currentPlanReady =
     plan !== null &&

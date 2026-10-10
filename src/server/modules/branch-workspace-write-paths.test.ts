@@ -1,5 +1,9 @@
 import { describe, expect, test, vi } from 'vitest'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
+import * as manifestSource from '#/server/modules/branch-workspace-source.ts'
+import * as catalogSource from '#/server/modules/branch-workspace-catalog-read.ts'
+import { createBranchWorkspaceDependencyWriteService } from '#/server/modules/branch-workspace-dependency-write-paths.ts'
+import { createBranchWorkspaceGitActionWriteService } from '#/server/modules/branch-workspace-git-action-write-paths.ts'
 import type {
   BranchWorkspaceManifest,
   BranchWorkspacePlan,
@@ -131,6 +135,102 @@ function readySnapshot(plan: BranchWorkspacePlan): BranchWorkspaceSnapshot {
 }
 
 describe('branch workspace write service', () => {
+  test('cancels obsolete planning and never installs a late result over the latest plan', async () => {
+    const oldPlan = { ...planned(), token: 'old-plan' }
+    const latestPlan = { ...planned(), token: 'latest-plan' }
+    let resolveOld!: (value: { ok: true; plan: BranchWorkspacePlan }) => void
+    const oldResult = new Promise<{ ok: true; plan: BranchWorkspacePlan }>((resolve) => {
+      resolveOld = resolve
+    })
+    const buildPlan = vi
+      .fn()
+      .mockImplementationOnce(() => oldResult)
+      .mockResolvedValueOnce({ ok: true, plan: latestPlan })
+    const service = createBranchWorkspaceWriteService({ buildPlan })
+    const old = service.plan(ROOT, { operation: 'create' })
+    await service.plan(ROOT, { operation: 'create' })
+    expect(buildPlan.mock.calls[0]?.[3]?.aborted).toBe(true)
+    resolveOld({ ok: true, plan: oldPlan })
+    await expect(old).resolves.toMatchObject({ ok: false, message: 'cancelled' })
+    await expect(service.execute(ROOT, { planToken: oldPlan.token, approvals: [] })).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.plan-stale',
+    })
+  })
+
+  test('rejects cross-service mutation plans while another operation is active', async () => {
+    const buildPlan = vi.fn(async () => ({ ok: false as const, message: 'unexpected-read' }))
+    const shared = { isOperationActive: () => true, buildPlan }
+    const lifecycle = createBranchWorkspaceWriteService(shared)
+    const dependency = createBranchWorkspaceDependencyWriteService(shared)
+    const git = createBranchWorkspaceGitActionWriteService(shared)
+    await expect(lifecycle.plan(ROOT, {})).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.operation-in-progress',
+    })
+    await expect(
+      dependency.plan(ROOT, { operation: 'remove', branchWorkspaceId: 'branch-1', names: ['.env'] }),
+    ).resolves.toMatchObject({ ok: false, message: 'workspace.branch-workspace.dependency.operation-in-progress' })
+    await expect(git.plan(ROOT, { kind: 'pull', branchWorkspaceId: 'branch-1' })).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.git-action.operation-active',
+    })
+    expect(buildPlan).not.toHaveBeenCalled()
+  })
+
+  test('keeps a reviewed lifecycle plan blocked until another mutation completes', async () => {
+    let otherActive = false
+    const plan = planned()
+    const source = inMemorySource()
+    const createDirectory = vi.fn(async () => {})
+    const service = createBranchWorkspaceWriteService({
+      isOperationActive: () => otherActive,
+      buildPlan: async () => ({ ok: true, plan }),
+      readManifests: source.readManifests,
+      updateManifests: source.updateManifests,
+      createDirectory,
+      createWorktree: async () => ({ ok: true, message: 'created' }),
+      readSnapshot: async () => ({ ok: true, rootId: ROOT, items: [readySnapshot(plan)], auxiliaryCandidates: [] }),
+      publishInvalidation: () => {},
+    })
+    await service.plan(ROOT, {})
+    otherActive = true
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.operation-in-progress',
+    })
+    expect(createDirectory).not.toHaveBeenCalled()
+    otherActive = false
+    expect((await service.execute(ROOT, { planToken: plan.token, approvals: [] })).ok).toBe(true)
+    expect(service.isActive(ROOT)).toBe(false)
+  })
+  test('reads persisted execution progress without rediscovering the workspace for every member', async () => {
+    const plan = planned()
+    const source = inMemorySource()
+    const readPersisted = vi
+      .spyOn(manifestSource, 'readBranchWorkspaceManifests')
+      .mockImplementation(source.readManifests)
+    const readCatalog = vi.spyOn(catalogSource, 'readBranchWorkspaceCatalog').mockImplementation(source.readManifests)
+    try {
+      const service = createBranchWorkspaceWriteService({
+        buildPlan: async () => ({ ok: true, plan }),
+        updateManifests: source.updateManifests,
+        createDirectory: async () => {},
+        createWorktree: async () => ({ ok: true, message: 'created' }),
+        readSnapshot: async () => ({ ok: true, rootId: ROOT, items: [readySnapshot(plan)], auxiliaryCandidates: [] }),
+        publishInvalidation: () => {},
+      })
+      await service.plan(ROOT, {})
+      expect((await service.execute(ROOT, { planToken: plan.token, approvals: [] })).ok).toBe(true)
+      expect(readPersisted).toHaveBeenCalledTimes(plan.repositories.length)
+      expect(readCatalog).not.toHaveBeenCalled()
+      await expect(service.reorder(ROOT, [plan.branchWorkspaceId])).resolves.toEqual({ ok: true })
+      expect(readCatalog).toHaveBeenCalledTimes(1)
+    } finally {
+      readPersisted.mockRestore()
+      readCatalog.mockRestore()
+    }
+  })
   test('returns the final ready snapshot after successful creation', async () => {
     const plan = planned()
     const source = inMemorySource()
@@ -174,7 +274,7 @@ describe('branch workspace write service', () => {
     })
 
     expect(readSnapshot).toHaveBeenCalledWith(ROOT, expect.any(AbortSignal))
-    expect(buildPlan).toHaveBeenNthCalledWith(1, ROOT, expect.any(Object), undefined, controller.signal)
+    expect(buildPlan).toHaveBeenNthCalledWith(1, ROOT, expect.any(Object), undefined, expect.any(AbortSignal))
     expect(publishInvalidation).toHaveBeenCalledWith(ROOT, 'workspace_create_1')
     expect(source.manifests[0]?.operation).toBeUndefined()
     expect(result).toEqual({ ok: true, branchWorkspaceId: plan.branchWorkspaceId, snapshot })
@@ -727,6 +827,29 @@ describe('branch workspace write service', () => {
     )
     expect(events.at(-1)).toBe(`entry:${plan.path}`)
     expect(source.manifests).toEqual([])
+  })
+
+  test('does not force-delete files when the registry has become unreadable', async () => {
+    const plan = removePlanned()
+    const removeEntry = vi.fn(async () => {})
+    const service = createBranchWorkspaceWriteService({
+      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
+      readManifests: async () => ({ kind: 'invalid', message: 'workspace.branch-workspace.read-failed' }),
+      updateManifests: vi.fn(async () => {}),
+      closeSessions: vi.fn(async () => ({ closed: plan.terminalSessionIds, missing: [] })),
+      cleanupWorktree: vi.fn(async () => ({ ok: true, message: 'cleaned' })),
+      removeEntry,
+    })
+    await service.plan(ROOT, {
+      operation: 'remove',
+      branchWorkspaceId: plan.branchWorkspaceId,
+      alsoDeleteBranch: false,
+      alsoDeleteUpstream: false,
+    })
+    await expect(
+      service.execute(ROOT, { planToken: plan.token, approvals: plan.requiredApprovals, force: true }),
+    ).resolves.toMatchObject({ ok: false, message: 'workspace.branch-workspace.read-failed' })
+    expect(removeEntry).not.toHaveBeenCalled()
   })
 
   test('force deletes the folder and config before best-effort member worktree cleanup', async () => {

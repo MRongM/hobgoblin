@@ -3,6 +3,7 @@ import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import { workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 
 export type BranchWorkspaceFileMutationInput = {
   rootId: string
@@ -18,24 +19,10 @@ export async function assertBranchWorkspaceFileMutationAllowed(
   input: BranchWorkspaceFileMutationInput,
   dependencies: BranchWorkspaceProtectedPathDependencies = {},
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const snapshot = await (dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId)))(
-    input.rootId,
-  ).catch(() => null)
-  if (!snapshot || snapshot.kind === 'invalid') {
-    return { ok: false, message: 'workspace.branch-workspace.read-failed' }
-  }
-  if (snapshot.kind === 'missing') return { ok: true }
   const rootPath = workspaceRepositoryPath(input.rootId)
   if (!rootPath) return { ok: false, message: 'error.invalid-arguments' }
   const pathApi = isRemoteRepoId(input.rootId) ? path.posix : path
-  const normalizedWorktreePath = pathApi.resolve(input.worktreePath)
-  const protectedPaths = new Set<string>()
-  for (const manifest of snapshot.manifests) {
-    if (samePath(pathApi, normalizedWorktreePath, rootPath)) protectedPaths.add(pathApi.resolve(manifest.path))
-    if (!samePath(pathApi, normalizedWorktreePath, manifest.path)) continue
-    for (const repository of manifest.repositories) protectedPaths.add(pathApi.resolve(repository.worktreePath))
-  }
-  if (protectedPaths.size === 0) return { ok: true }
+  if (!samePath(pathApi, input.worktreePath, rootPath)) return { ok: true }
 
   const candidates = [...input.paths]
   if (input.kind === 'rename' && input.paths[0]) {
@@ -43,6 +30,26 @@ export async function assertBranchWorkspaceFileMutationAllowed(
   } else if (input.kind === 'move') {
     candidates.push(...input.paths.map((sourcePath) => pathApi.join(input.targetDirPath, pathApi.basename(sourcePath))))
   }
+  // Only whole workspace roots are managed; members use ordinary file-tree rules.
+  if (
+    !candidates.some((candidate) => {
+      const normalized = pathApi.resolve(candidate)
+      return (
+        samePath(pathApi, pathApi.dirname(normalized), rootPath) &&
+        isBranchWorkspaceDirectoryName(pathApi.basename(normalized))
+      )
+    })
+  )
+    return { ok: true }
+
+  const snapshot = await (dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId)))(
+    input.rootId,
+  ).catch(() => null)
+  if (!snapshot || snapshot.kind === 'invalid') {
+    return { ok: false, message: 'workspace.branch-workspace.read-failed' }
+  }
+  if (snapshot.kind === 'missing') return { ok: true }
+  const protectedPaths = new Set(snapshot.manifests.map((manifest) => pathApi.resolve(manifest.path)))
   return candidates.some((candidatePath) => protectedPaths.has(pathApi.resolve(candidatePath)))
     ? { ok: false, message: 'branch-workspace.managed-path-protected' }
     : { ok: true }

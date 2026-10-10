@@ -8,16 +8,50 @@ const ROOT = path.resolve('/workspace')
 const BRANCH_PATH = path.join(ROOT, 'goblin-feature-auth')
 
 describe('branch workspace protected paths', () => {
-  test.each([
-    { worktreePath: ROOT, paths: [BRANCH_PATH] },
-    { worktreePath: BRANCH_PATH, paths: [path.join(BRANCH_PATH, 'api')] },
-  ])('blocks deleting a registered managed root %#', async ({ worktreePath, paths }) => {
+  test.each([{ worktreePath: ROOT, paths: [BRANCH_PATH] }])(
+    'blocks deleting a registered managed root %#',
+    async ({ worktreePath, paths }) => {
+      await expect(
+        assertBranchWorkspaceFileMutationAllowed(
+          { rootId: ROOT, kind: 'delete', worktreePath, paths },
+          dependencies(manifest(ROOT)),
+        ),
+      ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+    },
+  )
+
+  test.each(['delete', 'rename', 'move'] as const)(
+    'allows member root %s without scanning workspace state',
+    async (kind) => {
+      const readManifests = vi.fn(async () => {
+        throw new Error('unrelated registry unavailable')
+      })
+      await expect(
+        assertBranchWorkspaceFileMutationAllowed(
+          {
+            rootId: ROOT,
+            worktreePath: BRANCH_PATH,
+            paths: [path.join(BRANCH_PATH, 'api')],
+            kind,
+            newName: 'renamed',
+            targetDirPath: path.join(BRANCH_PATH, 'nested'),
+          },
+          { readManifests },
+        ),
+      ).resolves.toEqual({ ok: true })
+      expect(readManifests).not.toHaveBeenCalled()
+    },
+  )
+
+  test('does not scan the workspace for ordinary parent file mutations', async () => {
+    const deps = dependencies(manifest(ROOT))
     await expect(
       assertBranchWorkspaceFileMutationAllowed(
-        { rootId: ROOT, kind: 'delete', worktreePath, paths },
-        dependencies(manifest(ROOT)),
+        { rootId: ROOT, worktreePath: ROOT, kind: 'delete', paths: [path.join(ROOT, 'notes.txt')] },
+        deps,
       ),
-    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
+    ).resolves.toEqual({ ok: true })
+    expect(deps.readManifests).not.toHaveBeenCalled()
   })
 
   test('allows released auxiliary roots to retain generic file actions', async () => {
@@ -80,9 +114,9 @@ describe('branch workspace protected paths', () => {
         {
           rootId: ROOT,
           kind: 'move',
-          worktreePath: BRANCH_PATH,
-          paths: [path.join(BRANCH_PATH, 'scratch', 'api')],
-          targetDirPath: BRANCH_PATH,
+          worktreePath: ROOT,
+          paths: [path.join(ROOT, 'scratch', path.basename(BRANCH_PATH))],
+          targetDirPath: ROOT,
         },
         deps,
       ),
@@ -98,9 +132,9 @@ describe('branch workspace protected paths', () => {
         {
           rootId,
           kind: 'move',
-          worktreePath: remoteManifest.path,
-          paths: [`${remoteManifest.path}/api`],
-          targetDirPath: `${remoteManifest.path}/tmp`,
+          worktreePath: '/srv/workspace',
+          paths: [`${remoteManifest.path}/../goblin-feature-auth`],
+          targetDirPath: '/srv/workspace/tmp',
         },
         dependencies(remoteManifest),
       ),

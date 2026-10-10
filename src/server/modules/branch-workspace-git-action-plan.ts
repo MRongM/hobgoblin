@@ -57,6 +57,7 @@ export async function buildBranchWorkspaceGitActionPlan(
   request: BranchWorkspaceGitActionPlanRequest,
   dependencies: BranchWorkspaceGitActionPlanDependencies = {},
   signal?: AbortSignal,
+  repositoryNames?: ReadonlySet<string>,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
   const normalized = normalizeBranchWorkspaceGitActionPlanRequest(request)
   if (!normalized.ok) return normalized
@@ -64,14 +65,24 @@ export async function buildBranchWorkspaceGitActionPlan(
   try {
     signal?.throwIfAborted()
     const normalizedRootId = workspaceRootId(rootId)
-    const source = await (dependencies.readManifests ?? ((root: string) => readBranchWorkspaceCatalog(root, signal)))(
-      normalizedRootId,
-    )
+    const source = await (
+      dependencies.readManifests ??
+      ((root: string) =>
+        readBranchWorkspaceCatalog(root, signal, {
+          target: { branchWorkspaceId: normalized.request.branchWorkspaceId },
+        }))
+    )(normalizedRootId)
     if (source.kind === 'invalid') return { ok: false, message: source.message }
-    const manifest =
+    const stored =
       source.kind === 'ready'
         ? source.manifests.find((candidate) => candidate.id === normalized.request.branchWorkspaceId)
         : undefined
+    const manifest = stored && {
+      ...stored,
+      repositories: stored.repositories.filter(
+        (member) => member.progress === 'complete' && (!repositoryNames || repositoryNames.has(member.repositoryName)),
+      ),
+    }
     const unavailable = validateManifest(manifest)
     if (unavailable) return unavailable
     if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
@@ -115,11 +126,32 @@ export async function validateBranchWorkspaceGitActionPlan(
   dependencies: BranchWorkspaceGitActionPlanDependencies = {},
   signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
+  signal?.throwIfAborted()
+  const remaining = new Set(
+    expected.members
+      .filter((member) => !completedRepositoryNames.has(member.repositoryName))
+      .map((member) => member.repositoryName),
+  )
+  if (remaining.size === 0) {
+    const source = await (
+      dependencies.readManifests ??
+      ((root: string) =>
+        readBranchWorkspaceCatalog(root, signal, {
+          target: { branchWorkspaceId: expected.branchWorkspaceId },
+        }))
+    )(expected.rootId)
+    signal?.throwIfAborted()
+    if (source.kind === 'invalid') return { ok: false, message: source.message }
+    const manifest =
+      source.kind === 'ready' ? source.manifests.find((item) => item.id === expected.branchWorkspaceId) : undefined
+    return validateManifest(manifest) ?? { ok: true, plan: expected }
+  }
   const current = await buildBranchWorkspaceGitActionPlan(
     expected.rootId,
     { kind: expected.kind, branchWorkspaceId: expected.branchWorkspaceId },
     dependencies,
     signal,
+    remaining,
   )
   if (!current.ok) return current
 
@@ -137,12 +169,18 @@ export async function validateBranchWorkspaceGitActionPlan(
       }
     }
   }
-  return current
+  return {
+    ok: true,
+    plan: {
+      ...current.plan,
+      members: expected.members.map((member) => currentMembers.get(member.repositoryName) ?? member),
+    } as BranchWorkspaceGitActionPlan,
+  }
 }
 
 function validateManifest(manifest: BranchWorkspaceManifest | undefined): { ok: false; message: string } | null {
   if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
-  if (manifest.operation || manifest.repositories.some((member) => member.progress !== 'complete')) {
+  if (manifest.operation?.kind === 'remove' || manifest.operation?.kind === 'reduce') {
     return { ok: false, message: 'workspace.branch-workspace.git-action.not-ready' }
   }
   if (manifest.repositories.length === 0) {

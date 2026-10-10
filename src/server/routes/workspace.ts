@@ -34,6 +34,7 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
   const app = new Hono()
   const terminalClientId = options.terminalClientId ?? 'server'
   const branchWorkspaceWriteService = createBranchWorkspaceWriteService({
+    isOperationActive,
     planDependencies: {
       async listTerminalSessions(repoId) {
         if (!options.terminalHost) throw new Error('workspace.branch-workspace.terminal-read-failed')
@@ -44,8 +45,15 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       ? { closeSessions: async (sessionIds: string[]) => await options.terminalHost!.closeSessions(sessionIds) }
       : {}),
   })
-  const branchWorkspaceGitActionWriteService = createBranchWorkspaceGitActionWriteService()
-  const branchWorkspaceDependencyWriteService = createBranchWorkspaceDependencyWriteService()
+  const branchWorkspaceGitActionWriteService = createBranchWorkspaceGitActionWriteService({ isOperationActive })
+  const branchWorkspaceDependencyWriteService = createBranchWorkspaceDependencyWriteService({ isOperationActive })
+  function isOperationActive(rootId: string): boolean {
+    return (
+      branchWorkspaceWriteService.isActive(rootId) ||
+      branchWorkspaceGitActionWriteService.isActive(rootId) ||
+      branchWorkspaceDependencyWriteService.isActive(rootId)
+    )
+  }
   const workspaceRecoveryWriteService = createWorkspaceRecoveryWriteService({
     branchService: branchWorkspaceWriteService,
   })

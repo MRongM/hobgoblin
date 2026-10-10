@@ -23,6 +23,28 @@ const removeRequest: BranchWorkspaceDependencyPlanRequest = {
 }
 
 describe('branch workspace dependency write service', () => {
+  test('does not let cancelled planning replace the latest dependency plan', async () => {
+    const plan = addPlan()
+    let resolveOld!: (value: { ok: true; plan: BranchWorkspaceDependencyAddPlan }) => void
+    const oldResult = new Promise<{ ok: true; plan: BranchWorkspaceDependencyAddPlan }>((resolve) => {
+      resolveOld = resolve
+    })
+    const buildPlan = vi
+      .fn()
+      .mockImplementationOnce(() => oldResult)
+      .mockResolvedValueOnce({ ok: true, plan: { ...plan, token: 'latest' } })
+    const service = createBranchWorkspaceDependencyWriteService({ buildPlan })
+    const old = service.plan(ROOT, addRequest)
+    await service.plan(ROOT, addRequest)
+    expect(buildPlan.mock.calls[0]?.[3]?.aborted).toBe(true)
+    resolveOld({ ok: true, plan })
+    await expect(old).resolves.toMatchObject({ ok: false, message: 'cancelled' })
+    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
+      ok: false,
+      message: 'workspace.branch-workspace.dependency.plan-stale',
+    })
+  })
+
   test('executes copy and symlink additions sequentially and publishes one invalidation', async () => {
     const events: string[] = []
     const plan = addPlan()

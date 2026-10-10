@@ -134,8 +134,11 @@ export async function abortBranchWorkspaceDependencies(rootId: string): Promise<
 export async function planBranchWorkspaceGitAction(
   rootId: string,
   request: BranchWorkspaceGitActionPlanRequest,
+  signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  return await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request })
+  return signal
+    ? await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request }, { signal })
+    : await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request })
 }
 
 export async function executeBranchWorkspaceGitAction(

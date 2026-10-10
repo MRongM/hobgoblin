@@ -37,16 +37,30 @@ describe('branch workspace dependency plans', () => {
     })
   })
 
-  test('rejects dependency maintenance for a non-ready branch workspace', async () => {
+  test('allows dependency maintenance when only the lifecycle needs repair', async () => {
     const dependencies = planDependencies({
       ...workspace(),
       state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
     })
 
-    await expect(readBranchWorkspaceDependencyCandidates(ROOT, 'branch-1', undefined, dependencies)).resolves.toEqual({
-      ok: false,
-      message: 'workspace.branch-workspace.dependency.not-ready',
+    await expect(
+      readBranchWorkspaceDependencyCandidates(ROOT, 'branch-1', undefined, dependencies),
+    ).resolves.toMatchObject({
+      ok: true,
     })
+  })
+
+  test.each<Partial<BranchWorkspaceSnapshot>>([
+    { available: false },
+    { state: { kind: 'needs-action', action: 'continue-delete' } },
+    { state: { kind: 'needs-action', action: 'continue-reduce' } },
+    { activeOperation: { kind: 'pull', currentStep: 0, completedCount: 0, totalCount: 1, cancellable: true } },
+  ])('still rejects dependency maintenance for an unavailable or busy target %#', async (overrides) => {
+    const dependencies = planDependencies({ ...workspace(), ...overrides })
+    await expect(
+      readBranchWorkspaceDependencyCandidates(ROOT, 'branch-1', undefined, dependencies),
+    ).resolves.toMatchObject({ ok: false, message: 'workspace.branch-workspace.dependency.not-ready' })
+    expect(dependencies.inspectPath).not.toHaveBeenCalled()
   })
 
   test('builds an add plan for a missing target and requires outside-root approval only for copy', async () => {
@@ -83,6 +97,10 @@ describe('branch workspace dependency plans', () => {
       },
     })
     expect(dependencies.fingerprintEntry).not.toHaveBeenCalled()
+    expect(dependencies.inspectPath).toHaveBeenCalledExactlyOnceWith(ROOT, `${TARGET_ROOT}/.env`, undefined)
+    expect(dependencies.readSnapshot).toHaveBeenCalledExactlyOnceWith(ROOT, undefined, {
+      branchWorkspaceId: 'branch-1',
+    })
   })
 
   test('builds a fingerprint-bound replacement plan for an occupied target', async () => {
@@ -252,27 +270,29 @@ describe('branch workspace dependency plans', () => {
 })
 
 function planDependencies(item: BranchWorkspaceSnapshot = workspace()) {
-  const readSnapshot = vi.fn(async (): Promise<BranchWorkspaceReadResult> => ({
-    ok: true,
-    rootId: ROOT,
-    items: [item],
-    auxiliaryCandidates: [
-      {
-        name: '.env',
-        path: '/workspace/.env',
-        kind: 'file',
-        resolvedPath: '/outside/.env',
-        outsideRoot: true,
-      },
-      {
-        name: 'config',
-        path: '/workspace/config',
-        kind: 'directory',
-        resolvedPath: '/workspace/config',
-        outsideRoot: false,
-      },
-    ],
-  }))
+  const readSnapshot = vi.fn(
+    async (): Promise<BranchWorkspaceReadResult> => ({
+      ok: true,
+      rootId: ROOT,
+      items: [item],
+      auxiliaryCandidates: [
+        {
+          name: '.env',
+          path: '/workspace/.env',
+          kind: 'file',
+          resolvedPath: '/outside/.env',
+          outsideRoot: true,
+        },
+        {
+          name: 'config',
+          path: '/workspace/config',
+          kind: 'directory',
+          resolvedPath: '/workspace/config',
+          outsideRoot: false,
+        },
+      ],
+    }),
+  )
   const inspectPath = vi.fn(async (_rootId: string, candidatePath: string) => ({
     path: candidatePath,
     exists: candidatePath.endsWith('/config'),
@@ -280,8 +300,8 @@ function planDependencies(item: BranchWorkspaceSnapshot = workspace()) {
     directChild: false,
     outsideRoot: false,
   }))
-  const fingerprintEntry = vi.fn(async (_rootId: string, candidatePath: string) =>
-    `fingerprint:${candidatePath.split('/').at(-1)}`,
+  const fingerprintEntry = vi.fn(
+    async (_rootId: string, candidatePath: string) => `fingerprint:${candidatePath.split('/').at(-1)}`,
   )
   return { readSnapshot, inspectPath, fingerprintEntry }
 }

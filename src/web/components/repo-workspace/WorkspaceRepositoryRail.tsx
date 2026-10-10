@@ -312,6 +312,7 @@ export function WorkspaceRepositoryRail({
   }, [branchItems, branchQuery.data, branchQuery.refresh])
 
   if (!workspace) return null
+  const branchReadError = branchQuery.data?.ok ? branchQuery.data.registryError : branchQuery.data?.message
   const resolveMemberTarget = (member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveBranchWorkspaceMemberTarget({
       member,
@@ -523,25 +524,8 @@ export function WorkspaceRepositoryRail({
     setDialogWorkspace(item)
     setFixedReduceRepositoryName(reduceRepositoryName)
     setBranchDialogOpen(true)
-    if (requestPlan && item) {
-      void branchActions.requestPlan(
-        mode === 'repair'
-          ? { operation: 'repair', branchWorkspaceId: item.id }
-          : mode === 'reduce'
-            ? {
-                operation: 'reduce',
-                branchWorkspaceId: item.id,
-                repositories: item.repositories
-                  .filter((repository) => repository.progress !== 'complete')
-                  .map((repository) => repository.repositoryName),
-              }
-            : {
-                operation: 'remove',
-                branchWorkspaceId: item.id,
-                alsoDeleteBranch: false,
-                alsoDeleteUpstream: false,
-              },
-      )
+    if (requestPlan && item && mode === 'repair') {
+      void branchActions.requestPlan({ operation: 'repair', branchWorkspaceId: item.id })
     }
   }
   const openDependencyDialog = (mode: 'add' | 'remove', item: BranchWorkspaceSnapshot) => {
@@ -666,11 +650,9 @@ export function WorkspaceRepositoryRail({
               className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
               data-testid="branch-workspace-scroll-body"
             >
-              {branchQuery.isPending ? (
-                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
-              ) : branchQuery.data && !branchQuery.data.ok ? (
+              {!branchQuery.isPending && branchReadError ? (
                 <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
-                  <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
+                  <span className="min-w-0 flex-1">{t(branchReadError)}</span>
                   <Button
                     type="button"
                     variant="outline"
@@ -686,7 +668,7 @@ export function WorkspaceRepositoryRail({
                     )}
                     {t('workspace.branch-workspace.reload')}
                   </Button>
-                  {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+                  {branchReadError === 'workspace.branch-workspace.read-failed' ? (
                     <Button
                       type="button"
                       variant="destructive-soft"
@@ -698,7 +680,10 @@ export function WorkspaceRepositoryRail({
                     </Button>
                   ) : null}
                 </div>
-              ) : branchItems.length === 0 ? (
+              ) : null}
+              {branchQuery.isPending ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
+              ) : branchQuery.data && !branchQuery.data.ok ? null : branchItems.length === 0 ? (
                 <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
               ) : (
                 <BranchWorkspaceList

@@ -15,6 +15,7 @@ import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
 export interface BranchWorkspaceCatalogDependencies {
+  target?: { branchWorkspaceId: string } | { branch: string }
   readManifests?: typeof readBranchWorkspaceManifests
   discoverDirectories?: typeof discoverBranchWorkspaceDirectories
 }
@@ -24,17 +25,42 @@ export async function readBranchWorkspaceCatalog(
   rootId: string,
   signal?: AbortSignal,
   dependencies: BranchWorkspaceCatalogDependencies = {},
-): Promise<BranchWorkspaceManifestSourceSnapshot> {
+): Promise<
+  BranchWorkspaceManifestSourceSnapshot & {
+    discoveredDirectories?: BranchWorkspaceDiscoveredDirectory[]
+    registryError?: string
+  }
+> {
   const normalizedRootId = workspaceRootId(rootId)
   signal?.throwIfAborted()
+  const storedRead = (dependencies.readManifests ?? readBranchWorkspaceManifests)(normalizedRootId)
+  const target = dependencies.target
+  // Known targets need fresh discovery only in their own directory; unregistered workspaces still need a full scan.
+  let directoryNames: string[] | undefined
+  if (target) {
+    const stored = await storedRead
+    signal?.throwIfAborted()
+    const manifest =
+      stored.kind === 'ready'
+        ? stored.manifests.find((candidate) =>
+            'branchWorkspaceId' in target
+              ? candidate.id === target.branchWorkspaceId
+              : candidate.branch === target.branch,
+          )
+        : undefined
+    if (manifest) directoryNames = [manifest.directoryName]
+  }
   const [stored, discovered] = await Promise.all([
-    (dependencies.readManifests ?? readBranchWorkspaceManifests)(normalizedRootId),
-    (dependencies.discoverDirectories ?? discoverBranchWorkspaceDirectories)(normalizedRootId, signal).catch(
-      (error: unknown) => {
-        signal?.throwIfAborted()
-        return []
-      },
-    ),
+    storedRead,
+    (dependencies.discoverDirectories ?? discoverBranchWorkspaceDirectories)(
+      normalizedRootId,
+      signal,
+      {},
+      directoryNames,
+    ).catch((error: unknown) => {
+      signal?.throwIfAborted()
+      return []
+    }),
   ])
   signal?.throwIfAborted()
   const remaining = new Set(discovered)
@@ -58,11 +84,22 @@ export async function readBranchWorkspaceCatalog(
               actual.find((entry) => entry.repositoryName === member.repositoryName)?.repositoryId ??
               member.repositoryId,
           }))
-        : actual,
+        : [
+            ...actual,
+            // Keep missing recorded members visible so external deletions remain repairable and removable.
+            ...manifest.repositories.filter(
+              (member) => !actual.some((entry) => entry.repositoryName === member.repositoryName),
+            ),
+          ],
     }
   })
   for (const directory of remaining) manifests.push(discoveredManifest(normalizedRootId, directory))
-  return { kind: 'ready', manifests }
+  return {
+    kind: 'ready',
+    manifests,
+    discoveredDirectories: discovered,
+    ...(stored.kind === 'invalid' ? { registryError: stored.message } : {}),
+  }
 }
 
 function actualMember(

@@ -113,6 +113,7 @@ const BRANCH_WORKSPACE_BATCH_GIT_CONCURRENCY = 4
 type SetRepositoryBranchUpstream = typeof setRepositoryBranchUpstream
 
 export interface BranchWorkspaceGitActionWriteDependencies {
+  isOperationActive?: (rootId: string) => boolean
   planDependencies?: BranchWorkspaceGitActionPlanDependencies
   buildPlan?: typeof buildBranchWorkspaceGitActionPlan
   validatePlan?: typeof validateBranchWorkspaceGitActionPlan
@@ -142,6 +143,7 @@ export interface BranchWorkspaceGitActionWriteService {
     input: BranchWorkspaceGitActionExecuteInput,
   ): Promise<BranchWorkspaceGitActionResult | { ok: false; message: string }>
   abort(rootId: string): boolean
+  isActive(rootId: string): boolean
   activeOperation(rootId: string, branchWorkspaceId: string): BranchWorkspaceActiveOperation | null
 }
 
@@ -150,6 +152,7 @@ export function createBranchWorkspaceGitActionWriteService(
 ): BranchWorkspaceGitActionWriteService {
   const pending = new Map<string, PendingAction>()
   const active = new Map<string, ActiveAction>()
+  const planning = new Map<string, AbortController>()
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspaceGitActionPlan
   const validatePlan = dependencies.validatePlan ?? validateBranchWorkspaceGitActionPlan
   const commit = dependencies.commit ?? commitRepositoryChanges
@@ -169,19 +172,31 @@ export function createBranchWorkspaceGitActionWriteService(
   return {
     async plan(rootId, request, signal) {
       const normalizedRootId = workspaceRootId(rootId)
-      if (active.has(normalizedRootId)) {
+      if (active.has(normalizedRootId) || dependencies.isOperationActive?.(normalizedRootId)) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.operation-active' }
       }
-      const result = await buildPlan(normalizedRootId, request, dependencies.planDependencies, signal)
-      if (result.ok) {
-        pending.set(normalizedRootId, {
-          plan: result.plan,
-          completed: new Set(),
-          mergeProgress: new Map(),
-          mergeTemporaryWorktrees: new Map(),
-        })
+      planning.get(normalizedRootId)?.abort()
+      const controller = new AbortController()
+      planning.set(normalizedRootId, controller)
+      const planningSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+      try {
+        const result = await buildPlan(normalizedRootId, request, dependencies.planDependencies, planningSignal)
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        if (result.ok) {
+          pending.set(normalizedRootId, {
+            plan: result.plan,
+            completed: new Set(),
+            mergeProgress: new Map(),
+            mergeTemporaryWorktrees: new Map(),
+          })
+        }
+        return result
+      } catch (error) {
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        throw error
+      } finally {
+        if (planning.get(normalizedRootId) === controller) planning.delete(normalizedRootId)
       }
-      return result
     },
 
     async execute(rootId, rawInput) {
@@ -196,7 +211,7 @@ export function createBranchWorkspaceGitActionWriteService(
       if (state.requiresReplan) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.plan-expired' }
       }
-      if (active.has(normalizedRootId)) {
+      if (active.has(normalizedRootId) || dependencies.isOperationActive?.(normalizedRootId)) {
         return { ok: false, message: 'workspace.branch-workspace.git-action.operation-active' }
       }
       if (input.kind === 'batch-commit' && !validBatchMessages(state.plan, input)) {
@@ -466,6 +481,10 @@ export function createBranchWorkspaceGitActionWriteService(
       if (!operation) return false
       operation.controller.abort()
       return true
+    },
+
+    isActive(rootId) {
+      return active.has(workspaceRootId(rootId))
     },
 
     activeOperation(rootId, branchWorkspaceId) {

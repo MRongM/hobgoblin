@@ -1083,7 +1083,15 @@ describe('BranchWorkspaceList', () => {
     [
       'creation-interrupted',
       ['workspace.branch-workspace.retry'],
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete', 'tmux.cleanup.action'],
+      [
+        'terminal.new-with-tmux',
+        'terminal.restore-directory-tmux',
+        'terminal.external',
+        'workspace.branch-workspace.remove-members',
+        'workspace.branch-workspace.inspect',
+        'workspace.branch-workspace.delete',
+        'tmux.cleanup.action',
+      ],
     ],
     [
       'reduce-incomplete',
@@ -1097,6 +1105,7 @@ describe('BranchWorkspaceList', () => {
         'terminal.new-with-tmux',
         'terminal.restore-directory-tmux',
         'terminal.external',
+        'workspace.branch-workspace.remove-members',
         'workspace.branch-workspace.inspect',
         'workspace.branch-workspace.delete',
         'tmux.cleanup.action',
@@ -1153,49 +1162,62 @@ describe('BranchWorkspaceList', () => {
     }
   })
 
-  test('keeps an available drifted branch workspace usable with a weak repair hint', async () => {
-    const item = workspace('needs-repair')
-    act(() =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[item]}
-            activeId={null}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={() => {}}
-            onExtend={() => {}}
-            onReduce={() => {}}
-            onAddDependencies={() => {}}
-            onRemoveDependencies={() => {}}
-            onCancel={() => {}}
-            onGitAction={() => {}}
-          />,
+  test.each(['needs-repair', 'creation-interrupted'] as const)(
+    'keeps an available %s branch workspace usable with a weak repair hint',
+    async (stateName) => {
+      const item = workspace(stateName)
+      act(() =>
+        root.render(
+          withTerminalContexts(
+            <BranchWorkspaceList
+              rootId="/workspace"
+              items={[item]}
+              activeId={null}
+              onActivate={() => {}}
+              onReorder={() => {}}
+              onInspect={() => {}}
+              onRepair={() => {}}
+              onRemove={() => {}}
+              onExtend={() => {}}
+              onReduce={() => {}}
+              onAddDependencies={() => {}}
+              onRemoveDependencies={() => {}}
+              onCancel={() => {}}
+              onGitAction={() => {}}
+            />,
+          ),
         ),
-      ),
-    )
+      )
 
-    const row = container.querySelector('[data-branch-workspace-state="needs-repair"]')
-    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(false)
-    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(false)
-    expect(row?.querySelector('[data-workspace-list-item-drag-handle]')).not.toBeNull()
-    expect(row?.querySelector('[data-testid="branch-workspace-state-summary"]')?.className).toContain(
-      'text-muted-foreground',
-    )
-    expect(await openMenuLabels(row)).toEqual([
-      'terminal.new-with-tmux',
-      'terminal.restore-directory-tmux',
-      'terminal.external',
-      'workspace.branch-workspace.inspect',
-      'workspace.branch-workspace.delete',
-      'tmux.cleanup.action',
-    ])
-    if (!(row instanceof HTMLElement)) throw new Error('missing drifted branch workspace row')
-    expect((await openContextMenu(row)).slice(0, 3).every((item) => !item.hasAttribute('data-disabled'))).toBe(true)
-  })
+      const row = container.querySelector(`[data-branch-workspace-state="${stateName}"]`)
+      expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(false)
+      expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(
+        false,
+      )
+      expect(row?.querySelector('[data-workspace-list-item-drag-handle]')).not.toBeNull()
+      if (stateName === 'needs-repair')
+        expect(row?.querySelector('[data-testid="branch-workspace-state-summary"]')?.className).toContain(
+          'text-muted-foreground',
+        )
+      expect(await openMenuLabels(row)).toEqual(
+        expect.arrayContaining([
+          'terminal.new-with-tmux',
+          'terminal.restore-directory-tmux',
+          'terminal.external',
+          'workspace.branch-workspace.add-members',
+          'workspace.branch-workspace.remove-members',
+          'workspace.branch-workspace.dependency.add.action',
+          'workspace.branch-workspace.dependency.remove.action',
+          'workspace.branch-workspace.git-action.batch-commit',
+          'workspace.branch-workspace.inspect',
+          'workspace.branch-workspace.delete',
+          'tmux.cleanup.action',
+        ]),
+      )
+      if (!(row instanceof HTMLElement)) throw new Error('missing drifted branch workspace row')
+      expect((await openContextMenu(row)).slice(0, 3).every((item) => !item.hasAttribute('data-disabled'))).toBe(true)
+    },
+  )
 
   test('keeps disabled ready actions visible in the fixed dock and More menu', async () => {
     folderActionState.editorDisabled = true
@@ -1370,7 +1392,7 @@ describe('BranchWorkspaceList', () => {
     )
   })
 
-  test.each(['active', 'creation-interrupted', 'reduce-incomplete', 'delete-incomplete'] as const)(
+  test.each(['active', 'reduce-incomplete', 'delete-incomplete'] as const)(
     'keeps folder-open context actions disabled for a %s branch workspace',
     async (stateName) => {
       act(() =>

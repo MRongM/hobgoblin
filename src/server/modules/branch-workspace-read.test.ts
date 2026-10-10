@@ -89,6 +89,105 @@ function dependencies(manifests: BranchWorkspaceManifest[]) {
 }
 
 describe('branch workspace read model', () => {
+  test('reads only the target workspace while retaining all repository exclusions', async () => {
+    const target = manifest()
+    const sibling = manifest('feature/other', {
+      repositories: [
+        {
+          ...manifest().repositories[0]!,
+          repositoryName: 'sibling-only',
+          worktreePath: '/workspace/goblin-feature-other/sibling-only',
+        },
+      ],
+    })
+    const deps = dependencies([target, sibling])
+    const discoverDirectories = vi.fn(async () => [])
+    const result = await readBranchWorkspaceSnapshot(ROOT, undefined, {
+      ...deps,
+      branchWorkspaceId: target.id,
+      discoverDirectories,
+    })
+    expect(result).toMatchObject({ ok: true, items: [{ id: target.id }] })
+    if (!result.ok) throw new Error('expected snapshot')
+    expect(result.items).toHaveLength(1)
+    expect(deps.readRepositorySnapshot).toHaveBeenCalledTimes(1)
+    expect(deps.readRepositorySnapshot.mock.calls[0]?.[0]).toBe(path.join(ROOT, 'api'))
+    expect(deps.inspectPath).toHaveBeenCalledExactlyOnceWith(ROOT, target.path, undefined)
+    expect(discoverDirectories).toHaveBeenCalledExactlyOnceWith(ROOT, undefined, {}, [target.directoryName])
+    expect(deps.listCandidates).toHaveBeenCalledWith(ROOT, new Set(['api', 'web', 'sibling-only']), undefined)
+  })
+
+  test('reports registry damage without hiding discovered healthy workspaces', async () => {
+    const current = manifest()
+    const member = current.repositories[0]!
+    const result = await readBranchWorkspaceSnapshot(ROOT, undefined, {
+      ...dependencies([]),
+      readManifests: async () => ({ kind: 'invalid', message: 'workspace.branch-workspace.read-failed' }),
+      discoverDirectories: async () => [
+        {
+          directoryName: current.directoryName,
+          path: current.path,
+          branch: current.branch,
+          members: [
+            {
+              repositoryName: member.repositoryName,
+              repositoryId: path.join(ROOT, 'api'),
+              worktreePath: member.worktreePath,
+              branch: member.targetBranch,
+            },
+          ],
+        },
+      ],
+    })
+    expect(result).toMatchObject({
+      ok: true,
+      registryError: 'workspace.branch-workspace.read-failed',
+      items: [{ available: true, repositories: [{ ready: true }] }],
+    })
+  })
+
+  test('keeps a healthy root usable while a missing member exposes repair', async () => {
+    const current = manifest()
+    const deps = dependencies([current])
+    deps.readRepositorySnapshot.mockResolvedValue({ current: 'main', branches: [] })
+    await expect(readBranchWorkspaceSnapshot(ROOT, undefined, deps)).resolves.toMatchObject({
+      ok: true,
+      items: [
+        {
+          available: true,
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
+          repositories: [{ ready: false }],
+        },
+      ],
+    })
+  })
+
+  test('reuses discovered worktrees without checking their repositories and roots again', async () => {
+    const current = manifest()
+    const deps = dependencies([current])
+    const member = current.repositories[0]!
+    const result = await readBranchWorkspaceSnapshot(ROOT, undefined, {
+      ...deps,
+      discoverDirectories: async () => [
+        {
+          directoryName: current.directoryName,
+          path: current.path,
+          branch: current.branch,
+          members: [
+            {
+              repositoryName: member.repositoryName,
+              repositoryId: path.join(ROOT, 'api'),
+              worktreePath: member.worktreePath,
+              branch: member.targetBranch,
+            },
+          ],
+        },
+      ],
+    })
+    expect(result).toMatchObject({ ok: true, items: [{ available: true, repositories: [{ ready: true }] }] })
+    expect(deps.readRepositorySnapshot).not.toHaveBeenCalled()
+    expect(deps.inspectPath).not.toHaveBeenCalled()
+  })
   test('projects ready items in persisted manual order with auxiliary candidates', async () => {
     const manifests = [manifest('feature/second'), manifest('feature/first')]
     const deps = dependencies(manifests)
@@ -341,12 +440,12 @@ describe('branch workspace read model', () => {
       items: [
         {
           id: unavailable.id,
-          state: { kind: 'ready' },
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           issues: [{ kind: 'repository-unavailable', repositoryName: 'api' }],
         },
         {
           id: moved.id,
-          state: { kind: 'ready' },
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           issues: [{ kind: 'worktree-missing', repositoryName: 'web' }],
         },
       ],
@@ -367,7 +466,7 @@ describe('branch workspace read model', () => {
       ok: true,
       items: [
         {
-          state: { kind: 'ready' },
+          state: { kind: 'needs-action', action: 'repair', reason: 'drift' },
           issues: [{ kind: 'worktree-missing', repositoryName: 'api' }],
           repositories: [{ repositoryName: 'api', ready: false }],
         },

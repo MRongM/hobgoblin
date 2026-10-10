@@ -92,7 +92,13 @@ export function useBranchWorkspaceActions(rootId: string | null) {
           }))
           const stalePlan =
             !response.ok && response.message === 'workspace.branch-workspace.plan-stale' && request !== null
-          if (stalePlan) return response
+          if (stalePlan) {
+            if (viewGenerationRef.current === generation) {
+              setPlan(null)
+              setError(response.message)
+            }
+            return response
+          }
 
           if (viewGenerationRef.current === generation) {
             setResult(response)
@@ -147,11 +153,12 @@ export function useBranchWorkspaceActions(rootId: string | null) {
       activeExecutionRef.current = execution
 
       return execution.then(async (response) => {
+        // Automatic dialogs refresh stale plans; repair is the only manual planning flow.
         if (
           viewGenerationRef.current === generation &&
           !response.ok &&
           response.message === 'workspace.branch-workspace.plan-stale' &&
-          request
+          request?.operation === 'repair'
         ) {
           await requestPlan(request)
         }

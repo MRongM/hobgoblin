@@ -9,6 +9,8 @@ import { isRemoteRepoId, normalizeRemoteRepoId, parseRemoteRepoId } from '#/shar
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import { isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
+import { discoverRemoteBranchWorkspaceDirectories } from '#/system/ssh/branch-workspaces.ts'
 
 export interface BranchWorkspaceDiscoveredMember {
   repositoryName: string
@@ -25,6 +27,8 @@ export interface BranchWorkspaceDiscoveredDirectory {
 }
 
 export interface BranchWorkspaceDiscoveryDependencies {
+  resolveRemoteTarget?: typeof resolveRepositoryRemoteTarget
+  discoverRemote?: typeof discoverRemoteBranchWorkspaceDirectories
   listChildren?: typeof listBranchWorkspaceChildren
   inspectPath?: typeof inspectBranchWorkspacePath
   getWorktrees?: typeof getRepositoryWorktrees
@@ -34,15 +38,34 @@ export async function discoverBranchWorkspaceDirectories(
   rootId: string,
   signal?: AbortSignal,
   dependencies: BranchWorkspaceDiscoveryDependencies = {},
+  directoryNames?: readonly string[],
 ): Promise<BranchWorkspaceDiscoveredDirectory[]> {
   signal?.throwIfAborted()
   const rootPath = workspaceRepositoryPath(rootId)
   if (!rootPath) return []
 
+  const remote = parseRemoteRepoId(rootId)
+  if (remote) {
+    const { target } = await (dependencies.resolveRemoteTarget ?? resolveRepositoryRemoteTarget)(remote, signal)
+    const directories = await (dependencies.discoverRemote ?? discoverRemoteBranchWorkspaceDirectories)(
+      target,
+      rootPath,
+      { signal, ...(directoryNames ? { directoryNames } : {}) },
+    )
+    signal?.throwIfAborted()
+    return directories.map((directory) => ({
+      ...directory,
+      members: directory.members.map(({ repositoryPath, ...member }) => ({
+        ...member,
+        repositoryId: repositoryIdAtPath(rootId, repositoryPath),
+      })),
+    }))
+  }
+
   const listChildren = dependencies.listChildren ?? listBranchWorkspaceChildren
   const inspectPath = dependencies.inspectPath ?? inspectBranchWorkspacePath
   const getWorktrees = dependencies.getWorktrees ?? getRepositoryWorktrees
-  const names = await listChildren(rootId, rootPath, signal)
+  const names = directoryNames ?? (await listChildren(rootId, rootPath, signal))
   const pathApi = isRemoteRepoId(rootId) ? path.posix : path
   const results: BranchWorkspaceDiscoveredDirectory[] = []
 

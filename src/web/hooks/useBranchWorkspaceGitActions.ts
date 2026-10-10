@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type {
   BranchWorkspaceBatchMergeInSourceInput,
@@ -26,6 +26,9 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   const [result, setResult] = useState<BranchWorkspaceGitActionResult | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const planController = useRef<AbortController | null>(null)
+
+  useEffect(() => () => planController.current?.abort(), [rootId])
 
   const invalidate = useCallback(async () => {
     if (rootId) await queryClient.invalidateQueries({ queryKey: branchWorkspaceQueryKey(rootId), exact: true })
@@ -34,14 +37,21 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   const loadPlan = useCallback(
     async (kind: BranchWorkspaceGitActionKind, branchWorkspaceId: string) => {
       if (!rootId) return null
+      planController.current?.abort()
+      const controller = new AbortController()
+      planController.current = controller
       setPending(true)
       setError(null)
       setResult(null)
       setPlan(null)
-      const response = await planBranchWorkspaceGitAction(rootId, { kind, branchWorkspaceId }).catch(() => ({
-        ok: false as const,
-        message: 'workspace.branch-workspace.git-action.plan-failed',
-      }))
+      const response = await planBranchWorkspaceGitAction(rootId, { kind, branchWorkspaceId }, controller.signal).catch(
+        () => ({
+          ok: false as const,
+          message: 'workspace.branch-workspace.git-action.plan-failed',
+        }),
+      )
+      if (controller.signal.aborted) return null
+      if (planController.current === controller) planController.current = null
       setPending(false)
       if (!response.ok) {
         setError(response.message)
@@ -175,10 +185,18 @@ export function useBranchWorkspaceGitActions(rootId: string | null) {
   )
 
   const cancel = useCallback(async () => {
+    if (planController.current) {
+      planController.current.abort()
+      planController.current = null
+      setPending(false)
+      return
+    }
     if (rootId) await abortBranchWorkspaceGitAction(rootId).catch(() => ({ ok: false }))
   }, [rootId])
 
   const reset = useCallback(() => {
+    planController.current?.abort()
+    planController.current = null
     setPlan(null)
     setResult(null)
     setPending(false)

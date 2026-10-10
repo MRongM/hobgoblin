@@ -6,6 +6,7 @@ import {
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
 import type { WorktreeStatus } from '#/shared/git-types.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
+import * as catalog from '#/server/modules/branch-workspace-catalog-read.ts'
 
 const ROOT = '/workspace'
 const WORKSPACE_ID = 'branch-workspace-1'
@@ -144,6 +145,29 @@ function snapshotForMemberTarget(
 }
 
 describe('buildBranchWorkspaceGitActionPlan', () => {
+  test('scopes both initial planning and completed-plan validation to the target workspace', async () => {
+    const readCatalog = vi
+      .spyOn(catalog, 'readBranchWorkspaceCatalog')
+      .mockResolvedValue({ kind: 'ready', manifests: [manifest()] })
+    try {
+      const deps = { ...dependencies(), readManifests: undefined }
+      const result = await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID },
+        deps,
+      )
+      expect(result.ok).toBe(true)
+      if (!result.ok) throw new Error('expected plan')
+      await validateBranchWorkspaceGitActionPlan(result.plan, new Set(['api', 'web']), deps)
+      expect(readCatalog).toHaveBeenCalledTimes(2)
+      for (const call of readCatalog.mock.calls) {
+        expect(call).toEqual([ROOT, undefined, { target: { branchWorkspaceId: WORKSPACE_ID } }])
+      }
+    } finally {
+      readCatalog.mockRestore()
+    }
+  })
+
   test('skips snapshot worktree status and unused remote metadata', async () => {
     const deps = dependencies()
 
@@ -1242,6 +1266,100 @@ describe('buildBranchWorkspaceGitActionPlan', () => {
     )
 
     expect(result.ok).toBe(true)
+  })
+
+  test('does not inspect ignored repositories during execution validation', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID },
+      dependencies(),
+    )
+    if (!original.ok) throw new Error(original.message)
+    const getSnapshot = vi.fn(async (repoId: string) => {
+      if (repoId.endsWith('/web')) throw new Error('unselected repository offline')
+      return snapshot('api')
+    })
+    const result = await validateBranchWorkspaceGitActionPlan(
+      original.plan,
+      new Set(['web']),
+      dependencies({ getSnapshot }),
+    )
+    expect(result.ok).toBe(true)
+    expect(getSnapshot).toHaveBeenCalledTimes(1)
+    expect(getSnapshot.mock.calls[0]?.[0]).toBe('/workspace/api')
+    if (result.ok) expect(result.plan.members.map((member) => member.repositoryName)).toEqual(['api', 'web'])
+  })
+
+  test('skips all repository reads after completion while still honoring cancellation', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID },
+      dependencies(),
+    )
+    if (!original.ok) throw new Error(original.message)
+    const deps = dependencies()
+    const completed = new Set(['api', 'web'])
+    await expect(validateBranchWorkspaceGitActionPlan(original.plan, completed, deps)).resolves.toMatchObject({
+      ok: true,
+    })
+    expect(deps.readManifests).toHaveBeenCalledTimes(1)
+    expect(deps.getSnapshot).not.toHaveBeenCalled()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      validateBranchWorkspaceGitActionPlan(original.plan, completed, deps, controller.signal),
+    ).rejects.toThrow()
+  })
+
+  test.each(['remove', 'reduce', 'missing'] as const)(
+    'rejects completed-step retries when the workspace is %s',
+    async (lifecycle) => {
+      const original = await buildBranchWorkspaceGitActionPlan(
+        ROOT,
+        { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID },
+        dependencies(),
+      )
+      if (!original.ok) throw new Error(original.message)
+      const current = manifest()
+      if (lifecycle !== 'missing') current.operation = { kind: lifecycle }
+      const deps = dependencies({
+        readManifests: async () => ({ kind: 'ready', manifests: lifecycle === 'missing' ? [] : [current] }),
+      })
+      await expect(
+        validateBranchWorkspaceGitActionPlan(original.plan, new Set(['api', 'web']), deps),
+      ).resolves.toMatchObject({ ok: false })
+      expect(deps.getSnapshot).not.toHaveBeenCalled()
+    },
+  )
+
+  test('offers completed members while unrelated creation remains interrupted', async () => {
+    const current = manifest()
+    current.operation = { kind: 'create' }
+    current.repositories[1]!.progress = 'failed'
+    const deps = dependencies({ readManifests: async () => ({ kind: 'ready', manifests: [current] }) })
+    const result = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID },
+      deps,
+    )
+    expect(result).toMatchObject({ ok: true, plan: { members: [{ repositoryName: 'api' }] } })
+    if (result.ok) expect(result.plan.members).toHaveLength(1)
+    expect(deps.getSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  test('still rejects a selected member that disappears before execution', async () => {
+    const original = await buildBranchWorkspaceGitActionPlan(
+      ROOT,
+      { kind: 'batch-commit', branchWorkspaceId: WORKSPACE_ID },
+      dependencies(),
+    )
+    if (!original.ok) throw new Error(original.message)
+    const result = await validateBranchWorkspaceGitActionPlan(
+      original.plan,
+      new Set(['web']),
+      dependencies({ readManifests: async () => ({ kind: 'ready', manifests: [manifest(['web'])] }) }),
+    )
+    expect(result.ok).toBe(false)
   })
 
   test('does not block selected members when an ignored member is removed', async () => {

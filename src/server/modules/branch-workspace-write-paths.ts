@@ -50,6 +50,7 @@ interface PendingBranchWorkspacePlan {
 }
 
 export interface BranchWorkspaceWriteDependencies {
+  isOperationActive?: (rootId: string) => boolean
   buildPlan?: typeof buildBranchWorkspacePlan
   planDependencies?: BranchWorkspacePlanDependencies
   readManifests?: typeof readBranchWorkspaceManifests
@@ -73,6 +74,7 @@ export interface BranchWorkspaceWriteService {
   plan(rootId: string, request: unknown, signal?: AbortSignal): Promise<BranchWorkspacePlanResult>
   execute(rootId: string, input: BranchWorkspaceExecuteInput): Promise<BranchWorkspaceExecuteResult>
   abort(rootId: string): boolean
+  isActive(rootId: string): boolean
   reorder(rootId: string, orderedIds: string[]): Promise<BranchWorkspaceReorderResult>
 }
 
@@ -81,8 +83,10 @@ export function createBranchWorkspaceWriteService(
 ): BranchWorkspaceWriteService {
   const pendingByRoot = new Map<string, PendingBranchWorkspacePlan>()
   const activeByRoot = new Map<string, AbortController>()
+  const planningByRoot = new Map<string, AbortController>()
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspacePlan
-  const readManifests = dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId))
+  const readManifests = dependencies.readManifests ?? readBranchWorkspaceManifests
+  const readCatalog = dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId))
   const readSnapshot = dependencies.readSnapshot ?? readBranchWorkspaceSnapshot
   const updateManifests = dependencies.updateManifests ?? updateBranchWorkspaceManifests
   const retryUpdateManifests = (rootId: string, mutate: Parameters<typeof updateBranchWorkspaceManifests>[1]) =>
@@ -154,20 +158,32 @@ export function createBranchWorkspaceWriteService(
 
   return {
     async plan(rootId, request, signal) {
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.operation-in-progress' }
       }
-      const result = await buildPlan(rootId, request, dependencies.planDependencies, signal)
-      if (result.ok) {
-        pendingByRoot.set(rootId, {
-          plan: result.plan,
-          request,
-          persisted: false,
-          directoryReady: !result.plan.steps.some((step) => step.kind === 'create-directory'),
-          terminalsClosed: result.plan.terminalSessionIds.length === 0,
-        })
+      planningByRoot.get(rootId)?.abort()
+      const controller = new AbortController()
+      planningByRoot.set(rootId, controller)
+      const planningSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+      try {
+        const result = await buildPlan(rootId, request, dependencies.planDependencies, planningSignal)
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        if (result.ok) {
+          pendingByRoot.set(rootId, {
+            plan: result.plan,
+            request,
+            persisted: false,
+            directoryReady: !result.plan.steps.some((step) => step.kind === 'create-directory'),
+            terminalsClosed: result.plan.terminalSessionIds.length === 0,
+          })
+        }
+        return result
+      } catch (error) {
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        throw error
+      } finally {
+        if (planningByRoot.get(rootId) === controller) planningByRoot.delete(rootId)
       }
-      return result
     },
 
     async execute(rootId, input) {
@@ -175,7 +191,7 @@ export function createBranchWorkspaceWriteService(
       if (!pending || pending.plan.token !== input.planToken) {
         return { ok: false, message: 'workspace.branch-workspace.plan-stale' }
       }
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return {
           ok: false,
           message: 'workspace.branch-workspace.operation-in-progress',
@@ -205,6 +221,9 @@ export function createBranchWorkspaceWriteService(
           if (plan.operation !== 'remove') {
             return failOperation(plan.branchWorkspaceId, 'error.invalid-arguments')
           }
+          const registry = await readManifests(rootId)
+          controller.signal.throwIfAborted()
+          if (registry.kind === 'invalid') return failOperation(plan.branchWorkspaceId, registry.message)
           if (!pending.persisted) {
             const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal)
             if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
@@ -724,10 +743,10 @@ export function createBranchWorkspaceWriteService(
     },
 
     async reorder(rootId, orderedIds) {
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.operation-in-progress' }
       }
-      const snapshot = await readManifests(rootId)
+      const snapshot = await readCatalog(rootId)
       if (snapshot.kind === 'invalid') return { ok: false, message: snapshot.message }
       const manifests = snapshot.kind === 'ready' ? snapshot.manifests : []
       const knownIds = new Set(manifests.map((manifest) => manifest.id))
@@ -743,6 +762,10 @@ export function createBranchWorkspaceWriteService(
       await retryUpdateManifests(rootId, () => reordered)
       publishInvalidation(rootId)
       return { ok: true }
+    },
+
+    isActive(rootId) {
+      return activeByRoot.has(rootId)
     },
   }
 }

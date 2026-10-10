@@ -409,7 +409,7 @@ describe('useBranchWorkspaceActions', () => {
     expect(state!.error).toBeNull()
   })
 
-  test('replans a stale execution after releasing the active execution slot', async () => {
+  test('clears a stale plan and lets the dialog issue the only replacement request', async () => {
     mocks.plan.mockResolvedValueOnce({ ok: true, plan }).mockResolvedValueOnce({ ok: true, plan: freshPlan })
     mocks.execute.mockResolvedValue({
       ok: false,
@@ -434,11 +434,13 @@ describe('useBranchWorkspaceActions', () => {
     await act(async () => state!.requestPlan(request))
     await act(async () => state!.confirm([]))
 
-    expect(mocks.plan).toHaveBeenCalledTimes(2)
-    expect(mocks.plan).toHaveBeenNthCalledWith(2, '/workspace', request, undefined)
-    expect(state!.plan).toEqual(freshPlan)
+    expect(mocks.plan).toHaveBeenCalledTimes(1)
+    expect(state!.plan).toBeNull()
     expect(state!.result).toBeNull()
-    expect(state!.error).toBeNull()
+    expect(state!.error).toBe('workspace.branch-workspace.plan-stale')
+    await act(async () => state!.requestPlan(request))
+    expect(mocks.plan).toHaveBeenCalledTimes(2)
+    expect(state!.plan).toEqual(freshPlan)
   })
 
   test('returns a failed execution to selection without discarding its request', async () => {

@@ -171,21 +171,18 @@ describe('BranchWorkspaceDialog', () => {
     act(() => repositoryCheckbox('api').click())
     await flushAsyncWork()
 
-    expect(onPreview).toHaveBeenCalledWith(
-      {
-        operation: 'create',
-        branch: expect.stringMatching(/^feat\/[0-9]{8}$/),
-        repositories: [
-          {
-            repositoryName: 'api',
-            creationBase: { kind: 'localBranch', branch: 'main' },
-            syncBeforeCreate: false,
-          },
-        ],
-        auxiliaryEntries: [],
-      },
-      expect.any(AbortSignal),
-    )
+    await expectAutoPreview(onPreview, {
+      operation: 'create',
+      branch: expect.stringMatching(/^feat\/[0-9]{8}$/),
+      repositories: [
+        {
+          repositoryName: 'api',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+          syncBeforeCreate: false,
+        },
+      ],
+      auxiliaryEntries: [],
+    })
     expect(document.querySelector('[data-action="preview"]')).toBeNull()
   })
 
@@ -214,6 +211,35 @@ describe('BranchWorkspaceDialog', () => {
     renderDialog({ mode: 'repair', workspace: existingWorkspace() })
     expect(document.querySelector('[data-action="preview"]')).not.toBeNull()
     expect(document.querySelector('[data-testid="branch-workspace-one-step-layout"]')).toBeNull()
+  })
+
+  test('automatically resumes removal with one plan and without opting into branch cleanup', async () => {
+    const onPreview = vi.fn(async () => true)
+    renderDialog({
+      mode: 'remove',
+      workspace: {
+        ...existingWorkspace(),
+        state: { kind: 'needs-action', action: 'continue-delete' },
+      },
+      onPreview,
+    })
+    await expectAutoPreview(onPreview, {
+      operation: 'remove',
+      branchWorkspaceId: 'branch-1',
+      alsoDeleteBranch: false,
+      alsoDeleteUpstream: false,
+    })
+    expect(onPreview).toHaveBeenCalledTimes(1)
+  })
+
+  test('resumes reduction from interrupted members even when repository options are unavailable', async () => {
+    const onPreview = vi.fn(async () => true)
+    const workspace = workspaceWithTwoMembers()
+    workspace.state = { kind: 'needs-action', action: 'continue-reduce' }
+    workspace.repositories[0]!.progress = 'failed'
+    renderDialog({ mode: 'reduce', workspace, repositories: [], onPreview })
+    await expectAutoPreview(onPreview, { operation: 'reduce', branchWorkspaceId: 'branch-1', repositories: ['api'] })
+    expect(onPreview).toHaveBeenCalledTimes(1)
   })
 
   test('keeps removal configuration editable while planning and locks it while executing', () => {
@@ -552,12 +578,11 @@ describe('BranchWorkspaceDialog', () => {
       plannedRequest,
       onPreview,
     })
-    await expectAutoPreview(onPreview, plannedRequest)
-
     await vi.waitFor(() => {
       expect(document.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.disabled).toBe(false)
       expect(document.querySelector<HTMLButtonElement>('[data-action="force-confirm"]')?.disabled).toBe(false)
     })
+    expect(onPreview).not.toHaveBeenCalled()
 
     click('workspace.branch-workspace.delete-upstream-branch')
 

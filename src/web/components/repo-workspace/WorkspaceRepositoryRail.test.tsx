@@ -955,6 +955,30 @@ describe('WorkspaceRepositoryRail', () => {
     }
   })
 
+  test('offers registry cleanup alongside discovered workspaces when configuration is damaged', async () => {
+    branchWorkspaceState.queryResult = {
+      ok: true,
+      rootId: ROOT,
+      items: branchWorkspaceState.items,
+      auxiliaryCandidates: [],
+      registryError: 'workspace.branch-workspace.read-failed',
+    }
+    branchWorkspaceCleanupState.cleanup.mockResolvedValue({ ok: true, outcome: 'repaired', removedRecords: 1 })
+    renderRail({ currentRepoId: ROOT })
+    expect(container?.textContent).toContain('feature/auth')
+    const cleanup = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspace.branch-workspace.cleanup"]',
+    )
+    expect(cleanup).not.toBeNull()
+    act(() => cleanup?.click())
+    const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')).find(
+      (button) => button.textContent === 'workspace.branch-workspace.cleanup-confirm',
+    )
+    await act(async () => confirm?.click())
+    expect(branchWorkspaceCleanupState.cleanup).toHaveBeenCalledWith(ROOT)
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
+  })
+
   test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {
     branchWorkspaceState.queryResult = { ok: false, message: 'workspace.branch-workspace.read-failed' }
     branchWorkspaceCleanupState.cleanup.mockResolvedValue({ ok: true, outcome: 'repaired', removedRecords: 2 })
@@ -1597,10 +1621,11 @@ describe('WorkspaceRepositoryRail', () => {
       branchWorkspaceListState.props?.onReduce?.(interrupted, true)
       await Promise.resolve()
     })
-    expect(branchWorkspaceState.requestPlan).toHaveBeenCalledWith({
-      operation: 'reduce',
-      branchWorkspaceId: interrupted.id,
-      repositories: ['api', 'web'],
+    expect(branchWorkspaceState.requestPlan).not.toHaveBeenCalled()
+    expect(branchWorkspaceState.dialogProps).toMatchObject({
+      open: true,
+      mode: 'reduce',
+      workspace: interrupted,
     })
   })
 

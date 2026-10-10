@@ -1,8 +1,11 @@
-import type {
-  BranchWorkspaceAuxiliaryCandidate,
-  BranchWorkspacePathInspection,
-  BranchWorkspacePathKind,
+import path from 'node:path'
+import {
+  isBranchWorkspaceDirectoryName,
+  type BranchWorkspaceAuxiliaryCandidate,
+  type BranchWorkspacePathInspection,
+  type BranchWorkspacePathKind,
 } from '#/shared/branch-workspaces.ts'
+import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import {
   runRemoteCommand,
@@ -20,6 +23,65 @@ type RemoteBranchWorkspaceRunner = (
 interface RemoteBranchWorkspaceOptions {
   signal?: AbortSignal
   run?: RemoteBranchWorkspaceRunner
+}
+
+export interface RemoteBranchWorkspaceDirectory {
+  directoryName: string
+  path: string
+  branch: string
+  members: { repositoryName: string; repositoryPath: string; worktreePath: string; branch: string }[]
+}
+
+export async function discoverRemoteBranchWorkspaceDirectories(
+  target: RemoteRepoTarget,
+  rootPath: string,
+  options: RemoteBranchWorkspaceOptions & { directoryNames?: readonly string[] } = {},
+): Promise<RemoteBranchWorkspaceDirectory[]> {
+  const payload = parsePayload(
+    await executeRemoteBranchWorkspaceCommand(
+      target,
+      {
+        type: 'discoverBranchWorkspaceDirectories',
+        rootPath,
+        ...(options.directoryNames ? { directoryNames: options.directoryNames } : {}),
+      },
+      options,
+    ),
+  )
+  if (payload.ok !== true || !Array.isArray(payload.directories)) throw payloadError(payload)
+  return payload.directories.map((value) => {
+    const directory = asRecord(value)
+    if (
+      !directory ||
+      !isSafeText(directory.directoryName) ||
+      !isBranchWorkspaceDirectoryName(directory.directoryName) ||
+      directory.path !== path.posix.join(rootPath, directory.directoryName) ||
+      !isSafeText(directory.branch) ||
+      !Array.isArray(directory.members) ||
+      directory.members.length === 0
+    )
+      throw invalidResponse()
+    const directoryPath = directory.path as string
+    const members = directory.members.map((value) => {
+      const member = asRecord(value)
+      if (
+        !member ||
+        !isWorkspaceRepositoryName(member.repositoryName) ||
+        member.worktreePath !== path.posix.join(directoryPath, member.repositoryName) ||
+        !isSafeText(member.repositoryPath) ||
+        !path.posix.isAbsolute(member.repositoryPath) ||
+        !isSafeText(member.branch)
+      )
+        throw invalidResponse()
+      return {
+        repositoryName: member.repositoryName,
+        repositoryPath: member.repositoryPath,
+        worktreePath: member.worktreePath as string,
+        branch: member.branch,
+      }
+    })
+    return { directoryName: directory.directoryName, path: directoryPath, branch: directory.branch, members }
+  })
 }
 
 export async function listRemoteBranchWorkspaceAuxiliaryCandidates(

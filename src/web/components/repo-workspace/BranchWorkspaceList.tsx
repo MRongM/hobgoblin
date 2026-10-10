@@ -41,7 +41,11 @@ import {
 } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
-import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import {
+  isBranchWorkspaceRootUsable,
+  type BranchWorkspaceRepositorySnapshot,
+  type BranchWorkspaceSnapshot,
+} from '#/shared/branch-workspaces.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -265,7 +269,7 @@ function BranchWorkspaceRow({
   const busy = item.activeOperation !== undefined
   const folderAvailable = item.available
   const completeReady = item.state.kind === 'ready' && !busy
-  const rootUsable = (item.state.kind === 'ready' || isRepairableDrift(item)) && folderAvailable && !busy
+  const rootUsable = isBranchWorkspaceRootUsable(item)
   const recoveryAction = item.state.kind === 'needs-action' ? item.state.action : null
   const creationInterrupted =
     item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'creation-interrupted'
@@ -400,7 +404,7 @@ function BranchWorkspaceRow({
       ]
     : []
   const readyGitActions: BranchWorkspaceItemAction[] =
-    completeReady && onGitAction
+    rootUsable && onGitAction
       ? [
           {
             label: 'workspace.branch-workspace.git-action.batch-commit',
@@ -455,7 +459,7 @@ function BranchWorkspaceRow({
           },
         ]
       : []
-  const readyMembershipActions: BranchWorkspaceItemAction[] = completeReady
+  const readyMembershipActions: BranchWorkspaceItemAction[] = rootUsable
     ? [
         ...(onExtend
           ? [
@@ -481,7 +485,7 @@ function BranchWorkspaceRow({
           : []),
       ]
     : []
-  const readyDependencyActions: BranchWorkspaceItemAction[] = completeReady
+  const readyDependencyActions: BranchWorkspaceItemAction[] = rootUsable
     ? [
         ...(onAddDependencies
           ? [

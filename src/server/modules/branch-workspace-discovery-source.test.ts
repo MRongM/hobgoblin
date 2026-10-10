@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { execa } from 'execa'
 import { describe, expect, test, vi } from 'vitest'
 import { discoverBranchWorkspaceDirectories } from '#/server/modules/branch-workspace-discovery-source.ts'
-import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
+import { normalizeRemoteRepoId, normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
 import {
@@ -15,6 +15,32 @@ import {
 const ROOT = path.resolve('/workspace')
 
 describe('branch workspace discovery source', () => {
+  test('limits target discovery without enumerating or probing sibling workspaces', async () => {
+    const listChildren = vi.fn(async () => ['api'])
+    const inspectPath = vi.fn(async (_root: string, candidatePath: string) => ({
+      path: candidatePath,
+      exists: true,
+      kind: 'directory' as const,
+      directChild: true,
+      outsideRoot: false,
+    }))
+    const getWorktrees = vi.fn(async (memberPath: string) => [
+      { path: path.join(ROOT, 'external-repository'), isPrimary: true, isBare: false },
+      { path: memberPath, branch: 'feature/one', isPrimary: false, isBare: false },
+    ])
+    const result = await discoverBranchWorkspaceDirectories(
+      ROOT,
+      undefined,
+      { listChildren, inspectPath, getWorktrees },
+      ['hob-one'],
+    )
+    expect(result).toMatchObject([
+      { directoryName: 'hob-one', members: [{ repositoryId: path.join(ROOT, 'external-repository') }] },
+    ])
+    expect(listChildren).toHaveBeenCalledExactlyOnceWith(ROOT, path.join(ROOT, 'hob-one'), undefined)
+    expect(getWorktrees).toHaveBeenCalledTimes(1)
+  })
+
   test('detects and removes a real manual workspace without a saved workspace config', async () => {
     const temporaryRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'branch-workspace-discovery-')))
     try {
@@ -147,24 +173,43 @@ describe('branch workspace discovery source', () => {
 
   test('probes a member on its SSH host and derives its primary repository identity', async () => {
     const rootId = normalizeRemoteRepoId({ alias: 'dev', remotePath: '/workspace' })
-    const memberId = normalizeRemoteRepoId({ alias: 'dev', remotePath: '/workspace/hob-manual/api' })
     const primaryId = normalizeRemoteRepoId({ alias: 'dev', remotePath: '/repositories/api' })
-    const getWorktrees = vi.fn(async () => [
-      { path: '/repositories/api', branch: 'main', isBare: false, isPrimary: true },
-      { path: '/workspace/hob-manual/api', branch: 'feature/manual', isBare: false, isPrimary: false },
+    const target = normalizeRemoteTarget({
+      alias: 'dev',
+      host: 'example.com',
+      user: 'developer',
+      port: 22,
+      remotePath: '/workspace',
+    })!
+    const resolveRemoteTarget = vi.fn(async () => ({ target }))
+    const discoverRemote = vi.fn(async () => [
+      {
+        directoryName: 'hob-manual',
+        path: '/workspace/hob-manual',
+        branch: 'feature/manual',
+        members: [
+          {
+            repositoryName: 'api',
+            repositoryPath: '/repositories/api',
+            worktreePath: '/workspace/hob-manual/api',
+            branch: 'feature/manual',
+          },
+        ],
+      },
     ])
-    const result = await discoverBranchWorkspaceDirectories(rootId, undefined, {
-      listChildren: async (_rootId, target) => (target === '/workspace' ? ['hob-manual'] : ['api']),
-      inspectPath: async (_rootId, candidatePath) => ({
-        path: candidatePath,
-        exists: true,
-        kind: 'directory',
-        directChild: true,
-        outsideRoot: false,
-      }),
+    const getWorktrees = vi.fn(async () => [])
+    const listChildren = vi.fn(async () => [])
+    const signal = new AbortController().signal
+    const result = await discoverBranchWorkspaceDirectories(rootId, signal, {
+      resolveRemoteTarget,
+      discoverRemote,
+      listChildren,
       getWorktrees,
     })
-    expect(getWorktrees).toHaveBeenCalledWith(memberId, undefined)
+    expect(resolveRemoteTarget).toHaveBeenCalledTimes(1)
+    expect(discoverRemote).toHaveBeenCalledExactlyOnceWith(target, '/workspace', { signal })
+    expect(listChildren).not.toHaveBeenCalled()
+    expect(getWorktrees).not.toHaveBeenCalled()
     expect(result[0]?.members[0]).toMatchObject({ repositoryId: primaryId })
   })
 })

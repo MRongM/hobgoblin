@@ -164,6 +164,14 @@ export interface BranchWorkspaceSnapshot {
   activeOperation?: BranchWorkspaceActiveOperation
 }
 
+export function isBranchWorkspaceRootUsable(workspace: BranchWorkspaceSnapshot): boolean {
+  return (
+    workspace.available &&
+    !workspace.activeOperation &&
+    (workspace.state.kind === 'ready' || workspace.state.action === 'repair')
+  )
+}
+
 export interface BranchWorkspaceRepositorySelection {
   repositoryName: string
   creationBase: WorktreeCreationBase
@@ -342,6 +350,7 @@ export type BranchWorkspaceReadResult =
       rootId: string
       items: BranchWorkspaceSnapshot[]
       auxiliaryCandidates: BranchWorkspaceAuxiliaryCandidate[]
+      registryError?: string
     }
   | { ok: false; message: string }
 

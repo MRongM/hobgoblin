@@ -24,6 +24,7 @@ interface PendingBranchWorkspaceDependencyPlan {
 }
 
 export interface BranchWorkspaceDependencyWriteDependencies {
+  isOperationActive?: (rootId: string) => boolean
   buildPlan?: typeof buildBranchWorkspaceDependencyPlan
   readCandidates?: typeof readBranchWorkspaceDependencyCandidates
   planDependencies?: BranchWorkspaceDependencyPlanDependencies
@@ -40,10 +41,7 @@ export interface BranchWorkspaceDependencyWriteService {
     request: BranchWorkspaceDependencyPlanRequest,
     signal?: AbortSignal,
   ): Promise<BranchWorkspaceDependencyPlanResult>
-  execute(
-    rootId: string,
-    input: BranchWorkspaceDependencyExecuteInput,
-  ): Promise<BranchWorkspaceDependencyExecuteResult>
+  execute(rootId: string, input: BranchWorkspaceDependencyExecuteInput): Promise<BranchWorkspaceDependencyExecuteResult>
   abort(rootId: string): boolean
   isActive(rootId: string): boolean
 }
@@ -53,6 +51,7 @@ export function createBranchWorkspaceDependencyWriteService(
 ): BranchWorkspaceDependencyWriteService {
   const pendingByRoot = new Map<string, PendingBranchWorkspaceDependencyPlan>()
   const activeByRoot = new Map<string, AbortController>()
+  const planningByRoot = new Map<string, AbortController>()
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspaceDependencyPlan
   const readCandidates = dependencies.readCandidates ?? readBranchWorkspaceDependencyCandidates
   const copyEntry = dependencies.copyEntry ?? copyBranchWorkspaceEntry
@@ -66,12 +65,24 @@ export function createBranchWorkspaceDependencyWriteService(
     },
 
     async plan(rootId, request, signal) {
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.dependency.operation-in-progress' }
       }
-      const result = await buildPlan(rootId, request, dependencies.planDependencies, signal)
-      if (result.ok) pendingByRoot.set(rootId, { plan: result.plan, request })
-      return result
+      planningByRoot.get(rootId)?.abort()
+      const controller = new AbortController()
+      planningByRoot.set(rootId, controller)
+      const planningSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+      try {
+        const result = await buildPlan(rootId, request, dependencies.planDependencies, planningSignal)
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        if (result.ok) pendingByRoot.set(rootId, { plan: result.plan, request })
+        return result
+      } catch (error) {
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        throw error
+      } finally {
+        if (planningByRoot.get(rootId) === controller) planningByRoot.delete(rootId)
+      }
     },
 
     async execute(rootId, input) {
@@ -80,7 +91,7 @@ export function createBranchWorkspaceDependencyWriteService(
         return { ok: false, message: 'workspace.branch-workspace.dependency.plan-stale', completedNames: [] }
       }
       const { plan } = pending
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return failure(plan, 'workspace.branch-workspace.dependency.operation-in-progress', [])
       }
       const approvals = new Set(input.approvals)
@@ -93,13 +104,7 @@ export function createBranchWorkspaceDependencyWriteService(
       const completedNames: string[] = []
       let changed = false
       try {
-        const rebuilt = await buildPlan(
-          rootId,
-          pending.request,
-          dependencies.planDependencies,
-          controller.signal,
-          plan,
-        )
+        const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal, plan)
         if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
           return failure(plan, 'workspace.branch-workspace.dependency.plan-stale', completedNames)
         }

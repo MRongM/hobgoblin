@@ -73,6 +73,7 @@ function fixture(items: BranchWorkspaceManifest[] = [manifest('one', 'feature/on
     plan,
     execute,
     abort: vi.fn(() => false),
+    isActive: vi.fn(() => false),
     reorder: vi.fn(async () => ({ ok: true as const })),
   } satisfies BranchWorkspaceWriteService
   const inspectConfigCleanup = vi.fn<NonNullable<WorkspaceRecoveryWriteDependencies['inspectConfigCleanup']>>(
