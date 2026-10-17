@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 
-export const TERMINAL_SCROLLBACK_LINES = 50_000
+export const TERMINAL_SCROLLBACK_LINES = 20_000
 
 export interface TerminalOutputExcerptInput {
   sessionId: string
