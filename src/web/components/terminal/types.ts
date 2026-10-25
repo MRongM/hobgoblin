@@ -111,6 +111,7 @@ export type TerminalWorktreeScope = Pick<TerminalSessionBase, 'repoRoot' | 'work
 
 export interface TerminalSessionAttachHandlers {
   onRevealPath?: (relativePath: string) => void
+  onOpenPathPreview?: (target: FilePathTarget) => boolean
   onOpenPathInEditor?: (target: FilePathTarget) => void
   mobileScrollScrubber?: HTMLElement
 }

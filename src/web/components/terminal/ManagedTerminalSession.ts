@@ -115,6 +115,7 @@ export class ManagedTerminalSession {
   attach(host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void {
     if (this.disposed) return
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
+    this.view.setOpenPathPreviewHandler(handlers?.onOpenPathPreview ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
     this.view.setMobileScrollScrubber(handlers?.mobileScrollScrubber ?? null)
     this.view.setAutoFitEnabled(this.runtime.canResize())
@@ -128,6 +129,7 @@ export class ManagedTerminalSession {
   detach(host: HTMLElement, parkingRoot: HTMLElement): void {
     this.clearTerminalFocusIfOwned()
     this.view.setRevealPathHandler(null)
+    this.view.setOpenPathPreviewHandler(null)
     this.view.setOpenPathInEditorHandler(null)
     this.view.setMobileScrollScrubber(null)
     this.view.detach(host, parkingRoot)

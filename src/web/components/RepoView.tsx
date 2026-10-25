@@ -21,12 +21,29 @@ import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-worksp
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 import { WorktreeTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
+import { FilePreviewProvider } from '#/web/components/terminal/file-preview-context.tsx'
 
 interface Props {
   repoId: string
 }
 
 export function RepoView({ repoId }: Props) {
+  const scopeKey = useReposStore((state) => {
+    const repo = state.repos[repoId]
+    return JSON.stringify([
+      repoId,
+      repo ? selectedRepoWorktree(repo)?.worktreePath : null,
+      state.workspaceActiveContextByRoot[repoId],
+    ])
+  })
+  return (
+    <FilePreviewProvider scopeKey={scopeKey}>
+      <RepoViewContent repoId={repoId} />
+    </FilePreviewProvider>
+  )
+}
+
+function RepoViewContent({ repoId }: Props) {
   const layout = useEffectiveWorkspaceLayout()
   const uiMode = useResponsiveUiMode()
   const view = useStoreWithEqualityFn(

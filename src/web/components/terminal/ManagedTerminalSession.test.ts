@@ -1644,15 +1644,63 @@ describe('ManagedTerminalSession', () => {
     session.dispose({ closeSession: false })
   })
 
+  test('forwards preview activation and clears old callbacks across detach and reattach', async () => {
+    const firstPreview = vi.fn(() => true)
+    const nextPreview = vi.fn(() => false)
+    const reveal = vi.fn()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host, { onRevealPath: reveal, onOpenPathPreview: firstPreview })
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.bufferLines[0] = 'created src/app.ts:12:3'
+    let links: Array<{ activate: (event: MouseEvent, text: string) => void; text: string }> | undefined
+    const provideLinks = () =>
+      term.linkProviders[0]?.provideLinks(1, (provided: unknown[] | undefined) => {
+        links = provided as typeof links
+      })
+    provideLinks()
+    const link = links?.[0]
+    expect(link).toBeDefined()
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(firstPreview).toHaveBeenCalledExactlyOnceWith({ path: 'src/app.ts', line: 12, column: 3 })
+    expect(reveal).not.toHaveBeenCalled()
+
+    session.detach(host, document.createElement('div'))
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(firstPreview).toHaveBeenCalledTimes(1)
+    expect(reveal).not.toHaveBeenCalled()
+    provideLinks()
+    expect(links).toBeUndefined()
+
+    session.attach(host, { onRevealPath: reveal, onOpenPathPreview: nextPreview })
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(firstPreview).toHaveBeenCalledTimes(1)
+    expect(nextPreview).toHaveBeenCalledExactlyOnceWith({ path: 'src/app.ts', line: 12, column: 3 })
+    expect(reveal).toHaveBeenCalledExactlyOnceWith('src/app.ts')
+
+    session.attach(host)
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(nextPreview).toHaveBeenCalledTimes(1)
+    expect(reveal).toHaveBeenCalledTimes(1)
+    session.detach(host, document.createElement('div'))
+    session.dispose({ closeSession: false })
+  })
+
   test('opens relative terminal path links in the editor on double click', async () => {
     const onRevealPath = vi.fn()
+    const onOpenPathPreview = vi.fn(() => true)
     const onOpenPathInEditor = vi.fn()
     const host = document.createElement('div')
     document.body.appendChild(host)
     const session = new ManagedTerminalSession(descriptor, vi.fn())
     hydrateManagedSession(session)
 
-    session.attach(host, { onRevealPath, onOpenPathInEditor })
+    session.attach(host, { onRevealPath, onOpenPathPreview, onOpenPathInEditor })
     await flushTerminalStart()
     await flushUntil(() => session.snapshot().phase === 'open')
 
@@ -1665,6 +1713,7 @@ describe('ManagedTerminalSession', () => {
     })
     links?.[0]?.activate(new MouseEvent('click', { detail: 2 }), 'src/app.ts:12:3')
 
+    expect(onOpenPathPreview).not.toHaveBeenCalled()
     expect(onRevealPath).not.toHaveBeenCalled()
     expect(onOpenPathInEditor).toHaveBeenCalledWith({ path: 'src/app.ts', line: 12, column: 3 })
     session.detach(host, document.createElement('div'))

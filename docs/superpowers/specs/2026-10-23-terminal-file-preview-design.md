@@ -1,11 +1,11 @@
 # Terminal File Preview Design
 
-Status: proposed for user review. Implementation has not started.
+Status: extended on 2026-10-25 with file-area activation, same-file toggling, and external absolute paths.
 
 ## Goal and terminology
 
 A temporary file preview is a read-only pane on the right of the active terminal.
-Clicking another supported file path replaces its content in the same pane.
+Terminal links and file-area rows share this preview. Clicking another supported file path replaces its content in the same pane; clicking the same file again closes it, even when the two clicks use equivalent relative/absolute paths or different line references.
 Closing the pane returns its space to the terminal. This is renderer-local
 interaction state, with no session restoration or cross-window synchronization.
 
@@ -21,14 +21,22 @@ interaction state, with no session restoration or cross-window synchronization.
 
 ## Proposed interaction
 
-- The pane starts closed and opens when a supported terminal file link is clicked.
-- One pane shows one file at a time; the next click replaces the current target.
-- The header shows the file name, its worktree-relative path, and a close button.
+- The pane starts closed and opens when a supported terminal file link or file-area row is clicked.
+- One pane shows one file at a time; another file replaces it and the same file closes it.
+- The header shows the file name, its worktree-relative path (or absolute path for an external file), and a close button.
+- When no terminal surface is mounted, the current workspace/file area supplies a fallback preview. Compact and narrow layouts show it full-width without mounting another resizable split.
+- File-area modified clicks preserve multi-selection, directory clicks preserve expansion, and double-click editor activation cancels pending preview changes.
 - The terminal stays mounted and usable while the preview opens or changes.
+- Keep the terminal's layout ancestry stable across preview transitions. Reuse
+  the existing split's collapse support when the preview is closed so closing
+  returns all available space without recreating the terminal host.
 - The divider is resizable, using the existing panel primitives. The initial
   preview occupies approximately 40% of the terminal area, subject to usable
   minimum widths; the width remains local to this visit.
 - Existing double-click-to-open-in-editor remains available.
+- A supported single click waits 500 ms for double-click intent before changing
+  the terminal layout. Double-click editor activation cancels that pending
+  preview; closing, changing repository/worktree, and unmounting also cancel it.
 - Unsupported links retain the existing file-tree reveal behavior where present.
 - Changing repository or worktree clears the preview. Changing terminal within
   the same worktree may retain it; a new file click always replaces it.
@@ -59,15 +67,9 @@ a text preview can reveal its referenced line.
 
 Each preview target includes repository identity, worktree path, and file target.
 Relative paths retain the existing worktree-root interpretation; this feature does
-not infer a shell working directory from terminal output. Absolute paths are
-eligible only when they resolve inside the current worktree under the existing
-path-semantics rules. Existing path-recognition limitations remain explicit.
+not infer a shell working directory from terminal output. Absolute paths may identify files outside the current worktree on the same host. Quoted absolute paths containing spaces and paths wrapped after directory separators are recognized; UNC paths remain unsupported.
 
-Read through the existing server-backed file-tree binary-read boundary, which
-already supports local and SSH repositories. Add cancellable client transport if
-needed. Keep file access and validation on the server/system side, with ordinary
-authentication and root-containment checks; do not read through Electron renderer
-privileges or file:// URLs.
+Read contained files through the existing server-backed file-tree text and binary boundaries. External files use a separate authenticated read-only preview endpoint: the server validates and normalizes the absolute path, resolves the repository's host, selects the parent read directory, and applies fixed text/image limits. Existing file-tree containment and write contracts remain unchanged. Transport is cancellable; no Electron renderer privileges or file:// URLs are used.
 
 Keep loading/error/content lifecycle in a focused preview component or read hook.
 Cancel or disregard obsolete requests when the target changes or the pane closes.

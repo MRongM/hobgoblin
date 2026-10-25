@@ -859,6 +859,15 @@ export const ja: Record<DictKey, string> = {
   'ports.delete-history': '履歴レコードを削除',
 
   // ---- Terminal ----------------------------------------------------------
+  'terminal.file-preview.title': 'ファイルプレビュー',
+  'terminal.file-preview.close': 'プレビューを閉じる',
+  'terminal.file-preview.loading': 'プレビューを読み込み中…',
+  'terminal.file-preview.unsupported': 'この種類のファイルはプレビューできません。',
+  'terminal.file-preview.invalid-image': 'この画像を表示できませんでした。',
+  'terminal.file-preview.read-failed': 'プレビュー用のファイルを読み込めませんでした。',
+  'terminal.file-preview.image-too-large': '画像がプレビューのサイズ上限（20 MiB）を超えています。',
+  'terminal.file-preview.line': '{line} 行目',
+  'terminal.file-preview.line-column': '{line} 行目、{column} 列目',
   'terminal.opening': 'ターミナルを開いています…',
   'terminal.restart': 'ターミナルを再起動',
   'terminal.search-placeholder': 'ターミナルを検索',

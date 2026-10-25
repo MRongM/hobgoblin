@@ -104,6 +104,7 @@ import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
+import { FilePreviewProvider, useFilePreview } from '#/web/components/terminal/file-preview-context.tsx'
 
 const ROOT_DIR = ''
 
@@ -175,25 +176,39 @@ export interface FileTreeRevealRequest {
 
 type FileTreeToolbarHeight = 'compact' | 'detail'
 
-export function ProjectFileTree({
-  repoId,
-  folderContext,
-  revealRequest,
-  toolbarHeight = 'compact',
-  toolbarLeading,
-}: {
+export function ProjectFileTree(props: ProjectFileTreeProps) {
+  const view = useProjectFileTreeView(props.repoId, props.folderContext)
+  return (
+    <FilePreviewProvider scopeKey={JSON.stringify([props.repoId, view.worktreePath])}>
+      <ProjectFileTreeContent {...props} />
+    </FilePreviewProvider>
+  )
+}
+
+interface ProjectFileTreeProps {
   repoId: string
   folderContext?: ProjectFileTreeContext
   revealRequest?: FileTreeRevealRequest | null
   toolbarHeight?: FileTreeToolbarHeight
   toolbarLeading?: ReactNode
-}) {
+}
+
+function ProjectFileTreeContent({
+  repoId,
+  folderContext,
+  revealRequest,
+  toolbarHeight = 'compact',
+  toolbarLeading,
+}: ProjectFileTreeProps) {
   const t = useT()
+  const preview = useFilePreview()
   const { fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
   const { appFontSize } = useRuntimeFontSettings()
   const fileTreeClipboardMaxBytes = fileTreeClipboardMaxBytesFromMb(fileTreeClipboardMaxBytesMb)
   const view = useProjectFileTreeView(repoId, folderContext)
   const worktreePath = view.worktreePath
+  const cancelPendingPreview = preview?.cancelPendingPreview
+  useEffect(() => cancelPendingPreview, [cancelPendingPreview, repoId, worktreePath])
   const activeWorktreeRef = useRef<string | null>(worktreePath)
   const directoriesRef = useRef<Record<string, DirectoryState>>({})
   const latestDirectoryRequestTokensRef = useRef(new Map<string, symbol>())
@@ -403,8 +418,20 @@ export function ProjectFileTree({
           shiftKey: event.shiftKey,
         }),
       )
+      preview?.cancelPendingPreview()
+      if (
+        worktreePath &&
+        isEditorOpenableFileNode(node) &&
+        event.detail < 2 &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        preview?.requestPreview(repoId, worktreePath, { path: node.absolutePath })
+      }
     },
-    [visibleIds],
+    [visibleIds, preview, repoId, worktreePath],
   )
 
   const handleDragStart = useCallback(
@@ -1256,7 +1283,10 @@ export function ProjectFileTree({
                     onDownload={runDownload}
                     canUploadFiles={canUploadFiles}
                     onUpload={runUploadForNode}
-                    onOpenInEditor={(node) => void runOpenNodeInEditor(node)}
+                    onOpenInEditor={(node) => {
+                      preview?.cancelPendingPreview()
+                      void runOpenNodeInEditor(node)
+                    }}
                     isProtectedRoot={isProtectedRoot}
                     onKeyDown={handleKeyDown}
                     onFocus={setFocusedNodeId}

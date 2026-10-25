@@ -14,6 +14,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { toast } from 'sonner'
+import { SplitPane } from '#/web/components/SplitPane.tsx'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
+import { TerminalFilePreview } from '#/web/components/terminal/TerminalFilePreview.tsx'
+import { useFilePreview, useFilePreviewController } from '#/web/components/terminal/file-preview-context.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   ContextMenu,
@@ -139,6 +143,22 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const t = useT()
   const navigation = useMainWindowNavigation()
   const terminalHostId = useId()
+  const previewLayoutRef = useRef<HTMLDivElement | null>(null)
+  const previewSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const restorePreviewFocusRef = useRef(false)
+  const sharedPreview = useFilePreview()
+  const localPreview = useFilePreviewController(JSON.stringify([repoRoot, worktreePath]))
+  const preview = sharedPreview ?? localPreview
+  const { target: previewTarget, cancelPendingPreview, closePreview: clearPreview } = preview
+  const registerTerminalSurface = sharedPreview?.registerTerminalSurface
+  useLayoutEffect(() => registerTerminalSurface?.(), [registerTerminalSurface])
+  useEffect(() => cancelPendingPreview, [cancelPendingPreview, repoRoot, worktreePath])
+  const [previewSize, setPreviewSize] = useState(40)
+  const [previewLayoutWidth, setPreviewLayoutWidth] = useState<number | null>(null)
+  const compactUi = useIsCompactUi()
+  // Derive scope validity during render so old content never flashes before effect cleanup.
+  const activePreviewTarget =
+    previewTarget?.repoId === repoRoot && previewTarget.worktreePath === worktreePath ? previewTarget : null
   const hostRef = useRef<HTMLDivElement | null>(null)
   const mobileScrollScrubberRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -213,6 +233,41 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
+  const compactPreview =
+    !!activePreviewTarget && (isMobile || compactUi || previewLayoutWidth === null || previewLayoutWidth < 800)
+
+  useLayoutEffect(() => {
+    const surface = previewLayoutRef.current
+    if (!surface) return
+    const measure = () => {
+      const width = surface.getBoundingClientRect().width
+      setPreviewLayoutWidth(width > 0 ? width : null)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(surface)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (compactPreview)
+      previewSurfaceRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
+  }, [compactPreview])
+
+  useLayoutEffect(() => {
+    if (activePreviewTarget || !restorePreviewFocusRef.current) return
+    restorePreviewFocusRef.current = false
+    if (key) focusTerminal(key)
+  }, [activePreviewTarget, focusTerminal, key])
+
+  const closePreview = useCallback(() => {
+    restorePreviewFocusRef.current = !!previewSurfaceRef.current?.contains(document.activeElement)
+    clearPreview()
+  }, [clearPreview])
   const navigatorPlatform = globalThis.navigator?.platform ?? ''
   const isMacPlatform = isMacNavigatorPlatform(navigatorPlatform)
   const isWindowsPlatform = /^Win/i.test(navigatorPlatform)
@@ -579,7 +634,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   // goblin behaviour where focus was triggered exactly once per session key.
   const focusedKeyRef = useRef<string | null>(null)
   useLayoutEffect(() => {
-    if (isMobile || !isController || !key || searchOpen || renderPending) {
+    if (compactPreview || isMobile || !isController || !key || searchOpen || renderPending) {
       if (focusedKeyRef.current === key) focusedKeyRef.current = null
       return
     }
@@ -590,7 +645,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     if (!isBody) return
     const textarea = hostRef.current?.querySelector('textarea')
     textarea?.focus()
-  }, [isController, isMobile, key, renderPending, searchOpen])
+  }, [compactPreview, isController, isMobile, key, renderPending, searchOpen])
 
   const openPathInEditorRef = useRef<(target: FilePathTarget) => void>(() => {})
   openPathInEditorRef.current = (target: FilePathTarget) => {
@@ -598,12 +653,19 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       if (!result.ok) toast.error(t(result.message))
     })
   }
+  const openPathPreviewRef = useRef<(target: FilePathTarget) => boolean>(() => false)
+  openPathPreviewRef.current = (target) => preview.requestPreview(repoRoot, worktreePath, target)
+  const handleOpenPathPreview = useCallback((target: FilePathTarget) => openPathPreviewRef.current(target), [])
   const handleRevealPath = useCallback((relativePath: string) => {
     onRevealPathRef.current?.(relativePath)
   }, [])
-  const handleOpenPathInEditor = useCallback((target: FilePathTarget) => {
-    openPathInEditorRef.current(target)
-  }, [])
+  const handleOpenPathInEditor = useCallback(
+    (target: FilePathTarget) => {
+      cancelPendingPreview()
+      openPathInEditorRef.current(target)
+    },
+    [cancelPendingPreview],
+  )
 
   useLayoutEffect(() => {
     const host = hostRef.current
@@ -611,12 +673,13 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     attach(descriptor, host, {
       onRevealPath: handleRevealPath,
       onOpenPathInEditor: handleOpenPathInEditor,
+      onOpenPathPreview: handleOpenPathPreview,
       ...(isMobileTerminal && mobileScrollScrubberRef.current
         ? { mobileScrollScrubber: mobileScrollScrubberRef.current }
         : {}),
     })
     return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath, isMobileTerminal])
+  }, [attach, descriptor, detach, handleOpenPathInEditor, handleOpenPathPreview, handleRevealPath, isMobileTerminal])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return
@@ -631,8 +694,8 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   }, [clearBell, key])
 
   useEffect(() => {
-    if (searchOpen) searchInputRef.current?.focus({ preventScroll: true })
-  }, [searchOpen])
+    if (searchOpen && !compactPreview) searchInputRef.current?.focus({ preventScroll: true })
+  }, [compactPreview, searchOpen])
 
   useEffect(() => {
     if (!searchOpen && key) clearSearch(key)
@@ -979,9 +1042,11 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     terminalHost
   )
 
-  return (
+  const terminalSurface = (
     <div
       className="goblin-terminal-slot focus-visible:outline-none"
+      inert={compactPreview || undefined}
+      aria-hidden={compactPreview || undefined}
       tabIndex={-1}
       style={slotStyle}
       onFocusCapture={handleFocus}
@@ -1144,6 +1209,28 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           <span>{t('terminal.drop-hint')}</span>
         </div>
       )}
+    </div>
+  )
+
+  return (
+    <div ref={previewLayoutRef} className="goblin-terminal-preview-layout">
+      <SplitPane
+        before={terminalSurface}
+        after={
+          <div ref={previewSurfaceRef} className="goblin-terminal-preview-layout__preview">
+            {activePreviewTarget && (
+              <TerminalFilePreview target={activePreviewTarget} onClose={closePreview} compact={compactPreview} />
+            )}
+          </div>
+        }
+        afterSize={previewSize}
+        onAfterSizeChange={setPreviewSize}
+        beforeMinSize="480px"
+        afterMinSize="320px"
+        beforeCollapsed={compactPreview}
+        afterCollapsed={!activePreviewTarget}
+        disabled={!activePreviewTarget || compactPreview}
+      />
     </div>
   )
 }

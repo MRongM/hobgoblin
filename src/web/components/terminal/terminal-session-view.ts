@@ -72,6 +72,7 @@ export class TerminalSessionView {
   private autoFitEnabled = true
   private host: HTMLElement | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
+  private openPathPreviewHandler: ((target: FilePathTarget) => boolean) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
   private worktreePath: string | null = null
   private mobileScrollScrubber: HTMLElement | null = null
@@ -121,6 +122,10 @@ export class TerminalSessionView {
 
   setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
     this.revealPathHandler = handler
+  }
+
+  setOpenPathPreviewHandler(handler: ((target: FilePathTarget) => boolean) | null): void {
+    this.openPathPreviewHandler = handler
   }
 
   setOpenPathInEditorHandler(handler: ((target: FilePathTarget) => void) | null): void {
@@ -734,6 +739,7 @@ export class TerminalSessionView {
           () => this.revealPathHandler,
           () => this.openPathInEditorHandler,
           () => this.worktreePath,
+          () => this.openPathPreviewHandler,
         ),
       )
     } catch (err) {

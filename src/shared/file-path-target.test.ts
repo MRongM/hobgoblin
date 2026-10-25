@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-  editorTargetPathArgument,
-  filePathTargetsForText,
-  parseFilePathTarget,
-} from '#/shared/file-path-target.ts'
+import { editorTargetPathArgument, filePathTargetsForText, parseFilePathTarget } from '#/shared/file-path-target.ts'
 
 describe('parseFilePathTarget', () => {
   test('accepts relative paths with optional line and column targets', () => {
@@ -31,6 +27,14 @@ describe('parseFilePathTarget', () => {
     expect(parseFilePathTarget('/repo/src/app.ts:12')).toBeNull()
   })
 
+  test.each(['README', 'LICENSE', 'Dockerfile', 'Makefile', '.env', '.env.local', '.gitignore', '.editorconfig'])(
+    'accepts known text basenames without a directory: %s',
+    (name) => {
+      expect(parseFilePathTarget(name)).toEqual({ path: name })
+      expect(parseFilePathTarget(`./${name}:4`)).toEqual({ path: name, line: 4 })
+    },
+  )
+
   test('accepts Windows and POSIX absolute paths when explicitly enabled', () => {
     expect(parseFilePathTarget('C:\\repo\\src\\app.ts:12', { allowAbsolute: true })).toEqual({
       path: 'C:\\repo\\src\\app.ts',
@@ -53,6 +57,33 @@ describe('parseFilePathTarget', () => {
 })
 
 describe('filePathTargetsForText', () => {
+  test.each(['README', 'LICENSE', 'Dockerfile', 'Makefile', '.env', '.env.local', '.gitignore', '.editorconfig'])(
+    'recognizes standalone and dot-relative known text files: %s',
+    (name) => {
+      const token = `./${name}:4`
+      expect(filePathTargetsForText(`see ${name} and ${token}`)).toEqual([
+        { text: name, target: { path: name }, startIndex: 4, endIndex: 4 + name.length },
+        {
+          text: token,
+          target: { path: name, line: 4 },
+          startIndex: 9 + name.length,
+          endIndex: 9 + name.length + token.length,
+        },
+      ])
+    },
+  )
+
+  test('limits standalone name recognition to known files and keeps URLs excluded', () => {
+    expect(filePathTargetsForText('see ordinary words READMEs Dockerfiles .unknown')).toEqual([])
+    expect(
+      filePathTargetsForText('https://example.test/README http://localhost:3000/.env', { allowAbsolute: true }),
+    ).toEqual([])
+    expect(filePathTargetsForText('readme .ENV.LOCAL').map((span) => span.target)).toEqual([
+      { path: 'readme' },
+      { path: '.ENV.LOCAL' },
+    ])
+  })
+
   test('finds path-like spans and preserves offsets', () => {
     expect(filePathTargetsForText('see src/app.ts:12 and ./docs/guide.md')).toEqual([
       { text: 'src/app.ts:12', target: { path: 'src/app.ts', line: 12 }, startIndex: 4, endIndex: 17 },
@@ -174,14 +205,49 @@ describe('filePathTargetsForText', () => {
       },
     ])
   })
+
+  test.each(['/tmp/my reports/guide.md:12:3', 'C:\\reports folder\\guide.md:12:3'])(
+    'keeps a quoted absolute path with spaces as one target: %s',
+    (path) => {
+      const text = `created "${path}"`
+      expect(filePathTargetsForText(text, { allowAbsolute: true })).toEqual([
+        {
+          text: path,
+          target: { path: path.slice(0, -5), line: 12, column: 3 },
+          startIndex: 9,
+          endIndex: 9 + path.length,
+        },
+      ])
+    },
+  )
+
+  test.each(['/tmp/reports/\n  guide.md:12', 'C:\\reports\\\n  guide.md:12'])(
+    'recognizes a hard-wrapped absolute target: %s',
+    (path) => {
+      expect(filePathTargetsForText(path, { allowAbsolute: true })).toEqual([
+        {
+          text: path,
+          target: { path: path.replace('\n  ', '').slice(0, -3), line: 12 },
+          startIndex: 0,
+          endIndex: path.length,
+        },
+      ])
+    },
+  )
+
+  test('does not recognize URL paths when absolute file paths are enabled', () => {
+    expect(
+      filePathTargetsForText('https://example.test/report.md http://localhost:3000/src/app.ts file:///tmp/report.md', {
+        allowAbsolute: true,
+      }),
+    ).toEqual([])
+  })
 })
 
 describe('editorTargetPathArgument', () => {
   test('adds line and column only when a line target exists', () => {
     expect(editorTargetPathArgument({ path: '/repo/src/app.ts' })).toBe('/repo/src/app.ts')
     expect(editorTargetPathArgument({ path: '/repo/src/app.ts', line: 12 })).toBe('/repo/src/app.ts:12')
-    expect(editorTargetPathArgument({ path: '/repo/src/app.ts', line: 12, column: 3 })).toBe(
-      '/repo/src/app.ts:12:3',
-    )
+    expect(editorTargetPathArgument({ path: '/repo/src/app.ts', line: 12, column: 3 })).toBe('/repo/src/app.ts:12:3')
   })
 })

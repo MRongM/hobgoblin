@@ -3,6 +3,7 @@ import { filePathTargetsForText, type FilePathTarget } from '#/shared/file-path-
 import { pathStyle, worktreeRelativePathFromAbsolute } from '#/shared/path-semantics.ts'
 
 type RevealPathHandler = (relativePath: string) => void
+type OpenPathPreviewHandler = (target: FilePathTarget) => boolean
 type OpenPathInEditorHandler = (target: FilePathTarget) => void
 type WorktreePathProvider = () => string | null
 type TerminalBufferLine = {
@@ -22,7 +23,7 @@ interface TerminalLinkProviderHost {
 export interface TerminalRelativePathLink {
   text: string
   target: FilePathTarget
-  revealPath: string
+  revealPath: string | null
   startColumn: number
   endColumn: number
 }
@@ -41,9 +42,9 @@ interface TerminalLinkPosition {
 
 const MAX_TERMINAL_LINK_WINDOW_LENGTH = 4096
 const HARD_WRAP_PATH_PREFIX_PATTERN =
-  /(^|[\s"'`([{<：,，、;；（［【｛《〈「『])(?:\.\/)?(?:[A-Za-z0-9_@%+=.-]+\/)+$/u
+  /(^|[\s"'`([{<：,，、;；（［【｛《〈「『])(?:[A-Za-z]:[\\/]|\/|\.\/)?(?:[A-Za-z0-9_@%+=.-]+[\\/])+$/u
 const HARD_WRAP_PATH_CONTINUATION_PATTERN =
-  /^[ \t]*(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/u
+  /^[ \t]*(?:(?:[A-Za-z0-9_@%+=.-]+[\\/])+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/u
 
 function activationDetail(event: MouseEvent): number {
   const detail = (event as { detail?: unknown }).detail
@@ -118,7 +119,6 @@ function terminalRelativePathLinksForWindow(
   return filePathTargetsForText(window.text, { allowAbsolute: !!worktreePath })
     .map((span) => {
       const revealPath = revealPathForTarget(span.target, worktreePath)
-      if (!revealPath) return null
       const start = terminalPositionForOffset(window, span.startIndex)
       const end = terminalPositionForOffset(window, span.endIndex - 1)
       if (!start || !end) return null
@@ -140,12 +140,13 @@ export function registerTerminalRelativePathLinkProvider(
   getRevealPathHandler: () => RevealPathHandler | null,
   getOpenPathInEditorHandler: () => OpenPathInEditorHandler | null,
   getWorktreePath: WorktreePathProvider = () => null,
+  getOpenPathPreviewHandler: () => OpenPathPreviewHandler | null = () => null,
 ): { dispose: () => void } {
   const provider: ILinkProvider = {
     provideLinks(bufferLineNumber, callback) {
       const revealPath = getRevealPathHandler()
       const openPathInEditor = getOpenPathInEditorHandler()
-      if (!revealPath && !openPathInEditor) {
+      if (!revealPath && !openPathInEditor && !getOpenPathPreviewHandler()) {
         callback(undefined)
         return
       }
@@ -164,7 +165,8 @@ export function registerTerminalRelativePathLinkProvider(
               getOpenPathInEditorHandler()?.(link.target)
               return
             }
-            getRevealPathHandler()?.(link.revealPath)
+            const previewOpened = getOpenPathPreviewHandler()?.(link.target) === true
+            if (!previewOpened && link.revealPath) getRevealPathHandler()?.(link.revealPath)
           },
         }))
       callback(links.length > 0 ? links : undefined)

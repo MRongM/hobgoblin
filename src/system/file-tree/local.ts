@@ -17,7 +17,7 @@ import {
 export function pathInsideRoot(rootPath: string, candidatePath: string): boolean {
   const root = path.resolve(rootPath)
   const candidate = path.resolve(candidatePath)
-  return candidate === root || candidate.startsWith(root + path.sep)
+  return candidate === root || candidate.startsWith(root.endsWith(path.sep) ? root : root + path.sep)
 }
 
 function classifyFsError(err: unknown): string {

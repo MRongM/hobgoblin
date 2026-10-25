@@ -806,6 +806,15 @@ export const zh: Record<DictKey, string> = {
   'ports.delete-history': '删除历史记录',
 
   // ---- Terminal ----------------------------------------------------------
+  'terminal.file-preview.title': '文件预览',
+  'terminal.file-preview.close': '关闭预览',
+  'terminal.file-preview.loading': '正在加载预览…',
+  'terminal.file-preview.unsupported': '无法预览此文件类型。',
+  'terminal.file-preview.invalid-image': '无法显示此图片。',
+  'terminal.file-preview.read-failed': '无法读取此文件进行预览。',
+  'terminal.file-preview.image-too-large': '图片超过 20 MiB 的预览大小上限。',
+  'terminal.file-preview.line': '第 {line} 行',
+  'terminal.file-preview.line-column': '第 {line} 行，第 {column} 列',
   'terminal.opening': '正在打开终端…',
   'terminal.restart': '重启终端',
   'terminal.search-placeholder': '搜索终端',

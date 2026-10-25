@@ -121,30 +121,34 @@ describe('BranchWorkspaceTerminalPanel', () => {
     )
   })
 
-  test('renders the selected root-scoped session in the shared terminal slot', async () => {
-    snapshot = {
-      worktreeTerminalKey: WORKTREE_KEY,
-      count: 1,
-      sessions: [],
-      selectedDescriptor: {
-        key: `${WORKTREE_KEY}\0terminal-1`,
+  test.each([false, true])(
+    'forwards the root preview scope to the shared terminal slot in compact=%s',
+    async (compact) => {
+      compactUi = compact
+      snapshot = {
         worktreeTerminalKey: WORKTREE_KEY,
-        terminalId: 'terminal-1',
-        index: 1,
+        count: 1,
+        sessions: [],
+        selectedDescriptor: {
+          key: `${WORKTREE_KEY}\0terminal-1`,
+          worktreeTerminalKey: WORKTREE_KEY,
+          terminalId: 'terminal-1',
+          index: 1,
+          repoRoot: ROOT,
+          branch: 'feature/auth',
+          worktreePath: PATH,
+        },
+      }
+
+      await renderPanel()
+
+      const slot = container.querySelector<HTMLElement>('[data-testid="terminal-slot"]')
+      expect(JSON.parse(slot?.dataset.props ?? '{}')).toEqual({
         repoRoot: ROOT,
-        branch: 'feature/auth',
         worktreePath: PATH,
-      },
-    }
-
-    await renderPanel()
-
-    const slot = container.querySelector<HTMLElement>('[data-testid="terminal-slot"]')
-    expect(JSON.parse(slot?.dataset.props ?? '{}')).toEqual({
-      repoRoot: ROOT,
-      worktreePath: PATH,
-    })
-  })
+      })
+    },
+  )
 
   test('mounts the terminal slot while the first terminal creation is pending', async () => {
     snapshot = { ...snapshot, creating: true }

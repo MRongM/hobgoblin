@@ -859,6 +859,15 @@ export const en = {
   'ports.delete-history': 'Delete history record',
 
   // ---- Terminal -----------------------------------------------------------
+  'terminal.file-preview.title': 'File preview',
+  'terminal.file-preview.close': 'Close preview',
+  'terminal.file-preview.loading': 'Loading preview…',
+  'terminal.file-preview.unsupported': 'This file type cannot be previewed.',
+  'terminal.file-preview.invalid-image': 'This image could not be displayed.',
+  'terminal.file-preview.read-failed': 'Could not read this file for preview.',
+  'terminal.file-preview.image-too-large': 'Image exceeds the 20 MiB preview size limit.',
+  'terminal.file-preview.line': 'Line {line}',
+  'terminal.file-preview.line-column': 'Line {line}, column {column}',
   'terminal.opening': 'Opening terminal…',
   'terminal.restart': 'Restart terminal',
   'terminal.search-placeholder': 'Search terminal',

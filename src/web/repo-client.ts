@@ -9,11 +9,13 @@ import type {
   RepoFileTransferRequest,
   RepoFileTransferResult,
   RepoFileTreeBinaryFileReadResult,
+  RepoFileTreeTextFileReadResult,
   RepoFileTreeBinaryFileReplaceResult,
   RepoFileTreeResult,
 } from '#/shared/file-tree.ts'
 import type { RepoFileExportRequest, RepoFileExportResult } from '#/shared/file-tree-export.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
+import type { FilePreviewKind, FilePreviewReadResult } from '#/shared/file-preview.ts'
 import type { CloneRepoResult, RepoSnapshot } from '#/shared/rpc.ts'
 import type { CommitDetail, CommitHistoryEntry, ExecResult, WorktreeStatus } from '#/shared/git-types.ts'
 import type { ProbeResult } from '#/shared/rpc.ts'
@@ -304,13 +306,36 @@ export async function createRepositoryFileTreeFile(
   return await postServerJson('/api/repo/file-tree/create-file', { repoId, worktreePath, parentDirPath, name })
 }
 
+export async function readRepositoryFilePreview<K extends FilePreviewKind>(
+  repoId: string,
+  filePath: string,
+  kind: K,
+  signal?: AbortSignal,
+): Promise<FilePreviewReadResult<K>> {
+  return await postServerJson('/api/repo/file-preview', { repoId, filePath, kind }, { signal })
+}
+
+export async function readRepositoryFileTreeTextFile(
+  repoId: string,
+  worktreePath: string,
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<RepoFileTreeTextFileReadResult> {
+  return await postServerJson('/api/repo/file-tree/read-text-file', { repoId, worktreePath, filePath }, { signal })
+}
+
 export async function readRepositoryFileTreeBinaryFile(
   repoId: string,
   worktreePath: string,
   filePath: string,
   maxBytes: number,
+  signal?: AbortSignal,
 ): Promise<RepoFileTreeBinaryFileReadResult> {
-  return await postServerJson('/api/repo/file-tree/read-binary-file', { repoId, worktreePath, filePath, maxBytes })
+  return await postServerJson(
+    '/api/repo/file-tree/read-binary-file',
+    { repoId, worktreePath, filePath, maxBytes },
+    { signal },
+  )
 }
 
 export async function replaceRepositoryFileTreeBinaryFile(

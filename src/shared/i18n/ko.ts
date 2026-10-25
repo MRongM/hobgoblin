@@ -844,6 +844,15 @@ export const ko: Record<DictKey, string> = {
   'ports.delete-history': '기록 삭제',
 
   // ---- Terminal ----------------------------------------------------------
+  'terminal.file-preview.title': '파일 미리보기',
+  'terminal.file-preview.close': '미리보기 닫기',
+  'terminal.file-preview.loading': '미리보기 불러오는 중…',
+  'terminal.file-preview.unsupported': '이 파일 형식은 미리볼 수 없습니다.',
+  'terminal.file-preview.invalid-image': '이 이미지를 표시할 수 없습니다.',
+  'terminal.file-preview.read-failed': '미리보기용 파일을 읽을 수 없습니다.',
+  'terminal.file-preview.image-too-large': '이미지가 미리보기 크기 제한인 20 MiB를 초과했습니다.',
+  'terminal.file-preview.line': '{line}행',
+  'terminal.file-preview.line-column': '{line}행, {column}열',
   'terminal.opening': '터미널 여는 중…',
   'terminal.restart': '터미널 다시 시작',
   'terminal.search-placeholder': '터미널 검색',

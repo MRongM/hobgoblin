@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, join, parse, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import {
@@ -19,6 +19,11 @@ import {
 import { FILE_TREE_TEXT_FILE_MAX_BYTES } from '#/shared/file-tree.ts'
 
 describe('pathInsideRoot', () => {
+  test('accepts descendants of a filesystem root without doubling its separator', () => {
+    const root = parse(resolve('/')).root
+    expect(pathInsideRoot(root, join(root, 'report.md'))).toBe(true)
+  })
+
   test('accepts root and descendants', () => {
     expect(pathInsideRoot('/repo/worktree', '/repo/worktree')).toBe(true)
     expect(pathInsideRoot('/repo/worktree', '/repo/worktree/src/file.ts')).toBe(true)
