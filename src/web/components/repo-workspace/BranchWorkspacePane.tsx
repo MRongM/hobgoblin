@@ -352,7 +352,7 @@ export function BranchWorkspacePane({
 
   return (
     <BranchWorkspaceMemberContext.Provider value={memberScope}>
-      <section className="relative flex min-w-0 flex-1 flex-col" data-branch-workspace-id={workspace.id}>
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-branch-workspace-id={workspace.id}>
         {fallbackNotice ? (
           <div
             role="status"

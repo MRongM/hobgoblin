@@ -171,7 +171,7 @@ function RepoViewContent({ repoId }: Props) {
   if (isPlainWorkspace && uiMode === 'compact' && !repoUnavailable) {
     const compactWorkspaceOpen = compactSurface !== 'detail'
     return (
-      <section className="relative flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RepoWorkspacePane>
           {compactWorkspaceOpen ? (
             <RepoExplorerPane
@@ -198,7 +198,7 @@ function RepoViewContent({ repoId }: Props) {
   }
   if (isPlainWorkspace) {
     return (
-      <section className="relative flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RepoWorkspacePane>
           <RepoExplorerPane
             repoId={repoId}
@@ -226,7 +226,7 @@ function RepoViewContent({ repoId }: Props) {
 
   if (uiMode === 'compact' && !repoUnavailable) {
     return (
-      <section className="relative flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RepoWorkspacePane>
           {effectiveCompactSurface !== 'detail' ? (
             <RepoExplorerPane
@@ -318,7 +318,7 @@ function RepoViewContent({ repoId }: Props) {
     />
   )
 
-  return <section className="relative flex min-w-0 flex-1 flex-col">{workspaceBody}</section>
+  return <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">{workspaceBody}</section>
 }
 
 function ActiveBranchWorkspaceView({
