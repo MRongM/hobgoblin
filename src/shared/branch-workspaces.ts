@@ -442,7 +442,7 @@ export function normalizeBranchWorkspacePlanRequest(value: unknown): BranchWorks
 function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspacePlanRequestResult {
   const directoryName = request.directoryName === undefined ? undefined : request.directoryName
   if (directoryName !== undefined && !isSafeBranchWorkspaceFolderName(directoryName)) return invalidRequest()
-  const branch = directoryName === undefined ? normalizedText(request.branch) : (normalizedText(request.branch) ?? '')
+  const branch = directoryName === undefined ? normalizedText(request.branch) : ''
   if (
     (directoryName === undefined && !branch) ||
     !Array.isArray(request.repositories) ||

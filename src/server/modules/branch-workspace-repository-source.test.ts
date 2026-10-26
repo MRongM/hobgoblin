@@ -479,3 +479,215 @@ test('failed and cancelled clones leave no unowned target and can be retried', a
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test.skipIf(process.platform === 'win32')(
+  'retains durable ownership when cancelled after the last final file is published',
+  async () => {
+    const { watch } = await import('node:fs')
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'subworkspace-publication-cancel-')))
+    const originalPath = process.env.PATH
+    let watcher: ReturnType<typeof watch> | undefined
+    let deadline: ReturnType<typeof setTimeout> | undefined
+    try {
+      const source = path.join(root, 'source'),
+        folder = path.join(root, 'folder'),
+        target = path.join(folder, 'copy'),
+        bin = path.join(root, 'bin')
+      await mkdir(folder)
+      await mkdir(bin)
+      await execa('git', ['init', '-b', 'main', source])
+      await writeFile(path.join(source, 'tracked'), Buffer.alloc(1024 * 1024, 97))
+      await execa('git', ['-C', source, 'add', '.'])
+      await execa('git', [
+        '-C',
+        source,
+        '-c',
+        'user.name=Developer',
+        '-c',
+        'user.email=developer@example.com',
+        'commit',
+        '-m',
+        'Initial',
+      ])
+      const realGit = (await execa('which', ['git'])).stdout
+      await writeFile(
+        path.join(bin, 'git'),
+        `#!/usr/bin/env python3\nimport os,sys,time\nif "hobgoblin.subworkspaceMemberId" in sys.argv and os.getcwd() == ${JSON.stringify(target)}: time.sleep(0.3)\nos.execv(${JSON.stringify(realGit)},["git"]+sys.argv[1:])\n`,
+        { mode: 0o755 },
+      )
+      process.env.PATH = `${bin}:${originalPath}`
+      const controller = new AbortController()
+      const published = new Promise<void>((resolve, reject) => {
+        deadline = setTimeout(() => reject(new Error('final publication was not observed')), 5000)
+        watcher = watch(folder, { recursive: true }, (_event, name) => {
+          if (String(name) !== 'copy/tracked') return
+          controller.abort()
+          clearTimeout(deadline)
+          resolve()
+        })
+      })
+      const [result] = await Promise.all([
+        materializeBranchWorkspaceRepository(
+          root,
+          { memberId: 'member-copy', source: { kind: 'repository', repositoryId: source }, worktreePath: target },
+          controller.signal,
+        ),
+        published,
+      ])
+      expect(controller.signal.aborted).toBe(true)
+      expect(result.ok || result.message === 'cancelled').toBe(true)
+      process.env.PATH = originalPath
+      expect((await execa('git', ['-C', target, 'config', '--get', 'hobgoblin.subworkspaceMemberId'])).stdout).toBe(
+        'member-copy',
+      )
+      expect(await readFile(path.join(target, 'tracked'))).toEqual(Buffer.alloc(1024 * 1024, 97))
+      expect(await inspectBranchWorkspaceRepository(root, target)).toMatchObject({
+        memberId: 'member-copy',
+        dirty: false,
+      })
+    } finally {
+      process.env.PATH = originalPath
+      watcher?.close()
+      clearTimeout(deadline)
+      await rm(root, { recursive: true, force: true })
+    }
+  },
+)
+
+test('a member created from an already linked source uses the primary execution identity and retains its provenance', async () => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'subworkspace-linked-source-')))
+  try {
+    const source = path.join(root, 'source'),
+      linked = path.join(root, 'linked')
+    await execa('git', ['init', '-b', 'main', source])
+    await execa('git', [
+      '-C',
+      source,
+      '-c',
+      'user.name=Developer',
+      '-c',
+      'user.email=developer@example.com',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'Initial',
+    ])
+    await execa('git', ['-C', source, 'worktree', 'add', '-b', 'source-branch', linked])
+    const { readBranchWorkspaceManifests, updateBranchWorkspaceManifests } =
+      await import('#/server/modules/branch-workspace-source.ts')
+    const { readBranchWorkspaceSnapshot } = await import('#/server/modules/branch-workspace-read.ts')
+    const { createBranchWorkspaceWriteService } = await import('#/server/modules/branch-workspace-write-paths.ts')
+    const dataFile = path.join(root, 'registry.json')
+    const readManifests = (rootId: string) => readBranchWorkspaceManifests(rootId, { dataFile })
+    const readConfig = async () => ({ kind: 'missing' as const })
+    const readSnapshot = (rootId: string, signal?: AbortSignal) =>
+      readBranchWorkspaceSnapshot(rootId, signal, { readManifests, readConfig })
+    const service = createBranchWorkspaceWriteService({
+      readManifests,
+      readSnapshot,
+      updateManifests: (rootId, mutate) => updateBranchWorkspaceManifests(rootId, mutate, { dataFile }),
+      planDependencies: { readManifests, readConfig },
+      publishInvalidation: () => {},
+    })
+    const planned = await service.plan(root, {
+      operation: 'create',
+      directoryName: 'folder',
+      repositories: [
+        {
+          kind: 'worktree',
+          repositoryName: 'copy',
+          source: { kind: 'repository', repositoryId: linked },
+          targetBranch: 'target-branch',
+          creationBase: { kind: 'localBranch', branch: 'main' },
+        },
+      ],
+      auxiliaryEntries: [],
+    })
+    expect(planned).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [{ repoId: source, source: { kind: 'repository', repositoryId: linked } }],
+        manifest: { repositories: [{ repositoryId: source, source: { kind: 'repository', repositoryId: linked } }] },
+      },
+    })
+    if (!planned.ok) throw new Error(planned.message)
+    expect(await service.execute(root, { planToken: planned.plan.token, approvals: [] })).toMatchObject({ ok: true })
+    expect(await readSnapshot(root)).toMatchObject({
+      ok: true,
+      items: [
+        {
+          state: { kind: 'ready' },
+          repositories: [{ repositoryId: source, ready: true, currentBranch: 'target-branch' }],
+        },
+      ],
+    })
+    expect((await execa('git', ['-C', linked, 'branch', '--show-current'])).stdout).toBe('source-branch')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test.each([undefined, 'wsl'] as const)(
+  'owning %s host exposes a marked repository before publication-boundary cancellation',
+  async (transport) => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'subworkspace-host-cancel-')))
+    try {
+      const source = path.join(root, 'source'),
+        folder = path.join(root, 'folder'),
+        targetPath = path.join(folder, 'copy')
+      await mkdir(folder)
+      await execa('git', ['init', '-b', 'main', source])
+      await execa('git', [
+        '-C',
+        source,
+        '-c',
+        'user.name=Developer',
+        '-c',
+        'user.email=developer@example.com',
+        'commit',
+        '--allow-empty',
+        '-m',
+        'Initial',
+      ])
+      const rootId = normalizeRemoteRepoId({ alias: 'host', remotePath: root, ...(transport ? { transport } : {}) })
+      const sourceId = normalizeRemoteRepoId({ alias: 'host', remotePath: source, ...(transport ? { transport } : {}) })
+      const target = normalizeRemoteTarget({
+        alias: 'host',
+        host: 'example.com',
+        user: 'developer',
+        port: 22,
+        remotePath: root,
+        ...(transport ? { transport, wslExecutable: 'wsl.exe' } : {}),
+      })!
+      const result = await materializeBranchWorkspaceRepository(
+        rootId,
+        { memberId: 'member-copy', source: { kind: 'repository', repositoryId: sourceId }, worktreePath: targetPath },
+        undefined,
+        {
+          resolveRemoteTarget: async () => ({ target }),
+          runRemote: async (_target, command) => {
+            let script = buildRemoteCommandInvocation(target, command).script
+            if (command.type === 'materializeBranchWorkspaceRepository')
+              script = script.replace(
+                '        shutil.copytree(checkout, target, symlinks=True, dirs_exist_ok=True, copy_function=exclusive_copy)',
+                '        shutil.copytree(checkout, target, symlinks=True, dirs_exist_ok=True, copy_function=exclusive_copy)\n        sys.exit(130)',
+              )
+            const executed = await execa('sh', ['-c', script], { reject: false })
+            return {
+              ok: executed.exitCode === 0,
+              stdout: executed.stdout,
+              stderr: executed.stderr,
+              ...(executed.exitCode === 130 ? { message: 'cancelled' } : {}),
+            }
+          },
+        },
+      )
+      expect(result).toMatchObject({ ok: false, message: 'cancelled' })
+      expect((await execa('git', ['-C', targetPath, 'config', '--get', 'hobgoblin.subworkspaceMemberId'])).stdout).toBe(
+        'member-copy',
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  },
+)

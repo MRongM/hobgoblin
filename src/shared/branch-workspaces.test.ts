@@ -323,6 +323,7 @@ describe('folder subworkspace contracts', () => {
       normalizeBranchWorkspacePlanRequest({
         operation: 'create',
         directoryName: 'feature set',
+        branch: 'legacy/branch-must-not-identify-folder',
         repositories: [
           {
             repositoryName: 'service-a',

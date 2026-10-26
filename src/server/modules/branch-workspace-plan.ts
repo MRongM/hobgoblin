@@ -1197,7 +1197,7 @@ async function planRepository(
   selection?: BranchWorkspaceRepositorySelection,
 ): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
   const source = selection?.source
-  const repoId = source?.kind === 'repository' ? source.repositoryId : workspaceRepositoryId(rootId, repositoryName)
+  let repoId = source?.kind === 'repository' ? source.repositoryId : workspaceRepositoryId(rootId, repositoryName)
   if (source?.kind === 'repository' && !sameRepositoryHost(rootId, source.repositoryId))
     return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
   if (selection?.kind === 'repository')
@@ -1207,6 +1207,13 @@ async function planRepository(
   if (targetBranch && !isSafeBranchName(targetBranch))
     return { ok: false, message: 'workspace.branch-workspace.invalid-branch' }
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  if (source?.kind === 'repository') {
+    const registrations = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => [])
+    signal?.throwIfAborted()
+    const primary = registrations.find((entry) => entry.isPrimary && !entry.isBare && !entry.isPrunable)
+    if (!primary) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    repoId = repositoryIdAtPath(rootId, primary.path)
+  }
   let snapshot: RepoSnapshot | null
   try {
     snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
@@ -1257,6 +1264,9 @@ async function planRepository(
       repository: {
         repositoryName,
         repoId,
+        ...(selection?.kind ? { kind: selection.kind } : {}),
+        ...(source ? { source } : {}),
+        ...(selection?.memberId ? { memberId: selection.memberId } : {}),
         targetBranch,
         creationBase,
         syncBeforeCreate,

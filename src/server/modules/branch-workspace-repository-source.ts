@@ -178,9 +178,13 @@ async function materializeLocalRepository(
       ])
     }
     await checkoutRepositoryMode(checkout, input.mode, run)
+    if (input.memberId) {
+      await run(checkout, ['config', 'hobgoblin.subworkspaceMemberId', input.memberId])
+      const ownership = await run(checkout, ['config', '--local', '--get', 'hobgoblin.subworkspaceMemberId'])
+      if (ownership !== input.memberId) throw new Error('workspace.branch-workspace.repository-unavailable')
+    }
     signal.throwIfAborted()
     await publishBranchWorkspaceRepository(rootId, checkout, targetPath, signal)
-    if (input.memberId) await run(targetPath, ['config', 'hobgoblin.subworkspaceMemberId', input.memberId])
     return { ok: true, message: 'created' }
   } finally {
     await rm(staging, { recursive: true, force: true })
