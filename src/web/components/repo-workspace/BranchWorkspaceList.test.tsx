@@ -144,8 +144,7 @@ describe('BranchWorkspaceList', () => {
       ),
     )
 
-    expect(container.textContent).toContain('feature/auth')
-    expect(container.textContent).not.toContain('goblin-feature-auth')
+    expect(container.textContent).toContain('goblin-feature-auth')
     const branchWorkspaceRow = container.querySelector<HTMLButtonElement>(
       '[data-testid="branch-workspace-root-branch-1"]',
     )
@@ -677,7 +676,7 @@ describe('BranchWorkspaceList', () => {
     const terminalBadge = container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')
     const dirtyBadge = container.querySelector('[data-testid="branch-workspace-member-change-count-badge"]')
     expect(summary?.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')).toBe(terminalBadge)
-    expect(terminalBadge?.previousElementSibling?.textContent).toBe('api')
+    expect(terminalBadge?.previousElementSibling?.textContent).toBe('feature/auth')
     expect(dirtyBadge?.previousElementSibling).toBe(terminalBadge)
   })
 

@@ -379,78 +379,81 @@ describe('workspace commands', () => {
     expect(repo?.ui.detailTab).toBe('terminal')
   })
 
-  test('restores a valid branch workspace member scope without activating the repository as a project', () => {
-    const workspaceRootId = '/tmp/workspace'
-    const memberRepoId = `${workspaceRootId}/api`
-    const memberWorktreePath = `${workspaceRootId}/goblin-feature-auth/api`
-    const rootRepo = seedRepoState({
-      id: workspaceRootId,
-      isGitRepo: false,
-      branches: [],
-      currentBranch: '',
-      selectedBranch: null,
-    })
-    const memberRepo = seedRepoState({
-      id: memberRepoId,
-      branches: [createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } })],
-      currentBranch: 'main',
-      selectedBranch: 'main',
-      detailTab: 'status',
-    })
-    useReposStore.setState({
-      repos: { [workspaceRootId]: rootRepo, [memberRepoId]: memberRepo },
-      activeId: workspaceRootId,
-      workspaceProjects: {
-        [workspaceRootId]: {
-          rootId: workspaceRootId,
-          repositoryIds: [memberRepoId],
-          candidates: [{ id: memberRepoId, name: 'api', selected: true, available: true }],
-          configured: true,
-          configurationError: null,
-          phase: 'ready',
-          skipped: [],
-          error: null,
+  test.each(['feature/auth', 'previous/terminal-label'])(
+    'restores a member terminal with captured label %s without leaving its subworkspace',
+    (terminalBranch) => {
+      const workspaceRootId = '/tmp/workspace'
+      const memberRepoId = `${workspaceRootId}/api`
+      const memberWorktreePath = `${workspaceRootId}/goblin-feature-auth/api`
+      const rootRepo = seedRepoState({
+        id: workspaceRootId,
+        isGitRepo: false,
+        branches: [],
+        currentBranch: '',
+        selectedBranch: null,
+      })
+      const memberRepo = seedRepoState({
+        id: memberRepoId,
+        branches: [createRepoBranch('feature/auth', { worktree: { path: memberWorktreePath } })],
+        currentBranch: 'main',
+        selectedBranch: 'main',
+        detailTab: 'status',
+      })
+      useReposStore.setState({
+        repos: { [workspaceRootId]: rootRepo, [memberRepoId]: memberRepo },
+        activeId: workspaceRootId,
+        workspaceProjects: {
+          [workspaceRootId]: {
+            rootId: workspaceRootId,
+            repositoryIds: [memberRepoId],
+            candidates: [{ id: memberRepoId, name: 'api', selected: true, available: true }],
+            configured: true,
+            configurationError: null,
+            phase: 'ready',
+            skipped: [],
+            error: null,
+          },
         },
-      },
-      workspaceActiveContextByRoot: { [workspaceRootId]: { kind: 'overview' } },
-    })
-    mainWindowQueryClient.setQueryData(branchWorkspaceQueryKey(workspaceRootId), {
-      ok: true,
-      rootId: workspaceRootId,
-      auxiliaryCandidates: [],
-      items: [branchWorkspace(workspaceRootId, memberWorktreePath)],
-    })
-    const navigation = navigationWith()
-    navigation.showRepoBranchDetailTab = vi.fn()
-    navigation.showRepoDetailTab = vi.fn()
-    const onBranchWorkspaceScopeFallback = vi.fn()
+        workspaceActiveContextByRoot: { [workspaceRootId]: { kind: 'overview' } },
+      })
+      mainWindowQueryClient.setQueryData(branchWorkspaceQueryKey(workspaceRootId), {
+        ok: true,
+        rootId: workspaceRootId,
+        auxiliaryCandidates: [],
+        items: [branchWorkspace(workspaceRootId, memberWorktreePath)],
+      })
+      const navigation = navigationWith()
+      navigation.showRepoBranchDetailTab = vi.fn()
+      navigation.showRepoDetailTab = vi.fn()
+      const onBranchWorkspaceScopeFallback = vi.fn()
 
-    expect(
-      runTerminalDeepLinkCommand({
-        target: {
-          repoId: memberRepoId,
-          worktreePath: memberWorktreePath,
-          branch: 'feature/auth',
-          branchWorkspaceScope: { workspaceRootId, branchWorkspaceId: 'branch-1' },
-        },
-        navigation,
-        setDetailCollapsed: useReposStore.getState().setDetailCollapsed,
-        onBranchWorkspaceScopeFallback,
-      }),
-    ).toBe(true)
+      expect(
+        runTerminalDeepLinkCommand({
+          target: {
+            repoId: memberRepoId,
+            worktreePath: memberWorktreePath,
+            branch: terminalBranch,
+            branchWorkspaceScope: { workspaceRootId, branchWorkspaceId: 'branch-1' },
+          },
+          navigation,
+          setDetailCollapsed: useReposStore.getState().setDetailCollapsed,
+          onBranchWorkspaceScopeFallback,
+        }),
+      ).toBe(true)
 
-    expect(navigation.showRepoBranchDetailTab).not.toHaveBeenCalled()
-    expect(navigation.showRepoDetailTab).not.toHaveBeenCalled()
-    expect(onBranchWorkspaceScopeFallback).not.toHaveBeenCalled()
-    expect(useReposStore.getState().activeId).toBe(workspaceRootId)
-    expect(useReposStore.getState().workspaceActiveContextByRoot[workspaceRootId]).toEqual({
-      kind: 'branch-workspace',
-      branchWorkspaceId: 'branch-1',
-      memberRepositoryName: 'api',
-    })
-    expect(useReposStore.getState().repos[memberRepoId]?.ui.selectedBranch).toBe('feature/auth')
-    expect(useReposStore.getState().repos[memberRepoId]?.ui.detailTab).toBe('terminal')
-  })
+      expect(navigation.showRepoBranchDetailTab).not.toHaveBeenCalled()
+      expect(navigation.showRepoDetailTab).not.toHaveBeenCalled()
+      expect(onBranchWorkspaceScopeFallback).not.toHaveBeenCalled()
+      expect(useReposStore.getState().activeId).toBe(workspaceRootId)
+      expect(useReposStore.getState().workspaceActiveContextByRoot[workspaceRootId]).toEqual({
+        kind: 'branch-workspace',
+        branchWorkspaceId: 'branch-1',
+        memberRepositoryName: 'api',
+      })
+      expect(useReposStore.getState().repos[memberRepoId]?.ui.selectedBranch).toBe('feature/auth')
+      expect(useReposStore.getState().repos[memberRepoId]?.ui.detailTab).toBe('terminal')
+    },
+  )
 
   test('restores a repairable drifted member scope through its checked-out branch', () => {
     const workspaceRootId = '/tmp/workspace'

@@ -118,7 +118,8 @@ export function runTerminalDeepLinkCommand({
 
   if (restoredMember) {
     const next = useReposStore.getState()
-    next.selectBranch(repo.id, restoredMember.checkedOutBranch)
+    if (restoredMember.checkedOutBranch === null) next.selectDetachedWorktree(repo.id, target.worktreePath)
+    else next.selectBranch(repo.id, restoredMember.checkedOutBranch)
     next.setDetailTab(repo.id, 'terminal')
     next.activateBranchWorkspace(
       target.branchWorkspaceScope!.workspaceRootId,
@@ -147,7 +148,7 @@ export function runTerminalDeepLinkCommand({
 
 function restoreBranchWorkspaceMemberScope(
   target: TerminalDeepLinkTarget,
-): { repositoryName: string; checkedOutBranch: string } | false {
+): { repositoryName: string; checkedOutBranch: string | null } | false {
   const scope = target.branchWorkspaceScope
   if (!scope) return false
   const state = useReposStore.getState()
@@ -171,11 +172,7 @@ function restoreBranchWorkspaceMemberScope(
       repos: state.repos,
     })
     if (!resolution.ok) continue
-    if (
-      resolution.target.repositoryId === target.repoId &&
-      resolution.target.worktreePath === target.worktreePath &&
-      (!target.branch || resolution.target.checkedOutBranch === target.branch)
-    ) {
+    if (resolution.target.repositoryId === target.repoId && resolution.target.worktreePath === target.worktreePath) {
       return {
         repositoryName: resolution.target.repositoryName,
         checkedOutBranch: resolution.target.checkedOutBranch,

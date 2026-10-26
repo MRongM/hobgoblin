@@ -222,7 +222,7 @@ describe('selectDetachedWorktree', () => {
     })
   })
 
-  test('rejects unknown, primary, and prunable paths', () => {
+  test('permits primary detached navigation while rejecting unknown and prunable paths', () => {
     seedRepo({ selectedBranch: 'main' })
     useReposStore.setState((state) => {
       const repo = state.repos[REPO_ID]!
@@ -248,10 +248,14 @@ describe('selectDetachedWorktree', () => {
     const before = useReposStore.getState().repos[REPO_ID]
 
     useReposStore.getState().selectDetachedWorktree(REPO_ID, '/missing')
-    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/primary-detached')
     useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/prunable-detached')
-
     expect(useReposStore.getState().repos[REPO_ID]).toBe(before)
+
+    useReposStore.getState().selectDetachedWorktree(REPO_ID, '/tmp/primary-detached')
+    expect(useReposStore.getState().repos[REPO_ID]?.ui).toMatchObject({
+      selectedBranch: null,
+      selectedDetachedWorktreePath: '/tmp/primary-detached',
+    })
   })
 
   test('remembers explorer tabs independently by detached worktree path', () => {

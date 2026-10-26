@@ -69,10 +69,11 @@ export function RepoWorktreeExplorer({
     {
       kind: 'git-worktree',
       repo: sessionEntry,
-      branch: repo?.ui.selectedBranch ?? '',
+      branch: selected?.kind === 'detached' ? '' : (repo?.ui.selectedBranch ?? ''),
+      ...(selected ? { worktreePath: selected.worktreePath } : {}),
       tab: activeVisibleTab,
     },
-    { enabled: allowDetach && !!repo?.ui.selectedBranch },
+    { enabled: allowDetach && (selected !== null || !!repo?.ui.selectedBranch) },
   )
 
   const baseTabs = [

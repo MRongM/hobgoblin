@@ -80,12 +80,12 @@ describe('repoIndexFromRepos', () => {
 
     expect(index['/workspace']?.branchByWorktreePath).toEqual({
       '/workspace': NON_GIT_WORKSPACE_TERMINAL_BRANCH,
-      '/workspace/goblin-feature': 'feature/auth',
+      '/workspace/goblin-feature': 'goblin-feature',
     })
     expect(index['/workspace']?.branchWorkspaceIdByWorktreePath).toEqual({
       '/workspace/goblin-feature': '/workspace/goblin-feature',
     })
-    expect(branchForTerminalWorktree(index, '/workspace', '/workspace/goblin-feature')).toBe('feature/auth')
+    expect(branchForTerminalWorktree(index, '/workspace', '/workspace/goblin-feature')).toBe('goblin-feature')
   })
 
   test('resolves canonical Windows server paths against renderer-owned path spelling', () => {

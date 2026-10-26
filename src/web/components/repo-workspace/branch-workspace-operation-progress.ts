@@ -69,10 +69,18 @@ function durableStepStatus(
   }
   if (step.kind === 'remove-directory') return 'pending'
 
-  if (step.kind === 'create-worktree' || step.kind === 'remove-worktree') {
+  if (
+    step.kind === 'create-worktree' ||
+    step.kind === 'clone-repository' ||
+    step.kind === 'remove-worktree' ||
+    (step.kind === 'remove-entry' && step.repositoryName)
+  ) {
     const member = snapshot.repositories.find((candidate) => candidate.repositoryName === step.repositoryName)
     if (!member) return 'pending'
-    return progressStatus(member.progress, step.kind === 'create-worktree' ? 'complete' : 'removed')
+    return progressStatus(
+      member.progress,
+      step.kind === 'create-worktree' || step.kind === 'clone-repository' ? 'complete' : 'removed',
+    )
   }
 
   if (step.kind === 'delete-local-branch' || step.kind === 'delete-upstream-branch') {

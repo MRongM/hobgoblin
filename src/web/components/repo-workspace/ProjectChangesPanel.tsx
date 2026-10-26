@@ -157,7 +157,7 @@ export function ProjectChangesPanel({
     : null
   const selectedContext = repo && !target ? selectedRepoWorktree(repo) : null
   const worktreePath = target
-    ? (detail?.branch?.worktree?.path ?? null)
+    ? target.worktreePath
     : (selectedContext?.worktreePath ?? detail?.branch?.worktree?.path ?? null)
   const selectedStatus = worktreePath ? (repo?.data.status.filter((status) => status.path === worktreePath) ?? []) : []
   const currentChangedFiles = useMemo(() => changedFilePaths(selectedStatus), [selectedStatus])

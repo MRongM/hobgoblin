@@ -3,8 +3,13 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { normalizeBranchWorkspacePlanRequest } from '#/shared/branch-workspaces.ts'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
-import type { BranchWorkspacePlan, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import type {
+  BranchWorkspacePlan,
+  BranchWorkspaceSnapshot,
+  BranchWorkspacePlanRequest,
+} from '#/shared/branch-workspaces.ts'
 
 const mocks = vi.hoisted(() => ({
   getRepositoryFileTree: vi.fn(),
@@ -63,6 +68,192 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceDialog', () => {
+  test('plans a folder with independently branched worktree and complete repository members', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ onPreview })
+    expect(document.querySelector('[aria-label="workspace.branch-workspace.folder"]')).not.toBeNull()
+    setInput('workspace.branch-workspace.folder', 'feature-set')
+    act(() => repositoryCheckbox('api').click())
+    act(() => repositoryCheckbox('web').click())
+    const rows = ['api', 'web'].map(
+      (name) => document.querySelector<HTMLElement>(`[data-branch-workspace-repository-row="${name}"]`)!,
+    )
+    for (const [index, target] of ['feat/auth', 'fix/session'].entries()) {
+      const input = rows[index]!.querySelector<HTMLInputElement>('[data-member-target-branch]')!
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, target)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+    }
+    const kind = rows[1]!.querySelector<HTMLSelectElement>('[data-member-kind]')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(kind, 'repository')
+      kind.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        operation: 'create',
+        directoryName: 'feature-set',
+        branch: '',
+        repositories: [
+          expect.objectContaining({ repositoryName: 'api', kind: 'worktree', targetBranch: 'feat/auth' }),
+          expect.objectContaining({ repositoryName: 'web', kind: 'repository', targetBranch: 'fix/session' }),
+        ],
+      }),
+    )
+  })
+
+  test('adds a URL clone using its default branch and an alias of an existing source', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ onPreview })
+    setInput('workspace.branch-workspace.folder', 'mixed-set')
+    clickSelector('[data-add-member="api"]')
+    const alias = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="api-2"]')!
+    setRowInput(alias, '[data-member-directory]', 'api-copy')
+    setRowInput(alias, '[data-member-target-branch]', 'feat/copy')
+    clickSelector('[data-action="add-url-member"]')
+    const remote = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="repository-2"]')!
+    setRowInput(remote, '[data-member-directory]', 'remote-service')
+    setRowInput(remote, '[data-member-url]', 'https://example.com/team/service.git')
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        directoryName: 'mixed-set',
+        branch: '',
+        repositories: [
+          expect.objectContaining({
+            repositoryName: 'api-copy',
+            source: { kind: 'repository', repositoryId: '/workspace/api' },
+            targetBranch: 'feat/copy',
+          }),
+          expect.objectContaining({
+            repositoryName: 'remote-service',
+            kind: 'repository',
+            source: { kind: 'url', url: 'https://example.com/team/service.git' },
+          }),
+        ],
+      }),
+    )
+    const last = onPreview.mock.lastCall?.[0]
+    expect(last?.operation === 'create' ? last.repositories[1] : null).not.toHaveProperty('targetBranch')
+  })
+
+  test('supports remote tracking and detached creation without a shared target branch', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ onPreview })
+    act(() => repositoryCheckbox('api').click())
+    act(() => repositoryCheckbox('web').click())
+    const api = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="api"]')!
+    const web = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="web"]')!
+    expect(api.querySelector('[data-member-checkout-mode]')).not.toBeNull()
+    setRowSelect(api, '[data-member-checkout-mode]', 'trackRemoteBranch')
+    setRowInput(api, '[data-member-target-branch]', 'release/api')
+    setRowInput(api, '[data-member-ref]', 'origin/release')
+    setRowSelect(web, '[data-member-checkout-mode]', 'detached')
+    setRowInput(web, '[data-member-ref]', 'abcdef123456')
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        repositories: [
+          expect.objectContaining({
+            targetBranch: 'release/api',
+            mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/release', localBranch: 'release/api' },
+            syncBeforeCreate: false,
+          }),
+          expect.objectContaining({ mode: { kind: 'detached', ref: 'abcdef123456' }, syncBeforeCreate: false }),
+        ],
+      }),
+    )
+    const last = onPreview.mock.lastCall?.[0]
+    expect(last?.operation === 'create' ? last.repositories[1] : null).not.toHaveProperty('targetBranch')
+  })
+
+  test('previews independent repository deletion with exact path and local data risks', () => {
+    const plan = removalPlan()
+    plan.requiredApprovals = ['delete-repository']
+    plan.repositories = [
+      {
+        ...reductionPlan().repositories[0]!,
+        kind: 'repository',
+        action: 'remove-entry',
+        dirty: true,
+        localOnlyCommits: 3,
+      },
+    ]
+    plan.steps = [{ id: 'repository:api', kind: 'remove-entry', label: 'api', repositoryName: 'api' }]
+    renderDialog({ mode: 'remove', workspace: existingWorkspace(), plan })
+    const preview = document.querySelector('[data-independent-repository-removal]')
+    expect(preview).not.toBeNull()
+    expect(preview?.textContent).toContain(plan.repositories[0]!.worktreePath)
+    expect(preview?.textContent).toContain('workspace.branch-workspace.repository-removal-preview')
+    expect(
+      document.querySelector('[aria-label="workspace.branch-workspace.approval.delete-repository"]'),
+    ).not.toBeNull()
+  })
+
+  test('keeps complete aliases fixed when the source is absent from the parent configuration', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    const workspace = existingWorkspace()
+    workspace.branch = ''
+    workspace.directoryName = 'feature-set'
+    workspace.repositories[0] = {
+      ...workspace.repositories[0]!,
+      kind: 'repository',
+      repositoryName: 'service-copy',
+      source: { kind: 'repository', repositoryId: '/source/removed-service' },
+      repositoryId: '/workspace/feature-set/service-copy',
+      currentBranch: 'release/next',
+    }
+    renderDialog({ mode: 'extend', workspace, repositories: [], onPreview })
+    clickSelector('[data-action="add-url-member"]')
+    const row = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="repository-2"]')!
+    setRowInput(row, '[data-member-url]', 'https://example.com/team/new-service.git')
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        operation: 'create',
+        directoryName: 'feature-set',
+        branchWorkspaceId: workspace.id,
+        repositories: [
+          expect.objectContaining({
+            repositoryName: 'service-copy',
+            kind: 'repository',
+            source: { kind: 'repository', repositoryId: '/source/removed-service' },
+            targetBranch: 'feature/auth',
+          }),
+          expect.objectContaining({
+            repositoryName: 'repository-2',
+            kind: 'repository',
+            source: { kind: 'url', url: 'https://example.com/team/new-service.git' },
+          }),
+        ],
+      }),
+    )
+  })
+
+  test('discards inapplicable worktree dependency and sync choices for an independent clone', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ onPreview })
+    act(() => repositoryCheckbox('api').click())
+    click('workspace.branch-workspace.repository-dependencies-toggle-named')
+    await flushAsyncWork()
+    const row = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="api"]')!
+    setRowSelect(row, '[data-member-kind]', 'repository')
+    expect(
+      row.querySelector('[aria-label="workspace.branch-workspace.repository-dependencies-toggle-named"]'),
+    ).toBeNull()
+    expect(row.querySelector('[aria-label="workspace.branch-workspace.sync-before-create-named"]')).toBeNull()
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        repositories: [expect.objectContaining({ kind: 'repository', syncBeforeCreate: false })],
+      }),
+    )
+    const last = onPreview.mock.lastCall?.[0]
+    expect(last?.operation === 'create' ? last.repositories[0] : null).not.toHaveProperty('worktreeBootstrap')
+  })
+
   test('presents create as a compact neutral operation console', () => {
     renderDialog({})
 
@@ -165,7 +356,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('automatically plans a valid lifecycle selection', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ onPreview })
 
     act(() => repositoryCheckbox('api').click())
@@ -173,7 +364,8 @@ describe('BranchWorkspaceDialog', () => {
 
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: expect.stringMatching(/^feat\/[0-9]{8}$/),
+      branch: '',
+      directoryName: expect.stringMatching(/^feature-[0-9]{8}$/),
       repositories: [
         {
           repositoryName: 'api',
@@ -214,7 +406,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('automatically resumes removal with one plan and without opting into branch cleanup', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({
       mode: 'remove',
       workspace: {
@@ -233,7 +425,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('resumes reduction from interrupted members even when repository options are unavailable', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     const workspace = workspaceWithTwoMembers()
     workspace.state = { kind: 'needs-action', action: 'continue-reduce' }
     workspace.repositories[0]!.progress = 'failed'
@@ -332,38 +524,22 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.body.textContent).not.toContain('common.cancel')
   })
 
-  test('prefills a dated feature branch name when creating a branch workspace', () => {
+  test('prefills a dated folder name independent of member branches', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 6, 30, 12))
 
     renderDialog({})
 
-    expect(inputValue('workspace.branch-workspace.branch')).toBe('feat/20260730')
+    expect(inputValue('workspace.branch-workspace.folder')).toBe('feature-20260730')
   })
 
-  test('applies and removes a branch prefix through the prefix picker', () => {
-    renderDialog({})
-    setInput('workspace.branch-workspace.branch', 'topic')
-
-    openMenu('workspace.branch-workspace.branch-prefix.pick')
-    clickMenuItem('bugfix/')
-    expect(inputValue('workspace.branch-workspace.branch')).toBe('bugfix/topic')
-
-    openMenu('workspace.branch-workspace.branch-prefix.pick')
-    clickMenuItem('workspace.branch-workspace.branch-prefix.none')
-    expect(inputValue('workspace.branch-workspace.branch')).toBe('topic')
-  })
-
-  test('aligns the branch prefix picker with the branch input height', () => {
-    renderDialog({})
-
-    const prefix = document.querySelector<HTMLButtonElement>(
-      '[aria-label="workspace.branch-workspace.branch-prefix.pick"]',
-    )
-    const branch = document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.branch"]')
-
-    expect(prefix?.className).toContain('h-[calc(var(--goblin-control-height-sm,2rem)+0.25rem)]')
-    expect(branch?.className).toContain('h-[calc(var(--goblin-control-height-sm,2rem)+0.25rem)]')
+  test('accepts a folder name with spaces without offering a Git branch prefix', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ onPreview })
+    setInput('workspace.branch-workspace.folder', 'release candidates')
+    act(() => repositoryCheckbox('api').click())
+    expect(document.querySelector('[aria-label="workspace.branch-workspace.branch-prefix.pick"]')).toBeNull()
+    await expectAutoPreview(onPreview, expect.objectContaining({ directoryName: 'release candidates', branch: '' }))
   })
 
   test('shows live create progress and the completed step count after confirmation', () => {
@@ -564,7 +740,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('disables normal and force deletion when the visible plan no longer matches removal options', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     const plannedRequest = {
       operation: 'remove' as const,
       branchWorkspaceId: 'branch-1',
@@ -637,7 +813,7 @@ describe('BranchWorkspaceDialog', () => {
   test('returns a failed creation to the preserved selection form', async () => {
     const onReturnToSelection = vi.fn()
     renderDialog({})
-    setInput('workspace.branch-workspace.branch', 'feature/reselect')
+    setInput('workspace.branch-workspace.folder', 'reselect-set')
     click('workspace.branch-workspace.repository-named')
 
     renderDialog({
@@ -656,7 +832,7 @@ describe('BranchWorkspaceDialog', () => {
 
     renderDialog({ onReturnToSelection })
     expect(repositoryCheckbox('api').disabled).toBe(false)
-    expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/reselect')
+    expect(inputValue('workspace.branch-workspace.folder')).toBe('reselect-set')
     expect(checked('workspace.branch-workspace.repository-named')).toBe(true)
   })
 
@@ -665,10 +841,10 @@ describe('BranchWorkspaceDialog', () => {
     workspace.state = { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
     workspace.repositories[1] = { ...workspace.repositories[1]!, progress: 'failed', ready: false }
 
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ workspace, onPreview })
 
-    expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/auth')
+    expect(inputValue('workspace.branch-workspace.folder')).toBe('goblin-feature-auth')
     const members = document.querySelectorAll<HTMLInputElement>(
       '[aria-label="workspace.branch-workspace.repository-named"]',
     )
@@ -715,9 +891,9 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('previews a repository subset with per-repository bases and auxiliary link/copy choices', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ onPreview })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     await flushAsyncWork()
     changeSelect('workspace.branch-workspace.base-named', 'develop')
@@ -725,7 +901,8 @@ describe('BranchWorkspaceDialog', () => {
     clickSelector('[data-materialization-item="docs"] [data-materialization-choice="copy"]')
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -845,7 +1022,7 @@ describe('BranchWorkspaceDialog', () => {
 
   test('loads local and remote creation bases and submits the selected exact remote', async () => {
     mocks.getRepositoryRemoteBranches.mockResolvedValueOnce(['origin/main', 'upstream/release'])
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({
       repositories: [
         {
@@ -859,7 +1036,7 @@ describe('BranchWorkspaceDialog', () => {
       ],
       onPreview,
     })
-    setInput('workspace.branch-workspace.branch', 'feature/new')
+    setInput('workspace.branch-workspace.folder', 'new-set')
     act(() => repositoryCheckbox('api').click())
 
     await vi.waitFor(() => expect(mocks.getRepositoryRemoteBranches).toHaveBeenCalledTimes(1))
@@ -879,7 +1056,8 @@ describe('BranchWorkspaceDialog', () => {
     changeSelect('workspace.branch-workspace.base-named', 'remote:upstream/release')
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/new',
+      branch: '',
+      directoryName: 'new-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -946,8 +1124,8 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.body.textContent).toContain('workspace.branch-workspace.sync-no-upstream')
   })
 
-  test('uses and synchronizes an existing common target branch instead of the selected base', async () => {
-    const onPreview = vi.fn(async () => true)
+  test('uses and synchronizes an existing member target branch instead of the selected base', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({
       repositories: [
         {
@@ -964,7 +1142,8 @@ describe('BranchWorkspaceDialog', () => {
       ],
       onPreview,
     })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
+    setInput('workspace.branch-workspace.member-target-branch-named', 'feature/auth')
     act(() => repositoryCheckbox('api').click())
     await flushAsyncWork()
 
@@ -979,7 +1158,8 @@ describe('BranchWorkspaceDialog', () => {
 
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1003,8 +1183,8 @@ describe('BranchWorkspaceDialog', () => {
     )
     expect(dependencySwitch?.getAttribute('aria-checked')).toBe('false')
     const repositoryRow = dependencySwitch?.closest('[data-branch-workspace-repository-row="api"]')
-    expect(repositoryRow?.children[1]?.contains(dependencySwitch ?? null)).toBe(true)
-    expect(repositoryRow?.children[2]?.matches('[data-slot="select-trigger"]')).toBe(true)
+    expect(repositoryRow?.contains(dependencySwitch ?? null)).toBe(true)
+    expect(!!repositoryRow?.querySelector('[data-slot="select-trigger"]')).toBe(true)
 
     act(() => dependencySwitch?.click())
     await flushAsyncWork()
@@ -1025,7 +1205,7 @@ describe('BranchWorkspaceDialog', () => {
         finishRead = resolve
       }),
     )
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ onPreview })
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
@@ -1079,9 +1259,9 @@ describe('BranchWorkspaceDialog', () => {
             ],
           },
     )
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ onPreview })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await vi.waitFor(() => expect(document.querySelector('[data-worktree-dependency-expand="backend"]')).not.toBeNull())
@@ -1094,7 +1274,8 @@ describe('BranchWorkspaceDialog', () => {
     changeSelect('worktree-dependency-tree.mode', 'copy')
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1125,9 +1306,9 @@ describe('BranchWorkspaceDialog', () => {
         },
       ],
     })
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ onPreview })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
@@ -1149,7 +1330,8 @@ describe('BranchWorkspaceDialog', () => {
     expect(document.querySelector('[data-branch-workspace-repository-dependency-summary]')).toBeNull()
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1228,9 +1410,9 @@ describe('BranchWorkspaceDialog', () => {
         },
       ],
     })
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ onPreview })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
@@ -1244,7 +1426,8 @@ describe('BranchWorkspaceDialog', () => {
     clickSelector('[data-worktree-dependency-path="node_modules"]')
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1338,9 +1521,9 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('keeps an empty selected-base source instead of falling back', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
 
@@ -1353,7 +1536,8 @@ describe('BranchWorkspaceDialog', () => {
     )
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1422,9 +1606,9 @@ describe('BranchWorkspaceDialog', () => {
         ],
       }
     })
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ repositories: [repositoryWithDependencySources()], onPreview })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await vi.waitFor(() =>
@@ -1451,7 +1635,8 @@ describe('BranchWorkspaceDialog', () => {
     changeSelect('worktree-dependency-tree.mode', 'copy')
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1488,7 +1673,7 @@ describe('BranchWorkspaceDialog', () => {
         },
       ],
     })
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({
       onPreview,
       auxiliaryCandidates: [
@@ -1496,7 +1681,7 @@ describe('BranchWorkspaceDialog', () => {
         { name: 'AGENTS.md', path: '/workspace/AGENTS.md', kind: 'file', outsideRoot: false },
       ],
     })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
@@ -1515,7 +1700,8 @@ describe('BranchWorkspaceDialog', () => {
     clickSelector(`${auxiliaryList} [data-materialization-bulk-choice="symlink"]`)
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1577,7 +1763,7 @@ describe('BranchWorkspaceDialog', () => {
       items: [],
       auxiliaryCandidates: [],
     }))
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({
       onPreview,
       onRefreshAuxiliaryCandidates,
@@ -1586,7 +1772,7 @@ describe('BranchWorkspaceDialog', () => {
         { name: '.env', path: '/workspace/.env', kind: 'file', outsideRoot: false },
       ],
     })
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     await flushAsyncWork()
     changeSelect('workspace.branch-workspace.base-named', 'develop')
@@ -1605,7 +1791,7 @@ describe('BranchWorkspaceDialog', () => {
       ],
     })
 
-    expect(inputValue('workspace.branch-workspace.branch')).toBe('feature/auth')
+    expect(inputValue('workspace.branch-workspace.folder')).toBe('feature-set')
     expect(checked('workspace.branch-workspace.repository-named')).toBe(true)
     expect(selectValue('workspace.branch-workspace.base-named')).toBe('develop')
     expect(choiceState('docs', 'copy')).toBe('on')
@@ -1614,7 +1800,8 @@ describe('BranchWorkspaceDialog', () => {
 
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'feature-set',
       repositories: [
         {
           repositoryName: 'api',
@@ -1667,7 +1854,7 @@ describe('BranchWorkspaceDialog', () => {
   test('keeps preview enabled when repository dependencies cannot be loaded', async () => {
     mocks.getRepositoryFileTree.mockRejectedValueOnce(new Error('offline'))
     renderDialog({})
-    setInput('workspace.branch-workspace.branch', 'feature/auth')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
     click('workspace.branch-workspace.repository-named')
     click('workspace.branch-workspace.repository-dependencies-toggle-named')
     await flushAsyncWork()
@@ -1899,7 +2086,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('shows removal options beside the automatically planned deletion', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ mode: 'remove', workspace: existingWorkspace(), onPreview })
 
     expect(document.querySelector('[data-testid="branch-workspace-one-step-layout"]')).not.toBeNull()
@@ -1917,11 +2104,11 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('extends an existing branch workspace with only non-member repository controls', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ mode: 'extend', workspace: existingWorkspace(), onPreview })
 
-    const branchInput = document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.branch"]')
-    expect(branchInput?.value).toBe('feature/auth')
+    const branchInput = document.querySelector<HTMLInputElement>('[aria-label="workspace.branch-workspace.folder"]')
+    expect(branchInput?.value).toBe('goblin-feature-auth')
     expect(branchInput?.disabled).toBe(true)
     expect(document.body.textContent).not.toContain('workspace.branch-workspace.member-fixed')
     expect(document.querySelector('[aria-labelledby="branch-workspace-auxiliary-candidates"]')).toBeNull()
@@ -1931,7 +2118,9 @@ describe('BranchWorkspaceDialog', () => {
     click('workspace.branch-workspace.repository-named')
     await expectAutoPreview(onPreview, {
       operation: 'create',
-      branch: 'feature/auth',
+      branch: '',
+      directoryName: 'goblin-feature-auth',
+      branchWorkspaceId: 'branch-1',
       repositories: [
         {
           repositoryName: 'api',
@@ -1949,7 +2138,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('previews a member reduction while retaining at least one member', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), onPreview })
 
     expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
@@ -1971,7 +2160,7 @@ describe('BranchWorkspaceDialog', () => {
   })
 
   test('locks a member-scoped reduction to its preselected repository', async () => {
-    const onPreview = vi.fn(async () => true)
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
     renderDialog({
       mode: 'reduce',
       workspace: workspaceWithTwoMembers(),
@@ -2280,7 +2469,11 @@ async function flushAsyncWork() {
 }
 
 async function expectAutoPreview(onPreview: ReturnType<typeof vi.fn>, request: unknown) {
-  await vi.waitFor(() => expect(onPreview).toHaveBeenLastCalledWith(request, expect.any(AbortSignal)))
+  await vi.waitFor(() => {
+    expect(onPreview.mock.lastCall?.[0]).toMatchObject(request as object)
+    expect(onPreview.mock.lastCall?.[1]).toBeInstanceOf(AbortSignal)
+    expect(normalizeBranchWorkspacePlanRequest(onPreview.mock.lastCall?.[0]).ok).toBe(true)
+  })
 }
 
 function existingWorkspace(): BranchWorkspaceSnapshot {
@@ -2414,4 +2607,22 @@ function reductionPlan(): BranchWorkspacePlan {
     terminalSessionIds: ['terminal-api'],
     steps: [{ id: 'repository:api', kind: 'remove-worktree', label: 'api', repositoryName: 'api' }],
   }
+}
+
+function setRowInput(row: HTMLElement, selector: string, value: string) {
+  const input = row.querySelector<HTMLInputElement>(selector)
+  expect(input).not.toBeNull()
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+function setRowSelect(row: HTMLElement, selector: string, value: string) {
+  const select = row.querySelector<HTMLSelectElement>(selector)
+  expect(select).not.toBeNull()
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value)
+    select!.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 }

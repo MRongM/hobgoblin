@@ -380,7 +380,20 @@ export function WorkspaceRepositoryRail({
     })
     if (!resolution.ok) return resolution
     const repo = repos[resolution.target.repositoryId]
-    const branch = repo?.data.branches.find((candidate) => candidate.name === resolution.target.checkedOutBranch)
+    const branch =
+      resolution.target.checkedOutBranch === null
+        ? {
+            name: 'HEAD',
+            isCurrent: false,
+            ahead: 0,
+            behind: 0,
+            lastCommitHash: resolution.target.head ?? '',
+            lastCommitMessage: '',
+            lastCommitDate: '',
+            lastCommitAuthor: '',
+            worktree: { path: member.worktreePath },
+          }
+        : repo?.data.branches.find((candidate) => candidate.name === resolution.target.checkedOutBranch)
     if (!repo || !branch) {
       return { ok: false as const, reason: 'workspace.branch-workspace.member-branch-missing' }
     }
@@ -423,7 +436,9 @@ export function WorkspaceRepositoryRail({
       activeContext.kind !== 'branch-workspace' ||
       activeContext.branchWorkspaceId !== item.id ||
       activeContext.memberRepositoryName !== member.repositoryName
-    selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
+    if (resolution.target.checkedOutBranch === null)
+      useReposStore.getState().selectDetachedWorktree(resolution.target.repositoryId, resolution.target.worktreePath)
+    else selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
     setDetailTab(resolution.target.repositoryId, 'terminal')
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
@@ -438,7 +453,9 @@ export function WorkspaceRepositoryRail({
   const openRepositoryMemberTerminal = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveMemberTarget(member)
     if (!resolution.ok) return
-    selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
+    if (resolution.target.checkedOutBranch === null)
+      useReposStore.getState().selectDetachedWorktree(resolution.target.repositoryId, resolution.target.worktreePath)
+    else selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
     setDetailTab(resolution.target.repositoryId, 'terminal')
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)

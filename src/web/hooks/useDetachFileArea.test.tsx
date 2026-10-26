@@ -54,6 +54,7 @@ test('keeps the active tab captured when the toolbar drag starts', async () => {
       kind: 'git-worktree',
       repo: { kind: 'local', id: '/repo' },
       branch: 'main',
+      worktreePath: '/repo/member',
       tab,
     })
     return (
@@ -89,6 +90,7 @@ test('keeps the active tab captured when the toolbar drag starts', async () => {
     kind: 'git-worktree',
     repo: { kind: 'local', id: '/repo' },
     branch: 'main',
+    worktreePath: '/repo/member',
     tab: 'files',
     releasePoint: { x: 900, y: 400 },
   })

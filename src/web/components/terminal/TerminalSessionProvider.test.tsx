@@ -1235,7 +1235,7 @@ describe('TerminalSessionProvider', () => {
       await vi.waitFor(() => expect(getProbe().count).toBe(1))
       expect(mockSessions.at(-1)?.descriptor).toMatchObject({
         repoRoot: REPO_ID,
-        branch: 'feature/auth',
+        branch: 'goblin-feature',
         worktreePath: branchWorkspacePath,
         targetKind: 'branch-workspace',
         branchWorkspaceId: 'branch-1',

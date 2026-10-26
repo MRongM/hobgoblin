@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 import type {
   BranchWorkspaceApproval,
+  BranchWorkspaceMemberKind,
+  BranchWorkspaceMemberSource,
   BranchWorkspaceAuxiliaryCandidate,
   BranchWorkspaceExecuteResult,
   BranchWorkspacePlan,
@@ -25,8 +27,13 @@ import type {
   BranchWorkspaceSnapshot,
 } from '#/shared/branch-workspaces.ts'
 import type { WorktreeBootstrapSelection } from '#/shared/worktree-bootstrap-summary.ts'
-import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef } from '#/shared/worktree-create.ts'
-import { BranchPrefixPicker } from '#/web/components/branch-list/BranchPrefixPicker.tsx'
+import { isRemoteTrackingRef, type WorktreeCreationBase } from '#/shared/worktree-create.ts'
+import { isSafeBranchWorkspaceFolderName, normalizeBranchWorkspacePlanRequest } from '#/shared/branch-workspaces.ts'
+import { isSafeBranchName } from '#/shared/refnames.ts'
+import {
+  BranchWorkspaceMemberConfiguration,
+  type MemberCheckoutMode,
+} from '#/web/components/repo-workspace/BranchWorkspaceMemberConfiguration.tsx'
 import { RemoteBranchSearchInput } from '#/web/components/branch-list/RemoteBranchSearchInput.tsx'
 import { remoteRefMatchesQuery } from '#/web/components/branch-list/branch-create-model.ts'
 import {
@@ -110,17 +117,17 @@ interface BranchWorkspaceDialogProps {
   onCancel: () => Promise<unknown>
 }
 
-function defaultBranchWorkspaceName(now = new Date()): string {
+function defaultFolderName(now = new Date()): string {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
-  return `feat/${year}${month}${day}`
+  return `feature-${year}${month}${day}`
 }
 
 export function BranchWorkspaceDialog({
   open,
   mode,
-  repositories,
+  repositories: sourceRepositories,
   auxiliaryCandidates,
   workspace,
   progressWorkspace,
@@ -142,7 +149,37 @@ export function BranchWorkspaceDialog({
   onCancel,
 }: BranchWorkspaceDialogProps) {
   const t = useT()
-  const [branch, setBranch] = useState('')
+  const [folderName, setFolderName] = useState('')
+  const [extraRepositories, setExtraRepositories] = useState<BranchWorkspaceRepositoryOption[]>([])
+  const [memberKinds, setMemberKinds] = useState<Record<string, BranchWorkspaceMemberKind>>({})
+  const [memberSources, setMemberSources] = useState<Record<string, BranchWorkspaceMemberSource>>({})
+  const [memberDirectories, setMemberDirectories] = useState<Record<string, string>>({})
+  const [memberBranches, setMemberBranches] = useState<Record<string, string>>({})
+  const [memberCheckoutModes, setMemberCheckoutModes] = useState<Record<string, MemberCheckoutMode>>({})
+  const [memberRefs, setMemberRefs] = useState<Record<string, string>>({})
+  const fixedOptions: BranchWorkspaceRepositoryOption[] = (workspace?.repositories ?? [])
+    .filter(
+      (member) =>
+        member.progress !== 'removed' && !sourceRepositories.some((source) => source.name === member.repositoryName),
+    )
+    .map((member) => ({
+      id: member.source?.kind === 'repository' ? member.source.repositoryId : (member.repositoryId ?? ''),
+      name: member.repositoryName,
+      available: true,
+      branches: [member.targetBranch],
+      defaultBranch: member.targetBranch,
+    }))
+  const repositories = [...sourceRepositories, ...fixedOptions, ...extraRepositories].map((row) => {
+    const source = memberSources[row.name]
+    const repository =
+      source?.kind === 'repository' ? sourceRepositories.find((option) => option.id === source.repositoryId) : undefined
+    return repository ? { ...repository, name: row.name } : row
+  })
+  const targetBranchFor = (repository: BranchWorkspaceRepositoryOption) => memberBranches[repository.name]?.trim() ?? ''
+  const isCompleteMember = (repository: BranchWorkspaceRepositoryOption) =>
+    (memberKinds[repository.name] ?? 'worktree') === 'repository'
+  const isUrlMember = (repository: BranchWorkspaceRepositoryOption) => memberSources[repository.name]?.kind === 'url'
+
   const [selectedRepositories, setSelectedRepositories] = useState<Record<string, boolean>>({})
   const [repositoryDependenciesEnabled, setRepositoryDependenciesEnabled] = useState<Record<string, boolean>>({})
   const [creationBases, setCreationBases] = useState<Record<string, WorktreeCreationBase>>({})
@@ -206,14 +243,70 @@ export function BranchWorkspaceDialog({
       return
     }
     const initial = initialDialogState.current
-    const initialBranch = initial.workspace?.branch ?? (mode === 'create' ? defaultBranchWorkspaceName() : '')
+    const initialMembers = new Map(
+      initial.workspace?.repositories.map((member) => [member.repositoryName, member]) ?? [],
+    )
+    const initialFolderName = initial.workspace?.directoryName ?? (mode === 'create' ? defaultFolderName() : '')
     const initialBases = Object.fromEntries(
       initial.repositories.map((repository) => [
         repository.name,
-        initial.fixedRepositories.get(repository.name)?.creationBase ?? defaultCreationBase(repository),
+        initialMembers.get(repository.name)?.creationBase ?? defaultCreationBase(repository),
       ]),
     )
-    setBranch(initialBranch)
+    setFolderName(initialFolderName)
+    setExtraRepositories([])
+    setMemberCheckoutModes(
+      Object.fromEntries(
+        initial.repositories.map((repository) => [
+          repository.name,
+          initialMembers.get(repository.name)?.mode?.kind ?? 'auto',
+        ]),
+      ),
+    )
+    setMemberRefs(
+      Object.fromEntries(
+        initial.repositories.map((repository) => {
+          const mode = initialMembers.get(repository.name)?.mode
+          return [
+            repository.name,
+            mode?.kind === 'detached'
+              ? mode.ref
+              : mode?.kind === 'trackRemoteBranch'
+                ? mode.remoteRef
+                : mode?.kind === 'newBranch' && mode.creationBase.kind === 'localBranch'
+                  ? mode.creationBase.branch
+                  : '',
+          ]
+        }),
+      ),
+    )
+    setMemberKinds(
+      Object.fromEntries(
+        initial.repositories.map((repository) => [
+          repository.name,
+          initialMembers.get(repository.name)?.kind ?? 'worktree',
+        ]),
+      ),
+    )
+    setMemberSources(
+      Object.fromEntries(
+        initial.repositories.map((repository) => [
+          repository.name,
+          initialMembers.get(repository.name)?.source ?? { kind: 'repository', repositoryId: repository.id },
+        ]),
+      ),
+    )
+    setMemberDirectories(
+      Object.fromEntries(initial.repositories.map((repository) => [repository.name, repository.name])),
+    )
+    setMemberBranches(
+      Object.fromEntries(
+        initial.repositories.map((repository) => [
+          repository.name,
+          initialMembers.get(repository.name)?.targetBranch ?? defaultFolderName().replace('feature-', 'feat/'),
+        ]),
+      ),
+    )
     setSelectedRepositories(
       Object.fromEntries(
         mode === 'reduce' &&
@@ -239,7 +332,11 @@ export function BranchWorkspaceDialog({
             fixed?.syncBeforeCreate ??
               syncEligible(
                 repository,
-                effectiveCreationBase(repository, initialBranch, initialBases[repository.name]!),
+                effectiveCreationBase(
+                  repository,
+                  initialMembers.get(repository.name)?.targetBranch ?? defaultFolderName().replace('feature-', 'feat/'),
+                  initialBases[repository.name]!,
+                ),
               ),
           ]
         }),
@@ -327,6 +424,7 @@ export function BranchWorkspaceDialog({
   }
 
   const loadRemoteBranches = async (repository: BranchWorkspaceRepositoryOption) => {
+    if (isUrlMember(repository)) return
     remoteBranchControllers.current[repository.name]?.abort()
     const controller = new AbortController()
     remoteBranchControllers.current[repository.name] = controller
@@ -375,42 +473,50 @@ export function BranchWorkspaceDialog({
     }
   }
 
-  const applyBranchChange = (nextBranch: string) => {
-    if (nextBranch.trim() !== branch.trim()) setPlanNotBefore(Date.now() + 300)
-    setBranch(nextBranch)
-    setSyncBeforeCreate((current) =>
-      Object.fromEntries(
-        repositories.map((repository) => {
-          const fixed = fixedRepositories.get(repository.name)
-          if (fixed) return [repository.name, fixed.syncBeforeCreate]
-          const requestedBase = creationBases[repository.name] ?? defaultCreationBase(repository)
-          const previousBase = effectiveCreationBase(repository, branch.trim(), requestedBase)
-          const nextBase = effectiveCreationBase(repository, nextBranch.trim(), requestedBase)
-          return [
-            repository.name,
-            sameCreationBase(previousBase, nextBase)
-              ? (current[repository.name] ?? syncEligible(repository, nextBase))
-              : syncEligible(repository, nextBase),
-          ]
-        }),
-      ),
+  const applyFolderNameChange = (nextFolder: string) => {
+    if (nextFolder.trim() !== folderName.trim()) setPlanNotBefore(Date.now() + 300)
+    setFolderName(nextFolder)
+  }
+
+  const changeMemberBranch = (repository: BranchWorkspaceRepositoryOption, nextBranch: string) => {
+    setMemberBranches((current) => ({ ...current, [repository.name]: nextBranch }))
+    const nextBase = effectiveCreationBase(
+      repository,
+      nextBranch.trim(),
+      creationBases[repository.name] ?? defaultCreationBase(repository),
     )
-    for (const repository of repositories) {
-      if (!repositoryDependenciesEnabled[repository.name]) continue
-      const base = effectiveCreationBase(
-        repository,
-        nextBranch.trim(),
-        creationBases[repository.name] ?? defaultCreationBase(repository),
-      )
-      initializeRepositoryBootstrap(repository, base)
-    }
+    setSyncBeforeCreate((current) => ({ ...current, [repository.name]: syncEligible(repository, nextBase) }))
+    if (repositoryDependenciesEnabled[repository.name]) initializeRepositoryBootstrap(repository, nextBase)
+  }
+
+  const addMember = (source: BranchWorkspaceRepositoryOption | null) => {
+    const names = new Set(repositories.map((repository) => repository.name))
+    const stem = source?.name ?? 'repository'
+    let name = `${stem}-2`
+    for (let index = 3; names.has(name); index++) name = `${stem}-${index}`
+    setExtraRepositories((current) => [
+      ...current,
+      { ...(source ?? { id: '', available: true, branches: [], defaultBranch: '' }), name },
+    ])
+    setSelectedRepositories((current) => ({ ...current, [name]: true }))
+    setMemberDirectories((current) => ({ ...current, [name]: name }))
+    setMemberKinds((current) => ({ ...current, [name]: source ? 'worktree' : 'repository' }))
+    setMemberBranches((current) => ({
+      ...current,
+      [name]: source ? defaultFolderName().replace('feature-', 'feat/') : '',
+    }))
+    setMemberSources((current) => ({
+      ...current,
+      [name]: source ? { kind: 'repository', repositoryId: source.id } : { kind: 'url', url: '' },
+    }))
+    if (source) void loadRemoteBranches({ ...source, name })
   }
 
   const initializeRepositoryBootstrap = (
     repository: BranchWorkspaceRepositoryOption,
     creationBase = effectiveCreationBase(
       repository,
-      branch.trim(),
+      targetBranchFor(repository),
       creationBases[repository.name] ?? defaultCreationBase(repository),
     ),
   ) => {
@@ -431,7 +537,9 @@ export function BranchWorkspaceDialog({
 
   const createRequest = (): Extract<BranchWorkspacePlanRequest, { operation: 'create' }> => ({
     operation: 'create',
-    branch: branch.trim(),
+    directoryName: folderName.trim(),
+    branch: '',
+    ...(workspace ? { branchWorkspaceId: workspace.id } : {}),
     repositories: repositories.flatMap((repository) =>
       selectedRepositories[repository.name] ? [repositorySelection(repository)] : [],
     ),
@@ -446,23 +554,49 @@ export function BranchWorkspaceDialog({
     const fixed = fixedRepositories.get(repository.name)
     const creationBase =
       fixed?.creationBase ??
-      effectiveCreationBase(
-        repository,
-        branch.trim(),
-        creationBases[repository.name] ?? defaultCreationBase(repository),
-      )
-    const dependencySource = repositoryDependenciesEnabled[repository.name]
-      ? repositoryBootstrapSources[repository.name]
-      : undefined
+      (isUrlMember(repository) && memberCheckoutModes[repository.name] === 'newBranch'
+        ? { kind: 'localBranch' as const, branch: memberRefs[repository.name]?.trim() ?? '' }
+        : effectiveCreationBase(
+            repository,
+            targetBranchFor(repository),
+            creationBases[repository.name] ?? defaultCreationBase(repository),
+          ))
+    const dependencySource =
+      !isCompleteMember(repository) && repositoryDependenciesEnabled[repository.name]
+        ? repositoryBootstrapSources[repository.name]
+        : undefined
     const selections = repositoryDependenciesEnabled[repository.name]
       ? (repositoryBootstrapSelections[repository.name] ?? [])
       : []
+    const checkoutMode = memberCheckoutModes[repository.name] ?? 'auto'
+    const targetBranch = targetBranchFor(repository)
+    const ref = memberRefs[repository.name]?.trim() ?? ''
+    const mode =
+      fixed?.mode ??
+      (checkoutMode === 'detached'
+        ? { kind: 'detached' as const, ref }
+        : checkoutMode === 'trackRemoteBranch'
+          ? { kind: 'trackRemoteBranch' as const, remoteRef: ref, localBranch: targetBranch }
+          : checkoutMode === 'newBranch'
+            ? { kind: 'newBranch' as const, newBranch: targetBranch, creationBase }
+            : checkoutMode === 'existingBranch'
+              ? { kind: 'existingBranch' as const, branch: targetBranch }
+              : undefined)
     return {
-      repositoryName: repository.name,
+      ...(fixed?.memberId ? { memberId: fixed.memberId } : {}),
+      ...(mode ? { mode } : {}),
+      repositoryName: memberDirectories[repository.name]?.trim() ?? repository.name,
+      kind: fixed?.kind ?? memberKinds[repository.name] ?? 'worktree',
+      source: fixed?.source ?? memberSources[repository.name] ?? { kind: 'repository', repositoryId: repository.id },
+      ...(checkoutMode !== 'detached' && targetBranch ? { targetBranch } : {}),
       creationBase,
       syncBeforeCreate:
         fixed?.syncBeforeCreate ??
-        (syncBeforeCreate[repository.name] === true && syncEligible(repository, creationBase)),
+        (checkoutMode !== 'detached' &&
+          checkoutMode !== 'trackRemoteBranch' &&
+          !isCompleteMember(repository) &&
+          syncBeforeCreate[repository.name] === true &&
+          syncEligible(repository, creationBase)),
       ...(dependencySource && selections.length > 0
         ? {
             worktreeBootstrap: {
@@ -481,7 +615,25 @@ export function BranchWorkspaceDialog({
         (repository) => !fixedRepositories.has(repository.repositoryName),
       )
       const hasNewAuxiliaryEntry = value.auxiliaryEntries.some((entry) => !fixedAuxiliary.has(entry.name))
-      return value.branch && value.repositories.length > 0 && (!workspace || hasNewRepository || hasNewAuxiliaryEntry)
+      const validMembers = value.repositories.every(
+        (member) =>
+          isSafeBranchWorkspaceFolderName(member.repositoryName) &&
+          (member.mode?.kind === 'detached'
+            ? !!member.mode.ref && !member.mode.ref.startsWith('-')
+            : member.targetBranch
+              ? isSafeBranchName(member.targetBranch)
+              : member.kind === 'repository' && member.source?.kind === 'url') &&
+          (member.mode?.kind !== 'trackRemoteBranch' || isRemoteTrackingRef(member.mode.remoteRef)) &&
+          (member.source?.kind !== 'url' || member.source.url.trim().length > 0),
+      )
+      if (!normalizeBranchWorkspacePlanRequest(value).ok) return null
+      const uniqueDirectories =
+        new Set(value.repositories.map((member) => member.repositoryName)).size === value.repositories.length
+      return isSafeBranchWorkspaceFolderName(value.directoryName ?? '') &&
+        validMembers &&
+        uniqueDirectories &&
+        value.repositories.length > 0 &&
+        (!workspace || hasNewRepository || hasNewAuxiliaryEntry)
         ? value
         : null
     }
@@ -571,15 +723,24 @@ export function BranchWorkspaceDialog({
     selectableRepositories.length > 0 && selectedSelectableCount === selectableRepositories.length
   const someSelectableRepositoriesSelected = selectedSelectableCount > 0 && !allSelectableRepositoriesSelected
   const synchronizableSelectedRepositories = visibleRepositories.filter((repository) => {
-    if (!repository.available || fixedRepositories.has(repository.name) || !selectedRepositories[repository.name]) {
+    if (
+      isCompleteMember(repository) ||
+      !repository.available ||
+      fixedRepositories.has(repository.name) ||
+      !selectedRepositories[repository.name]
+    ) {
       return false
     }
     const creationBase = effectiveCreationBase(
       repository,
-      branch.trim(),
+      targetBranchFor(repository),
       creationBases[repository.name] ?? defaultCreationBase(repository),
     )
-    return syncEligible(repository, creationBase)
+    return (
+      memberCheckoutModes[repository.name] !== 'detached' &&
+      memberCheckoutModes[repository.name] !== 'trackRemoteBranch' &&
+      syncEligible(repository, creationBase)
+    )
   })
   const synchronizedSelectedCount = synchronizableSelectedRepositories.filter(
     (repository) => syncBeforeCreate[repository.name],
@@ -696,19 +857,14 @@ export function BranchWorkspaceDialog({
             {oneStep && (mode === 'create' || mode === 'extend') ? (
               <div className="grid gap-4">
                 <label className="grid gap-1.5 text-xs font-medium">
-                  {t('workspace.branch-workspace.branch')}
+                  {t('workspace.branch-workspace.folder')}
                   <div className="flex gap-2">
-                    <BranchPrefixPicker
-                      value={branch}
-                      disabled={selectionLocked || !!workspace}
-                      onChange={(nextBranch) => applyBranchChange(nextBranch)}
-                    />
                     <Input
-                      aria-label={t('workspace.branch-workspace.branch')}
-                      value={branch}
+                      aria-label={t('workspace.branch-workspace.folder')}
+                      value={folderName}
                       disabled={selectionLocked || !!workspace}
                       className="font-mono flex-1 min-w-0"
-                      onChange={(event) => applyBranchChange(event.target.value)}
+                      onChange={(event) => applyFolderNameChange(event.target.value)}
                     />
                   </div>
                 </label>
@@ -774,7 +930,11 @@ export function BranchWorkspaceDialog({
                   {visibleRepositories.map((repository) => {
                     const fixed = fixedRepositories.has(repository.name)
                     const requestedCreationBase = creationBases[repository.name] ?? defaultCreationBase(repository)
-                    const creationBase = effectiveCreationBase(repository, branch.trim(), requestedCreationBase)
+                    const creationBase = effectiveCreationBase(
+                      repository,
+                      targetBranchFor(repository),
+                      requestedCreationBase,
+                    )
                     const dependencySources = repositoryDependencySources({
                       contextBranch: creationBase.kind === 'localBranch' ? creationBase.branch : '',
                       worktrees: repository.worktrees ?? [],
@@ -783,8 +943,16 @@ export function BranchWorkspaceDialog({
                       dependencySources.options.find(
                         (source) => source.id === repositoryBootstrapSources[repository.name]?.id,
                       ) ?? dependencySources.initial
-                    const existingTarget = creationBase.kind === 'localBranch' && creationBase.branch === branch.trim()
-                    const synchronizationEligible = syncEligible(repository, creationBase)
+                    const existingTarget =
+                      !!targetBranchFor(repository) &&
+                      creationBase.kind === 'localBranch' &&
+                      creationBase.branch === targetBranchFor(repository) &&
+                      (memberCheckoutModes[repository.name] ?? 'auto') === 'auto'
+                    const synchronizationEligible =
+                      !isCompleteMember(repository) &&
+                      memberCheckoutModes[repository.name] !== 'detached' &&
+                      memberCheckoutModes[repository.name] !== 'trackRemoteBranch' &&
+                      syncEligible(repository, creationBase)
                     const remoteState = remoteBranches[repository.name]
                     return (
                       <div key={repository.name} className="grid gap-2">
@@ -793,7 +961,10 @@ export function BranchWorkspaceDialog({
                           className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(6.5rem,0.55fr)_minmax(8rem,0.8fr)_minmax(7rem,0.6fr)]"
                         >
                           <label
-                            className={cn('flex items-center gap-2 text-xs', !repository.available && 'opacity-60')}
+                            className={cn(
+                              'flex items-center gap-2 text-xs sm:col-span-4',
+                              !repository.available && 'opacity-60',
+                            )}
                           >
                             <input
                               type="checkbox"
@@ -824,144 +995,218 @@ export function BranchWorkspaceDialog({
                               </span>
                             ) : null}
                           </label>
-                          <label className="flex min-w-0 items-center justify-center gap-2 text-xs text-muted-foreground">
-                            <Switch
-                              checked={repositoryDependenciesEnabled[repository.name] === true}
-                              disabled={
-                                selectionLocked ||
-                                fixed ||
-                                !repository.available ||
-                                !selectedRepositories[repository.name]
-                              }
-                              aria-label={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
-                                name: repository.name,
-                              })}
-                              title={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
-                                name: repository.name,
-                              })}
-                              onCheckedChange={(enabled) => {
+                          <BranchWorkspaceMemberConfiguration
+                            name={repository.name}
+                            sources={sourceRepositories}
+                            branches={repository.branches}
+                            kind={memberKinds[repository.name] ?? 'worktree'}
+                            source={
+                              memberSources[repository.name] ?? { kind: 'repository', repositoryId: repository.id }
+                            }
+                            directory={memberDirectories[repository.name] ?? repository.name}
+                            targetBranch={memberBranches[repository.name] ?? ''}
+                            checkoutMode={memberCheckoutModes[repository.name] ?? 'auto'}
+                            refValue={memberRefs[repository.name] ?? ''}
+                            disabled={selectionLocked || fixed}
+                            onKindChange={(kind) => {
+                              setMemberKinds((current) => ({ ...current, [repository.name]: kind }))
+                              if (kind === 'repository') {
                                 setRepositoryDependenciesEnabled((current) => ({
                                   ...current,
-                                  [repository.name]: enabled,
+                                  [repository.name]: false,
                                 }))
-                                if (enabled) initializeRepositoryBootstrap(repository)
-                                else clearRepositoryBootstrap(repository.name)
-                              }}
-                            />
-                            <span className="truncate">
-                              {t('workspace.branch-workspace.repository-dependencies-toggle')}
-                            </span>
-                          </label>
-                          <Select
-                            value={creationBaseSelectValue(creationBase)}
-                            disabled={
-                              selectionLocked || fixed || !selectedRepositories[repository.name] || existingTarget
-                            }
-                            onValueChange={(value) => {
-                              const nextCreationBase = parseCreationBaseSelectValue(value)
-                              if (!nextCreationBase) return
+                                clearRepositoryBootstrap(repository.name)
+                                setSyncBeforeCreate((current) => ({ ...current, [repository.name]: false }))
+                              }
+                            }}
+                            onSourceChange={(sourceId) => {
+                              const source = sourceRepositories.find((option) => option.id === sourceId)
+                              if (!source) return
+                              setMemberSources((current) => ({
+                                ...current,
+                                [repository.name]: { kind: 'repository', repositoryId: source.id },
+                              }))
                               setCreationBases((current) => ({
                                 ...current,
-                                [repository.name]: nextCreationBase,
+                                [repository.name]: defaultCreationBase(source),
                               }))
                               setSyncBeforeCreate((current) => ({
                                 ...current,
-                                [repository.name]: syncEligible(repository, nextCreationBase),
+                                [repository.name]: syncEligible(source, defaultCreationBase(source)),
                               }))
-                              if (repositoryDependenciesEnabled[repository.name]) {
-                                initializeRepositoryBootstrap(repository, nextCreationBase)
-                              }
+                              setRepositoryDependenciesEnabled((current) => ({ ...current, [repository.name]: false }))
+                              clearRepositoryBootstrap(repository.name)
+                              void loadRemoteBranches({ ...source, name: repository.name })
                             }}
-                            onOpenChange={(open) => {
-                              if (!open) {
-                                setRepositoryBranchQueries((current) => {
-                                  const next = { ...current }
-                                  delete next[repository.name]
-                                  return next
-                                })
-                              }
-                            }}
-                          >
-                            <SelectTrigger
-                              size="sm"
-                              aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
-                              className="font-mono text-xs"
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent
-                              header={
-                                !existingTarget ? (
-                                  <RemoteBranchSearchInput
-                                    id={`branch-workspace-base-search-${repository.name}`}
-                                    value={repositoryBranchQueries[repository.name] ?? ''}
-                                    placeholder={t('branches.search-placeholder')}
-                                    ariaLabel={t('branches.search-label')}
-                                    disabled={selectionLocked || fixed || !selectedRepositories[repository.name]}
-                                    onChange={(query) => {
-                                      setRepositoryBranchQueries((current) => ({
-                                        ...current,
-                                        [repository.name]: query,
-                                      }))
-                                    }}
-                                  />
-                                ) : undefined
-                              }
-                            >
-                              {(existingTarget ? [branch.trim()] : repository.branches)
-                                .filter((candidate) =>
-                                  localBranchMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
-                                )
-                                .map((candidate) => (
-                                  <SelectItem key={`local:${candidate}`} value={candidate} textValue={candidate}>
-                                    {candidate}
-                                  </SelectItem>
-                                ))}
-                              {!existingTarget &&
-                                remoteState?.branches
-                                  .filter((candidate) =>
-                                    remoteRefMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
-                                  )
-                                  .map((candidate) => (
-                                    <SelectItem
-                                      key={`remote:${candidate}`}
-                                      value={`remote:${candidate}`}
-                                      textValue={candidate}
-                                    >
-                                      {candidate}
-                                    </SelectItem>
-                                  ))}
-                            </SelectContent>
-                          </Select>
-                          <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              aria-label={t('workspace.branch-workspace.sync-before-create-named', {
-                                name: repository.name,
-                              })}
-                              checked={syncBeforeCreate[repository.name] === true && synchronizationEligible}
+                            onUrlChange={(url) =>
+                              setMemberSources((current) => ({ ...current, [repository.name]: { kind: 'url', url } }))
+                            }
+                            onDirectoryChange={(directory) =>
+                              setMemberDirectories((current) => ({ ...current, [repository.name]: directory }))
+                            }
+                            onBranchChange={(value) => changeMemberBranch(repository, value)}
+                            onCheckoutModeChange={(value) =>
+                              setMemberCheckoutModes((current) => ({ ...current, [repository.name]: value }))
+                            }
+                            onRefChange={(value) =>
+                              setMemberRefs((current) => ({ ...current, [repository.name]: value }))
+                            }
+                            onAddAlias={fixed || isUrlMember(repository) ? undefined : () => addMember(repository)}
+                          />
+                          {!isCompleteMember(repository) ? (
+                            <label className="flex min-w-0 items-center justify-center gap-2 text-xs text-muted-foreground">
+                              <Switch
+                                checked={repositoryDependenciesEnabled[repository.name] === true}
+                                disabled={
+                                  selectionLocked ||
+                                  fixed ||
+                                  !repository.available ||
+                                  !selectedRepositories[repository.name] ||
+                                  isUrlMember(repository)
+                                }
+                                aria-label={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
+                                  name: repository.name,
+                                })}
+                                title={t('workspace.branch-workspace.repository-dependencies-toggle-named', {
+                                  name: repository.name,
+                                })}
+                                onCheckedChange={(enabled) => {
+                                  setRepositoryDependenciesEnabled((current) => ({
+                                    ...current,
+                                    [repository.name]: enabled,
+                                  }))
+                                  if (enabled) initializeRepositoryBootstrap(repository)
+                                  else clearRepositoryBootstrap(repository.name)
+                                }}
+                              />
+                              <span className="truncate">
+                                {t('workspace.branch-workspace.repository-dependencies-toggle')}
+                              </span>
+                            </label>
+                          ) : null}
+                          {!isUrlMember(repository) ? (
+                            <Select
+                              value={creationBaseSelectValue(creationBase)}
                               disabled={
                                 selectionLocked ||
                                 fixed ||
                                 !selectedRepositories[repository.name] ||
-                                !synchronizationEligible
+                                existingTarget ||
+                                isUrlMember(repository)
                               }
-                              onChange={(event) =>
+                              onValueChange={(value) => {
+                                const nextCreationBase = parseCreationBaseSelectValue(value)
+                                if (!nextCreationBase) return
+                                setCreationBases((current) => ({
+                                  ...current,
+                                  [repository.name]: nextCreationBase,
+                                }))
                                 setSyncBeforeCreate((current) => ({
                                   ...current,
-                                  [repository.name]: event.target.checked,
+                                  [repository.name]: syncEligible(repository, nextCreationBase),
                                 }))
-                              }
-                            />
-                            <span className="truncate">{t('workspace.branch-workspace.sync-before-create')}</span>
-                          </label>
+                                if (repositoryDependenciesEnabled[repository.name]) {
+                                  initializeRepositoryBootstrap(repository, nextCreationBase)
+                                }
+                              }}
+                              onOpenChange={(open) => {
+                                if (!open) {
+                                  setRepositoryBranchQueries((current) => {
+                                    const next = { ...current }
+                                    delete next[repository.name]
+                                    return next
+                                  })
+                                }
+                              }}
+                            >
+                              <SelectTrigger
+                                size="sm"
+                                aria-label={t('workspace.branch-workspace.base-named', { name: repository.name })}
+                                className="font-mono text-xs"
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent
+                                header={
+                                  !existingTarget ? (
+                                    <RemoteBranchSearchInput
+                                      id={`branch-workspace-base-search-${repository.name}`}
+                                      value={repositoryBranchQueries[repository.name] ?? ''}
+                                      placeholder={t('branches.search-placeholder')}
+                                      ariaLabel={t('branches.search-label')}
+                                      disabled={selectionLocked || fixed || !selectedRepositories[repository.name]}
+                                      onChange={(query) => {
+                                        setRepositoryBranchQueries((current) => ({
+                                          ...current,
+                                          [repository.name]: query,
+                                        }))
+                                      }}
+                                    />
+                                  ) : undefined
+                                }
+                              >
+                                {(existingTarget ? [targetBranchFor(repository)] : repository.branches)
+                                  .filter((candidate) =>
+                                    localBranchMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
+                                  )
+                                  .map((candidate) => (
+                                    <SelectItem key={`local:${candidate}`} value={candidate} textValue={candidate}>
+                                      {candidate}
+                                    </SelectItem>
+                                  ))}
+                                {!existingTarget &&
+                                  remoteState?.branches
+                                    .filter((candidate) =>
+                                      remoteRefMatchesQuery(candidate, repositoryBranchQueries[repository.name] ?? ''),
+                                    )
+                                    .map((candidate) => (
+                                      <SelectItem
+                                        key={`remote:${candidate}`}
+                                        value={`remote:${candidate}`}
+                                        textValue={candidate}
+                                      >
+                                        {candidate}
+                                      </SelectItem>
+                                    ))}
+                              </SelectContent>
+                            </Select>
+                          ) : null}
+                          {!isCompleteMember(repository) ? (
+                            <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                aria-label={t('workspace.branch-workspace.sync-before-create-named', {
+                                  name: repository.name,
+                                })}
+                                checked={syncBeforeCreate[repository.name] === true && synchronizationEligible}
+                                disabled={
+                                  selectionLocked ||
+                                  fixed ||
+                                  !selectedRepositories[repository.name] ||
+                                  !synchronizationEligible
+                                }
+                                onChange={(event) =>
+                                  setSyncBeforeCreate((current) => ({
+                                    ...current,
+                                    [repository.name]: event.target.checked,
+                                  }))
+                                }
+                              />
+                              <span className="truncate">{t('workspace.branch-workspace.sync-before-create')}</span>
+                            </label>
+                          ) : null}
                         </div>
                         {selectedRepositories[repository.name] && existingTarget ? (
                           <p className="pl-6 text-[10px] text-muted-foreground">
-                            {t('workspace.branch-workspace.existing-target-used', { branch: branch.trim() })}
+                            {t('workspace.branch-workspace.existing-target-used', {
+                              branch: targetBranchFor(repository),
+                            })}
                           </p>
                         ) : null}
                         {selectedRepositories[repository.name] &&
+                        !isCompleteMember(repository) &&
+                        memberCheckoutModes[repository.name] !== 'detached' &&
+                        memberCheckoutModes[repository.name] !== 'trackRemoteBranch' &&
                         creationBase.kind === 'localBranch' &&
                         !synchronizationEligible ? (
                           <p className="pl-6 text-[10px] text-muted-foreground">
@@ -1049,6 +1294,16 @@ export function BranchWorkspaceDialog({
                       </div>
                     )
                   })}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-action="add-url-member"
+                    disabled={selectionLocked}
+                    onClick={() => addMember(null)}
+                  >
+                    {t('workspace.branch-workspace.member-add-url')}
+                  </Button>
                 </fieldset>
                 {mode === 'create' ? (
                   <MaterializationCandidateList
@@ -1270,9 +1525,16 @@ export function BranchWorkspaceDialog({
 
                       const { step } = item
                       const creationRepository =
-                        step.kind === 'create-worktree' && step.repositoryName
+                        (step.kind === 'create-worktree' || step.kind === 'clone-repository') && step.repositoryName
                           ? displayedPlan.repositories.find(
                               (repository) => repository.repositoryName === step.repositoryName,
+                            )
+                          : undefined
+                      const removalRepository =
+                        step.kind === 'remove-entry' && step.repositoryName
+                          ? displayedPlan.repositories.find(
+                              (repository) =>
+                                repository.repositoryName === step.repositoryName && repository.kind === 'repository',
                             )
                           : undefined
                       return (
@@ -1293,7 +1555,25 @@ export function BranchWorkspaceDialog({
                         >
                           {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
                           <div className="grid min-w-0 flex-1 gap-0.5">
-                            <span>{step.label}</span>
+                            <span>
+                              {step.kind === 'clone-repository'
+                                ? `${t('workspace.branch-workspace.step.clone-repository')}: `
+                                : removalRepository
+                                  ? `${t('workspace.branch-workspace.step.remove-repository')}: `
+                                  : ''}
+                              {step.label}
+                            </span>
+                            {removalRepository ? (
+                              <div data-independent-repository-removal className="grid gap-1 text-[10px] text-danger">
+                                <code className="break-all">{removalRepository.worktreePath}</code>
+                                <span>
+                                  {t('workspace.branch-workspace.repository-removal-preview', {
+                                    dirty: t(removalRepository.dirty ? 'branches.dirty' : 'status.worktree-clean'),
+                                    commits: removalRepository.localOnlyCommits ?? 0,
+                                  })}
+                                </span>
+                              </div>
+                            ) : null}
                             {creationRepository ? (
                               <>
                                 <BranchWorkspaceCreationSourcePreview repository={creationRepository} />
@@ -1473,7 +1753,7 @@ export function BranchWorkspaceDialog({
 function defaultCreationBase(repository: BranchWorkspaceRepositoryOption): WorktreeCreationBase {
   return {
     kind: 'localBranch',
-    branch: repository.defaultBranch || repository.branches[0] || '',
+    branch: repository.defaultBranch || repository.branches[0] || 'main',
   }
 }
 
@@ -1504,10 +1784,6 @@ function parseCreationBaseSelectValue(value: string): WorktreeCreationBase | nul
     : { kind: 'localBranch', branch: value }
 }
 
-function sameCreationBase(left: WorktreeCreationBase, right: WorktreeCreationBase): boolean {
-  return left.kind === right.kind && worktreeCreationBaseRef(left) === worktreeCreationBaseRef(right)
-}
-
 function BranchWorkspaceCreationSourcePreview({ repository }: { repository: BranchWorkspaceRepositoryPlan }) {
   const t = useT()
   const existingTarget = repository.mode.kind === 'existingBranch'
@@ -1523,7 +1799,11 @@ function BranchWorkspaceCreationSourcePreview({ repository }: { repository: Bran
       : repository.creationBase.branch
   return (
     <span data-branch-workspace-creation-source className="font-normal text-[10px] text-muted-foreground">
-      {t(sourceKey, { ref: sourceRef })} ·{' '}
+      {repository.source?.kind === 'url' ? repository.source.url : t(sourceKey, { ref: sourceRef })} ·{' '}
+      {repository.mode.kind === 'detached'
+        ? repository.mode.ref
+        : repository.targetBranch || t('workspace.branch-workspace.member-default-branch')}{' '}
+      ·{' '}
       {t(
         repository.syncBeforeCreate
           ? 'workspace.branch-workspace.preview-sync-enabled'
@@ -1706,7 +1986,7 @@ function WorkspaceSummary({ workspace }: { workspace: BranchWorkspaceSnapshot })
     >
       <div className="flex items-center gap-2 font-medium">
         <FolderKanban className="size-4" aria-hidden="true" />
-        <span>{workspace.branch}</span>
+        <span>{workspace.directoryName}</span>
       </div>
       <span className="break-all font-mono text-[10px] text-muted-foreground" title={workspace.path}>
         {workspace.path}

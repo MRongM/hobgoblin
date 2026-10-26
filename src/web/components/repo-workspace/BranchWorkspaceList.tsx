@@ -752,7 +752,7 @@ function BranchWorkspaceRow({
           'data-testid': `branch-workspace-root-${item.id}`,
           'aria-current': rootSelected ? 'page' : undefined,
           disabled: disabled || !folderAvailable || busy,
-          title: item.branch,
+          title: item.directoryName,
           className: 'pr-[7.25rem]',
           onClick: activate,
           onDoubleClick: onToggleFileArea ? () => onToggleFileArea(item) : undefined,
@@ -779,7 +779,7 @@ function BranchWorkspaceRow({
             aria-hidden="true"
           />
         ) : null}
-        <span className="min-w-0 truncate font-medium">{item.branch}</span>
+        <span className="min-w-0 truncate font-medium">{item.directoryName}</span>
         {terminalCount > 0 ? (
           <Badge
             data-testid="branch-workspace-terminal-count-badge"

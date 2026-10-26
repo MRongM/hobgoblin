@@ -7,7 +7,8 @@ export interface BranchWorkspaceMemberTarget {
   repositoryId: string
   repositoryName: string
   targetBranch: string
-  checkedOutBranch: string
+  checkedOutBranch: string | null
+  head?: string
   worktreePath: string
 }
 
@@ -52,9 +53,25 @@ export function resolveBranchWorkspaceMemberTarget({
   const branchAtMemberPath = repository.data.branches.find(
     (entry) => entry.worktree?.path && sameLocalFilePath(entry.worktree.path, member.worktreePath),
   )
+  const worktree = Object.values(repository.data.worktreesByPath).find((entry) =>
+    sameLocalFilePath(entry.path, member.worktreePath),
+  )
+  if (member.ready && (member.currentBranch === null || worktree?.isDetached)) {
+    return {
+      ok: true,
+      target: {
+        repositoryId,
+        repositoryName: member.repositoryName,
+        targetBranch: member.targetBranch,
+        checkedOutBranch: null,
+        worktreePath: member.worktreePath,
+        ...((member.head ?? worktree?.head) ? { head: member.head ?? worktree?.head } : {}),
+      },
+    }
+  }
   if (branchAtMemberPath) {
     const warning =
-      branchAtMemberPath.name !== member.targetBranch
+      member.currentBranch === undefined && branchAtMemberPath.name !== member.targetBranch
         ? 'workspace.branch-workspace.member-branch-drift'
         : !member.ready
           ? 'workspace.branch-workspace.member-not-ready'

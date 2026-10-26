@@ -114,6 +114,48 @@ describe('useBranchWriteActions', () => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
   })
 
+  test('switches the exact member directory and calls its context-preserving refresh only after success', async () => {
+    const repo = seedRepoState({
+      id: REPO_ID,
+      branches: [
+        createRepoBranch('feature/current', { worktree: { path: '/tmp/member' } }),
+        createRepoBranch('release/next'),
+      ],
+      currentBranch: 'feature/current',
+    })
+    const onCheckoutSuccess = vi.fn(async () => {})
+    mocks.checkoutBranchInWorktree.mockResolvedValue({ ok: true, message: 'switched' })
+    let actions: ReturnType<typeof useBranchWriteActions> | null = null
+    root = createRoot(container)
+    await act(async () => {
+      root!.render(
+        <BranchWriteActionsHarness
+          repo={repo}
+          onPush={vi.fn()}
+          onCheckoutSuccess={onCheckoutSuccess}
+          onReady={(value) => {
+            actions = value
+          }}
+        />,
+      )
+    })
+    await act(async () => {
+      actions?.mainItems.find((item) => item.id === 'checkoutTo')?.onSelect()
+    })
+    await flush()
+    openSelect('#checkout-to-select')
+    const option = document.body.querySelector<HTMLElement>('[data-checkout-target-key="local:release/next"]')
+    expect(option).not.toBeNull()
+    act(() => option!.dispatchEvent(new MouseEvent('click', { bubbles: true })))
+    clickButtonByText('action.checkout-to-confirm')
+    await flush()
+    expect(mocks.checkoutBranchInWorktree).toHaveBeenCalledWith(REPO_ID, '/tmp/member', {
+      kind: 'localBranch',
+      branch: 'release/next',
+    })
+    expect(onCheckoutSuccess).toHaveBeenCalledWith('release/next')
+  })
+
   test('commit action shows toast and does not open draft when worktree has no changes', async () => {
     const repo = seedRepoState({
       id: REPO_ID,
@@ -453,13 +495,15 @@ function BranchWriteActionsHarness({
   repo,
   onPush,
   onReady,
+  onCheckoutSuccess,
 }: {
   repo: RepoState
   onPush: () => void
+  onCheckoutSuccess?: (branch: string) => void | Promise<void>
   onReady: (value: ReturnType<typeof useBranchWriteActions>) => void
 }) {
   const branch = repo.data.branches[0]!
-  const value = useBranchWriteActions(repo, branch, { canPush: true, onPush })
+  const value = useBranchWriteActions(repo, branch, { canPush: true, onPush, onCheckoutSuccess })
   useEffect(() => {
     onReady(value)
   }, [onReady, value])

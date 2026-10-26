@@ -6,7 +6,7 @@ export type SelectedBranchDetail = ReturnType<typeof getSelectedBranchDetail>
 export type SelectedBranchDetailPresentation = ReturnType<typeof getSelectedBranchDetailPresentation>
 
 export interface BranchDetailTarget {
-  branchName: string
+  branchName: string | null
   worktreePath: string
 }
 

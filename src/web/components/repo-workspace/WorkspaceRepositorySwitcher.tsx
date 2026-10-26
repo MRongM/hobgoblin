@@ -45,7 +45,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
     activeContext?.kind === 'branch-workspace'
       ? branchWorkspaces.find((item) => item.id === activeContext.branchWorkspaceId)
       : undefined
-  const currentName = activeBranchWorkspace?.branch ?? currentRepositoryName
+  const currentName = activeBranchWorkspace?.directoryName ?? currentRepositoryName
   const overviewSelected = activeContext?.kind === 'overview' || (!activeContext && repoId === workspaceRootId)
 
   function activateBranchWorkspaceDestination(branchWorkspaceId: string) {
@@ -109,7 +109,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
             onSelect={() => activateBranchWorkspaceDestination(branchWorkspace.id)}
           >
             <FolderKanban />
-            <span className="min-w-0 truncate">{branchWorkspace.branch}</span>
+            <span className="min-w-0 truncate">{branchWorkspace.directoryName}</span>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

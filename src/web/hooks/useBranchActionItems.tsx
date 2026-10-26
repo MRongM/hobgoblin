@@ -62,6 +62,7 @@ export interface BranchActionItemGroups {
 export interface UseBranchActionItemsOptions {
   onNavigateToInternalTerminal?: (target: TerminalSessionBase) => void | Promise<void>
   windowsInternalTerminalShellMenu?: boolean
+  onCheckoutSuccess?: (branch: string) => void | Promise<void>
 }
 
 export function visibleBranchActionItems({
@@ -103,6 +104,7 @@ export function useBranchActionItems(
   const writeActions = useBranchWriteActions(repo, branch, {
     canPush: capabilities.canPush,
     onPush: actions.push,
+    onCheckoutSuccess: options.onCheckoutSuccess,
   })
   const createWorktree = useCreateWorktreeAction(repo, {
     defaultBranch: branch.name,

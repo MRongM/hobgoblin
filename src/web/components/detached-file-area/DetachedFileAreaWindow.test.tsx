@@ -103,6 +103,62 @@ afterEach(async () => {
 })
 
 describe('DetachedFileAreaWindow', () => {
+  test('keeps an exact captured member directory after its branch changes', async () => {
+    seedRepoState({
+      id: '/repo',
+      branches: [
+        createRepoBranch('main', { worktree: { path: '/repo/other' } }),
+        createRepoBranch('release/next', { worktree: { path: '/repo/member' } }),
+      ],
+      currentBranch: 'main',
+      selectedBranch: 'main',
+    })
+    const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
+    await act(async () => {
+      root.render(<DetachedFileAreaWindow request={{ ...request, worktreePath: '/repo/member' }} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(useReposStore.getState().repos['/repo']?.ui.selectedBranch).toBe('release/next')
+    expect(container.querySelector('[data-testid="detached-panel"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="detached-context"]')?.textContent).toContain('release/next')
+  })
+
+  test('does not follow an old branch when its captured directory disappears', async () => {
+    seedRepoState({
+      id: '/repo',
+      branches: [createRepoBranch('main', { worktree: { path: '/repo/other' } })],
+      selectedBranch: 'main',
+    })
+    const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
+    await act(async () => {
+      root.render(<DetachedFileAreaWindow request={{ ...request, worktreePath: '/repo/missing' }} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(container.textContent).toContain('file-area.detached.unavailable-title')
+    expect(container.querySelector('[data-testid="detached-panel"]')).toBeNull()
+  })
+
+  test('opens an exact detached primary repository directory without inventing a branch', async () => {
+    seedRepoState({
+      id: '/repo',
+      branches: [],
+      worktreesByPath: {
+        '/repo/member': { path: '/repo/member', isDetached: true, isMain: true, head: 'abcdef123456' },
+      },
+    })
+    const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
+    await act(async () => {
+      root.render(<DetachedFileAreaWindow request={{ ...request, branch: '', worktreePath: '/repo/member' }} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(useReposStore.getState().repos['/repo']?.ui.selectedDetachedWorktreePath).toBe('/repo/member')
+    expect(container.querySelector('[data-testid="detached-context"]')?.textContent).toContain('HEAD@abcdef123456')
+    expect(container.querySelector('[data-testid="detached-panel"]')).not.toBeNull()
+  })
+
   test('hydrates the captured worktree and renders only the captured panel', async () => {
     const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
     await act(async () => {

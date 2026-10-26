@@ -153,7 +153,7 @@ describe('WorkspaceRepositorySwitcher', () => {
   test('selects an available branch workspace', () => {
     act(() => root!.render(<WorkspaceRepositorySwitcher repoId={API} />))
     const branchWorkspace = Array.from(container!.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('feature/auth'),
+      button.textContent?.includes('goblin-feature-auth'),
     )
 
     act(() => branchWorkspace?.click())
@@ -165,7 +165,7 @@ describe('WorkspaceRepositorySwitcher', () => {
   test('selects a branch workspace in compact presentation without changing desktop Focus', () => {
     act(() => root!.render(<WorkspaceRepositorySwitcher repoId={API} compact />))
     const branchWorkspace = Array.from(container!.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
-      button.textContent?.includes('feature/auth'),
+      button.textContent?.includes('goblin-feature-auth'),
     )
 
     act(() => branchWorkspace?.click())
@@ -183,8 +183,10 @@ describe('WorkspaceRepositorySwitcher', () => {
 
     act(() => root!.render(<WorkspaceRepositorySwitcher repoId={ROOT} />))
 
-    expect(container?.querySelector('[aria-label="workspace.repositories"]')?.textContent).toContain('feature/auth')
-    expect(container?.querySelector('[aria-current="page"]')?.textContent).toContain('feature/auth')
+    expect(container?.querySelector('[aria-label="workspace.repositories"]')?.textContent).toContain(
+      'goblin-feature-auth',
+    )
+    expect(container?.querySelector('[aria-current="page"]')?.textContent).toContain('goblin-feature-auth')
   })
 
   test('does not render for a standalone repository', () => {

@@ -5,6 +5,7 @@ import {
   ClipboardCopy,
   ExternalLink,
   FolderPlus,
+  FolderGit2,
   FolderTree,
   GitBranch,
   GitCompareArrows,
@@ -47,6 +48,9 @@ import { useT } from '#/web/stores/i18n.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { supportsWindowsInternalTerminalShellMenu } from '#/web/windows-internal-terminal-shell-menu.ts'
 import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { refreshBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 
 export interface BranchWorkspaceMemberActionTarget {
   repo: BranchActionRepo
@@ -95,6 +99,21 @@ function ResolvedBranchWorkspaceMemberRow({
   const actions = useBranchActionItems(actionTarget.repo, actionTarget.branch, {
     onNavigateToInternalTerminal: () => onOpenInternalTerminal?.(item, member),
     windowsInternalTerminalShellMenu: supportsWindowsInternalTerminalShellMenu(actionTarget.repo.id),
+    onCheckoutSuccess: async (branch) => {
+      await Promise.all([
+        useReposStore.getState().refreshCoreData(actionTarget.repo.id),
+        refreshBranchWorkspaceQuery(mainWindowQueryClient, item.rootId).catch(() => undefined),
+      ])
+      const state = useReposStore.getState()
+      const context = state.workspaceActiveContextByRoot[item.rootId]
+      if (
+        context?.kind === 'branch-workspace' &&
+        context.branchWorkspaceId === item.id &&
+        context.memberRepositoryName === member.repositoryName
+      ) {
+        state.selectBranch(actionTarget.repo.id, branch)
+      }
+    },
   })
   return (
     <BranchWorkspaceMemberRowFrame
@@ -102,7 +121,7 @@ function ResolvedBranchWorkspaceMemberRow({
       item={item}
       member={member}
       onOpenInternalTerminal={onOpenInternalTerminal}
-      actions={actions}
+      actions={member.currentBranch === null ? detachedMemberActions(actions) : actions}
     />
   )
 }
@@ -147,7 +166,9 @@ function BranchWorkspaceMemberRowFrame({
   const unavailableLabel = presentation.reason ? t(presentation.reason) : null
   const warningLabel = presentation.warning ? t(presentation.warning) : null
   const branch = presentation.actionTarget?.branch
-  const commitHashTag = formatShortCommitHashTag(branch?.lastCommitHash ?? '')
+  const commitHashTag = formatShortCommitHashTag(branch?.lastCommitHash || member.head || '')
+  const currentBranch =
+    member.currentBranch !== undefined ? member.currentBranch : (branch?.name ?? member.targetBranch)
   const forceDisabled = disabled || !presentation.navigable
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: presentation.repositoryId,
@@ -209,7 +230,13 @@ function BranchWorkspaceMemberRowFrame({
   const row = (
     <WorkspaceListItemFrame
       size="member"
-      leadingIcon={<FolderTree className="size-3.5" aria-hidden="true" />}
+      leadingIcon={
+        member.kind === 'repository' ? (
+          <FolderGit2 className="size-3.5" aria-hidden="true" />
+        ) : (
+          <FolderTree className="size-3.5" aria-hidden="true" />
+        )
+      }
       selected={selected}
       unavailable={!presentation.navigable}
       className={cn(
@@ -261,6 +288,19 @@ function BranchWorkspaceMemberRowFrame({
     >
       <span data-branch-workspace-member-summary className="inline-flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{member.repositoryName}</span>
+        <span data-testid="branch-workspace-member-kind" className="sr-only">
+          {t(
+            member.kind === 'repository'
+              ? 'workspace.branch-workspace.member-mode.repository'
+              : 'workspace.branch-workspace.member-mode.worktree',
+          )}
+        </span>
+        <span
+          data-testid="branch-workspace-member-current-branch"
+          className="min-w-0 truncate font-mono text-[10px] text-muted-foreground"
+        >
+          {currentBranch === null ? t('branches.detached') : currentBranch}
+        </span>
         {commitHashTag ? (
           <span
             data-testid="branch-workspace-member-hash-tag"
@@ -386,6 +426,7 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>, tmuxMenuVisible:
       disabledAction('sync', 'action.refresh', <RefreshCw aria-hidden="true" />),
       disabledAction('createBranch', 'action.create-branch', <GitBranch aria-hidden="true" />),
       disabledAction('pullRemoteBranch', 'action.pull-remote-branch', <RadioTower aria-hidden="true" />),
+      disabledAction('checkoutTo', 'action.checkout-to', <GitBranch aria-hidden="true" />),
       disabledAction('merge', 'action.merge-in', <GitMerge aria-hidden="true" />),
       disabledAction('mergeOut', 'action.merge-out', <GitMerge aria-hidden="true" />),
       disabledAction('commit', 'action.commit', <SendHorizontal aria-hidden="true" />),
@@ -418,6 +459,7 @@ function createDisabledAction(
     | 'sync'
     | 'createBranch'
     | 'pullRemoteBranch'
+    | 'checkoutTo'
     | 'merge'
     | 'mergeOut'
     | 'commit'
@@ -438,5 +480,28 @@ function createDisabledAction(
     icon,
     onSelect: () => {},
     ...options,
+  }
+}
+
+function detachedMemberActions(actions: BranchActionItemGroups): BranchActionItemGroups {
+  const branchActions = new Set([
+    'pull',
+    'push',
+    'upstream',
+    'merge',
+    'mergeOut',
+    'createBranch',
+    'createWorktree',
+    'alignRemote',
+    'resetHard',
+    'remote',
+  ])
+  const project = (items: BranchActionItemGroups['mainItems']) =>
+    items.map((item) => (branchActions.has(item.id) ? { ...item, disabled: true } : item))
+  return {
+    ...actions,
+    mainItems: project(actions.mainItems),
+    externalItems: project(actions.externalItems),
+    destructiveItems: project(actions.destructiveItems),
   }
 }

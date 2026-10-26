@@ -29,7 +29,7 @@ export interface WorktreeListItemActionProjection {
 }
 
 const ordinaryMainExclusions = new Set(['checkout'])
-const memberMainExclusions = new Set([...ordinaryMainExclusions, 'checkoutTo'])
+const memberMainExclusions = ordinaryMainExclusions
 const ordinaryDestructiveExclusions = new Set(['deleteBranch'])
 const memberDestructiveExclusions = new Set([...ordinaryDestructiveExclusions, 'removeWorktree', 'cleanupWorktree'])
 
@@ -61,7 +61,13 @@ export function projectWorktreeListItemActions(
     : groups.destructiveItems
   const contextActions = hasWorktree
     ? [...groups.mainItems, ...groups.destructiveItems]
-        .filter((item) => item.id === 'createWorktree' || item.id === 'sync' || item.id === 'alignRemote')
+        .filter(
+          (item) =>
+            item.id === 'createWorktree' ||
+            item.id === 'sync' ||
+            item.id === 'alignRemote' ||
+            (policy === 'branch-workspace-member' && item.id === 'checkoutTo'),
+        )
         .map((item) => branchListItemAction(item, forceDisabled))
     : []
 

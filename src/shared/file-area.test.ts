@@ -10,6 +10,21 @@ const valid: DetachedFileAreaWindowRequest = {
 }
 
 describe('detached file area window request', () => {
+  test('captures an exact worktree independently of its branch, including detached HEAD', () => {
+    const captured = { ...valid, worktreePath: '/workspace/member', branch: '' }
+    expect(normalizeDetachedFileAreaWindowRequest(captured)).toEqual(captured)
+    expect(
+      normalizeDetachedFileAreaWindowRequest({ ...captured, worktreePath: 'C:\\workspace\\member' }),
+    ).toMatchObject({ worktreePath: 'C:\\workspace\\member' })
+  })
+
+  test.each(['relative/path', '', '/workspace/bad\u0000path', '/workspace/bad\npath'])(
+    'rejects unsafe captured worktree path %j',
+    (worktreePath) => {
+      expect(normalizeDetachedFileAreaWindowRequest({ ...valid, worktreePath })).toBeNull()
+    },
+  )
+
   test('normalizes a valid local request', () => {
     expect(normalizeDetachedFileAreaWindowRequest(valid)).toEqual(valid)
   })

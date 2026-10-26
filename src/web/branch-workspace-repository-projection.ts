@@ -36,12 +36,16 @@ export function projectDiscoveredBranchWorkspaceRepositories(
       order = opened.order
       if (
         opened.changed ||
-        !existing?.data.branches.some(
-          (branch) =>
-            branch.name === member.targetBranch &&
-            !!branch.worktree &&
-            sameLocalFilePath(branch.worktree.path, member.worktreePath),
-        )
+        !(member.currentBranch === null
+          ? Object.values(existing?.data.worktreesByPath ?? {}).some(
+              (worktree) => worktree.isDetached && sameLocalFilePath(worktree.path, member.worktreePath),
+            )
+          : existing?.data.branches.some(
+              (branch) =>
+                (member.currentBranch === undefined || branch.name === member.currentBranch) &&
+                !!branch.worktree &&
+                sameLocalFilePath(branch.worktree.path, member.worktreePath),
+            ))
       )
         refreshIds.push(member.repositoryId)
     }

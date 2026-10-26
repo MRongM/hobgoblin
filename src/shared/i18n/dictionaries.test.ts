@@ -12,6 +12,16 @@ function componentTags(value: string): string[] {
 }
 
 describe('i18n dictionaries', () => {
+  test('localizes folder and mixed-member configuration and independent deletion', () => {
+    expect(zh['workspace.branch-workspace.member-mode.repository']).toBe('原始仓库（独立克隆）')
+    expect(en['workspace.branch-workspace.folder']).toBe('Folder name')
+    for (const dict of Object.values(dicts)) {
+      expect(dict['workspace.branch-workspace.member-add-url']).not.toBe('workspace.branch-workspace.member-add-url')
+      expect(dict['workspace.branch-workspace.approval.delete-repository']).toBeTruthy()
+      expect(dict['workspace.branch-workspace.dialog.create.description']).not.toContain('common branch')
+    }
+  })
+
   test('does not contain empty or whitespace-only values', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const [key, value] of Object.entries(dict)) {
@@ -50,7 +60,7 @@ describe('i18n dictionaries', () => {
 
   test('localizes the branch workspace operation console guidance', () => {
     expect(zh['workspace.branch-workspace.one-step.selection-description.create']).toBe(
-      '命名子工作区并选择要创建的成员工作树。',
+      '命名文件夹并独立配置每个仓库成员。',
     )
     expect(zh['workspace.branch-workspace.one-step.selection-description.remove']).toBe(
       '选择是否一并删除符合条件的本地和上游分支。',
@@ -449,7 +459,7 @@ describe('i18n dictionaries', () => {
   })
 
   test('uses concise branch workspace member badge copy in every locale', () => {
-    expect(en['workspace.branch-workspace.member-badge']).toBe('branch workspace')
+    expect(en['workspace.branch-workspace.member-badge']).toBe('subworkspace')
     expect(zh['workspace.branch-workspace.member-badge']).toBe('子工作区')
     expect(ja['workspace.branch-workspace.member-badge']).toBe('ブランチワークスペース')
     expect(ko['workspace.branch-workspace.member-badge']).toBe('브랜치 워크스페이스')

@@ -431,7 +431,9 @@ function DetachedWorktreeRow({
                 variant="ghost"
                 size="icon-xs"
                 loading={actionBusy}
-                disabled={repo.operations.branchAction.phase !== 'idle' || worktree.isLocked === true}
+                disabled={
+                  repo.operations.branchAction.phase !== 'idle' || worktree.isLocked === true || worktree.isMain
+                }
                 aria-label={actionLabel}
                 className={prunable ? undefined : 'text-danger hover:bg-danger-surface hover:text-danger'}
                 onClick={(event) => {

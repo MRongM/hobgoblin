@@ -365,6 +365,22 @@ function ActiveBranchWorkspaceView({
   const memberReason = memberResolution && !memberResolution.ok ? memberResolution.reason : null
 
   useEffect(() => {
+    if (!memberTarget) return
+    const state = useReposStore.getState()
+    const repo = state.repos[memberTarget.repositoryId]
+    if (!repo) return
+    if (memberTarget.checkedOutBranch === null) {
+      if (repo.ui.selectedDetachedWorktreePath !== memberTarget.worktreePath)
+        state.selectDetachedWorktree(repo.id, memberTarget.worktreePath)
+    } else if (
+      repo.ui.selectedBranch !== memberTarget.checkedOutBranch &&
+      repo.data.branches.some((branch) => branch.name === memberTarget.checkedOutBranch)
+    ) {
+      state.selectBranch(repo.id, memberTarget.checkedOutBranch)
+    }
+  }, [memberTarget?.repositoryId, memberTarget?.worktreePath, memberTarget?.checkedOutBranch, repos])
+
+  useEffect(() => {
     if (query.data?.ok && !workspace) activateWorkspaceOverview(rootId)
   }, [activateWorkspaceOverview, query.data, rootId, workspace])
 
