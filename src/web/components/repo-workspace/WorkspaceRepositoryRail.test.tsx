@@ -64,6 +64,8 @@ const repositoryListState = vi.hoisted(() => ({
     onReorder: (fromId: string, toId: string) => void
     onToggleFileArea?: () => void
     onOpenFileArea?: () => void
+    refreshingRepositoryIds?: ReadonlySet<string>
+    onRefreshRepository?: (repositoryId: string) => void | Promise<void>
   },
 }))
 
@@ -216,6 +218,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
     onOpenFileArea?: () => void
     changeCountById?: Readonly<Record<string, number>>
+    refreshingChangeIds?: ReadonlySet<string>
     getMemberPresentation?: (
       item: BranchWorkspaceSnapshot,
       member: BranchWorkspaceSnapshot['repositories'][number],
@@ -247,6 +250,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onRemove?: (item: BranchWorkspaceSnapshot) => void
     onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
     onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
+    onRefreshChanges?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   },
 }))
 
@@ -405,6 +409,7 @@ const originalActions = {
   rescanWorkspace: useReposStore.getState().rescanWorkspace,
   configureWorkspace: useReposStore.getState().configureWorkspace,
   refreshCoreData: useReposStore.getState().refreshCoreData,
+  refreshStatus: useReposStore.getState().refreshStatus,
   syncAndRefresh: useReposStore.getState().syncAndRefresh,
 }
 
@@ -417,6 +422,7 @@ const selectBranch = vi.fn()
 const setDetailTab = vi.fn()
 const rescanWorkspace = vi.fn(async () => {})
 const refreshCoreData = vi.fn(async () => {})
+const refreshStatus = vi.fn(async () => {})
 const syncAndRefresh = vi.fn(async () => ({ ok: true as const, message: 'fetched' }))
 const configureWorkspace = vi.fn(
   async (_rootId: string, _config: WorkspaceConfig): Promise<{ ok: true } | { ok: false; message: string }> => ({
@@ -451,6 +457,8 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   refreshCoreData.mockReset()
   refreshCoreData.mockResolvedValue(undefined)
+  refreshStatus.mockReset()
+  refreshStatus.mockResolvedValue(undefined)
   syncAndRefresh.mockReset()
   syncAndRefresh.mockResolvedValue({ ok: true, message: 'fetched' })
   branchWorkspaceState.refresh.mockReset()
@@ -583,6 +591,7 @@ beforeEach(() => {
     rescanWorkspace,
     configureWorkspace,
     refreshCoreData,
+    refreshStatus,
     syncAndRefresh,
   })
   container = document.createElement('div')
@@ -622,6 +631,60 @@ describe('WorkspaceRepositoryRail', () => {
     expect(syncAndRefresh).toHaveBeenCalledTimes(2)
     expect(syncAndRefresh).toHaveBeenCalledWith(API, { token: api.instanceToken })
     expect(syncAndRefresh).toHaveBeenCalledWith(WEB, { token: web.instanceToken })
+  })
+
+  test('refreshes a workspace repository status with its latest token and prevents duplicate requests', async () => {
+    let resolveStatus: (() => void) | undefined
+    refreshStatus.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStatus = resolve
+        }),
+    )
+    renderRail()
+
+    const refreshRepository = repositoryListState.props?.onRefreshRepository
+    expect(refreshRepository).toBeTypeOf('function')
+    if (!refreshRepository) return
+    const first = refreshRepository(API)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(repositoryListState.props?.refreshingRepositoryIds).toEqual(new Set([API]))
+
+    await act(async () => {
+      await refreshRepository(API)
+    })
+    expect(refreshStatus).toHaveBeenCalledTimes(1)
+
+    const api = useReposStore.getState().repos[API]!
+    expect(refreshStatus).toHaveBeenCalledWith(API, { token: api.instanceToken })
+
+    resolveStatus?.()
+    await act(async () => {
+      await first
+    })
+    expect(repositoryListState.props?.refreshingRepositoryIds).toEqual(new Set())
+  })
+
+  test('skips unavailable repositories and clears busy state after a status failure', async () => {
+    refreshStatus.mockRejectedValueOnce(new Error('offline'))
+    renderRail()
+
+    const refreshRepository = repositoryListState.props?.onRefreshRepository
+    expect(refreshRepository).toBeTypeOf('function')
+    if (!refreshRepository) return
+
+    await act(async () => {
+      await refreshRepository(API)
+    })
+    expect(repositoryListState.props?.refreshingRepositoryIds).toEqual(new Set())
+
+    await act(async () => {
+      await refreshRepository(WEB)
+    })
+    expect(refreshStatus).toHaveBeenCalledTimes(1)
+    expect(refreshStatus).toHaveBeenCalledWith(API, { token: expect.any(Number) })
   })
 
   test('renders the desktop repository list as a resizable region with the default height', () => {
@@ -1764,11 +1827,58 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceState.cancel).not.toHaveBeenCalled()
   })
 
-  test('does not expose per-row change refresh controls to the branch workspace list', () => {
+  test('exposes per-row change refresh controls to the branch workspace list', () => {
     renderRail({ currentRepoId: ROOT })
 
-    expect(branchWorkspaceListState.props).not.toHaveProperty('onRefreshChanges')
-    expect(branchWorkspaceListState.props).not.toHaveProperty('refreshingChangeIds')
+    expect(branchWorkspaceListState.props?.onRefreshChanges).toBeTypeOf('function')
+    expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set())
+  })
+
+  test('refreshes available branch workspace members and prevents duplicate refreshes', async () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: {
+        ...state.repos,
+        [WEB]: replaceRepo(state.repos[WEB]!, (repo) => {
+          repo.availability = { phase: 'available' }
+        }),
+      },
+    })
+    let releaseApi: (() => void) | undefined
+    let releaseWeb: (() => void) | undefined
+    refreshStatus
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseApi = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseWeb = resolve
+          }),
+      )
+    renderRail({ currentRepoId: ROOT })
+
+    const refreshChanges = branchWorkspaceListState.props?.onRefreshChanges
+    const item = branchWorkspaceState.items[0]!
+    expect(refreshChanges).toBeTypeOf('function')
+    if (!refreshChanges) return
+
+    const first = refreshChanges(item)
+    await act(async () => await Promise.resolve())
+    expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set([item.id]))
+
+    await act(async () => await refreshChanges(item))
+    expect(refreshStatus).toHaveBeenCalledTimes(2)
+    expect(refreshStatus).toHaveBeenNthCalledWith(1, API, { token: expect.any(Number) })
+    expect(refreshStatus).toHaveBeenNthCalledWith(2, WEB, { token: expect.any(Number) })
+
+    releaseApi?.()
+    releaseWeb?.()
+    await act(async () => await first)
+    expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set())
   })
 
   test('sums changes from each branch workspace repository member worktree', () => {

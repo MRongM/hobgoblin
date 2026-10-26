@@ -550,6 +550,28 @@ describe('i18n dictionaries', () => {
     expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
   })
 
+  test('localizes workspace repository change refresh in every locale', () => {
+    const key = 'workspace.repository.refresh-changes' as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en[key]).toBe('Refresh changes')
+    expect(zh[key]).toBe('刷新改动')
+    expect(ja[key]).toBe('変更を更新')
+    expect(ko[key]).toBe('변경 사항 새로 고침')
+  })
+
+  test('localizes branch workspace change refresh in every locale', () => {
+    const key = 'workspace.branch-workspace.refresh-changes' as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en[key]).toBe('Refresh changes')
+    expect(zh[key]).toBe('刷新改动')
+    expect(ja[key]).toBe('変更を更新')
+    expect(ko[key]).toBe('변경 사항 새로 고침')
+  })
+
   test('localizes branch workspace fetch all feedback in every locale', () => {
     const keys = [
       'workspace.branch-workspace.fetch-all',

@@ -39,6 +39,7 @@ const projectActionState = vi.hoisted(() => ({
   editorOnSelect: vi.fn(),
   externalTerminalOnSelect: vi.fn(),
   internalTerminalOnSelect: vi.fn(),
+  refreshRepositoryOnSelect: vi.fn(),
   editorDisabled: false,
   externalTerminalDisabled: false,
   internalTerminalDisabled: false,
@@ -201,6 +202,7 @@ beforeEach(() => {
   projectActionState.editorOnSelect.mockReset()
   projectActionState.externalTerminalOnSelect.mockReset()
   projectActionState.internalTerminalOnSelect.mockReset()
+  projectActionState.refreshRepositoryOnSelect.mockReset()
   projectActionState.editorDisabled = false
   projectActionState.externalTerminalDisabled = false
   projectActionState.internalTerminalDisabled = false
@@ -228,6 +230,7 @@ function renderList(
   disabled = false,
   readContext: TerminalSessionReadContextValue = terminalReadContext(new Map()),
   closeTerminal: CloseTerminalMock = vi.fn<TerminalSessionContextValue['closeTerminalAndDismissDetailIfLast']>(),
+  refreshingRepositoryIds: ReadonlySet<string> = new Set(),
 ) {
   const onActivate = vi.fn()
   const onReorder = vi.fn()
@@ -245,6 +248,8 @@ function renderList(
             onReorder={onReorder}
             onToggleFileArea={onToggleFileArea}
             onOpenFileArea={onOpenFileArea}
+            refreshingRepositoryIds={refreshingRepositoryIds}
+            onRefreshRepository={projectActionState.refreshRepositoryOnSelect}
           />
         </TerminalSessionReadContext.Provider>
       </TerminalSessionContext.Provider>,
@@ -441,6 +446,37 @@ describe('WorkspaceRepositoryList', () => {
     expect(projectActionState.internalTerminalOnSelect).toHaveBeenCalledWith('/workspace/api')
   })
 
+  test('offers refresh changes in the repository action menu', async () => {
+    renderList()
+
+    const menuItems = await openRepositoryMenu('/workspace/api')
+    const refresh = menuItems.find((entry) => entry.textContent?.includes('workspace.repository.refresh-changes'))
+
+    expect(refresh).toBeDefined()
+    await act(async () => {
+      refresh?.click()
+      await Promise.resolve()
+    })
+
+    expect(projectActionState.refreshRepositoryOnSelect).toHaveBeenCalledWith('/workspace/api')
+  })
+
+  test('keeps refresh changes visible but disabled for unavailable or busy repositories', async () => {
+    renderList(false, terminalReadContext(new Map()), undefined, new Set(['/workspace/api']))
+
+    const busyRefresh = (await openRepositoryMenu('/workspace/api')).find((entry) =>
+      entry.textContent?.includes('workspace.repository.refresh-changes'),
+    )
+    const unavailableRefresh = (await openRepositoryMenu('/workspace/web')).find((entry) =>
+      entry.textContent?.includes('workspace.repository.refresh-changes'),
+    )
+
+    expect(busyRefresh).toBeDefined()
+    expect(busyRefresh?.hasAttribute('data-disabled')).toBe(true)
+    expect(unavailableRefresh).toBeDefined()
+    expect(unavailableRefresh?.hasAttribute('data-disabled')).toBe(true)
+  })
+
   test('omits tmux actions for native local Windows workspace repositories', async () => {
     platformState.hostPlatform = 'win32'
     renderList()
@@ -532,10 +568,11 @@ describe('WorkspaceRepositoryList', () => {
     expect(menuItems.map((entry) => entry.textContent?.trim())).toEqual([
       'action.pull-remote-branch',
       'action.create-worktree',
+      'workspace.repository.refresh-changes',
       'terminal.new-with-tmux',
       'terminal.external',
     ])
-    expect(menuItems[2]?.hasAttribute('data-disabled')).toBe(true)
+    expect(menuItems[3]?.hasAttribute('data-disabled')).toBe(true)
   })
 
   test('keeps repository creation available when only list reordering is disabled', async () => {

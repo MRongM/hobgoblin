@@ -118,6 +118,7 @@ describe('BranchWorkspaceList', () => {
     const onReduce = vi.fn()
     const onAddDependencies = vi.fn()
     const onRemoveDependencies = vi.fn()
+    const onRefreshChanges = vi.fn()
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     act(() =>
       root.render(
@@ -132,6 +133,7 @@ describe('BranchWorkspaceList', () => {
             onReduce={onReduce}
             onAddDependencies={onAddDependencies}
             onRemoveDependencies={onRemoveDependencies}
+            onRefreshChanges={onRefreshChanges}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
@@ -171,6 +173,7 @@ describe('BranchWorkspaceList', () => {
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.external',
+      'workspace.branch-workspace.refresh-changes',
       'workspace.branch-workspace.add-members',
       'workspace.branch-workspace.remove-members',
       'workspace.branch-workspace.dependency.add.action',
@@ -246,6 +249,14 @@ describe('BranchWorkspaceList', () => {
       await Promise.resolve()
     })
     expect(onGitAction).toHaveBeenLastCalledWith(item, 'batch-set-upstream')
+    const refreshChangesItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.refresh-changes',
+    )
+    await act(async () => {
+      refreshChangesItem?.click()
+      await Promise.resolve()
+    })
+    expect(onRefreshChanges).toHaveBeenCalledWith(item)
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()

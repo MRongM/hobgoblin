@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderGit2, FolderTree, GitCompareArrows, Terminal } from 'lucide-react'
+import { FolderGit2, FolderTree, GitCompareArrows, RefreshCw, Terminal } from 'lucide-react'
 import { useMemo } from 'react'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
@@ -57,6 +57,8 @@ interface Props {
   repositories: WorkspaceRepositoryListItem[]
   currentRepoId: string
   disabled: boolean
+  refreshingRepositoryIds?: ReadonlySet<string>
+  onRefreshRepository?: (repositoryId: string) => void | Promise<void>
   onActivate: (id: string) => void
   onReorder: (fromId: string, toId: string) => void
   onToggleFileArea?: () => void
@@ -67,6 +69,8 @@ export function WorkspaceRepositoryList({
   repositories,
   currentRepoId,
   disabled,
+  refreshingRepositoryIds = new Set(),
+  onRefreshRepository,
   onActivate,
   onReorder,
   onToggleFileArea,
@@ -97,6 +101,8 @@ export function WorkspaceRepositoryList({
               repository={repository}
               active={currentRepoId === repository.id}
               disabled={disabled}
+              refreshing={refreshingRepositoryIds.has(repository.id)}
+              onRefreshRepository={onRefreshRepository}
               onActivate={onActivate}
               onToggleFileArea={onToggleFileArea}
               onOpenFileArea={onOpenFileArea}
@@ -112,6 +118,8 @@ function SortableWorkspaceRepositoryRow({
   repository,
   active,
   disabled,
+  refreshing,
+  onRefreshRepository,
   onActivate,
   onToggleFileArea,
   onOpenFileArea,
@@ -119,6 +127,8 @@ function SortableWorkspaceRepositoryRow({
   repository: WorkspaceRepositoryListItem
   active: boolean
   disabled: boolean
+  refreshing: boolean
+  onRefreshRepository?: (repositoryId: string) => void | Promise<void>
   onActivate: (id: string) => void
   onToggleFileArea?: () => void
   onOpenFileArea?: () => void
@@ -182,6 +192,14 @@ function SortableWorkspaceRepositoryRow({
     busy: internalTerminalAction.busy,
     visible: tmuxMenuVisible,
     onSelect: () => internalTerminalAction.onSelect('tmux-if-available'),
+  }
+  const refreshChangesAction: WorkspaceListItemAction = {
+    id: 'refreshChanges',
+    label: t('workspace.repository.refresh-changes'),
+    icon: <RefreshCw aria-hidden="true" />,
+    disabled: repository.unavailable || repo?.isGitRepo === false || !onRefreshRepository,
+    busy: refreshing || repo?.operations.status.phase !== 'idle',
+    onSelect: () => onRefreshRepository?.(repository.id),
   }
   const handleOpenFileArea = onOpenFileArea
     ? () => {
@@ -262,7 +280,7 @@ function SortableWorkspaceRepositoryRow({
             moreMenu={
               <WorkspaceListItemMenu
                 label={t('action.menu')}
-                groups={[creation.items, [tmuxTerminalAction, externalTerminalAction]]}
+                groups={[creation.items, [refreshChangesAction], [tmuxTerminalAction, externalTerminalAction]]}
               />
             }
           />

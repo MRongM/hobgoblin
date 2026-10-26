@@ -96,6 +96,7 @@ export interface BranchWorkspaceListProps {
   activeMemberRepositoryName?: string | null
   disabled?: boolean
   changeCountById?: Readonly<Record<string, number>>
+  refreshingChangeIds?: ReadonlySet<string>
   onActivate: (id: string) => void
   onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
   onOpenFileArea?: () => void
@@ -108,6 +109,7 @@ export interface BranchWorkspaceListProps {
   onReduceMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
   onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
+  onRefreshChanges?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   getMemberPresentation?: (
     item: BranchWorkspaceSnapshot,
@@ -133,6 +135,7 @@ export function BranchWorkspaceList({
   activeMemberRepositoryName = null,
   disabled = false,
   changeCountById = {},
+  refreshingChangeIds = new Set(),
   onActivate,
   onToggleFileArea,
   onOpenFileArea,
@@ -145,6 +148,7 @@ export function BranchWorkspaceList({
   onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
+  onRefreshChanges,
   onCancel,
   getMemberPresentation,
   onSelectRepositoryMember,
@@ -200,6 +204,7 @@ export function BranchWorkspaceList({
               expanded={expandedIds.has(item.id)}
               disabled={disabled}
               changeCountById={changeCountById}
+              refreshingChangeIds={refreshingChangeIds}
               onActivate={selectRoot}
               onToggleFileArea={onToggleFileArea}
               onOpenFileArea={onOpenFileArea}
@@ -212,6 +217,7 @@ export function BranchWorkspaceList({
               onReduceMember={onReduceMember}
               onAddDependencies={onAddDependencies}
               onRemoveDependencies={onRemoveDependencies}
+              onRefreshChanges={onRefreshChanges}
               onCancel={onCancel}
               getMemberPresentation={getMemberPresentation}
               onSelectRepositoryMember={onSelectRepositoryMember}
@@ -237,6 +243,7 @@ function BranchWorkspaceRow({
   expanded,
   disabled,
   changeCountById,
+  refreshingChangeIds = new Set(),
   onActivate,
   onToggleFileArea,
   onOpenFileArea,
@@ -249,6 +256,7 @@ function BranchWorkspaceRow({
   onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
+  onRefreshChanges,
   onCancel,
   getMemberPresentation,
   onSelectRepositoryMember,
@@ -403,6 +411,19 @@ function BranchWorkspaceRow({
         },
       ]
     : []
+  const refreshChangesActions: BranchWorkspaceItemAction[] =
+    rootUsable && onRefreshChanges
+      ? [
+          {
+            label: 'workspace.branch-workspace.refresh-changes',
+            icon: <RefreshCw aria-hidden="true" />,
+            disabled,
+            busy: refreshingChangeIds.has(item.id),
+            separated: true,
+            onSelect: () => onRefreshChanges(item),
+          },
+        ]
+      : []
   const readyGitActions: BranchWorkspaceItemAction[] =
     rootUsable && onGitAction
       ? [
@@ -551,6 +572,7 @@ function BranchWorkspaceRow({
         : []
   const rowMenuActions = [
     ...rootOpenMenuActions,
+    ...refreshChangesActions,
     ...readyMembershipActions,
     ...readyDependencyActions,
     ...readyGitActions,

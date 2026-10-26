@@ -142,6 +142,10 @@ export function WorkspaceRepositoryRail({
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
   const branchReloadPendingRef = useRef(false)
+  const refreshingBranchChangesRef = useRef<Set<string>>(new Set())
+  const [refreshingBranchChanges, setRefreshingBranchChanges] = useState<ReadonlySet<string>>(() => new Set())
+  const refreshingRepositoryIdsRef = useRef<Set<string>>(new Set())
+  const [refreshingRepositoryIds, setRefreshingRepositoryIds] = useState<ReadonlySet<string>>(() => new Set())
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
   const autoRefreshedDriftIds = useRef<Set<string>>(new Set())
   const dialogProgressWorkspace = branchActions.plan
@@ -274,6 +278,60 @@ export function WorkspaceRepositoryRail({
   )
   const fetchAllRepositories = useCallback(
     async () => await fetchWorkspaceRepositories(workspaceRootId),
+    [workspaceRootId],
+  )
+  const refreshWorkspaceRepositoryChanges = useCallback(async (repositoryId: string) => {
+    const state = useReposStore.getState()
+    const repository = state.repos[repositoryId]
+    if (!repository || repository.availability.phase !== 'available' || repository.isGitRepo === false) return
+    const inFlight = refreshingRepositoryIdsRef.current
+    if (inFlight.has(repositoryId)) return
+    inFlight.add(repositoryId)
+    setRefreshingRepositoryIds(new Set(inFlight))
+    try {
+      await state.refreshStatus(repositoryId, { token: repository.instanceToken })
+    } catch {
+      // The store normally projects refresh failures into the resource state;
+      // keep menu actions safe if a caller still rejects unexpectedly.
+    } finally {
+      inFlight.delete(repositoryId)
+      setRefreshingRepositoryIds(new Set(inFlight))
+    }
+  }, [])
+  const refreshBranchWorkspaceChanges = useCallback(
+    async (item: BranchWorkspaceSnapshot) => {
+      const inFlight = refreshingBranchChangesRef.current
+      if (inFlight.has(item.id)) return
+      inFlight.add(item.id)
+      setRefreshingBranchChanges(new Set(inFlight))
+      try {
+        const state = useReposStore.getState()
+        const workspace = state.workspaceProjects[workspaceRootId]
+        const repositoryIds = Array.from(
+          new Set(
+            item.repositories.flatMap((member) => {
+              if (member.progress === 'removed') return []
+              const repositoryId = branchWorkspaceMemberRepositoryId(
+                member,
+                workspace?.repositoryIds ?? [],
+                workspace?.candidates ?? [],
+              )
+              return repositoryId ? [repositoryId] : []
+            }),
+          ),
+        )
+        await Promise.allSettled(
+          repositoryIds.map(async (repositoryId) => {
+            const repository = useReposStore.getState().repos[repositoryId]
+            if (!repository || repository.availability.phase !== 'available' || repository.isGitRepo === false) return
+            await useReposStore.getState().refreshStatus(repositoryId, { token: repository.instanceToken })
+          }),
+        )
+      } finally {
+        inFlight.delete(item.id)
+        setRefreshingBranchChanges(new Set(inFlight))
+      }
+    },
     [workspaceRootId],
   )
   const refreshWorkspaceMemberCoreData = useCallback(() => {
@@ -626,6 +684,8 @@ export function WorkspaceRepositoryRail({
               repositories={repositoryItems}
               currentRepoId={currentRepoId}
               disabled={!reorderReady}
+              refreshingRepositoryIds={refreshingRepositoryIds}
+              onRefreshRepository={refreshWorkspaceRepositoryChanges}
               onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
               onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
               onToggleFileArea={onToggleFileArea}
@@ -695,6 +755,8 @@ export function WorkspaceRepositoryRail({
                   gitActionsDisabled={branchGitActions.pending}
                   onGitAction={openGitAction}
                   changeCountById={branchWorkspaceChangeCountById}
+                  refreshingChangeIds={refreshingBranchChanges}
+                  onRefreshChanges={refreshBranchWorkspaceChanges}
                   onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                   onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
                   onOpenFileArea={onOpenFileArea}
