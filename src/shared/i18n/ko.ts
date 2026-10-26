@@ -127,7 +127,7 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.create': '브랜치 워크스페이스 추가',
   'workspace.branch-workspace.create.files-options': '파일 복사 또는 링크 (선택 사항)',
   'workspace.branch-workspace.create.selected-count': '{count}개 선택됨',
-  'workspace.branch-workspace.create.plan-details': '생성 내용 확인',
+  'workspace.branch-workspace.create.plan-details': '생성 내용',
   'workspace.branch-workspace.create.checking': '생성 위치 확인 중…',
   'workspace.branch-workspace.create.invalid-folder': '올바른 폴더 이름을 입력하세요.',
   'workspace.branch-workspace.refresh-changes': '변경 사항 새로 고침',

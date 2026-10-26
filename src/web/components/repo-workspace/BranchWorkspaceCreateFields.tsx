@@ -9,7 +9,6 @@ import { isSafeBranchWorkspaceFolderName } from '#/shared/branch-workspaces.ts'
 interface BranchWorkspaceCreateFieldsProps {
   folderName: string
   parentDirectory: string
-  targetPath: string | null
   parentDirectoryValid: boolean
   locked: boolean
   fixed: boolean
@@ -26,7 +25,6 @@ interface BranchWorkspaceCreateFieldsProps {
 export function BranchWorkspaceCreateFields({
   folderName,
   parentDirectory,
-  targetPath,
   parentDirectoryValid,
   locked,
   fixed,
@@ -102,14 +100,6 @@ export function BranchWorkspaceCreateFields({
           </FieldError>
         ) : null}
       </Field>
-      {targetPath ? (
-        <div data-branch-workspace-planned-path className="grid min-w-0 gap-1 rounded-md bg-muted/30 px-3 py-2 text-xs">
-          <span className="text-muted-foreground">{t('workspace.branch-workspace.target-directory')}</span>
-          <code className="break-all" title={targetPath}>
-            {targetPath}
-          </code>
-        </div>
-      ) : null}
     </div>
   )
 }

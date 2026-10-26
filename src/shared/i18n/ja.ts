@@ -134,7 +134,7 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.create': 'ブランチワークスペースを追加',
   'workspace.branch-workspace.create.files-options': 'ファイルをコピーまたはリンク（任意）',
   'workspace.branch-workspace.create.selected-count': '{count} 件選択中',
-  'workspace.branch-workspace.create.plan-details': '作成内容を確認',
+  'workspace.branch-workspace.create.plan-details': '作成内容',
   'workspace.branch-workspace.create.checking': '作成先を確認中…',
   'workspace.branch-workspace.create.invalid-folder': '有効なフォルダー名を入力してください。',
   'workspace.branch-workspace.refresh-changes': '変更を更新',

@@ -123,7 +123,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.create': '新增子工作区',
   'workspace.branch-workspace.create.files-options': '复制或链接文件（可选）',
   'workspace.branch-workspace.create.selected-count': '已选 {count} 项',
-  'workspace.branch-workspace.create.plan-details': '查看创建详情',
+  'workspace.branch-workspace.create.plan-details': '创建详情',
   'workspace.branch-workspace.create.checking': '正在检查创建位置…',
   'workspace.branch-workspace.create.invalid-folder': '请输入有效的文件夹名称。',
   'workspace.branch-workspace.refresh-changes': '刷新改动',

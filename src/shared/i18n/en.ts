@@ -135,7 +135,7 @@ export const en = {
   'workspace.branch-workspace.create': 'New subworkspace',
   'workspace.branch-workspace.create.files-options': 'Copy or link files (optional)',
   'workspace.branch-workspace.create.selected-count': '{count} selected',
-  'workspace.branch-workspace.create.plan-details': 'View creation details',
+  'workspace.branch-workspace.create.plan-details': 'Creation details',
   'workspace.branch-workspace.create.checking': 'Checking folder location…',
   'workspace.branch-workspace.create.invalid-folder': 'Enter a valid folder name.',
   'workspace.branch-workspace.refresh-changes': 'Refresh changes',

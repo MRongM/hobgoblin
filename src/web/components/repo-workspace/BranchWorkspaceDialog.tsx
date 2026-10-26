@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
@@ -221,8 +221,7 @@ export function BranchWorkspaceDialog({
   const dialogStateKey = open ? JSON.stringify([mode, workspace?.id ?? null, fixedReduceRepositoryName]) : null
   const [initializedDialogStateKey, setInitializedDialogStateKey] = useState<string | null>(null)
   const oneStep = mode === 'create' || mode === 'extend' || mode === 'reduce' || mode === 'remove'
-  const compactCreate = mode === 'create'
-  const splitLayout = oneStep && !compactCreate
+  const creating = mode === 'create'
   const operationConsole = mode === 'remove'
   const selectionDescriptionKey =
     mode === 'remove'
@@ -844,11 +843,7 @@ export function BranchWorkspaceDialog({
       <DialogContent
         className={cn(
           'max-h-[85vh]',
-          compactCreate
-            ? 'grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl'
-            : oneStep
-              ? 'grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-5xl'
-              : 'overflow-y-auto sm:max-w-2xl',
+          oneStep ? 'grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-5xl' : 'overflow-y-auto sm:max-w-2xl',
         )}
         showCloseButton={!removalExecutionLocked}
         onEscapeKeyDown={(event) => {
@@ -885,14 +880,14 @@ export function BranchWorkspaceDialog({
           </div>
         </DialogHeader>
 
-        <div className={compactCreate ? 'grid min-h-0 gap-4 overflow-y-auto px-1 -mx-1' : 'contents'}>
+        <div className="contents">
           <OneStepPlanningLayout
-            enabled={splitLayout}
+            enabled={oneStep}
             testIdPrefix="branch-workspace"
             presentation={operationConsole ? 'operation-console' : 'plain'}
           >
             <OneStepPlanningSelectionPane
-              enabled={splitLayout}
+              enabled={oneStep}
               testIdPrefix="branch-workspace"
               title={t('workspace.branch-workspace.one-step.selection-title')}
               description={operationConsole ? t(selectionDescriptionKey) : undefined}
@@ -901,11 +896,10 @@ export function BranchWorkspaceDialog({
             >
               {oneStep && (mode === 'create' || mode === 'extend') ? (
                 <div className="grid gap-4">
-                  {compactCreate ? (
+                  {creating ? (
                     <BranchWorkspaceCreateFields
                       folderName={folderName}
                       parentDirectory={parentDirectory}
-                      targetPath={targetPath}
                       parentDirectoryValid={parentDirectoryValid}
                       locked={selectionLocked}
                       fixed={!!workspace}
@@ -1173,7 +1167,7 @@ export function BranchWorkspaceDialog({
                                   </span>
                                 ) : null}
                               </label>
-                              {!compactCreate || selectedRepositories[repository.name] ? (
+                              {!creating || selectedRepositories[repository.name] ? (
                                 <>
                                   <BranchWorkspaceMemberConfiguration
                                     name={repository.name}
@@ -1560,7 +1554,7 @@ export function BranchWorkspaceDialog({
                       </Button>
                     </fieldset>
                   </details>
-                  {compactCreate ? (
+                  {creating ? (
                     <details className="rounded-md border border-separator p-3">
                       <summary className="cursor-pointer text-xs font-medium">
                         {t('workspace.branch-workspace.create.files-options')}
@@ -1706,27 +1700,34 @@ export function BranchWorkspaceDialog({
               ) : null}
             </OneStepPlanningSelectionPane>
             <OneStepPlanningPlanPane
-              enabled={splitLayout}
+              enabled={oneStep}
               testIdPrefix="branch-workspace"
-              title={t('workspace.branch-workspace.one-step.plan-title')}
+              title={t(
+                creating
+                  ? 'workspace.branch-workspace.create.plan-details'
+                  : 'workspace.branch-workspace.one-step.plan-title',
+              )}
               description={operationConsole ? t(planDescriptionKey) : undefined}
               presentation={operationConsole ? 'operation-console' : 'plain'}
               step={operationConsole ? '02' : undefined}
             >
               {workspace ? <WorkspaceSummary workspace={workspace} /> : null}
+              {(creating ? targetPath : displayedPlan?.path) ? (
+                <div
+                  data-branch-workspace-planned-path
+                  className="grid gap-1 rounded-md border border-separator bg-muted/20 p-3 text-xs"
+                >
+                  <span className="font-medium">{t('workspace.branch-workspace.target-directory')}</span>
+                  <code
+                    className="break-all text-[10px] text-muted-foreground"
+                    title={(creating ? targetPath : displayedPlan?.path) ?? undefined}
+                  >
+                    {creating ? targetPath : displayedPlan?.path}
+                  </code>
+                </div>
+              ) : null}
               {displayedPlan ? (
                 <div className="grid gap-3">
-                  {!compactCreate ? (
-                    <div
-                      data-branch-workspace-planned-path
-                      className="grid gap-1 rounded-md border border-separator bg-muted/20 p-3 text-xs"
-                    >
-                      <span className="font-medium">{t('workspace.branch-workspace.target-directory')}</span>
-                      <code className="break-all text-[10px] text-muted-foreground" title={displayedPlan.path}>
-                        {displayedPlan.path}
-                      </code>
-                    </div>
-                  ) : null}
                   {operationProgress ? (
                     <div
                       data-branch-workspace-operation-progress
@@ -1752,139 +1753,121 @@ export function BranchWorkspaceDialog({
                       </span>
                     </div>
                   ) : null}
-                  {!compactCreate ||
-                  selectedRepositoryCount > 0 ||
-                  selectedFileCount > 0 ||
-                  operationPending ||
-                  result !== null ? (
-                    <BranchWorkspaceCreationDetails
-                      compact={compactCreate}
-                      forceOpen={operationPending || result !== null}
-                    >
-                      <div className="overflow-hidden rounded-md border border-separator bg-card">
-                        {displayedPlan.steps.length === 0 ? (
-                          <p className="p-3 text-xs text-muted-foreground">
-                            {t('workspace.branch-workspace.no-pending-steps')}
-                          </p>
-                        ) : (
-                          groupBranchCleanupSteps(displayedPlan.steps).map((item, itemIndex) => {
-                            if (item.kind === 'branch-group') {
-                              return (
-                                <div
-                                  key={item.steps.map((step) => step.id).join(':')}
-                                  data-branch-workspace-branch-group={item.repositoryName}
-                                  role="group"
-                                  aria-label={item.repositoryName}
-                                  className="flex items-start gap-2 border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
-                                >
-                                  {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
-                                  <div
-                                    className={cn(
-                                      'grid min-w-0 flex-1 gap-2',
-                                      item.steps.length > 1 &&
-                                        'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center',
-                                    )}
-                                  >
-                                    {item.steps.map((step, index) => (
-                                      <div key={step.id} className="contents">
-                                        {index > 0 ? (
-                                          <ArrowRight
-                                            className="mx-auto size-3.5 rotate-90 text-muted-foreground/70 sm:rotate-0"
-                                            aria-hidden="true"
-                                          />
-                                        ) : null}
-                                        <div
-                                          data-branch-workspace-progress-step={step.id}
-                                          data-progress-status={progressStatusByStepId.get(step.id)}
-                                          className="grid min-w-0 gap-1"
-                                        >
-                                          <BranchCleanupStepLabel step={step} />
-                                          {progressStatusByStepId.get(step.id) ? (
-                                            <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )
-                            }
-
-                            const { step } = item
-                            const creationRepository =
-                              (step.kind === 'create-worktree' || step.kind === 'clone-repository') &&
-                              step.repositoryName
-                                ? displayedPlan.repositories.find(
-                                    (repository) => repository.repositoryName === step.repositoryName,
-                                  )
-                                : undefined
-                            const removalRepository =
-                              step.kind === 'remove-entry' && step.repositoryName
-                                ? displayedPlan.repositories.find(
-                                    (repository) =>
-                                      repository.repositoryName === step.repositoryName &&
-                                      repository.kind === 'repository',
-                                  )
-                                : undefined
-                            return (
+                  <div className="overflow-hidden rounded-md border border-separator bg-card">
+                    {displayedPlan.steps.length === 0 ? (
+                      <p className="p-3 text-xs text-muted-foreground">
+                        {t('workspace.branch-workspace.no-pending-steps')}
+                      </p>
+                    ) : (
+                      groupBranchCleanupSteps(displayedPlan.steps).map((item, itemIndex) => {
+                        if (item.kind === 'branch-group') {
+                          return (
+                            <div
+                              key={item.steps.map((step) => step.id).join(':')}
+                              data-branch-workspace-branch-group={item.repositoryName}
+                              role="group"
+                              aria-label={item.repositoryName}
+                              className="flex items-start gap-2 border-b border-separator/60 bg-muted/10 px-3 py-2.5 text-xs last:border-b-0"
+                            >
+                              {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
                               <div
-                                key={step.id}
-                                data-branch-workspace-plan-step={step.kind}
-                                data-branch-workspace-progress-step={step.id}
-                                data-progress-status={progressStatusByStepId.get(step.id)}
                                 className={cn(
-                                  'flex items-center justify-between gap-3 border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
-                                  mode === 'create' &&
-                                    step.kind === 'create-directory' &&
-                                    'bg-success-surface font-semibold text-success',
-                                  mode === 'remove' &&
-                                    step.kind === 'remove-directory' &&
-                                    'bg-danger-surface font-semibold text-danger',
+                                  'grid min-w-0 flex-1 gap-2',
+                                  item.steps.length > 1 &&
+                                    'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center',
                                 )}
                               >
-                                {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
-                                <div className="grid min-w-0 flex-1 gap-0.5">
-                                  <span>
-                                    {step.kind === 'clone-repository'
-                                      ? `${t('workspace.branch-workspace.step.clone-repository')}: `
-                                      : removalRepository
-                                        ? `${t('workspace.branch-workspace.step.remove-repository')}: `
-                                        : ''}
-                                    {step.label}
-                                  </span>
-                                  {removalRepository ? (
+                                {item.steps.map((step, index) => (
+                                  <div key={step.id} className="contents">
+                                    {index > 0 ? (
+                                      <ArrowRight
+                                        className="mx-auto size-3.5 rotate-90 text-muted-foreground/70 sm:rotate-0"
+                                        aria-hidden="true"
+                                      />
+                                    ) : null}
                                     <div
-                                      data-independent-repository-removal
-                                      className="grid gap-1 text-[10px] text-danger"
+                                      data-branch-workspace-progress-step={step.id}
+                                      data-progress-status={progressStatusByStepId.get(step.id)}
+                                      className="grid min-w-0 gap-1"
                                     >
-                                      <code className="break-all">{removalRepository.worktreePath}</code>
-                                      <span>
-                                        {t('workspace.branch-workspace.repository-removal-preview', {
-                                          dirty: t(
-                                            removalRepository.dirty ? 'branches.dirty' : 'status.worktree-clean',
-                                          ),
-                                          commits: removalRepository.localOnlyCommits ?? 0,
-                                        })}
-                                      </span>
+                                      <BranchCleanupStepLabel step={step} />
+                                      {progressStatusByStepId.get(step.id) ? (
+                                        <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
+                                      ) : null}
                                     </div>
-                                  ) : null}
-                                  {creationRepository ? (
-                                    <>
-                                      <BranchWorkspaceCreationSourcePreview repository={creationRepository} />
-                                      <BranchWorkspaceRepositoryDependencyPreview repository={creationRepository} />
-                                    </>
-                                  ) : null}
-                                </div>
-                                {progressStatusByStepId.get(step.id) ? (
-                                  <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
-                                ) : null}
+                                  </div>
+                                ))}
                               </div>
-                            )
-                          })
-                        )}
-                      </div>
-                    </BranchWorkspaceCreationDetails>
-                  ) : null}
+                            </div>
+                          )
+                        }
+
+                        const { step } = item
+                        const creationRepository =
+                          (step.kind === 'create-worktree' || step.kind === 'clone-repository') && step.repositoryName
+                            ? displayedPlan.repositories.find(
+                                (repository) => repository.repositoryName === step.repositoryName,
+                              )
+                            : undefined
+                        const removalRepository =
+                          step.kind === 'remove-entry' && step.repositoryName
+                            ? displayedPlan.repositories.find(
+                                (repository) =>
+                                  repository.repositoryName === step.repositoryName && repository.kind === 'repository',
+                              )
+                            : undefined
+                        return (
+                          <div
+                            key={step.id}
+                            data-branch-workspace-plan-step={step.kind}
+                            data-branch-workspace-progress-step={step.id}
+                            data-progress-status={progressStatusByStepId.get(step.id)}
+                            className={cn(
+                              'flex items-center justify-between gap-3 border-b border-separator/60 px-3 py-2 text-xs last:border-b-0',
+                              mode === 'create' &&
+                                step.kind === 'create-directory' &&
+                                'bg-success-surface font-semibold text-success',
+                              mode === 'remove' &&
+                                step.kind === 'remove-directory' &&
+                                'bg-danger-surface font-semibold text-danger',
+                            )}
+                          >
+                            {operationConsole ? <BranchWorkspacePlanSequence index={itemIndex} /> : null}
+                            <div className="grid min-w-0 flex-1 gap-0.5">
+                              <span>
+                                {step.kind === 'clone-repository'
+                                  ? `${t('workspace.branch-workspace.step.clone-repository')}: `
+                                  : removalRepository
+                                    ? `${t('workspace.branch-workspace.step.remove-repository')}: `
+                                    : ''}
+                                {step.label}
+                              </span>
+                              {removalRepository ? (
+                                <div data-independent-repository-removal className="grid gap-1 text-[10px] text-danger">
+                                  <code className="break-all">{removalRepository.worktreePath}</code>
+                                  <span>
+                                    {t('workspace.branch-workspace.repository-removal-preview', {
+                                      dirty: t(removalRepository.dirty ? 'branches.dirty' : 'status.worktree-clean'),
+                                      commits: removalRepository.localOnlyCommits ?? 0,
+                                    })}
+                                  </span>
+                                </div>
+                              ) : null}
+                              {creationRepository ? (
+                                <>
+                                  <BranchWorkspaceCreationSourcePreview repository={creationRepository} />
+                                  <BranchWorkspaceRepositoryDependencyPreview repository={creationRepository} />
+                                </>
+                              ) : null}
+                            </div>
+                            {progressStatusByStepId.get(step.id) ? (
+                              <PlanStepProgressStatus status={progressStatusByStepId.get(step.id)!} />
+                            ) : null}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
                   {displayedPlan.requiredApprovals.length > 0 ? (
                     <fieldset className="grid gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
                       <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.approvals')}</legend>
@@ -1909,19 +1892,23 @@ export function BranchWorkspaceDialog({
                     </fieldset>
                   ) : null}
                 </div>
-              ) : compactCreate ? (
-                autoPlan.status === 'planning' || autoPlan.status === 'error' ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-                    {autoPlan.status === 'planning' ? (
-                      <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    {t(
-                      autoPlan.status === 'planning'
-                        ? 'workspace.branch-workspace.create.checking'
-                        : 'workspace.branch-workspace.one-step.plan-error',
-                    )}
-                  </div>
-                ) : null
+              ) : creating ? (
+                <div
+                  data-plan-status={autoPlan.status}
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                  role="status"
+                >
+                  {autoPlan.status === 'planning' ? (
+                    <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
+                  ) : null}
+                  {t(
+                    autoPlan.status === 'planning'
+                      ? 'workspace.branch-workspace.create.checking'
+                      : autoPlan.status === 'error'
+                        ? 'workspace.branch-workspace.one-step.plan-error'
+                        : 'workspace.branch-workspace.one-step.incomplete',
+                  )}
+                </div>
               ) : oneStep ? (
                 operationConsole ? (
                   <BranchWorkspacePlanPlaceholder status={autoPlan.status} />
@@ -2053,28 +2040,6 @@ export function BranchWorkspaceDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function BranchWorkspaceCreationDetails({
-  compact,
-  forceOpen,
-  children,
-}: {
-  compact: boolean
-  forceOpen: boolean
-  children: ReactNode
-}) {
-  const t = useT()
-  const [expanded, setExpanded] = useState(false)
-  if (!compact || forceOpen) return children
-  return (
-    <details open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary className="cursor-pointer text-xs text-muted-foreground">
-        {t('workspace.branch-workspace.create.plan-details')}
-      </summary>
-      <div className="mt-2">{children}</div>
-    </details>
   )
 }
 
