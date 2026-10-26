@@ -29,9 +29,9 @@ export type BranchWorkspaceMemberKind = 'worktree' | 'repository'
 export type BranchWorkspaceMemberSource = { kind: 'repository'; repositoryId: string } | { kind: 'url'; url: string }
 ```
 
-Selections, durable members, and repository plans gain optional `kind`, `source`, and `memberId`. Selections gain optional `targetBranch`; repository plans keep their existing `mode: CreateWorktreeMode`. Existing members without `kind` mean `worktree`. `repositoryName` denotes the destination member directory; the explicit source identifies the origin when different. Persist an authoritative `repositoryId` for new records and keep legacy fallback resolution for old ones.
+Selections, durable members, and repository plans gain optional `kind`, `source`, and `memberId`. Selections gain optional `targetBranch` and `mode?: CreateWorktreeMode`; repository plans keep their existing `mode: CreateWorktreeMode`. Snapshots may expose `currentBranch?: string | null` and `head?: string`; a null current branch denotes detached HEAD. Existing members without `kind` mean `worktree`. `repositoryName` denotes the destination member directory; the explicit source identifies the origin when different. Persist an authoritative `repositoryId` for new records and keep legacy fallback resolution for old ones.
 
-Create requests gain optional `directoryName` and `branchWorkspaceId`. The normalized request still supplies a string `branch` for old consumers, but a folder request uses `directoryName` for identity and its members' own `targetBranch` for Git. An omitted old-style `directoryName` retains the old branch request adapter; new UI always sends `directoryName`. Extending a folder workspace sends its explicit existing `branchWorkspaceId`.
+Create requests gain optional `directoryName` and `branchWorkspaceId`. The normalized request still supplies a string `branch` for old consumers; new folder requests normalize that legacy field to an empty string, use `directoryName` for identity, and use their members' own `targetBranch` or explicit creation `mode` for Git. An omitted old-style `directoryName` retains the old branch request adapter; new UI always sends `directoryName`. Extending a folder workspace sends its explicit existing `branchWorkspaceId`.
 
 Canonical helpers should live with their domain: a safe folder-name validator in shared, member identity resolution in server workspace paths, clone materialization in its own source, and workspace-copy transport in its own feature files. Avoid a broad rename of existing BranchWorkspace modules.
 
@@ -49,7 +49,7 @@ Canonical helpers should live with their domain: a safe folder-name validator in
 
 **Interfaces:** Consume existing lifecycle service and backend adapters. Produce the shared additive protocol above, folder-safe creation, per-member Git targets, mode-aware clone/removal/repair, and authoritative member repository IDs usable by the renderer and workspace-copy feature.
 
-- [ ] **Step 1: Add failing contract and integration tests.** A folder name containing spaces must be accepted independently of branch syntax; two members with distinct `targetBranch` values must produce distinct branch plans. A mixed member test must verify a repository member has its own Git directory and does not change its source checkout.
+- [x] **Step 1: Add failing contract and integration tests.** A folder name containing spaces must be accepted independently of branch syntax; two members with distinct `targetBranch` values must produce distinct branch plans. A mixed member test must verify a repository member has its own Git directory and does not change its source checkout.
 
 ```ts
 const request = normalizeBranchWorkspacePlanRequest({
@@ -69,8 +69,8 @@ const request = normalizeBranchWorkspacePlanRequest({
 expect(request).toMatchObject({ ok: true, request: { directoryName: 'feature set' } })
 ```
 
-- [ ] **Step 2: Run focused tests and confirm they fail because the new behavior is absent.** Use `bun run test src/shared/branch-workspaces.test.ts src/server/modules/branch-workspace-plan.test.ts src/server/modules/branch-workspace-repository-source.test.ts`.
-- [ ] **Step 3: Implement protocol, compatibility, and execution dispatch.** Keep ordinary reads write-free. Save registry version 2 atomically after a recoverable version-1 backup on first write. Resolve each new member through its explicit source and destination; never infer a complete repository's target from its parent's configured repository name.
+- [x] **Step 2: Run focused tests and confirm they fail because the new behavior is absent.** Use `bun run test src/shared/branch-workspaces.test.ts src/server/modules/branch-workspace-plan.test.ts src/server/modules/branch-workspace-repository-source.test.ts`.
+- [x] **Step 3: Implement protocol, compatibility, and execution dispatch.** Keep ordinary reads write-free. Save registry version 2 atomically after a recoverable version-1 backup on first write. Resolve each new member through its explicit source and destination; never infer a complete repository's target from its parent's configured repository name.
 
 ```ts
 const kind = selection.kind ?? 'worktree'
@@ -80,8 +80,8 @@ const memberRepositoryId = kind === 'repository' ? repositoryIdAtPath(rootId, de
 
 Use `git clone` with independent objects for complete repositories, retaining intentional long-term remotes. Existing local/SSH/WSL operations must route through their owning host. During removal, branch cleanup remains worktree-specific; deleting a complete member requires explicit target-directory approval and cannot call `git worktree remove` on its primary worktree. Preserve successful members on failure and revalidate ownership on retry.
 
-- [ ] **Step 4: Extend authoritative discovery and protection.** Probe every registered directory by exact path, distinguish primary repositories and linked worktrees, retain legacy prefix discovery, and keep arbitrary unregistered directories unclaimed. Root file mutation protection must recognize registered folders without a prefix. Current branch comes from the exact member directory, including detached state.
-- [ ] **Step 5: Verify focused suites and typecheck, self-review source isolation and lifecycle recovery, then commit the complete backend slice.** Add regression cases for version-1 IDs, unknown registry versions, mixed removal, source disappearance, branch switching, and actual member Git-action targeting.
+- [x] **Step 4: Extend authoritative discovery and protection.** Probe every registered directory by exact path, distinguish primary repositories and linked worktrees, retain legacy prefix discovery, and keep arbitrary unregistered directories unclaimed. Root file mutation protection must recognize registered folders without a prefix. Current branch comes from the exact member directory, including detached state.
+- [x] **Step 5: Verify focused suites and typecheck, self-review source isolation and lifecycle recovery, then commit the complete backend slice.** Add regression cases for version-1 IDs, unknown registry versions, mixed removal, source disappearance, branch switching, and actual member Git-action targeting.
 
 ### Task 2: Mixed-member creation and member branch switching in the renderer
 
@@ -115,7 +115,7 @@ expect(planRequest).toMatchObject({
 const createRequest = {
   operation: 'create' as const,
   directoryName: folderName.trim(),
-  branch: folderName.trim(),
+  branch: '',
   ...(workspace ? { branchWorkspaceId: workspace.id } : {}),
   repositories: selectedMembers,
   auxiliaryEntries: selectedAuxiliaryEntries,
