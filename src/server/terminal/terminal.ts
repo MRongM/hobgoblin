@@ -21,6 +21,14 @@ import { TerminalRealtimeBroker, type TerminalRealtimeSocket } from '#/server/te
 import { authorizeTerminalAttachment } from '#/server/terminal/terminal-ownership.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
 import {
+  createTerminalPathRelocator,
+  validateTerminalPathRelocation,
+  type TerminalPathRelocationInput,
+  type TerminalPathRelocationResult,
+} from '#/server/terminal/terminal-path-relocation.ts'
+import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
+import {
   type TerminalCatalogMutationResult,
   type TerminalCloseResult,
   type TerminalCloseSessionsResult,
@@ -444,7 +452,7 @@ export async function returnServerTerminalToBottom(
     return false
   }
   const result = await (dependencies.returnTmuxSessionToBottom ?? returnAssociatedTmuxSessionToBottom)({
-    projectRoot: session.scope,
+    projectRoot: session.tmuxProjectRoot ?? session.scope,
     itemPath: session.tmuxWorkingDirectory,
     sessionName: session.tmuxSessionName,
   })
@@ -478,7 +486,7 @@ export async function pageServerTerminal(
     return false
   }
   const result = await (dependencies.pageTmuxSession ?? pageAssociatedTmuxSession)({
-    projectRoot: session.scope,
+    projectRoot: session.tmuxProjectRoot ?? session.scope,
     itemPath: session.tmuxWorkingDirectory,
     sessionName: session.tmuxSessionName,
     direction: input.direction,
@@ -512,7 +520,7 @@ export async function closeServerTerminal(
       return { ok: false, message: 'terminal.close-tmux-session-exit-required' }
     }
     const result = await (dependencies.closeTmuxSession ?? closeAssociatedTmuxSessionByName)({
-      projectRoot: session.scope,
+      projectRoot: session.tmuxProjectRoot ?? session.scope,
       itemPath: session.tmuxWorkingDirectory,
       sessionName: session.tmuxSessionName,
     })
@@ -532,6 +540,17 @@ export function closeServerTerminalSessions(sessionIds: string[]): TerminalClose
     broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   }
   return { closed: result.closed, missing: result.missing }
+}
+
+export async function relocateServerTerminalPaths(
+  input: TerminalPathRelocationInput,
+): Promise<TerminalPathRelocationResult> {
+  validateTerminalPathRelocation(input)
+  const remote = parseRemoteRepoId(input.rootId)
+  const target = remote ? (await resolveRepositoryRemoteTarget(remote)).target : undefined
+  const result = manager.relocateSessions(createTerminalPathRelocator(input, target))
+  for (const repoRoot of result.scopes) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
+  return result
 }
 
 export function takeoverServerTerminal(clientId: string, input: TerminalTakeoverInput): TerminalTakeoverResult {

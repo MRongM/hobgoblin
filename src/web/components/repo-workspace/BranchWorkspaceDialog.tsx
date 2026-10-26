@@ -79,6 +79,7 @@ import {
   showWorkspaceRepositoryFetchResult,
 } from '#/web/components/repo-workspace/workspace-repository-fetch-feedback.ts'
 import { useLatestPlanRequest } from '#/web/hooks/useLatestPlanRequest.ts'
+import { isRemovableBranchWorkspaceWorktree } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 
 export interface BranchWorkspaceRepositoryOption {
   id: string
@@ -222,6 +223,8 @@ export function BranchWorkspaceDialog({
   const [initializedDialogStateKey, setInitializedDialogStateKey] = useState<string | null>(null)
   const oneStep = mode === 'create' || mode === 'extend' || mode === 'reduce' || mode === 'remove'
   const creating = mode === 'create'
+  const auxiliaryChoiceFor = (name: string): MaterializationCandidateChoice =>
+    auxiliaryChoices[name] ?? (creating ? 'symlink' : 'skip')
   const operationConsole = mode === 'remove'
   const selectionDescriptionKey =
     mode === 'remove'
@@ -232,6 +235,8 @@ export function BranchWorkspaceDialog({
       ? 'workspace.branch-workspace.one-step.plan-description.remove'
       : 'workspace.branch-workspace.one-step.plan-description.create'
   const selectionLocked = oneStep ? executing || result !== null : pending
+  const removableWorktrees =
+    workspace?.repositories.filter((member) => isRemovableBranchWorkspaceWorktree(workspace, member)) ?? []
 
   const fixedRepositories = useMemo(
     () =>
@@ -590,7 +595,7 @@ export function BranchWorkspaceDialog({
     ),
     auxiliaryEntries: auxiliaryCandidates.flatMap((candidate) => {
       if (workspace && fixedAuxiliary.has(candidate.name)) return []
-      const choice = auxiliaryChoices[candidate.name] ?? 'skip'
+      const choice = auxiliaryChoiceFor(candidate.name)
       return choice === 'skip' ? [] : [{ name: candidate.name, mode: choice }]
     }),
   })
@@ -686,7 +691,7 @@ export function BranchWorkspaceDialog({
     if (!workspace) return null
     if (mode === 'repair') return { operation: 'repair', branchWorkspaceId: workspace.id }
     if (mode === 'reduce') {
-      const selected = workspace.repositories.flatMap((member) =>
+      const selected = removableWorktrees.flatMap((member) =>
         selectedRepositories[member.repositoryName] ? [member.repositoryName] : [],
       )
       return selected.length > 0
@@ -765,7 +770,9 @@ export function BranchWorkspaceDialog({
       ? joinWorktreeRelativePath(parentDirectory.trim(), folderName.trim())
       : null)
   const selectedRepositoryCount = repositories.filter((repository) => selectedRepositories[repository.name]).length
-  const selectedFileCount = Object.values(auxiliaryChoices).filter((choice) => choice !== 'skip').length
+  const selectedFileCount = auxiliaryCandidates.filter(
+    (candidate) => auxiliaryChoiceFor(candidate.name) !== 'skip',
+  ).length
   const destructiveConfirm = mode === 'reduce' || mode === 'remove'
   const visibleRepositories = repositories.filter(
     (repository) => mode !== 'extend' || !fixedRepositories.has(repository.name),
@@ -1589,7 +1596,12 @@ export function BranchWorkspaceDialog({
                               ),
                             }
                           })}
-                          choices={auxiliaryChoices}
+                          choices={Object.fromEntries(
+                            auxiliaryCandidates.map((candidate) => [
+                              candidate.name,
+                              auxiliaryChoiceFor(candidate.name),
+                            ]),
+                          )}
                           onChoiceChange={(name, choice) =>
                             setAuxiliaryChoices((current) => ({ ...current, [name]: choice }))
                           }
@@ -1635,7 +1647,7 @@ export function BranchWorkspaceDialog({
                   </p>
                   <fieldset className="grid gap-2 rounded-md border border-separator p-3">
                     <legend className="px-1 text-xs font-medium">{t('workspace.branch-workspace.repositories')}</legend>
-                    {workspace.repositories.map((member) => (
+                    {removableWorktrees.map((member) => (
                       <label key={member.repositoryName} className="flex items-center gap-2 text-xs">
                         <input
                           type="checkbox"
@@ -1653,6 +1665,9 @@ export function BranchWorkspaceDialog({
                         <span className="truncate font-medium">{member.repositoryName}</span>
                       </label>
                     ))}
+                    {removableWorktrees.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">{t('workspace.branch-workspace.reduce-empty')}</p>
+                    ) : null}
                   </fieldset>
                 </div>
               ) : null}
@@ -1816,6 +1831,12 @@ export function BranchWorkspaceDialog({
                                   repository.repositoryName === step.repositoryName && repository.kind === 'repository',
                               )
                             : undefined
+                        const worktreeRemoval =
+                          mode === 'reduce' && step.repositoryName
+                            ? displayedPlan.repositories.find(
+                                (repository) => repository.repositoryName === step.repositoryName,
+                              )
+                            : undefined
                         return (
                           <div
                             key={step.id}
@@ -1858,6 +1879,14 @@ export function BranchWorkspaceDialog({
                                   <BranchWorkspaceCreationSourcePreview repository={creationRepository} />
                                   <BranchWorkspaceRepositoryDependencyPreview repository={creationRepository} />
                                 </>
+                              ) : null}
+                              {worktreeRemoval ? (
+                                <div className="grid gap-1 text-[10px] text-muted-foreground">
+                                  <code className="break-all">{worktreeRemoval.worktreePath}</code>
+                                  {worktreeRemoval.action === 'remove-entry' ? (
+                                    <span>{t('workspace.branch-workspace.unlink-worktree')}</span>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
                             {progressStatusByStepId.get(step.id) ? (

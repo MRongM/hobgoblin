@@ -97,6 +97,9 @@ export class TerminalWorkerRuntime {
         return await this.options.service.close(message.clientId, message.input)
       case 'close-sessions':
         return await this.options.service.closeSessions(message.input)
+      case 'relocate-paths':
+        if (!this.options.service.relocatePaths) throw new Error('error.unavailable')
+        return await this.options.service.relocatePaths(message.input)
       case 'notify-bell':
         return await this.options.service.notifyBell(message.clientId, message.input)
       case 'list-sessions':

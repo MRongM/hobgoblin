@@ -1,22 +1,22 @@
-import { Fragment, type ReactNode } from 'react'
-import { Loader2, MoreHorizontal } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { MoreHorizontal } from 'lucide-react'
 import { Button } from '#/web/components/ui/button.tsx'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '#/web/components/ui/dropdown-menu.tsx'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '#/web/components/ui/dropdown-menu.tsx'
 import { useT } from '#/web/stores/i18n.ts'
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
+import type { WorkspaceMenuCategory } from '#/web/components/repo-workspace/workspace-menu-groups.ts'
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 
 export interface BranchWorkspaceItemAction {
+  id?: string
   label: string
+  title?: string
   icon: ReactNode
   disabled?: boolean
   busy?: boolean
   destructive?: boolean
   separated?: boolean
+  category?: WorkspaceMenuCategory
   onSelect: () => void | Promise<void>
 }
 
@@ -38,20 +38,32 @@ export function BranchWorkspaceItemMenu({ actions }: { actions: readonly BranchW
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-48">
-        {actions.map((action, index) => (
-          <Fragment key={`${action.label}-${index}`}>
-            {action.separated ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem
-              disabled={action.disabled || action.busy}
-              variant={action.destructive ? 'destructive' : 'default'}
-              onSelect={() => void action.onSelect()}
-            >
-              {action.busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : action.icon}
-              {t(action.label)}
-            </DropdownMenuItem>
-          </Fragment>
-        ))}
+        <WorkspaceActionMenuItems groups={branchWorkspaceActionGroups(actions, t)} />
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+export function branchWorkspaceActionGroups(
+  actions: readonly BranchWorkspaceItemAction[],
+  translate: (key: string) => string,
+): WorkspaceListItemAction[][] {
+  const groups: WorkspaceListItemAction[][] = []
+  for (const action of actions) {
+    if (groups.length === 0 || action.separated) groups.push([])
+    groups[groups.length - 1]!.push({
+      ...action,
+      id: action.id ?? action.label,
+      label: translate(action.label),
+      disabled: action.disabled === true,
+      category:
+        action.category ??
+        (action.label.startsWith('tmux.') || action.label.startsWith('terminal.')
+          ? 'terminals'
+          : action.label.startsWith('workspace.recovery.')
+            ? 'manage'
+            : undefined),
+    })
+  }
+  return groups
 }

@@ -1,5 +1,6 @@
 import path from 'node:path'
-import { branchWorkspaceStorageRootId } from '#/server/modules/workspace-paths.ts'
+import { branchWorkspaceStorageRootId, repositoryIdAtPath } from '#/server/modules/workspace-paths.ts'
+import { acquireFolderMutationScopes } from '#/server/modules/folder-mutation-locks.ts'
 import {
   inspectBranchWorkspaceRepository,
   materializeBranchWorkspaceRepository,
@@ -9,6 +10,7 @@ import {
   copyBranchWorkspaceEntry,
   createBranchWorkspaceDirectory,
   fingerprintBranchWorkspaceEntry,
+  inspectBranchWorkspacePath,
   materializeBranchWorkspaceSymlink,
   removeBranchWorkspaceEntry,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
@@ -233,6 +235,7 @@ export function createBranchWorkspaceWriteService(
       activeByRoot.set(rootId, controller)
       const { plan } = pending
       const targetRootId = branchWorkspaceStorageRootId(plan)
+      let releaseFolderScopes: (() => void) | null = null
       const warnings: BranchWorkspaceExecutionWarning[] = []
       const persistExecution = (
         targetRootId: string,
@@ -240,6 +243,12 @@ export function createBranchWorkspaceWriteService(
         branchWorkspaceId: string,
       ) => persist(targetRootId, mutate, branchWorkspaceId, input.sourceToken)
       try {
+        releaseFolderScopes = acquireFolderMutationScopes([
+          { repoId: rootId, path: plan.path },
+          ...plan.repositories.map((repository) => ({ repoId: repository.repoId, path: repository.worktreePath })),
+        ])
+        if (!releaseFolderScopes)
+          return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.operation-in-progress')
         if (input.force === true) {
           if (plan.operation !== 'remove') {
             return failOperation(plan.branchWorkspaceId, 'error.invalid-arguments')
@@ -367,12 +376,50 @@ export function createBranchWorkspaceWriteService(
             if (controller.signal.aborted) {
               return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
+            if (repository.kind === 'repository')
+              return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.primary-worktree')
+            // A partially completed removal may be retried after the user changed a remaining directory.
+            // Read its current Git/path identity again before touching that member.
+            const latest = await buildPlan(
+              rootId,
+              {
+                operation: 'reduce',
+                branchWorkspaceId: plan.branchWorkspaceId,
+                repositories: [repository.repositoryName],
+              },
+              dependencies.planDependencies,
+              controller.signal,
+            )
+            const latestRepository = latest.ok ? latest.plan.repositories[0] : undefined
+            if (
+              !latest.ok ||
+              !latestRepository ||
+              !sameRemovalTarget(repository, latestRepository) ||
+              latest.plan.requiredApprovals.some((approval) => !approvals.has(approval)) ||
+              latest.plan.terminalSessionIds.length > 0
+            ) {
+              return failOperation(
+                plan.branchWorkspaceId,
+                latest.ok ? 'workspace.branch-workspace.plan-stale' : latest.message,
+              )
+            }
             let result = { ok: true, message: 'satisfied' }
             if (!repository.satisfied && repository.action === 'remove-entry') {
               try {
-                if (repository.kind === 'repository')
-                  await revalidateRepositoryDeletion(targetRootId, repository, inspectRepository, controller.signal)
-                await removeEntry(targetRootId, repository.worktreePath, controller.signal)
+                const entryScope = repositoryIdAtPath(rootId, plan.path)
+                const entry = await (dependencies.planDependencies?.inspectPath ?? inspectBranchWorkspacePath)(
+                  entryScope,
+                  repository.worktreePath,
+                  controller.signal,
+                )
+                if (
+                  entry.kind !== 'symlink' ||
+                  !repository.entryFingerprint ||
+                  (await fingerprintEntry(entryScope, repository.worktreePath, controller.signal)) !==
+                    repository.entryFingerprint
+                )
+                  throw new Error('workspace.branch-workspace.plan-stale')
+                await removeEntry(entryScope, repository.worktreePath, controller.signal)
                 result = { ok: true, message: 'removed' }
               } catch (error) {
                 result = { ok: false, message: operationMessage(error) }
@@ -384,8 +431,8 @@ export function createBranchWorkspaceWriteService(
                   branch: repository.checkedOutBranch ?? repository.targetBranch,
                   worktreePath: repository.worktreePath,
                   alsoDeleteBranch: false,
-                  forceRemoveWorktree: true,
-                  skipWorktreeStatus: true,
+                  forceRemoveWorktree: repository.dirty === true && approvals.has('discard-member-changes'),
+                  skipWorktreeStatus: false,
                   forceDeleteBranch: false,
                   alsoDeleteUpstream: false,
                 },
@@ -780,6 +827,7 @@ export function createBranchWorkspaceWriteService(
       } catch (error) {
         return failOperation(plan.branchWorkspaceId, operationMessage(error))
       } finally {
+        releaseFolderScopes?.()
         if (activeByRoot.get(rootId) === controller) activeByRoot.delete(rootId)
       }
     },
@@ -953,4 +1001,20 @@ async function revalidateRepositoryDeletion(
 
 function isFolderUnregistration(plan: BranchWorkspacePlan): boolean {
   return plan.operation === 'remove'
+}
+
+function sameRemovalTarget(
+  left: BranchWorkspacePlan['repositories'][number],
+  right: BranchWorkspacePlan['repositories'][number],
+): boolean {
+  return (
+    left.repositoryName === right.repositoryName &&
+    left.repoId === right.repoId &&
+    left.kind === right.kind &&
+    left.action === right.action &&
+    left.worktreePath === right.worktreePath &&
+    left.checkedOutBranch === right.checkedOutBranch &&
+    left.dirty === right.dirty &&
+    left.entryFingerprint === right.entryFingerprint
+  )
 }

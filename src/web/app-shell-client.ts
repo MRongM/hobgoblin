@@ -202,6 +202,39 @@ export async function openInFinder(path: string): Promise<ExecResult> {
   return (await nativeShell()?.openInFinder?.({ path })) ?? { ok: false, message: 'error.invalid-path' }
 }
 
+export function canRevealInFileManager(): boolean {
+  try {
+    const bridge = getRendererBridge()
+    return (
+      bridge.kind() === 'electron' &&
+      bridge.hasCapability('open-in-finder') &&
+      typeof bridge.shell()?.openInFinder === 'function'
+    )
+  } catch {
+    return false
+  }
+}
+
+export function canOpenDirectoryInFileManager(): boolean {
+  try {
+    const bridge = getRendererBridge()
+    return (
+      bridge.kind() === 'electron' &&
+      bridge.hasCapability('open-directory-in-file-manager') &&
+      typeof bridge.shell()?.openDirectoryInFileManager === 'function'
+    )
+  } catch {
+    return false
+  }
+}
+
+export async function openDirectoryInFileManager(path: string): Promise<ExecResult> {
+  if (!canOpenDirectoryInFileManager()) return { ok: false, message: 'directory-open.desktop-only' }
+  return (
+    (await nativeShell()?.openDirectoryInFileManager?.({ path })) ?? { ok: false, message: 'directory-open.failed' }
+  )
+}
+
 export async function chooseLocalRepositoryPath(): Promise<string | null> {
   return (await nativeShell()?.openDirectoryDialog?.({ title: 'Open Git Repository' })) ?? null
 }

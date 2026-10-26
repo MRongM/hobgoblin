@@ -1,16 +1,11 @@
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
+import { branchListItemAction } from '#/web/components/branch-list/worktree-list-item-actions.ts'
 import { ChevronDown, Loader2 } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { useT } from '#/web/stores/i18n.ts'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from '#/web/components/ui/dropdown-menu.tsx'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '#/web/components/ui/dropdown-menu.tsx'
 import { type BranchActionItem, type BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
 import { useAsyncPending } from '#/web/hooks/useAsyncPending.ts'
 import { cn } from '#/web/lib/cn.ts'
@@ -143,40 +138,17 @@ export function BranchActionsDropdown({
         </DropdownMenuTrigger>
       </div>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-        {itemGroups.map((items, groupIndex) => (
-          <Fragment key={groupIndex}>
-            {groupIndex > 0 && <DropdownMenuSeparator />}
-            {items.map((item) => (
-              <BranchActionMenuItem key={item.id} item={item} busy={busyAction} onSelect={() => runItem(item)} />
-            ))}
-          </Fragment>
-        ))}
+        <WorkspaceActionMenuItems
+          groups={itemGroups.map((items) => items.map((item) => branchListItemAction(item)))}
+          busyId={busyAction}
+          pendingId={pendingAction}
+          onSelect={(action) => {
+            const item = visibleItems.find((entry) => entry.id === action.id)
+            if (item) runItem(item)
+          }}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-function BranchActionMenuItem({
-  item,
-  busy,
-  onSelect,
-}: {
-  item: BranchActionItem
-  busy: BranchActionItem['id'] | null
-  onSelect: () => void
-}) {
-  return (
-    <DropdownMenuItem
-      disabled={branchActionMenuItemDisabled(item, busy)}
-      title={item.title}
-      onClick={onSelect}
-      variant={item.destructive ? 'destructive' : 'default'}
-      className={item.shortcut ? 'whitespace-nowrap' : undefined}
-    >
-      {busy === item.id || item.busy ? <Loader2 size={16} className="animate-spin" /> : item.icon}
-      {item.label}
-      {item.shortcut && <DropdownMenuShortcut>{item.shortcut}</DropdownMenuShortcut>}
-    </DropdownMenuItem>
   )
 }
 

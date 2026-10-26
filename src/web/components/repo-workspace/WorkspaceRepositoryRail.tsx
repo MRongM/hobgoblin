@@ -18,17 +18,16 @@ import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '#/web/components/ui/context-menu.tsx'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
+import { BranchWorkspaceRenameDialog } from '#/web/components/repo-workspace/BranchWorkspaceRenameDialog.tsx'
 import { BranchWorkspaceFolderDialog } from '#/web/components/repo-workspace/BranchWorkspaceFolderDialog.tsx'
 import { BranchWorkspaceCloneDialog } from '#/web/components/repo-workspace/BranchWorkspaceCloneDialog.tsx'
 import { openRegisteredBranchWorkspace } from '#/web/branch-workspace-navigation-write-paths.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
 import {
   BranchWorkspaceGitActionPanel,
@@ -143,6 +142,7 @@ export function WorkspaceRepositoryRail({
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [renameWorkspace, setRenameWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
   const [cloneSource, setCloneSource] = useState<BranchWorkspaceSnapshot | null>(null)
   const cloneTargets = useMemo(
     () =>
@@ -216,6 +216,11 @@ export function WorkspaceRepositoryRail({
   }
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
+  const overviewDirectoryAction = useOpenDirectoryAction({
+    repoId: workspaceRootId,
+    path: parseRemoteRepoId(workspaceRootId)?.remotePath ?? overviewRootPath,
+    disabled: repos[workspaceRootId]?.availability.phase === 'unavailable',
+  })
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
   const overviewTerminalWorktreeKey = worktreeTerminalKey(workspaceRootId, overviewRootPath)
   const overviewTerminalWorktreeKeys = useMemo(
@@ -284,50 +289,62 @@ export function WorkspaceRepositoryRail({
       ),
     [branchItems, repos, workspace?.repositoryIds, workspace?.candidates],
   )
-  const repositoryOptions = useMemo(
-    () =>
-      (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
-        const repo = repos[repositoryId]
-        if (!repo) return []
-        const defaultBranch =
-          repo.data.branches.find((branch) => branch.isDefault)?.name ||
-          repo.data.currentBranch ||
-          repo.data.branches[0]?.name ||
-          ''
-        return [
-          {
-            id: repositoryId,
-            name: candidateNameById.get(repositoryId) ?? repo.name,
-            available: repo.availability.phase === 'available',
-            branches: repo.data.branches.map((branch) => branch.name),
-            defaultBranch,
-            branchDetails: Object.fromEntries(
-              repo.data.branches.map((branch) => [
-                branch.name,
-                {
-                  ...(branch.tracking ? { tracking: branch.tracking } : {}),
-                  ...(branch.trackingGone ? { trackingGone: true } : {}),
-                },
-              ]),
-            ),
-            worktrees: Object.values(repo.data.worktreesByPath).flatMap((worktree) =>
-              worktree.isPrunable
-                ? []
-                : [
-                    {
-                      path: worktree.path,
-                      isMain: worktree.isMain,
-                      ...(worktree.branch ? { branch: worktree.branch } : {}),
-                      ...(worktree.head ? { head: worktree.head } : {}),
-                      ...(worktree.isDetached ? { isDetached: true } : {}),
-                    },
-                  ],
-            ),
-          },
-        ]
-      }),
-    [candidateNameById, repos, workspace?.repositoryIds],
-  )
+  const repositoryOptions = useMemo(() => {
+    const usedNames = new Set<string>()
+    return [
+      ...new Set([
+        ...(workspace?.repositoryIds ?? []),
+        ...(dialogWorkspace?.repositories.flatMap((member) => (member.repositoryId ? [member.repositoryId] : [])) ??
+          []),
+      ]),
+    ].flatMap((repositoryId) => {
+      const repo = repos[repositoryId]
+      if (!repo) return []
+      const baseName =
+        candidateNameById.get(repositoryId) ??
+        dialogWorkspace?.repositories.find((member) => member.repositoryId === repositoryId)?.repositoryName ??
+        repo.name
+      let name = baseName
+      for (let suffix = 2; usedNames.has(name); suffix++) name = `${baseName}-${suffix}`
+      usedNames.add(name)
+      const defaultBranch =
+        repo.data.branches.find((branch) => branch.isDefault)?.name ||
+        repo.data.currentBranch ||
+        repo.data.branches[0]?.name ||
+        ''
+      return [
+        {
+          id: repositoryId,
+          name,
+          available: repo.availability.phase === 'available',
+          branches: repo.data.branches.map((branch) => branch.name),
+          defaultBranch,
+          branchDetails: Object.fromEntries(
+            repo.data.branches.map((branch) => [
+              branch.name,
+              {
+                ...(branch.tracking ? { tracking: branch.tracking } : {}),
+                ...(branch.trackingGone ? { trackingGone: true } : {}),
+              },
+            ]),
+          ),
+          worktrees: Object.values(repo.data.worktreesByPath).flatMap((worktree) =>
+            worktree.isPrunable
+              ? []
+              : [
+                  {
+                    path: worktree.path,
+                    isMain: worktree.isMain,
+                    ...(worktree.branch ? { branch: worktree.branch } : {}),
+                    ...(worktree.head ? { head: worktree.head } : {}),
+                    ...(worktree.isDetached ? { isDetached: true } : {}),
+                  },
+                ],
+          ),
+        },
+      ]
+    })
+  }, [candidateNameById, repos, workspace?.repositoryIds, dialogWorkspace])
   const fetchAllRepositories = useCallback(
     async () => await fetchWorkspaceRepositories(workspaceRootId),
     [workspaceRootId],
@@ -762,6 +779,7 @@ export function WorkspaceRepositoryRail({
             onHeightChange={handleRepositoryListHeightChange}
           >
             <ManifestRow
+              directoryAction={overviewDirectoryAction}
               active={activeContext.kind === 'overview'}
               name={overviewName}
               terminalCount={overviewTerminalCount}
@@ -855,9 +873,12 @@ export function WorkspaceRepositoryRail({
                   onOpenFileArea={onOpenFileArea}
                   onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
                   onExtend={(item) => openBranchDialog('extend', item)}
+                  onReduce={(item) => openBranchDialog('reduce', item)}
+                  onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
                   onClone={setCloneSource}
                   onAddDependencies={(item) => openDependencyDialog('add', item)}
                   onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
+                  onRename={setRenameWorkspace}
                   onRemove={(item) => void unregisterWorkspaceFolder(item)}
                   getMemberPresentation={(_item, member) => getMemberPresentation(member)}
                   onSelectRepositoryMember={selectRepositoryMember}
@@ -884,6 +905,16 @@ export function WorkspaceRepositoryRail({
         )}
       </div>
       {gitActionPanelElement}
+      <BranchWorkspaceRenameDialog
+        rootId={workspaceRootId}
+        workspace={renameWorkspace}
+        onOpenChange={(open) => {
+          if (!open) setRenameWorkspace(null)
+        }}
+        onRenamed={async () => {
+          await reloadBranchWorkspaces()
+        }}
+      />
       <BranchWorkspaceFolderDialog
         open={folderDialogOpen}
         rootId={workspaceRootId}
@@ -971,6 +1002,7 @@ export function WorkspaceRepositoryRail({
 }
 
 function ManifestRow({
+  directoryAction,
   active,
   name,
   terminalCount,
@@ -980,6 +1012,7 @@ function ManifestRow({
   onOpenFileArea,
   onToggleFileArea,
 }: {
+  directoryAction: WorkspaceListItemAction
   active: boolean
   name: string
   terminalCount: number
@@ -990,6 +1023,16 @@ function ManifestRow({
   onToggleFileArea?: () => void
 }) {
   const t = useT()
+  const actions: WorkspaceListItemAction[] = [
+    {
+      id: 'fileArea',
+      label: t('file-area.open'),
+      disabled: !onOpenFileArea,
+      icon: <FolderTree aria-hidden="true" />,
+      onSelect: () => onOpenFileArea?.(),
+    },
+    directoryAction,
+  ]
   const row = (
     <button
       type="button"
@@ -1030,10 +1073,7 @@ function ManifestRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem disabled={!onOpenFileArea} onSelect={() => onOpenFileArea?.()}>
-          <FolderTree aria-hidden="true" />
-          {t('file-area.open')}
-        </ContextMenuItem>
+        <WorkspaceActionMenuItems context groups={[actions]} />
       </ContextMenuContent>
     </ContextMenu>
   )

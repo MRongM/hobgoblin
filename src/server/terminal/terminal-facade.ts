@@ -14,6 +14,7 @@ import {
   pruneServerTerminals,
   registerTerminalSocket,
   reorderServerTerminals,
+  relocateServerTerminalPaths,
   restartServerTerminal,
   resizeServerTerminal,
   takeoverServerTerminal,
@@ -61,6 +62,9 @@ export interface TerminalFacade {
   closeSessions(
     input: TerminalWorkerRequestInputs['close-sessions'],
   ): MaybePromise<TerminalWorkerResponseOutputs['close-sessions']>
+  relocatePaths?(
+    input: TerminalWorkerRequestInputs['relocate-paths'],
+  ): MaybePromise<TerminalWorkerResponseOutputs['relocate-paths']>
   notifyBell(
     clientId: string,
     input: TerminalWorkerRequestInputs['notify-bell'],
@@ -112,6 +116,7 @@ export function createTerminalFacade(): TerminalFacade {
     closeSessions(input) {
       return closeServerTerminalSessions(input.sessionIds)
     },
+    relocatePaths: relocateServerTerminalPaths,
     notifyBell: notifyServerTerminalBell,
     listSessions(clientId, input) {
       return listServerTerminalSessions(clientId, input.repoRoot)

@@ -4,7 +4,10 @@ import {
   ArrowUp,
   ClipboardCopy,
   ExternalLink,
+  FilePlus2,
+  FileMinus2,
   FolderPlus,
+  FolderMinus,
   FolderGit2,
   FolderTree,
   GitBranch,
@@ -34,6 +37,7 @@ import {
   WorkspaceListItemActionDock,
   WorkspaceListItemFrame,
   WorkspaceListItemMenu,
+  type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
@@ -49,6 +53,11 @@ import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
 import { refreshBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import {
+  canAddBranchWorkspaceWorktree,
+  isRemovableBranchWorkspaceWorktree,
+} from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 
 export interface BranchWorkspaceMemberActionTarget {
   repo: BranchActionRepo
@@ -77,6 +86,7 @@ interface BranchWorkspaceMemberRowProps {
   onOpenFileArea?: () => void
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onRemoveMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onAddWorktree?: (item: BranchWorkspaceSnapshot) => void
 }
 
 export function BranchWorkspaceMemberRow(props: BranchWorkspaceMemberRowProps) {
@@ -126,10 +136,23 @@ function ResolvedBranchWorkspaceMemberRow({
 
 function DisabledBranchWorkspaceMemberRow(props: BranchWorkspaceMemberRowProps) {
   const t = useT()
+  const directoryAction = useOpenDirectoryAction({
+    repoId: props.item.rootId,
+    path: props.member.worktreePath,
+    disabled: true,
+  })
+  const groups = disabledMemberActionGroups(t, supportsTmuxMenu(props.item.rootId))
   return (
     <BranchWorkspaceMemberRowFrame
       {...props}
-      actions={disabledMemberActionGroups(t, supportsTmuxMenu(props.item.rootId))}
+      actions={{
+        ...groups,
+        externalItems: [
+          groups.externalItems[0]!,
+          { ...directoryAction, id: 'openDirectory', visible: true, menuOnly: true },
+          ...groups.externalItems.slice(1),
+        ],
+      }}
     />
   )
 }
@@ -145,6 +168,8 @@ function BranchWorkspaceMemberRowFrame({
   onToggleFileArea,
   onOpenFileArea,
   onOpenInternalTerminal,
+  onAddWorktree,
+  onRemoveMember,
 }: BranchWorkspaceMemberRowProps & { actions: BranchActionItemGroups }) {
   const t = useT()
   const terminalKey =
@@ -178,6 +203,64 @@ function BranchWorkspaceMemberRowFrame({
     hasWorktree: true,
     forceDisabled,
   })
+  // A member's add action targets this folder rather than the repository's default worktree location.
+  const folderMemberActions: WorkspaceListItemAction[] = [
+    ...(onAddWorktree
+      ? [
+          {
+            id: 'addWorkspaceWorktree',
+            category: 'manage' as const,
+            label: t('workspace.branch-workspace.member.add-worktree'),
+            icon: <FolderPlus aria-hidden="true" />,
+            disabled: disabled || !canAddBranchWorkspaceWorktree(item),
+            onSelect: () => onAddWorktree(item),
+          },
+        ]
+      : []),
+    ...(onRemoveMember && isRemovableBranchWorkspaceWorktree(item, member)
+      ? [
+          {
+            id: 'removeWorkspaceWorktree',
+            category: 'manage' as const,
+            label: t('workspace.branch-workspace.member.remove-worktree'),
+            icon: <FolderMinus aria-hidden="true" />,
+            disabled: disabled || !item.available,
+            destructive: true,
+            onSelect: () => onRemoveMember(item, member),
+          },
+        ]
+      : []),
+  ]
+  const fileAreaAction: WorkspaceListItemAction | undefined = onOpenFileArea
+    ? {
+        id: 'fileArea',
+        label: t('file-area.open'),
+        disabled: forceDisabled || !onSelectRepositoryMember,
+        icon: <FolderTree aria-hidden="true" />,
+        onSelect: () => {
+          onSelectRepositoryMember?.(item, member)
+          onOpenFileArea()
+        },
+      }
+    : undefined
+  const memberTerminalIds = new Set([
+    'terminal',
+    'terminalPowerShell',
+    'terminalWsl',
+    'terminalTmux',
+    'restoreTmuxTerminals',
+  ])
+  const scopedActions = (items: WorkspaceListItemAction[]) =>
+    items
+      .filter((action) => !onAddWorktree || action.id !== 'createWorktree')
+      .map((action) =>
+        memberTerminalIds.has(action.id) ? { ...action, disabled: action.disabled || !onOpenInternalTerminal } : action,
+      )
+  const memberMenuGroups = [
+    ...(fileAreaAction ? [[fileAreaAction]] : []),
+    ...actionProjection.menuGroups.map(scopedActions),
+    folderMemberActions,
+  ]
   const internalTerminalAction = actionProjection.internalTerminal
     ? {
         ...actionProjection.internalTerminal,
@@ -247,11 +330,7 @@ function BranchWorkspaceMemberRowFrame({
           moreMenu={
             <WorkspaceListItemMenu
               label={t('action.menu')}
-              groups={
-                tmuxCleanup.visible
-                  ? [...actionProjection.menuGroups, [tmuxCleanup.action]]
-                  : actionProjection.menuGroups
-              }
+              groups={tmuxCleanup.visible ? [...memberMenuGroups, [tmuxCleanup.action]] : memberMenuGroups}
             />
           }
         />
@@ -342,20 +421,11 @@ function BranchWorkspaceMemberRowFrame({
 
   return (
     <WorkspaceItemContextMenu
-      fileArea={
-        onOpenFileArea
-          ? {
-              disabled: forceDisabled || !onSelectRepositoryMember,
-              icon: <FolderTree aria-hidden="true" />,
-              onSelect: () => {
-                onSelectRepositoryMember?.(item, member)
-                onOpenFileArea()
-              },
-            }
-          : undefined
-      }
-      actions={actionProjection.contextMenu.actions}
+      fileArea={fileAreaAction}
+      actions={[...scopedActions(actionProjection.contextMenu.actions), ...folderMemberActions]}
       editor={actionProjection.contextMenu.editor}
+      directory={actionProjection.contextMenu.directory}
+      remote={actionProjection.contextMenu.remote}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
       windowsInternalTerminals={windowsInternalTerminalContextActions}
@@ -393,6 +463,8 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>, tmuxMenuVisible:
       disabledAction('remote', 'action.remote', <ExternalLink aria-hidden="true" />),
     ],
     mainItems: [
+      disabledAction('addDependencies', 'worktree-dependencies.add.action', <FilePlus2 aria-hidden="true" />),
+      disabledAction('removeDependencies', 'worktree-dependencies.remove.action', <FileMinus2 aria-hidden="true" />),
       disabledAction('pull', 'action.pull', <ArrowDown aria-hidden="true" />),
       disabledAction('push', 'action.push', <ArrowUp aria-hidden="true" />),
       disabledAction('createWorktree', 'action.create-worktree', <FolderPlus aria-hidden="true" />),
@@ -429,6 +501,8 @@ function createDisabledAction(
     | 'pull'
     | 'push'
     | 'createWorktree'
+    | 'addDependencies'
+    | 'removeDependencies'
     | 'sync'
     | 'createBranch'
     | 'pullRemoteBranch'

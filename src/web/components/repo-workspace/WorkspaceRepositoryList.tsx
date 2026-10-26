@@ -1,3 +1,4 @@
+import { useWorktreeDependencyMenu } from '#/web/hooks/useWorktreeDependencyMenu.tsx'
 import {
   DndContext,
   KeyboardSensor,
@@ -15,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { FolderGit2, FolderTree, GitCompareArrows, RefreshCw, Terminal } from 'lucide-react'
+import { FolderGit2, FolderTree, GitCompareArrows, RefreshCw, Terminal, X } from 'lucide-react'
 import { useMemo } from 'react'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
@@ -31,7 +32,10 @@ import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
+import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import {
   WorkspaceListItemActionDock,
   WorkspaceListItemFrame,
@@ -146,10 +150,17 @@ function SortableWorkspaceRepositoryRow({
     () => repository.terminalWorktreePaths.map((path) => worktreeTerminalKey(repository.id, path)),
     [repository.id, repository.terminalWorktreePaths],
   )
+  const closeTerminalScope = useCloseTerminalScope(terminalWorktreeKeys)
   const externalActions = useProjectExternalOpenActions(repository.id)
+  const directoryAction = useOpenDirectoryAction({
+    repoId: repository.id,
+    path: parseRemoteRepoId(repository.id)?.remotePath ?? repository.id,
+    disabled: repository.unavailable,
+  })
   const internalTerminalAction = useProjectInternalTerminalAction(repository.id)
   const tmuxMenuVisible = supportsTmuxMenu(repository.id)
   const repo = useReposStore((state) => state.repos[repository.id])
+  const dependencyMenu = useWorktreeDependencyMenu(repo, { disabled: repository.unavailable || disabled })
   const creation = useRepositoryCreationActions(repo, {
     forceDisabled: repository.unavailable,
   })
@@ -157,26 +168,36 @@ function SortableWorkspaceRepositoryRow({
     id: repository.id,
     disabled,
   })
-  const editorAction: WorkspaceListItemAction | undefined = externalActions.visible
-    ? {
-        id: 'editor',
-        label: t('worktrees.open-in-editor-label'),
-        icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
-        disabled: externalActions.editor.disabled,
-        busy: externalActions.editor.busy,
-        onSelect: externalActions.editor.onSelect,
-      }
-    : undefined
+  const editorMenuAction: WorkspaceListItemAction = {
+    id: 'editor',
+    label: t('worktrees.open-in-editor-label'),
+    icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+    disabled: externalActions.editor.disabled,
+    busy: externalActions.editor.busy,
+    onSelect: externalActions.editor.onSelect,
+  }
+  const editorAction = externalActions.visible ? editorMenuAction : undefined
   const internalAction: WorkspaceListItemAction = {
     id: 'terminal',
+    category: 'terminals',
     label: t('terminal.internal'),
     icon: <Terminal aria-hidden="true" />,
     disabled: internalTerminalAction.disabled,
     busy: internalTerminalAction.busy,
     onSelect: internalTerminalAction.onSelect,
   }
+  const closeTerminalsAction: WorkspaceListItemAction = {
+    id: 'closeAllTerminals',
+    category: 'terminals',
+    label: closeTerminalScope.label,
+    disabled: closeTerminalScope.disabled,
+    destructive: true,
+    icon: <X aria-hidden="true" />,
+    onSelect: closeTerminalScope.requestClose,
+  }
   const externalTerminalAction: WorkspaceListItemAction = {
     id: 'externalTerminal',
+    category: 'terminals',
     label: t('terminal.external'),
     icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
     disabled: externalActions.externalTerminal.disabled,
@@ -186,6 +207,7 @@ function SortableWorkspaceRepositoryRow({
   }
   const tmuxTerminalAction: WorkspaceListItemAction = {
     id: 'terminalTmux',
+    category: 'terminals',
     label: t('terminal.new-with-tmux'),
     icon: <Terminal aria-hidden="true" />,
     disabled: internalTerminalAction.disabled,
@@ -207,19 +229,21 @@ function SortableWorkspaceRepositoryRow({
         onOpenFileArea()
       }
     : undefined
+  const fileAreaAction: WorkspaceListItemAction | undefined = handleOpenFileArea
+    ? {
+        id: 'fileArea',
+        label: t('file-area.open'),
+        disabled: repository.unavailable,
+        icon: <FolderTree aria-hidden="true" />,
+        onSelect: handleOpenFileArea,
+      }
+    : undefined
 
   const row = (
     <WorkspaceItemContextMenu
-      fileArea={
-        handleOpenFileArea
-          ? {
-              disabled: repository.unavailable,
-              icon: <FolderTree aria-hidden="true" />,
-              onSelect: handleOpenFileArea,
-            }
-          : undefined
-      }
-      editor={{ ...externalActions.editor, icon: <EditorAppIcon pref={externalActions.editor.iconPref} /> }}
+      fileArea={fileAreaAction}
+      editor={editorMenuAction}
+      directory={directoryAction}
       externalTerminal={{
         ...externalActions.externalTerminal,
         icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
@@ -234,6 +258,7 @@ function SortableWorkspaceRepositoryRow({
             }
           : undefined
       }
+      actions={[...creation.items, ...dependencyMenu.actions, refreshChangesAction]}
       worktreeTerminalKeys={terminalWorktreeKeys}
     >
       <WorkspaceListItemFrame
@@ -280,7 +305,13 @@ function SortableWorkspaceRepositoryRow({
             moreMenu={
               <WorkspaceListItemMenu
                 label={t('action.menu')}
-                groups={[creation.items, [refreshChangesAction], [tmuxTerminalAction, externalTerminalAction]]}
+                groups={[
+                  [...(fileAreaAction ? [fileAreaAction] : []), directoryAction, editorMenuAction],
+                  creation.items,
+                  dependencyMenu.actions,
+                  [refreshChangesAction],
+                  [internalAction, tmuxTerminalAction, externalTerminalAction, closeTerminalsAction],
+                ]}
               />
             }
           />
@@ -336,6 +367,8 @@ function SortableWorkspaceRepositoryRow({
     <>
       {row}
       {creation.dialogs}
+      {dependencyMenu.dialog}
+      {closeTerminalScope.dialog}
     </>
   )
 }

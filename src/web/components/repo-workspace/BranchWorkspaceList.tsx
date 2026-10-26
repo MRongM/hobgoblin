@@ -27,10 +27,12 @@ import {
   FilePlus2,
   FolderKanban,
   FolderPlus,
+  FolderMinus,
   FolderTree,
   GitCompareArrows,
   GitFork,
   GitMerge,
+  Pencil,
   RefreshCw,
   RotateCcw,
   SendHorizontal,
@@ -38,6 +40,10 @@ import {
   X,
 } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
+import {
+  canAddBranchWorkspaceWorktree,
+  isRemovableBranchWorkspaceWorktree,
+} from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
 import { type BranchWorkspaceRepositorySnapshot, type BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
@@ -48,6 +54,7 @@ import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import { TerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import {
   useWorktreeTerminalCount,
   useWorktreeTerminalHasBell,
@@ -59,6 +66,7 @@ import {
 } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { useFolderExternalOpenActions } from '#/web/hooks/useFolderExternalOpenActions.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
@@ -97,6 +105,7 @@ export interface BranchWorkspaceListProps {
   onInspect?: (item: BranchWorkspaceSnapshot) => void
   onRepair?: (item: BranchWorkspaceSnapshot) => void
   onRemove: (item: BranchWorkspaceSnapshot) => void
+  onRename?: (item: BranchWorkspaceSnapshot) => void
   onExtend?: (item: BranchWorkspaceSnapshot) => void
   onClone?: (item: BranchWorkspaceSnapshot) => void
   onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
@@ -137,6 +146,7 @@ export function BranchWorkspaceList({
   onInspect,
   onRepair,
   onRemove,
+  onRename,
   onExtend,
   onClone,
   onReduce,
@@ -207,6 +217,7 @@ export function BranchWorkspaceList({
               onInspect={onInspect}
               onRepair={onRepair}
               onRemove={onRemove}
+              onRename={onRename}
               onExtend={onExtend}
               onClone={onClone}
               onReduce={onReduce}
@@ -245,8 +256,11 @@ function BranchWorkspaceRow({
   onOpenFileArea,
   onToggleExpanded,
   onRemove,
+  onRename,
   onExtend,
   onClone,
+  onReduce,
+  onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
   onRefreshChanges,
@@ -274,9 +288,15 @@ function BranchWorkspaceRow({
   const windowsInternalTerminalShellMenu = supportsWindowsInternalTerminalShellMenu(rootId)
   const tmuxMenuVisible = supportsTmuxMenu(rootId)
   const externalActions = useFolderExternalOpenActions({ repoId: rootId, path: item.path, available: folderAvailable })
+  const directoryAction = useOpenDirectoryAction({
+    repoId: rootId,
+    path: item.path,
+    disabled: disabled || !folderAvailable,
+  })
   const terminalContext = useContext(TerminalSessionContext)
   const terminalKey = worktreeTerminalKey(rootId, item.path)
   const terminalKeys = useMemo(() => [terminalKey], [terminalKey])
+  const closeTerminalScope = useCloseTerminalScope(terminalKeys)
   const terminalCount = useWorktreeTerminalCount(terminalKey)
   const changeCount = changeCountById?.[item.id] ?? 0
   const memberPresentations = item.repositories.map((member) => {
@@ -356,50 +376,60 @@ function BranchWorkspaceRow({
         onSelect: () => openInternal('native'),
       }
     : undefined
-  const rootOpenMenuActions: BranchWorkspaceItemAction[] = rootUsable
-    ? [
-        ...(windowsInternalTerminalShellMenu
-          ? [
-              {
-                label: 'terminal.internal-powershell',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: () => openInternal('native', 'powershell'),
-              },
-              {
-                label: 'terminal.internal-wsl',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: () => openInternal('native', 'wsl'),
-              },
-            ]
-          : []),
-        ...(tmuxMenuVisible
-          ? [
-              {
-                label: 'terminal.new-with-tmux',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: () => openInternal('tmux-if-available'),
-              },
-              {
-                label: 'terminal.restore-directory-tmux',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: restoreTmuxTerminals,
-              },
-            ]
-          : []),
-        {
-          label: 'terminal.external',
-          icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
-          disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
-          busy: externalActions.externalTerminal.busy,
-          onSelect: () =>
-            onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect(),
-        },
-      ]
-    : []
+  const rootOpenMenuActions: BranchWorkspaceItemAction[] = [
+    {
+      id: 'terminal',
+      label: 'terminal.internal',
+      icon: <Terminal aria-hidden="true" />,
+      disabled: openActionsDisabled,
+      onSelect: () => openInternal('native'),
+    },
+    ...(windowsInternalTerminalShellMenu
+      ? [
+          {
+            id: 'terminalPowerShell',
+            label: 'terminal.internal-powershell',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: () => openInternal('native', 'powershell'),
+          },
+          {
+            id: 'terminalWsl',
+            label: 'terminal.internal-wsl',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: () => openInternal('native', 'wsl'),
+          },
+        ]
+      : []),
+    ...(tmuxMenuVisible
+      ? [
+          {
+            id: 'terminalTmux',
+            label: 'terminal.new-with-tmux',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: () => openInternal('tmux-if-available'),
+          },
+          {
+            id: 'restoreTmuxTerminals',
+            label: 'terminal.restore-directory-tmux',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: restoreTmuxTerminals,
+          },
+        ]
+      : []),
+    {
+      id: 'externalTerminal',
+      label: 'terminal.external',
+      icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+      disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
+      busy: externalActions.externalTerminal.busy,
+      onSelect: () =>
+        onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect(),
+    },
+  ]
   const refreshChangesActions: BranchWorkspaceItemAction[] =
     rootUsable && onRefreshChanges
       ? [
@@ -476,7 +506,7 @@ function BranchWorkspaceRow({
               {
                 label: 'workspace.branch-workspace.add-members',
                 icon: <FolderPlus aria-hidden="true" />,
-                disabled,
+                disabled: disabled || !canAddBranchWorkspaceWorktree(item),
                 separated: true,
                 onSelect: () => onExtend(item),
               },
@@ -489,6 +519,18 @@ function BranchWorkspaceRow({
                 icon: <Copy aria-hidden="true" />,
                 disabled,
                 onSelect: () => onClone(item),
+              },
+            ]
+          : []),
+        ...(onReduce
+          ? [
+              {
+                label: 'workspace.branch-workspace.remove-members',
+                icon: <FolderMinus aria-hidden="true" />,
+                disabled:
+                  disabled || !item.repositories.some((member) => isRemovableBranchWorkspaceWorktree(item, member)),
+                destructive: true,
+                onSelect: () => onReduce(item),
               },
             ]
           : []),
@@ -521,6 +563,16 @@ function BranchWorkspaceRow({
       ]
     : []
   const lowFrequencyActions: BranchWorkspaceItemAction[] = [
+    ...(onRename
+      ? [
+          {
+            label: 'workspace.branch-workspace.rename.action',
+            icon: <Pencil aria-hidden="true" />,
+            disabled: disabled || !rootUsable,
+            onSelect: () => onRename(item),
+          },
+        ]
+      : []),
     {
       label: 'workspace.branch-workspace.unregister',
       icon: <X aria-hidden="true" />,
@@ -529,14 +581,46 @@ function BranchWorkspaceRow({
       onSelect: () => onRemove(item),
     },
   ]
-  const rowMenuActions = [
-    ...rootOpenMenuActions,
+  const additionalMenuActions: BranchWorkspaceItemAction[] = [
     ...refreshChangesActions,
-    ...readyMembershipActions,
-    ...readyDependencyActions,
-    ...readyGitActions,
-    ...lowFrequencyActions,
-    ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
+    ...readyMembershipActions.map((action) => ({ ...action, category: 'manage' as const })),
+    ...readyDependencyActions.map((action) => ({ ...action, category: 'dependencies' as const })),
+    ...readyGitActions.map((action) => ({ ...action, category: 'git' as const })),
+    ...lowFrequencyActions.map((action) => ({ ...action, category: 'manage' as const })),
+    ...(tmuxCleanup.visible ? [{ ...tmuxCleanup.contextAction, category: 'terminals' as const }] : []),
+  ]
+  const rowMenuActions: BranchWorkspaceItemAction[] = [
+    ...(onOpenFileArea
+      ? [
+          {
+            id: 'fileArea',
+            label: 'file-area.open',
+            icon: <FolderTree aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: openFileArea,
+          },
+        ]
+      : []),
+    {
+      id: 'editor',
+      label: 'worktrees.open-in-editor-label',
+      icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+      disabled: openActionsDisabled || externalActions.editor.disabled,
+      busy: externalActions.editor.busy,
+      onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
+    },
+    { ...directoryAction, label: 'directory-open.action' },
+    ...rootOpenMenuActions.map((action) => ({ ...action, category: 'terminals' as const })),
+    {
+      id: 'closeAllTerminals',
+      label: 'terminal.close-all',
+      category: 'terminals',
+      icon: <X aria-hidden="true" />,
+      disabled: closeTerminalScope.disabled,
+      destructive: true,
+      onSelect: closeTerminalScope.requestClose,
+    },
+    ...additionalMenuActions,
   ]
   const moreMenu = rowMenuActions.length > 0 ? <BranchWorkspaceItemMenu actions={rowMenuActions} /> : undefined
   const stateAction = busy ? (
@@ -585,6 +669,8 @@ function BranchWorkspaceRow({
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
             onOpenFileArea={onOpenFileArea}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
+            onAddWorktree={onExtend}
+            onRemoveMember={onReduceMember}
           />
         ))}
       </ul>
@@ -607,6 +693,7 @@ function BranchWorkspaceRow({
         icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
         onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
       }}
+      directory={directoryAction}
       externalTerminal={{
         ...externalActions.externalTerminal,
         disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
@@ -654,13 +741,7 @@ function BranchWorkspaceRow({
           : undefined
       }
       worktreeTerminalKeys={terminalKeys}
-      additionalActions={[
-        ...readyGitActions.filter(
-          (action) => action.label === 'workspace.branch-workspace.git-action.batch-align-remote',
-        ),
-        ...lowFrequencyActions,
-        ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
-      ]}
+      additionalActions={additionalMenuActions}
     >
       <WorkspaceListItemFrame
         itemRef={setNodeRef}
@@ -704,6 +785,7 @@ function BranchWorkspaceRow({
           <>
             {memberList}
             {tmuxCleanup.dialog}
+            {closeTerminalScope.dialog}
           </>
         }
       >

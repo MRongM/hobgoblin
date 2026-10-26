@@ -20,6 +20,11 @@ import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/syste
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
 import { workspaceSnapshotScript, type WorkspaceSnapshotCommand } from '#/system/ssh/workspace-snapshot-script.ts'
+import {
+  workspaceFolderRenameScript,
+  type WorkspaceFolderRenameCommand,
+} from '#/system/ssh/workspace-folder-rename-script.ts'
+import { worktreeDependencyScript, type WorktreeDependencyCommand } from '#/system/ssh/worktree-dependency-script.ts'
 
 const SSH_COMMAND_TIMEOUT_MS = 15_000
 const SSH_CONNECT_TIMEOUT_SEC = 10
@@ -33,6 +38,8 @@ export const REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER = '__HOBGOBLIN_WORKSPACE_LI
 
 export type RemoteCommandKind =
   | WorkspaceSnapshotCommand
+  | WorkspaceFolderRenameCommand
+  | WorktreeDependencyCommand
   | { type: 'printHome' }
   | { type: 'checkShell' }
   | { type: 'checkGit' }
@@ -336,6 +343,10 @@ function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefi
 
 function scriptForCommand(command: RemoteCommandKind): string {
   switch (command.type) {
+    case 'renameWorkspaceFolder':
+      return workspaceFolderRenameScript(command)
+    case 'worktreeDependency':
+      return worktreeDependencyScript(command)
     case 'workspaceSnapshotInspect':
     case 'workspaceSnapshotExport':
     case 'workspaceSnapshotReadChunk':

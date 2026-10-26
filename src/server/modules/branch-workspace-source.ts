@@ -132,6 +132,60 @@ export async function unregisterBranchWorkspaceFolder(
   await discardBranchWorkspaceRecords(rootId, [branchWorkspaceId], dependencies)
 }
 
+/** Update all same-host folder locations after a physical rename, keeping IDs and ordering. */
+export async function relocateBranchWorkspaceFolderRecords(
+  rootId: string,
+  branchWorkspaceId: string,
+  previousPath: string,
+  nextPath: string,
+  dependencies: BranchWorkspaceSourceDependencies = {},
+  additionalMappings: Array<{ previousPath: string; path: string }> = [],
+): Promise<string[]> {
+  const root = workspaceRootId(rootId)
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  const affectedRootIds: string[] = []
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
+    const snapshot = await readRegistry(dataFile)
+    if (snapshot.kind !== 'ready') throw new Error(invalidRegistryMessage)
+    const owner = snapshot.registry.workspaces.find((group) => group.rootId === root)
+    const registration = owner?.branchWorkspaces.find((entry) => entry.id === branchWorkspaceId)
+    if (!registration || !sameFolderPath(root, registration.path, previousPath))
+      throw new Error('workspace.branch-workspace.plan-stale')
+    const remote = parseRemoteRepoId(root)
+    const pathApi = remote ? path.posix : path
+    const groups = snapshot.registry.workspaces.map((group) => {
+      const candidateRemote = parseRemoteRepoId(group.rootId)
+      if (
+        remote
+          ? !candidateRemote || candidateRemote.alias !== remote.alias || candidateRemote.transport !== remote.transport
+          : candidateRemote
+      )
+        return group
+      let changed = false
+      const branchWorkspaces = group.branchWorkspaces.map((entry) => {
+        for (const mapping of [{ previousPath, path: nextPath }, ...additionalMappings]) {
+          const relative = pathApi.relative(mapping.previousPath, entry.path)
+          if (relative === '..' || relative.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(relative)) continue
+          changed = true
+          return { id: entry.id, path: pathApi.join(mapping.path, relative) }
+        }
+        return entry
+      })
+      if (!changed) return group
+      affectedRootIds.push(group.rootId)
+      return { ...group, branchWorkspaces: normalizeRegistrations(branchWorkspaces, group.rootId) }
+    })
+    await backupLegacyRegistry(dataFile, snapshot.registry)
+    await writeJsonRegistryAtomically(
+      dataFile,
+      { version: 3, workspaces: groups },
+      dependencies.randomId?.() ?? randomUUID(),
+    )
+    for (const affectedRoot of affectedRootIds) executionByFile.get(dataFile)?.delete(affectedRoot)
+  })
+  return affectedRootIds
+}
+
 export async function replaceBranchWorkspaceManifests(
   rootId: string,
   manifests: BranchWorkspaceManifest[],

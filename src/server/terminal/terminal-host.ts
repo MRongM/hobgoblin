@@ -23,6 +23,10 @@ import type {
 } from '#/shared/terminal.ts'
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
+import type {
+  TerminalPathRelocationInput,
+  TerminalPathRelocationResult,
+} from '#/server/terminal/terminal-path-relocation.ts'
 
 type MaybePromise<T> = T | Promise<T>
 
@@ -70,6 +74,7 @@ export interface ServerTerminalHost {
   takeover(clientId: string, input: TerminalTakeoverInput): MaybePromise<TerminalTakeoverResult>
   close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalCloseResult>
   closeSessions(sessionIds: string[]): MaybePromise<TerminalCloseSessionsResult>
+  relocatePaths?(input: TerminalPathRelocationInput): MaybePromise<TerminalPathRelocationResult>
   notifyBell(clientId: string, input: TerminalNotifyBellInput): MaybePromise<TerminalMutationResult>
   listSessions(clientId: string, repoRoot: string): MaybePromise<TerminalSessionSummary[]>
   create(clientId: string, input: TerminalCreateInput): MaybePromise<TerminalCatalogMutationResult>

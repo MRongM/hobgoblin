@@ -1,4 +1,4 @@
-import type { BranchWorkspaceRepositorySnapshot } from '#/shared/branch-workspaces.ts'
+import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import type { WorkspaceRepositoryCandidate } from '#/shared/workspace.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
@@ -10,6 +10,21 @@ export interface BranchWorkspaceMemberTarget {
   checkedOutBranch: string | null
   head?: string
   worktreePath: string
+}
+
+/** The folder itself and independent primary repositories are not worktree-removal targets. */
+export function isRemovableBranchWorkspaceWorktree(
+  workspace: BranchWorkspaceSnapshot,
+  member: BranchWorkspaceRepositorySnapshot,
+): boolean {
+  return member.kind !== 'repository' && !sameLocalFilePath(member.worktreePath, workspace.path)
+}
+
+export function canAddBranchWorkspaceWorktree(workspace: BranchWorkspaceSnapshot): boolean {
+  return (
+    workspace.available &&
+    !workspace.repositories.some((member) => sameLocalFilePath(member.worktreePath, workspace.path))
+  )
 }
 
 export type BranchWorkspaceMemberResolution =

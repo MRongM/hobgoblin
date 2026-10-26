@@ -1,3 +1,7 @@
+import { useWorktreeDependencyMenu } from '#/web/hooks/useWorktreeDependencyMenu.tsx'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 // Persistent branch list. Each row shows branch name and lightweight
 // scan signals. The
 // selected row scrolls into view automatically when the user moves with
@@ -369,6 +373,11 @@ function DetachedWorktreeRow({
     .join(', ')
   const selectable = isSelectableDetachedWorktree(worktree)
   const prunable = worktree.isPrunable === true
+  const directoryAction = useOpenDirectoryAction({ repoId, path: worktree.path, disabled: prunable })
+  const dependencyMenu = useWorktreeDependencyMenu(repo, {
+    worktreePath: worktree.path,
+    disabled: prunable || !selectable,
+  })
   const actionLabel = t(prunable ? 'action.cleanup-invalid-worktree' : 'action.remove-worktree')
   const actionBusy =
     repo.operations.branchAction.phase !== 'idle' && repo.operations.branchAction.target === worktree.path
@@ -382,6 +391,7 @@ function DetachedWorktreeRow({
   const discardPaths = statusEntries ? statusEntryPaths(statusEntries) : []
   const discardAction: WorkspaceListItemAction = {
     id: 'discardDetachedWorktreeChanges',
+    category: 'git',
     label: t('action.reset-hard'),
     title: discardPaths.length > 0 ? undefined : t('workspace.branch-workspace.dirty-state-unknown'),
     disabled: discardPaths.length === 0,
@@ -389,6 +399,17 @@ function DetachedWorktreeRow({
     icon: <RotateCcw aria-hidden="true" />,
     onSelect: () => setDiscardConfirmOpen(true),
   }
+
+  const removeAction: WorkspaceListItemAction = {
+    id: prunable ? 'cleanupWorktree' : 'removeWorktree',
+    category: 'manage',
+    label: actionLabel,
+    icon: prunable ? <ListRestart aria-hidden="true" /> : <Trash2 aria-hidden="true" />,
+    disabled: repo.operations.branchAction.phase !== 'idle' || worktree.isLocked === true || worktree.isMain,
+    destructive: !prunable,
+    onSelect: () => setConfirmOpen(true),
+  }
+  const menuGroups = [[directoryAction], dependencyMenu.actions, ...(dirty ? [[discardAction]] : []), [removeAction]]
 
   async function confirmAction() {
     const action = prunable
@@ -404,7 +425,7 @@ function DetachedWorktreeRow({
     setForceRemove(false)
   }
 
-  return (
+  const row = (
     <WorkspaceListItemFrame
       selected={selected}
       unavailable={prunable}
@@ -420,7 +441,7 @@ function DetachedWorktreeRow({
       }}
       leadingIcon={<GitCommitHorizontal size={14} className={dirty ? 'text-attention' : 'text-muted-foreground'} />}
       auxiliaryActions={
-        dirty && showActions ? <WorkspaceListItemMenu label={t('action.menu')} groups={[[discardAction]]} /> : undefined
+        showActions ? <WorkspaceListItemMenu label={t('action.menu')} groups={menuGroups} /> : undefined
       }
       actions={
         showActions ? (
@@ -449,6 +470,7 @@ function DetachedWorktreeRow({
       }
       expandedContent={
         <>
+          {dependencyMenu.dialog}
           <ConfirmDialog
             open={confirmOpen}
             title={t(
@@ -495,30 +517,38 @@ function DetachedWorktreeRow({
         </>
       }
     >
-        <span className="flex min-w-0 items-center gap-2 overflow-hidden">
-          <span className="shrink-0 truncate font-mono text-sm text-foreground">{head}</span>
-          {dirty ? (
-            <Badge
-              data-testid="dirty-detached-worktree-badge"
-              variant="attention"
-              aria-label={dirtyLabel}
-              title={dirtyLabel}
-              className={cn(
-                'h-4 px-1',
-                dirtyChangeCount !== null && 'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
-              )}
-            >
-              <GitCompareArrows size={10} aria-hidden="true" />
-              {dirtyChangeCount}
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="gap-1">
-              <FolderTree size={10} />
-              {t('branches.detached')}
-            </Badge>
-          )}
-          <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>
-        </span>
+      <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+        <span className="shrink-0 truncate font-mono text-sm text-foreground">{head}</span>
+        {dirty ? (
+          <Badge
+            data-testid="dirty-detached-worktree-badge"
+            variant="attention"
+            aria-label={dirtyLabel}
+            title={dirtyLabel}
+            className={cn(
+              'h-4 px-1',
+              dirtyChangeCount !== null && 'gap-1 rounded-full px-1.5 text-[10px] font-semibold tabular-nums',
+            )}
+          >
+            <GitCompareArrows size={10} aria-hidden="true" />
+            {dirtyChangeCount}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1">
+            <FolderTree size={10} />
+            {t('branches.detached')}
+          </Badge>
+        )}
+        <span className="min-w-0 truncate text-[11px] leading-none text-muted-foreground/85">{displayPath}</span>
+      </span>
     </WorkspaceListItemFrame>
+  )
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <WorkspaceActionMenuItems context groups={menuGroups} />
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

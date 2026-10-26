@@ -312,6 +312,8 @@ export interface BranchWorkspaceRepositoryPlan {
   dirty?: boolean
   localOnlyCommits?: number
   repositoryFingerprint?: string
+  /** Identity of a selected directory link, rechecked before unlinking it. */
+  entryFingerprint?: string
 }
 
 export interface BranchWorkspaceAuxiliaryPlan {

@@ -1,3 +1,4 @@
+import { useWorktreeDependencyMenu } from '#/web/hooks/useWorktreeDependencyMenu.tsx'
 import { useContext, useState } from 'react'
 import {
   DndContext,
@@ -38,12 +39,15 @@ import { BranchWorkspaceFolderDialog } from '#/web/components/repo-workspace/Bra
 import { openRegisteredBranchWorkspace } from '#/web/branch-workspace-navigation-write-paths.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
+import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { useHostTmuxInventory } from '#/web/hooks/useHostTmuxInventory.tsx'
 import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
 import { useWorkspaceConfigurationRecovery } from '#/web/hooks/useWorkspaceConfigurationRecovery.tsx'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
+import { branchWorkspaceActionGroups } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import {
   WorkspaceListItemActionDock,
@@ -159,7 +163,13 @@ function SortableProjectRow({
   const projectKind = project.isGitRepo ? 'git' : 'plain'
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
+  const directoryAction = useOpenDirectoryAction({
+    repoId: project.id,
+    path: remote?.remotePath ?? project.id,
+    disabled: project.unavailable,
+  })
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
+  const closeTerminalScope = useCloseTerminalScope(project.terminalWorktreeKeys)
   const repo = useReposStore((state) => state.repos[project.id])
   const workspace = useReposStore((state) => state.workspaceProjects[project.id])
   const activeWorkspaceContext = useReposStore((state) => state.workspaceActiveContextByRoot[project.id])
@@ -169,6 +179,7 @@ function SortableProjectRow({
   const branchWorkspaces = branchWorkspaceQuery.data?.ok ? branchWorkspaceQuery.data.items : []
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const creation = useRepositoryCreationActions(repo, { forceDisabled: project.unavailable })
+  const dependencyMenu = useWorktreeDependencyMenu(repo, { disabled: project.unavailable, visible: project.isGitRepo })
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: project.id,
     itemPath: remote?.remotePath ?? project.id,
@@ -183,27 +194,37 @@ function SortableProjectRow({
   })
   const changeCountLabel =
     project.changeCount > 0 ? t('branch-status.worktree-dirty', { n: project.changeCount }) : null
-  const editorAction: WorkspaceListItemAction | undefined = projectExternalActions.visible
-    ? {
-        id: 'editor',
-        label: t('worktrees.open-in-editor-label'),
-        ariaLabel: `${t('worktrees.open-in-editor-label')} ${displayName}`,
-        icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
-        disabled: projectExternalActions.editor.disabled,
-        busy: projectExternalActions.editor.busy,
-        onSelect: projectExternalActions.editor.onSelect,
-      }
-    : undefined
+  const editorMenuAction: WorkspaceListItemAction = {
+    id: 'editor',
+    label: t('worktrees.open-in-editor-label'),
+    ariaLabel: `${t('worktrees.open-in-editor-label')} ${displayName}`,
+    icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
+    disabled: projectExternalActions.editor.disabled,
+    busy: projectExternalActions.editor.busy,
+    onSelect: projectExternalActions.editor.onSelect,
+  }
+  const editorAction = projectExternalActions.visible ? editorMenuAction : undefined
   const internalTerminalAction: WorkspaceListItemAction = {
     id: 'terminal',
+    category: 'terminals',
     label: t('terminal.internal'),
     icon: <Terminal aria-hidden="true" />,
     disabled: projectInternalTerminalAction.disabled,
     busy: projectInternalTerminalAction.busy,
     onSelect: projectInternalTerminalAction.onSelect,
   }
+  const closeTerminalsAction: WorkspaceListItemAction = {
+    id: 'closeAllTerminals',
+    category: 'terminals',
+    label: closeTerminalScope.label,
+    disabled: closeTerminalScope.disabled,
+    destructive: true,
+    icon: <X aria-hidden="true" />,
+    onSelect: closeTerminalScope.requestClose,
+  }
   const externalTerminalAction: WorkspaceListItemAction = {
     id: 'externalTerminal',
+    category: 'terminals',
     label: t('terminal.external'),
     icon: <TerminalAppIcon pref={projectExternalActions.externalTerminal.iconPref} />,
     disabled: projectExternalActions.externalTerminal.disabled,
@@ -222,6 +243,7 @@ function SortableProjectRow({
   }
   const tmuxTerminalAction: WorkspaceListItemAction = {
     id: 'terminalTmux',
+    category: 'terminals',
     label: t('terminal.new-with-tmux'),
     icon: <Terminal aria-hidden="true" />,
     disabled: projectInternalTerminalAction.disabled,
@@ -231,6 +253,7 @@ function SortableProjectRow({
   }
   const closeAction: WorkspaceListItemAction = {
     id: 'closeProject',
+    category: 'manage',
     label: t('repo-tabs.close-named', { name: displayName }),
     icon: <X aria-hidden="true" />,
     disabled: false,
@@ -238,6 +261,7 @@ function SortableProjectRow({
   }
   const addFolderAction: WorkspaceListItemAction = {
     id: 'addWorkspaceFolder',
+    category: 'manage',
     label: t('workspace.branch-workspace.folder-register.title'),
     icon: <FolderOpen aria-hidden="true" />,
     disabled: project.unavailable,
@@ -245,6 +269,7 @@ function SortableProjectRow({
   }
   const detectWorkspaceRepositoriesAction: WorkspaceListItemAction = {
     id: 'detectWorkspaceRepositories',
+    category: 'manage',
     label: t('workspace.detect-repositories'),
     icon: <FolderSearch aria-hidden="true" />,
     disabled: project.unavailable,
@@ -252,6 +277,7 @@ function SortableProjectRow({
   }
   const fetchAllRepositoriesAction: WorkspaceListItemAction = {
     id: 'fetchAllRepositories',
+    category: 'git',
     label: t('workspace.branch-workspace.fetch-all'),
     icon: <RefreshCw aria-hidden="true" />,
     disabled: project.unavailable,
@@ -291,23 +317,27 @@ function SortableProjectRow({
         onOpenFileArea()
       }
     : undefined
+  const fileAreaAction: WorkspaceListItemAction | undefined = handleOpenFileArea
+    ? {
+        id: 'fileArea',
+        label: t('file-area.open'),
+        disabled: project.unavailable,
+        icon: <FolderTree aria-hidden="true" />,
+        onSelect: handleOpenFileArea,
+      }
+    : undefined
+  const additionalMenuActions = [
+    ...(hostTmuxInventory.visible ? [hostTmuxInventory.contextAction] : []),
+    ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
+    ...(workspaceRecovery.visible ? [workspaceRecovery.contextAction] : []),
+  ]
 
   return (
     <>
       <WorkspaceItemContextMenu
-        fileArea={
-          handleOpenFileArea
-            ? {
-                disabled: project.unavailable,
-                icon: <FolderTree aria-hidden="true" />,
-                onSelect: handleOpenFileArea,
-              }
-            : undefined
-        }
-        editor={{
-          ...projectExternalActions.editor,
-          icon: <EditorAppIcon pref={projectExternalActions.editor.iconPref} />,
-        }}
+        fileArea={fileAreaAction}
+        editor={editorMenuAction}
+        directory={directoryAction}
         remote={
           project.isGitRepo
             ? { ...projectExternalActions.remote, icon: <ExternalLink aria-hidden="true" /> }
@@ -328,21 +358,17 @@ function SortableProjectRow({
             : undefined
         }
         worktreeTerminalKeys={project.terminalWorktreeKeys}
-        additionalActions={[
-          ...(!project.isGitRepo
-            ? [
-                {
-                  label: 'workspace.branch-workspace.folder-register.title',
-                  icon: <FolderOpen aria-hidden="true" />,
-                  disabled: project.unavailable,
-                  onSelect: () => setFolderDialogOpen(true),
-                },
-              ]
-            : []),
-          ...(hostTmuxInventory.visible ? [hostTmuxInventory.contextAction] : []),
-          ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
-          ...(workspaceRecovery.visible ? [workspaceRecovery.contextAction] : []),
+        actions={[
+          ...(project.isGitRepo
+            ? creation.items
+            : workspace
+              ? [fetchAllRepositoriesAction]
+              : [detectWorkspaceRepositoriesAction]),
+          ...(!project.isGitRepo ? [addFolderAction] : []),
+          ...dependencyMenu.actions,
+          closeAction,
         ]}
+        additionalActions={additionalMenuActions}
       >
         <WorkspaceListItemFrame
           size="project"
@@ -377,15 +403,23 @@ function SortableProjectRow({
                 <WorkspaceListItemMenu
                   label={t('action.menu')}
                   groups={[
+                    [...(fileAreaAction ? [fileAreaAction] : []), directoryAction, editorMenuAction],
                     project.isGitRepo
                       ? creation.items
                       : workspace
                         ? [fetchAllRepositoriesAction]
                         : [detectWorkspaceRepositoriesAction],
                     ...(!project.isGitRepo ? [[addFolderAction]] : []),
-                    [remoteAction, tmuxTerminalAction, externalTerminalAction],
+                    dependencyMenu.actions,
+                    [
+                      remoteAction,
+                      internalTerminalAction,
+                      tmuxTerminalAction,
+                      externalTerminalAction,
+                      closeTerminalsAction,
+                    ],
                     [closeAction],
-                    ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),
+                    ...branchWorkspaceActionGroups(additionalMenuActions, t),
                   ]}
                 />
               }
@@ -422,6 +456,8 @@ function SortableProjectRow({
         />
       ) : null}
       {project.isGitRepo ? creation.dialogs : null}
+      {dependencyMenu.dialog}
+      {closeTerminalScope.dialog}
       {hostTmuxInventory.dialog}
       {tmuxCleanup.dialog}
       {workspaceRecovery.dialog}

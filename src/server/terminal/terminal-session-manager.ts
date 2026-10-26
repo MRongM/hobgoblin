@@ -46,6 +46,11 @@ import {
 } from '#/server/terminal/terminal-render-state.ts'
 import { spawnTerminalPtyRuntime, type TerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
+import type {
+  TerminalPathRelocationResult,
+  TerminalSessionLocation,
+  TerminalSessionLocationUpdate,
+} from '#/server/terminal/terminal-path-relocation.ts'
 
 const MAX_TERMINAL_WRITE_CHARS = 1024 * 1024
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{16,64}$/
@@ -79,6 +84,7 @@ interface TerminalSession<TOwner extends string | number> {
   windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
   tmuxSessionName: string | null
   tmuxWorkingDirectory: string | null
+  tmuxProjectRoot: string | null
   tmuxCloseSupported: boolean
   cols: number
   rows: number
@@ -153,6 +159,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       windowsInternalTerminalShell: input.windowsInternalTerminalShell,
       tmuxSessionName: input.tmuxSessionName ?? null,
       tmuxWorkingDirectory: input.tmuxSessionName ? (input.tmuxWorkingDirectory ?? null) : null,
+      tmuxProjectRoot: input.tmuxSessionName ? input.scope : null,
       tmuxCloseSupported: input.tmuxSessionName ? input.tmuxCloseSupported !== false : false,
       cols: size.cols,
       rows: size.rows,
@@ -415,6 +422,51 @@ export class TerminalSessionManager<TOwner extends string | number> {
     }
     sessions.sort((a, b) => a.displayOrder - b.displayOrder)
     return sessions
+  }
+
+  relocateSessions(
+    relocate: (session: Readonly<TerminalSessionLocation>) => TerminalSessionLocationUpdate | null,
+  ): TerminalPathRelocationResult {
+    const updates = new Map<string, TerminalSessionLocationUpdate>()
+    for (const session of this.sessionsById.values()) {
+      const update = relocate(session)
+      if (update) updates.set(session.id, update)
+    }
+    // Compute every new location before touching lookup keys; errors leave the catalog intact.
+    const reserved = new Set<string>()
+    for (const session of this.sessionsById.values()) {
+      if (!updates.has(session.id)) reserved.add(this.sessionOwnerKey(session.ownerId, session.key))
+    }
+    for (const [sessionId, update] of updates) {
+      const session = this.sessionsById.get(sessionId)!
+      const prefix = update.key.slice(0, update.key.lastIndexOf('\0') + 1)
+      let index = 1
+      while (reserved.has(this.sessionOwnerKey(session.ownerId, update.key)))
+        update.key = `${prefix}terminal-${index++}`
+      reserved.add(this.sessionOwnerKey(session.ownerId, update.key))
+    }
+    const result: TerminalPathRelocationResult = { relocated: [], scopes: [] }
+    const scopes = new Set<string>()
+    for (const sessionId of updates.keys()) {
+      const session = this.sessionsById.get(sessionId)!
+      this.sessionIdByOwnerKey.delete(this.sessionOwnerKey(session.ownerId, session.key))
+    }
+    for (const [sessionId, update] of updates) {
+      const session = this.sessionsById.get(sessionId)!
+      result.relocated.push({
+        sessionId,
+        previousKey: session.key,
+        key: update.key,
+        previousScope: session.scope,
+        scope: update.scope,
+      })
+      scopes.add(session.scope)
+      scopes.add(update.scope)
+      Object.assign(session, update)
+      this.sessionIdByOwnerKey.set(this.sessionOwnerKey(session.ownerId, session.key), session.id)
+    }
+    result.scopes = [...scopes]
+    return result
   }
 
   reorderSessions(scope: string, worktreePath: string, orderedKeys: string[]): boolean {

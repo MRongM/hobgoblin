@@ -52,6 +52,7 @@ interface GoblinNativeBridge {
     openFileDialog?: (input?: { title?: string }) => Promise<string[]>
     consumeExternalOpenPaths: () => Promise<string[]>
     openInFinder: (input: { path: string }) => Promise<ExecResult>
+    openDirectoryInFileManager?: (input: { path: string }) => Promise<ExecResult>
     readClipboardImage?: () => Promise<ClipboardBinaryFilePayload | null>
     readClipboardFilePaths?: () => Promise<string[]>
     saveClipboardBinaryFiles?: (input: SaveClipboardBinaryFilesInput) => Promise<SaveClipboardBinaryFilesResult>

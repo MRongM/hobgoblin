@@ -13,6 +13,7 @@ import {
   WorkspaceListItemFrame,
   WorkspaceListItemMenu,
   type WorkspaceListItemDragHandle,
+  type WorkspaceListItemAction,
 } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { projectWorktreeListItemActions } from '#/web/components/branch-list/worktree-list-item-actions.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
@@ -83,6 +84,17 @@ export function BranchRow({
         onOpenFileArea()
       }
     : undefined
+  const fileAreaAction: WorkspaceListItemAction | undefined =
+    worktreePath && handleOpenFileArea
+      ? {
+          id: 'fileArea',
+          label: t('file-area.open'),
+          disabled: false,
+          icon: <FolderTree aria-hidden="true" />,
+          onSelect: handleOpenFileArea,
+        }
+      : undefined
+  const menuGroups = [...(fileAreaAction ? [[fileAreaAction]] : []), ...actionProjection.menuGroups]
   const setItemRef = useCallback(
     (node: HTMLLIElement | null) => {
       if (isSelected) {
@@ -130,11 +142,7 @@ export function BranchRow({
             moreMenu={
               <WorkspaceListItemMenu
                 label={t('action.menu')}
-                groups={
-                  tmuxCleanup.visible
-                    ? [...actionProjection.menuGroups, [tmuxCleanup.action]]
-                    : actionProjection.menuGroups
-                }
+                groups={tmuxCleanup.visible ? [...menuGroups, [tmuxCleanup.action]] : menuGroups}
                 open={actionMenuOpen}
                 onOpenChange={onActionMenuOpenChange}
               />
@@ -167,16 +175,10 @@ export function BranchRow({
 
   return worktreePath ? (
     <WorkspaceItemContextMenu
-      fileArea={
-        handleOpenFileArea
-          ? {
-              disabled: false,
-              icon: <FolderTree aria-hidden="true" />,
-              onSelect: handleOpenFileArea,
-            }
-          : undefined
-      }
+      fileArea={fileAreaAction}
       editor={actionProjection.contextMenu.editor}
+      directory={actionProjection.contextMenu.directory}
+      remote={actionProjection.contextMenu.remote}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={actionProjection.contextMenu.internalTerminal}
       windowsInternalTerminals={actionProjection.contextMenu.windowsInternalTerminals}

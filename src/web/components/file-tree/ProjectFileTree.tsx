@@ -94,6 +94,7 @@ import {
   chooseFileTreeDownloadDirectory,
   chooseFileTreeUploadFiles,
   hasNativeFilePicker,
+  canRevealInFileManager,
   openInFinder,
   readFileTreeClipboardFile,
   readSystemClipboardFilePaths,
@@ -105,6 +106,9 @@ import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 import { FilePreviewProvider, useFilePreview } from '#/web/components/terminal/file-preview-context.tsx'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import { resolveFileManagerTarget } from '#/web/file-manager-target.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 
 const ROOT_DIR = ''
 
@@ -403,7 +407,8 @@ function ProjectFileTreeContent({
     }
   }, [revealRelativePath, revealRequest, worktreePath])
 
-  const canOpenLocally = !!worktreePath && !isRemoteRepoId(repoId)
+  const openDirectoryAction = useOpenDirectoryAction({ repoId, path: worktreePath, disabled: !view.exists })
+  const canOpenLocally = !openDirectoryAction.disabled
 
   const toggleDirectory = useCallback(
     (node: FileTreeNode) => {
@@ -1215,11 +1220,7 @@ function ProjectFileTreeContent({
     },
     [repoId],
   )
-  const openWorktreeLocally = useCallback(async () => {
-    if (!canOpenLocally || !worktreePath) return
-    const result = await openInFinder(worktreePath)
-    if (!result.ok) toast.error(result.message)
-  }, [canOpenLocally, worktreePath])
+  const openWorktreeLocally = openDirectoryAction.onSelect
 
   if (!view.exists) return null
   const fileTreeStyle = {
@@ -1700,7 +1701,14 @@ function FileTreeContextMenu({
   const t = useT()
   const realNode = isWritableNode(node)
   const mutableNode = realNode && !protectedRoot
-  const canRevealInFinder = realNode && !isRemoteRepoId(repoId)
+  const directoryNode = isExpandableNode(node)
+  const directoryAction = useOpenDirectoryAction({
+    repoId,
+    path: directoryNode ? node.absolutePath : null,
+    disabled: !realNode,
+  })
+  const revealTarget = resolveFileManagerTarget(repoId, node.absolutePath, getInitialBootstrap().hostPlatform)
+  const canReveal = realNode && !directoryNode && canRevealInFileManager() && revealTarget.ok
   const downloadTargets = exportableFileNodes(targets)
   return (
     <ContextMenuContent>
@@ -1742,8 +1750,26 @@ function FileTreeContextMenu({
         <Terminal className="size-3.5" />
         {t('file-tree.open-terminal')}
       </ContextMenuItem>
-      {canRevealInFinder ? (
-        <ContextMenuItem onSelect={() => void openInFinder(node.absolutePath)}>
+      {directoryNode ? (
+        <ContextMenuItem
+          disabled={directoryAction.disabled}
+          title={directoryAction.title}
+          onSelect={() => void directoryAction.onSelect()}
+        >
+          <FolderOpen className="size-3.5" />
+          {directoryAction.label}
+        </ContextMenuItem>
+      ) : canReveal ? (
+        <ContextMenuItem
+          onSelect={() => {
+            if (!revealTarget.ok) return
+            void openInFinder(revealTarget.path)
+              .then((result) => {
+                if (!result.ok) toast.error(t(result.message))
+              })
+              .catch(() => toast.error(t('directory-open.failed')))
+          }}
+        >
           <FolderOpen className="size-3.5" />
           {t('worktrees.reveal-title')}
         </ContextMenuItem>

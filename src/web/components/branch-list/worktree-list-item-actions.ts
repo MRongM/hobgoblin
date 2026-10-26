@@ -1,6 +1,7 @@
 import type { BranchActionItem, BranchActionItemGroups } from '#/web/hooks/useBranchActionItems.tsx'
 import type { WorkspaceItemOpenAction } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { branchMenuCategory } from '#/web/components/repo-workspace/workspace-menu-groups.ts'
 
 export type WorktreeListItemActionPolicy = 'ordinary-worktree' | 'branch-workspace-member'
 
@@ -16,6 +17,8 @@ export interface WorktreeListItemActionProjection {
   menuGroups: WorkspaceListItemAction[][]
   contextMenu: {
     editor: WorkspaceItemOpenAction
+    directory?: WorkspaceListItemAction
+    remote?: WorkspaceItemOpenAction
     externalTerminal: WorkspaceItemOpenAction
     internalTerminal: WorkspaceItemOpenAction
     windowsInternalTerminals?: {
@@ -38,6 +41,8 @@ export function projectWorktreeListItemActions(
   { policy, hasWorktree, forceDisabled = false }: WorktreeListItemActionProjectionOptions,
 ): WorktreeListItemActionProjection {
   const editorItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'editor') : undefined
+  const directoryItem = groups.externalItems.find((item) => item.id === 'openDirectory')
+  const remoteItem = groups.externalItems.find((item) => item.id === 'remote')
   const terminalItem = hasWorktree ? groups.externalItems.find((item) => item.id === 'terminal') : undefined
   const powershellTerminalItem = hasWorktree
     ? groups.externalItems.find((item) => item.id === 'terminalPowerShell')
@@ -49,9 +54,7 @@ export function projectWorktreeListItemActions(
   const restoreTmuxTerminalsItem = hasWorktree
     ? groups.externalItems.find((item) => item.id === 'restoreTmuxTerminals' && item.visible)
     : undefined
-  const externalItems = hasWorktree
-    ? groups.externalItems.filter((item) => item.id !== 'editor' && item.id !== 'terminal')
-    : groups.externalItems
+  const externalItems = groups.externalItems
   const mainExclusions = policy === 'branch-workspace-member' ? memberMainExclusions : ordinaryMainExclusions
   const destructiveExclusions =
     policy === 'branch-workspace-member' ? memberDestructiveExclusions : ordinaryDestructiveExclusions
@@ -60,14 +63,8 @@ export function projectWorktreeListItemActions(
     ? groups.destructiveItems.filter((item) => !destructiveExclusions.has(item.id))
     : groups.destructiveItems
   const contextActions = hasWorktree
-    ? [...groups.mainItems, ...groups.destructiveItems]
-        .filter(
-          (item) =>
-            item.id === 'createWorktree' ||
-            item.id === 'sync' ||
-            item.id === 'alignRemote' ||
-            (policy === 'branch-workspace-member' && item.id === 'checkoutTo'),
-        )
+    ? [...mainItems, ...groups.patchItems, ...destructiveItems]
+        .filter((item) => item.visible && item.id !== 'closeAllTerminals')
         .map((item) => branchListItemAction(item, forceDisabled))
     : []
 
@@ -78,6 +75,8 @@ export function projectWorktreeListItemActions(
       items.map((item) => branchListItemAction(item, forceDisabled)),
     ),
     contextMenu: {
+      ...(directoryItem ? { directory: branchListItemAction(directoryItem, forceDisabled) } : {}),
+      ...(remoteItem ? { remote: branchContextMenuAction(remoteItem, forceDisabled) } : {}),
       editor: branchContextMenuAction(
         groups.externalItems.find((item) => item.id === 'editor'),
         forceDisabled,
@@ -119,6 +118,7 @@ export function branchListItemAction(item: BranchActionItem, forceDisabled = fal
     destructive: item.destructive,
     shortcut: item.shortcut,
     visible: item.visible,
+    category: branchMenuCategory(item.id),
     onSelect: item.onSelect,
   }
 }

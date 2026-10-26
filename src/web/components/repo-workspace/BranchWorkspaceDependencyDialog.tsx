@@ -76,6 +76,8 @@ export function BranchWorkspaceDependencyDialog({
   const [approvals, setApprovals] = useState<BranchWorkspaceDependencyApproval[]>([])
   const [planRevision, setPlanRevision] = useState(0)
   const addable = candidates
+  const choiceFor = (candidate: BranchWorkspaceDependencyCandidate): MaterializationCandidateChoice =>
+    choices[candidate.name] ?? (candidate.targetKind === 'missing' ? 'symlink' : 'skip')
   const removable = useMemo(() => candidates.filter((candidate) => candidate.targetKind !== 'missing'), [candidates])
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export function BranchWorkspaceDependencyDialog({
   const request = (): BranchWorkspaceDependencyPlanRequest | null => {
     if (mode === 'add') {
       const entries = addable.flatMap((candidate) => {
-        const choice = choices[candidate.name] ?? 'skip'
+        const choice = choiceFor(candidate)
         return choice === 'skip' ? [] : [{ name: candidate.name, mode: choice }]
       })
       return entries.length > 0 ? { operation: 'add', branchWorkspaceId, entries } : null
@@ -189,7 +191,7 @@ export function BranchWorkspaceDependencyDialog({
                       </span>
                     ) : undefined,
                 }))}
-                choices={choices}
+                choices={Object.fromEntries(addable.map((candidate) => [candidate.name, choiceFor(candidate)]))}
                 onChoiceChange={(name, choice) => setChoices((current) => ({ ...current, [name]: choice }))}
                 headingId="branch-workspace-dependency-add-candidates"
                 label={t('workspace.branch-workspace.dependency.add.available')}

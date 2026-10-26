@@ -1,4 +1,5 @@
 import type { WorkspaceConfig, WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
+import type { BranchWorkspaceFolderRenameResult } from '#/shared/branch-workspace-folders.ts'
 import type {
   BranchWorkspaceExecuteInput,
   BranchWorkspaceExecuteResult,
@@ -82,6 +83,14 @@ export async function unregisterBranchWorkspace(
   branchWorkspaceId: string,
 ): Promise<{ ok: boolean; message?: string }> {
   return await postServerJson('/api/workspace/branch-workspaces/unregister', { rootId, branchWorkspaceId })
+}
+
+export async function renameBranchWorkspaceFolder(
+  rootId: string,
+  branchWorkspaceId: string,
+  directoryName: string,
+): Promise<BranchWorkspaceFolderRenameResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/rename', { rootId, branchWorkspaceId, directoryName })
 }
 
 export async function planBranchWorkspace(

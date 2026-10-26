@@ -1,20 +1,28 @@
 import { X } from 'lucide-react'
 import type { ReactElement, ReactNode } from 'react'
 import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '#/web/components/ui/context-menu.tsx'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 import { useT } from '#/web/stores/i18n.ts'
-import type { BranchWorkspaceItemAction } from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
+import {
+  branchWorkspaceActionGroups,
+  type BranchWorkspaceItemAction,
+} from '#/web/components/repo-workspace/BranchWorkspaceItemMenu.tsx'
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
 import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 
 type WorkspaceItemContextAction = Pick<
   WorkspaceListItemAction,
-  'id' | 'label' | 'icon' | 'disabled' | 'busy' | 'destructive' | 'onSelect'
+  | 'id'
+  | 'label'
+  | 'icon'
+  | 'disabled'
+  | 'busy'
+  | 'destructive'
+  | 'onSelect'
+  | 'category'
+  | 'shortcut'
+  | 'visible'
+  | 'title'
 >
 
 export interface WorkspaceItemOpenAction {
@@ -27,6 +35,7 @@ export interface WorkspaceItemOpenAction {
 interface WorkspaceItemContextMenuProps {
   fileArea?: WorkspaceItemOpenAction
   editor: WorkspaceItemOpenAction
+  directory?: WorkspaceListItemAction
   remote?: WorkspaceItemOpenAction
   externalTerminal: WorkspaceItemOpenAction
   internalTerminal: WorkspaceItemOpenAction
@@ -45,6 +54,7 @@ interface WorkspaceItemContextMenuProps {
 export function WorkspaceItemContextMenu({
   fileArea,
   editor,
+  directory,
   remote,
   externalTerminal,
   internalTerminal,
@@ -59,70 +69,51 @@ export function WorkspaceItemContextMenu({
   const t = useT()
   const closeScope = useCloseTerminalScope(worktreeTerminalKeys)
 
+  const opening: WorkspaceListItemAction[] = [
+    ...(fileArea ? [{ id: 'fileArea', label: t('file-area.open'), ...fileArea }] : []),
+    { id: 'editor', label: t('worktrees.open-in-editor-label'), ...editor },
+    ...(directory ? [directory] : []),
+    ...(remote ? [{ id: 'remote', label: t('action.remote'), ...remote }] : []),
+  ]
+  const terminals: WorkspaceListItemAction[] = [
+    { id: 'externalTerminal', label: t('terminal.external'), ...externalTerminal },
+    { id: 'terminal', label: t('terminal.internal'), ...internalTerminal },
+    ...(windowsInternalTerminals
+      ? [
+          {
+            id: 'terminalPowerShell',
+            label: t('terminal.internal-powershell'),
+            ...windowsInternalTerminals.powershell,
+          },
+          { id: 'terminalWsl', label: t('terminal.internal-wsl'), ...windowsInternalTerminals.wsl },
+        ]
+      : []),
+    ...(tmuxTerminal ? [{ id: 'terminalTmux', label: t('terminal.new-with-tmux'), ...tmuxTerminal }] : []),
+    ...(restoreTmuxTerminals
+      ? [{ id: 'restoreTmuxTerminals', label: t('terminal.restore-directory-tmux'), ...restoreTmuxTerminals }]
+      : []),
+    {
+      id: 'closeAllTerminals',
+      label: closeScope.label,
+      icon: <X aria-hidden="true" />,
+      disabled: closeScope.disabled,
+      destructive: true,
+      onSelect: closeScope.requestClose,
+    },
+  ].map((action) => ({ ...action, category: 'terminals' as const }))
+
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent>
-          {fileArea ? <OpenActionItem action={fileArea}>{t('file-area.open')}</OpenActionItem> : null}
-          <OpenActionItem action={editor}>{t('worktrees.open-in-editor-label')}</OpenActionItem>
-          {remote ? <OpenActionItem action={remote}>{t('action.remote')}</OpenActionItem> : null}
-          <OpenActionItem action={externalTerminal}>{t('terminal.external')}</OpenActionItem>
-          {windowsInternalTerminals ? (
-            <>
-              <OpenActionItem action={windowsInternalTerminals.powershell}>
-                {t('terminal.internal-powershell')}
-              </OpenActionItem>
-              <OpenActionItem action={windowsInternalTerminals.wsl}>{t('terminal.internal-wsl')}</OpenActionItem>
-            </>
-          ) : (
-            <OpenActionItem action={internalTerminal}>{t('terminal.internal')}</OpenActionItem>
-          )}
-          {tmuxTerminal ? <OpenActionItem action={tmuxTerminal}>{t('terminal.new-with-tmux')}</OpenActionItem> : null}
-          {restoreTmuxTerminals ? (
-            <OpenActionItem action={restoreTmuxTerminals}>{t('terminal.restore-directory-tmux')}</OpenActionItem>
-          ) : null}
-          {actions.length > 0 ? <ContextMenuSeparator /> : null}
-          {actions.map((action) => (
-            <ContextMenuItem
-              key={action.id}
-              variant={action.destructive ? 'destructive' : 'default'}
-              disabled={action.disabled || action.busy}
-              onSelect={() => void action.onSelect()}
-            >
-              {action.icon}
-              {action.label}
-            </ContextMenuItem>
-          ))}
-          <ContextMenuSeparator />
-          <ContextMenuItem variant="destructive" disabled={closeScope.disabled} onSelect={closeScope.requestClose}>
-            <X aria-hidden="true" />
-            {closeScope.label}
-          </ContextMenuItem>
-          {additionalActions.length > 0 ? <ContextMenuSeparator /> : null}
-          {additionalActions.map((action, index) => (
-            <ContextMenuItem
-              key={`${action.label}-${index}`}
-              variant={action.destructive ? 'destructive' : 'default'}
-              disabled={action.disabled || action.busy}
-              onSelect={() => void action.onSelect()}
-            >
-              {action.icon}
-              {t(action.label)}
-            </ContextMenuItem>
-          ))}
+          <WorkspaceActionMenuItems
+            context
+            groups={[opening, terminals, [...actions], ...branchWorkspaceActionGroups(additionalActions, t)]}
+          />
         </ContextMenuContent>
       </ContextMenu>
       {closeScope.dialog}
     </>
-  )
-}
-
-function OpenActionItem({ action, children }: { action: WorkspaceItemOpenAction; children: ReactNode }) {
-  return (
-    <ContextMenuItem disabled={action.disabled || action.busy} onSelect={() => void action.onSelect()}>
-      {action.icon}
-      {children}
-    </ContextMenuItem>
   )
 }

@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { createWorktreeDependencyRoutes } from '#/server/routes/worktree-dependencies.ts'
 import { getBackgroundSyncRepos, setBackgroundSyncRepos } from '#/server/modules/background-sync.ts'
 import { exportRepositoryFilesToLocalDirectory } from '#/server/modules/repo-file-export.ts'
 import { readRepositoryFilePreview } from '#/server/modules/repo-file-preview-read.ts'
@@ -78,6 +79,7 @@ import { normalizeWorktreeBranchSwitchTarget } from '#/shared/worktree-branch-sw
 
 export function createRepoRoutes() {
   const app = new Hono()
+  app.route('/worktree-dependencies', createWorktreeDependencyRoutes())
   async function jsonOr<T>(run: () => Promise<T>, fallback: T, label: string) {
     try {
       return await run()

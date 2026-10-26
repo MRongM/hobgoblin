@@ -1,25 +1,12 @@
-import {
-  Fragment,
-  forwardRef,
-  useState,
-  type ComponentProps,
-  type CSSProperties,
-  type ForwardedRef,
-  type ReactNode,
-} from 'react'
+import { forwardRef, useState, type ComponentProps, type CSSProperties, type ForwardedRef, type ReactNode } from 'react'
 import { Ellipsis, GripVertical, Loader2 } from 'lucide-react'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from '#/web/components/ui/dropdown-menu.tsx'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '#/web/components/ui/dropdown-menu.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import type { WorkspaceMenuCategory } from '#/web/components/repo-workspace/workspace-menu-groups.ts'
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
 
 export interface WorkspaceListItemAction {
   id: string
@@ -32,6 +19,7 @@ export interface WorkspaceListItemAction {
   destructive?: boolean
   shortcut?: string
   visible?: boolean
+  category?: WorkspaceMenuCategory
   onSelect: () => void | Promise<void>
 }
 
@@ -257,28 +245,12 @@ export function WorkspaceListItemMenu({ label, groups, open, onOpenChange }: Wor
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-        {visibleGroups.map((group, groupIndex) => (
-          <Fragment key={group.map((action) => action.id).join('|')}>
-            {groupIndex > 0 ? <DropdownMenuSeparator /> : null}
-            {group.map((action) => {
-              const busy = pendingId === action.id || action.busy
-              return (
-                <DropdownMenuItem
-                  key={action.id}
-                  data-action={action.id}
-                  disabled={action.disabled || busyId !== null}
-                  title={action.title}
-                  variant={action.destructive ? 'destructive' : 'default'}
-                  onSelect={() => void runMenuAction(action)}
-                >
-                  {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : action.icon}
-                  {action.label}
-                  {action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
-                </DropdownMenuItem>
-              )
-            })}
-          </Fragment>
-        ))}
+        <WorkspaceActionMenuItems
+          groups={visibleGroups}
+          busyId={busyId}
+          pendingId={pendingId}
+          onSelect={runMenuAction}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   )

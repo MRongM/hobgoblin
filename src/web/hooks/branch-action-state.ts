@@ -17,6 +17,7 @@ export type BranchActionItemId =
   | 'externalTerminal'
   | 'closeAllTerminals'
   | 'editor'
+  | 'openDirectory'
   | 'createWorktree'
   | 'createTag'
   | 'createBranch'
@@ -30,6 +31,8 @@ export type BranchActionItemId =
   | 'commit'
   | 'resetHard'
   | 'alignRemote'
+  | 'addDependencies'
+  | 'removeDependencies'
 
 export interface BranchActionRepo {
   id: RepoState['id']

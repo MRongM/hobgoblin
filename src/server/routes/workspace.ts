@@ -50,7 +50,14 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
   const branchWorkspaceGitActionWriteService = createBranchWorkspaceGitActionWriteService({ isOperationActive })
   const branchWorkspaceDependencyWriteService = createBranchWorkspaceDependencyWriteService({ isOperationActive })
   const branchWorkspaceCloneWriteService = createBranchWorkspaceCloneWriteService({ isOperationActive })
-  const branchWorkspaceFolderWriteService = createBranchWorkspaceFolderWriteService({ isOperationActive })
+  const branchWorkspaceFolderWriteService = createBranchWorkspaceFolderWriteService({
+    isOperationActive,
+    ...(options.terminalHost?.relocatePaths
+      ? {
+          relocateTerminalPaths: async (input) => await options.terminalHost!.relocatePaths!(input),
+        }
+      : {}),
+  })
   function isOperationActive(rootId: string): boolean {
     return (
       branchWorkspaceWriteService.isActive(rootId) ||
@@ -78,6 +85,25 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
       return c.json({ ok: false, message: 'error.invalid-arguments' })
     }
     return c.json(await branchWorkspaceFolderWriteService.unregister(body.rootId, body.branchWorkspaceId))
+  })
+
+  app.post('/branch-workspaces/rename', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (
+      !isNonEmptyString(body?.rootId) ||
+      !isNonEmptyString(body?.branchWorkspaceId) ||
+      !isNonEmptyString(body?.directoryName)
+    ) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(
+      await branchWorkspaceFolderWriteService.rename(
+        body.rootId,
+        body.branchWorkspaceId,
+        body.directoryName,
+        c.req.raw.signal,
+      ),
+    )
   })
 
   app.post('/branch-workspaces/clone/plan', async (c) => {
