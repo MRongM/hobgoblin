@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
   isBranchWorkspaceDirectoryName,
+  isSafeBranchWorkspaceFolderName,
   type BranchWorkspaceAuxiliaryCandidate,
   type BranchWorkspacePathInspection,
   type BranchWorkspacePathKind,
@@ -29,13 +30,24 @@ export interface RemoteBranchWorkspaceDirectory {
   directoryName: string
   path: string
   branch: string
-  members: { repositoryName: string; repositoryPath: string; worktreePath: string; branch: string }[]
+  members: {
+    repositoryName: string
+    repositoryPath: string
+    worktreePath: string
+    branch: string
+    kind?: 'repository' | 'worktree'
+    head?: string
+    memberId?: string
+  }[]
 }
 
 export async function discoverRemoteBranchWorkspaceDirectories(
   target: RemoteRepoTarget,
   rootPath: string,
-  options: RemoteBranchWorkspaceOptions & { directoryNames?: readonly string[] } = {},
+  options: RemoteBranchWorkspaceOptions & {
+    directoryNames?: readonly string[]
+    registeredDirectoryNames?: readonly string[]
+  } = {},
 ): Promise<RemoteBranchWorkspaceDirectory[]> {
   const payload = parsePayload(
     await executeRemoteBranchWorkspaceCommand(
@@ -44,6 +56,7 @@ export async function discoverRemoteBranchWorkspaceDirectories(
         type: 'discoverBranchWorkspaceDirectories',
         rootPath,
         ...(options.directoryNames ? { directoryNames: options.directoryNames } : {}),
+        ...(options.registeredDirectoryNames ? { registeredDirectoryNames: options.registeredDirectoryNames } : {}),
       },
       options,
     ),
@@ -54,9 +67,12 @@ export async function discoverRemoteBranchWorkspaceDirectories(
     if (
       !directory ||
       !isSafeText(directory.directoryName) ||
-      !isBranchWorkspaceDirectoryName(directory.directoryName) ||
+      !isSafeBranchWorkspaceFolderName(directory.directoryName) ||
+      (!options.directoryNames?.includes(directory.directoryName) &&
+        !options.registeredDirectoryNames?.includes(directory.directoryName) &&
+        !isBranchWorkspaceDirectoryName(directory.directoryName)) ||
       directory.path !== path.posix.join(rootPath, directory.directoryName) ||
-      !isSafeText(directory.branch) ||
+      typeof directory.branch !== 'string' ||
       !Array.isArray(directory.members) ||
       directory.members.length === 0
     )
@@ -70,7 +86,7 @@ export async function discoverRemoteBranchWorkspaceDirectories(
         member.worktreePath !== path.posix.join(directoryPath, member.repositoryName) ||
         !isSafeText(member.repositoryPath) ||
         !path.posix.isAbsolute(member.repositoryPath) ||
-        !isSafeText(member.branch)
+        typeof member.branch !== 'string'
       )
         throw invalidResponse()
       return {
@@ -78,6 +94,11 @@ export async function discoverRemoteBranchWorkspaceDirectories(
         repositoryPath: member.repositoryPath,
         worktreePath: member.worktreePath as string,
         branch: member.branch,
+        ...(member.kind === 'repository' || member.kind === 'worktree'
+          ? { kind: member.kind as 'repository' | 'worktree' }
+          : {}),
+        ...(typeof member.memberId === 'string' && member.memberId ? { memberId: member.memberId } : {}),
+        ...(typeof member.head === 'string' && member.head ? { head: member.head } : {}),
       }
     })
     return { directoryName: directory.directoryName, path: directoryPath, branch: directory.branch, members }

@@ -193,12 +193,10 @@ describe('server terminal sessions', () => {
       attachmentId: 'attachment_viewer',
     })
 
-    expect(markServerTelegramTerminalInputTarget('client_1', 'attachment_a', { sessionId: first.sessionId })).toBe(
-      true,
+    expect(markServerTelegramTerminalInputTarget('client_1', 'attachment_a', { sessionId: first.sessionId })).toBe(true)
+    expect(markServerTelegramTerminalInputTarget('client_1', 'attachment_viewer', { sessionId: first.sessionId })).toBe(
+      false,
     )
-    expect(
-      markServerTelegramTerminalInputTarget('client_1', 'attachment_viewer', { sessionId: first.sessionId }),
-    ).toBe(false)
     await expect(submitServerTelegramTerminalInput('first command')).resolves.toEqual({
       ok: true,
       terminal: { index: 1 },
@@ -479,6 +477,30 @@ describe('server terminal sessions', () => {
       expect.any(Array),
       expect.objectContaining({ cwd: '/workspace/goblin-feature' }),
     )
+  })
+
+  test('creates a folder workspace terminal with an empty compatibility branch', async () => {
+    branchWorkspaceSourceMocks.readBranchWorkspaceManifests.mockResolvedValue({
+      kind: 'ready',
+      manifests: [
+        {
+          ...branchWorkspaceManifest('/workspace', '/workspace/feature set'),
+          branch: '',
+          directoryName: 'feature set',
+        },
+      ],
+    })
+    const result = await createServerTerminal('client_1', {
+      repoRoot: '/workspace',
+      branch: '',
+      worktreePath: '/workspace/feature set',
+      targetKind: 'branch-workspace',
+      branchWorkspaceId: 'branch-1',
+      kind: 'primary',
+      attachmentId: 'attachment_1',
+    })
+    expect(result).toMatchObject({ ok: true, key: '/workspace\0/workspace/feature set\0terminal-1' })
+    expect(getWorktrees).not.toHaveBeenCalled()
   })
 
   test('creates an authorized SSH branch workspace terminal with the persisted folder cwd', async () => {

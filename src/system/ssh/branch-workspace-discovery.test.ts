@@ -17,7 +17,7 @@ const TARGET = normalizeRemoteTarget({
 
 describe('remote branch workspace discovery', () => {
   test.skipIf(process.platform === 'win32')(
-    'discovers exact registered members in one command, excluding links and detached worktrees',
+    'discovers exact attached and detached members in one command while excluding links',
     async () => {
       const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'workspace-discovery-')))
       try {
@@ -54,22 +54,29 @@ describe('remote branch workspace discovery', () => {
         })
         const discovered = await remote.discoverRemoteBranchWorkspaceDirectories(TARGET, root, { run })
         expect(run).toHaveBeenCalledTimes(1)
-        expect(discovered.map((item) => item.directoryName)).toEqual(['goblin-two', 'hob-one'])
-        expect(discovered[1]?.members).toEqual([
+        expect(discovered.map((item) => item.directoryName)).toEqual(['goblin-two', 'hob-detached', 'hob-one'])
+        expect(discovered[2]?.members).toEqual([
           {
             repositoryName: 'api',
             repositoryPath: primary,
             worktreePath: path.join(root, 'hob-one', 'api'),
             branch: 'feature/one',
+            kind: 'worktree',
+            head: expect.stringMatching(/^[a-f0-9]+$/),
           },
         ])
+        expect(discovered[1]?.members[0]).toMatchObject({
+          branch: '',
+          kind: 'worktree',
+          head: expect.stringMatching(/^[a-f0-9]+$/),
+        })
         run.mockClear()
         const scoped = await remote.discoverRemoteBranchWorkspaceDirectories(TARGET, root, {
           run,
           directoryNames: ['hob-one'],
         })
         expect(run).toHaveBeenCalledTimes(1)
-        expect(scoped).toEqual([discovered[1]])
+        expect(scoped).toEqual([discovered[2]])
       } finally {
         await rm(temporary, { recursive: true, force: true })
       }

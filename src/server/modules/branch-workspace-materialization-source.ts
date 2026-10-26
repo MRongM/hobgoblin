@@ -5,7 +5,7 @@ import path from 'node:path'
 import { workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import {
-  isBranchWorkspaceDirectoryName,
+  isSafeBranchWorkspaceFolderName,
   isManagedBranchWorkspaceEntryName,
   type BranchWorkspaceAuxiliaryCandidate,
   type BranchWorkspacePathInspection,
@@ -135,7 +135,7 @@ export async function createBranchWorkspaceDirectory(
   await assertSafeTargetParents(rootPath, targetPath)
   if (
     path.dirname(path.resolve(targetPath)) !== path.resolve(rootPath) ||
-    !isBranchWorkspaceDirectoryName(path.basename(targetPath))
+    !isSafeBranchWorkspaceFolderName(path.basename(targetPath))
   ) {
     throw new Error('workspace.branch-workspace.invalid-path')
   }

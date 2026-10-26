@@ -1,3 +1,4 @@
+import { inspectBranchWorkspaceRepository } from '#/server/modules/branch-workspace-repository-source.ts'
 import { isBranchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
@@ -7,7 +8,11 @@ import {
   normalizedStatusEntries,
   repositoryPlanFingerprint,
 } from '#/server/modules/repository-status-plan.ts'
-import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
+import {
+  branchWorkspaceMemberRepositoryId,
+  workspaceRepositoryId,
+  workspaceRootId,
+} from '#/server/modules/workspace-paths.ts'
 import {
   getRepositoryPatch,
   getRepositoryRemoteBranchInfo,
@@ -79,18 +84,47 @@ export async function buildBranchWorkspaceGitActionPlan(
         : undefined
     const manifest = stored && {
       ...stored,
-      repositories: stored.repositories.filter(
-        (member) => member.progress === 'complete' && (!repositoryNames || repositoryNames.has(member.repositoryName)),
-      ),
+      repositories: stored.repositories
+        .filter(
+          (member) =>
+            member.progress === 'complete' && (!repositoryNames || repositoryNames.has(member.repositoryName)),
+        )
+        .map((member) => ({ ...member })),
     }
     const unavailable = validateManifest(manifest)
     if (unavailable) return unavailable
     if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
+    // New members retain creation intent in the manifest; Git actions always use the exact directory's current branch.
+    for (const member of manifest.repositories) {
+      if (!member.kind && !member.source && member.currentBranch === undefined) continue
+      const repoId = branchWorkspaceMemberRepositoryId(normalizedRootId, member)
+      if (!repoId) continue
+      if (member.kind === 'repository' && member.memberId) {
+        const ownership = await inspectBranchWorkspaceRepository(normalizedRootId, member.worktreePath, signal).catch(
+          () => null,
+        )
+        if (ownership?.memberId !== member.memberId)
+          return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+      }
+      const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+        includeWorktreeStatus: false,
+        includeRemote: false,
+      })
+      const actual = snapshot?.branches.find(
+        (branch) =>
+          branch.worktree &&
+          normalizeRepositoryPath(repoId, branch.worktree.path) ===
+            normalizeRepositoryPath(repoId, member.worktreePath),
+      )
+      member.targetBranch = actual?.name ?? ''
+    }
     dependencies = {
       ...dependencies,
       repositoryIds: new Map(
         manifest.repositories.flatMap((member) =>
-          member.repositoryId ? [[member.repositoryName, member.repositoryId]] : [],
+          branchWorkspaceMemberRepositoryId(normalizedRootId, member)
+            ? [[member.repositoryName, branchWorkspaceMemberRepositoryId(normalizedRootId, member)!]]
+            : [],
         ),
       ),
     }
@@ -677,7 +711,7 @@ function unreadableBatchSetUpstreamMember(
   member: BranchWorkspaceManifest['repositories'][number],
   message: string,
 ): BranchWorkspaceBatchSetUpstreamMemberPlan {
-  const repoId = member.repositoryId ?? workspaceRepositoryId(rootId, member.repositoryName) ?? member.repositoryName
+  const repoId = branchWorkspaceMemberRepositoryId(rootId, member) ?? member.repositoryName
   const identity = {
     repositoryName: member.repositoryName,
     repoId,

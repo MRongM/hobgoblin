@@ -2396,3 +2396,168 @@ function terminal(sessionId: string, scope: string, targetPath: string) {
     message: null,
   }
 }
+
+describe('folder and mixed member plans', () => {
+  test('uses the exact folder name and independent member targets', async () => {
+    const deps = dependencies({
+      [path.join(ROOT, 'api')]: snapshot(branch('main')),
+      [path.join(ROOT, 'web')]: snapshot(branch('main')),
+    })
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        directoryName: 'feature set',
+        repositories: [
+          { repositoryName: 'api', targetBranch: 'feat/api', creationBase: { kind: 'localBranch', branch: 'main' } },
+          { repositoryName: 'web', targetBranch: 'fix/web', creationBase: { kind: 'localBranch', branch: 'main' } },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        directoryName: 'feature set',
+        path: path.join(ROOT, 'feature set'),
+        repositories: [{ targetBranch: 'feat/api' }, { targetBranch: 'fix/web' }],
+      },
+    })
+  })
+  test('a complete clone uses its own target repository identity and ignores source branch occupancy', async () => {
+    const source = path.join(ROOT, 'api')
+    const deps = dependencies({ [source]: snapshot(branch('main', source)) })
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        directoryName: 'folder',
+        repositories: [
+          {
+            repositoryName: 'copy',
+            kind: 'repository',
+            source: { kind: 'repository', repositoryId: source },
+            targetBranch: 'main',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            kind: 'repository',
+            repoId: path.join(ROOT, 'folder', 'copy'),
+            source: { kind: 'repository', repositoryId: source },
+            satisfied: false,
+          },
+        ],
+      },
+    })
+  })
+})
+
+describe('per-member creation modes', () => {
+  test('plans a detached member without requiring a local base branch or synthesizing a branch name', async () => {
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('topic')) })
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        directoryName: 'folder',
+        repositories: [{ repositoryName: 'api', mode: { kind: 'detached', ref: 'abcdef0' } }],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      plan: { repositories: [{ targetBranch: '', mode: { kind: 'detached', ref: 'abcdef0' } }] },
+    })
+  })
+  test('plans remote-tracking mode using the member remote base', async () => {
+    const deps = dependencies({ [path.join(ROOT, 'api')]: snapshot(branch('topic')) })
+    deps.getRemoteBranches.mockResolvedValue(['origin/feature'])
+    const result = await buildBranchWorkspacePlan(
+      ROOT,
+      {
+        operation: 'create',
+        directoryName: 'folder',
+        repositories: [
+          {
+            repositoryName: 'api',
+            mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature', localBranch: 'feature' },
+          },
+        ],
+        auxiliaryEntries: [],
+      },
+      deps,
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      plan: {
+        repositories: [
+          {
+            targetBranch: 'feature',
+            mode: { kind: 'trackRemoteBranch', remoteRef: 'origin/feature', localBranch: 'feature' },
+          },
+        ],
+      },
+    })
+  })
+  test('a completed switched worktree is satisfied during repair without moving its original branch', async () => {
+    const current = existingManifest()
+    const deps = repairDependencies(current)
+    deps.getSnapshot.mockResolvedValue(
+      snapshot(
+        branch('main'),
+        branch('switched', current.repositories[0]!.worktreePath),
+        branch(BRANCH, path.join(ROOT, 'other')),
+      ),
+    )
+    const result = await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)
+    expect(result).toEqual({ ok: false, message: 'workspace.branch-workspace.nothing-to-repair' })
+  })
+})
+
+test('a missing complete member repair previews clone materialization', async () => {
+  const current = existingManifest()
+  Object.assign(current.repositories[0]!, {
+    kind: 'repository',
+    repositoryId: current.repositories[0]!.worktreePath,
+    source: { kind: 'repository', repositoryId: path.join(ROOT, 'api') },
+    progress: 'failed',
+  })
+  const deps = repairDependencies(current)
+  deps.inspectPath.mockImplementation(async (_rootId, candidatePath) => ({
+    ...missing(candidatePath),
+    ...(candidatePath === current.path ? { exists: true, kind: 'directory' as const } : {}),
+  }))
+  expect(
+    await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps),
+  ).toMatchObject({ ok: true, plan: { steps: [{ kind: 'clone-repository' }] } })
+})
+
+test('an existing detached linked member is satisfied during repair', async () => {
+  const current = existingManifest()
+  Object.assign(current.repositories[0]!, {
+    kind: 'worktree',
+    targetBranch: '',
+    mode: { kind: 'detached', ref: 'abcdef0' },
+  })
+  const deps = repairDependencies(current)
+  deps.getSnapshot.mockResolvedValue(snapshot(branch('main')))
+  deps.getWorktrees.mockResolvedValue([
+    worktree(path.join(ROOT, 'api'), { isPrimary: true }),
+    worktree(current.repositories[0]!.worktreePath, { head: 'abcdef0' }),
+  ])
+  expect(await buildBranchWorkspacePlan(ROOT, { operation: 'repair', branchWorkspaceId: current.id }, deps)).toEqual({
+    ok: false,
+    message: 'workspace.branch-workspace.nothing-to-repair',
+  })
+})

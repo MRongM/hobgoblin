@@ -51,7 +51,22 @@ export type RemoteCommandKind =
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
   | { type: 'testWorkspaceGitDirectory'; path: string }
   | { type: 'testPathExists'; path: string }
-  | { type: 'discoverBranchWorkspaceDirectories'; rootPath: string; directoryNames?: readonly string[] }
+  | {
+      type: 'discoverBranchWorkspaceDirectories'
+      rootPath: string
+      directoryNames?: readonly string[]
+      registeredDirectoryNames?: readonly string[]
+    }
+  | { type: 'inspectBranchWorkspaceRepository'; rootPath: string; targetPath: string }
+  | {
+      type: 'materializeBranchWorkspaceRepository'
+      rootPath: string
+      source: string
+      sourceIsRepository: boolean
+      targetPath: string
+      memberId?: string
+      mode?: CreateWorktreeInput['mode']
+    }
   | { type: 'listBranchWorkspaceCandidates'; rootPath: string; excludedNames: string[] }
   | { type: 'inspectBranchWorkspacePath'; rootPath: string; candidatePath: string }
   | { type: 'createBranchWorkspaceDirectory'; rootPath: string; targetPath: string }
@@ -435,6 +450,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'fi',
       ].join('\n')
     }
+    case 'inspectBranchWorkspaceRepository':
+    case 'materializeBranchWorkspaceRepository':
     case 'discoverBranchWorkspaceDirectories':
     case 'listBranchWorkspaceCandidates':
     case 'inspectBranchWorkspacePath':
@@ -810,6 +827,8 @@ type RemoteBranchWorkspaceCommand = Extract<
   RemoteCommandKind,
   {
     type:
+      | 'inspectBranchWorkspaceRepository'
+      | 'materializeBranchWorkspaceRepository'
       | 'discoverBranchWorkspaceDirectories'
       | 'listBranchWorkspaceCandidates'
       | 'inspectBranchWorkspacePath'
@@ -824,9 +843,14 @@ type RemoteBranchWorkspaceCommand = Extract<
 
 function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): string {
   switch (command.type) {
+    case 'inspectBranchWorkspaceRepository':
+      return remoteBranchWorkspaceRepositoryInspectionScript(command)
+    case 'materializeBranchWorkspaceRepository':
+      return remoteBranchWorkspaceRepositoryScript(command)
     case 'discoverBranchWorkspaceDirectories':
       return remoteBranchWorkspacePython(command.rootPath, [
         `selected_names = json.loads(${pythonString(JSON.stringify(command.directoryNames ?? null))})`,
+        `registered_names = json.loads(${pythonString(JSON.stringify(command.registeredDirectoryNames ?? []))})`,
         `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
         'def directories(parent):',
         '    try:',
@@ -852,7 +876,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         'found = []',
         'for name in directories(root_path):',
         '    if selected_names is not None and name not in selected_names: continue',
-        '    if not name.startswith(managed_prefixes) or name.strip() != name or "\\\\" in name: continue',
+        '    if (selected_names is None and name not in registered_names and not name.startswith(managed_prefixes)) or name.strip() != name or "\\\\" in name: continue',
         '    workspace_path = os.path.join(root_path, name)',
         '    members = []',
         '    for repository_name in directories(workspace_path):',
@@ -863,8 +887,9 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         '            if "bare" in record or "prunable" in record: continue',
         '            if os.path.normpath(record.get("worktree", "")) != member_path: continue',
         '            branch = record.get("branch", "")',
-        '            if not branch.startswith("refs/heads/"): continue',
-        '            members.append({"repositoryName": repository_name, "repositoryPath": records[0].get("worktree", member_path), "worktreePath": member_path, "branch": branch[len("refs/heads/"):]})',
+        '            branch = branch[len("refs/heads/"):] if branch.startswith("refs/heads/") else ""',
+        '            member_id = subprocess.run(["git", "-C", member_path, "config", "--get", "hobgoblin.subworkspaceMemberId"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode("utf-8", "surrogateescape").strip()',
+        '            members.append({"memberId": member_id, "repositoryName": repository_name, "repositoryPath": records[0].get("worktree", member_path), "worktreePath": member_path, "branch": branch, "kind": "repository" if records[0].get("worktree") == member_path else "worktree", "head": record.get("HEAD", "")})',
         '            break',
         '    if members:',
         '        found.append({"directoryName": name, "path": workspace_path, "branch": members[0]["branch"], "members": members})',
@@ -935,7 +960,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
       return remoteBranchWorkspacePython(command.rootPath, [
         `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
         `managed_prefixes = tuple(json.loads(${pythonString(JSON.stringify(BRANCH_WORKSPACE_DIRECTORY_PREFIXES))}))`,
-        'if os.path.dirname(target_path) != root_path or not os.path.basename(target_path).startswith(managed_prefixes):',
+        'if os.path.dirname(target_path) != root_path:',
         '    fail("workspace.branch-workspace.invalid-path")',
         'ensure_safe_parents(target_path)',
         'os.mkdir(target_path)',
@@ -1036,6 +1061,117 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function remoteBranchWorkspaceRepositoryInspectionScript(
+  command: Extract<RemoteCommandKind, { type: 'inspectBranchWorkspaceRepository' }>,
+): string {
+  return remoteBranchWorkspacePython(command.rootPath, [
+    `target = checked_path(${pythonString(command.targetPath)}, False)`,
+    'ensure_safe_parents(target)',
+    'if os.path.dirname(os.path.dirname(target)) != root_path or os.path.islink(target): fail("workspace.branch-workspace.invalid-path")',
+    'git_dir = os.path.join(target, ".git")',
+    'if not os.path.isdir(git_dir) or os.path.islink(git_dir): fail("workspace.branch-workspace.repository-unavailable")',
+    'def git(*args): return subprocess.check_output(["git", "-C", target] + list(args), stderr=subprocess.PIPE).rstrip(b"\\n")',
+    'if os.path.normpath(os.path.join(target, os.fsdecode(git("rev-parse", "--git-common-dir")))) != git_dir: fail("workspace.branch-workspace.repository-unavailable")',
+    'for field in git("worktree", "list", "--porcelain", "-z").split(b"\\0"):',
+    '    if field.startswith(b"worktree ") and os.path.normpath(os.fsdecode(field[9:])) != target: fail("workspace.branch-workspace.worktree-elsewhere")',
+    'status = git("status", "--porcelain=v1", "-z")',
+    'digest = hashlib.sha256()',
+    'for args in [("status", "--porcelain=v1", "-z"), ("diff", "--cached", "--binary"), ("diff", "--binary"), ("show-ref",), ("rev-parse", "HEAD")]: digest.update(git(*args))',
+    'for name in git("ls-files", "--others", "--exclude-standard", "-z").split(b"\\0"):',
+    '    if not name: continue',
+    '    file_path = os.path.join(target, os.fsdecode(name))',
+    '    digest.update(name)',
+    '    if os.path.islink(file_path): digest.update(os.fsencode(os.readlink(file_path)))',
+    '    elif os.path.isfile(file_path):',
+    '        with open(file_path, "rb") as handle:',
+    '            for chunk in iter(lambda: handle.read(1024 * 1024), b""): digest.update(chunk)',
+    'count = int(git("rev-list", "--count", "--all", "--not", "--remotes"))',
+    'try: member_id = os.fsdecode(git("config", "--get", "hobgoblin.subworkspaceMemberId"))',
+    'except subprocess.CalledProcessError: member_id = None',
+    'print(json.dumps({"ok": True, "dirty": bool(status), "memberId": member_id, "localOnlyCommits": count, "repositoryFingerprint": digest.hexdigest()}))',
+  ])
+}
+
+function remoteBranchWorkspaceRepositoryScript(
+  command: Extract<RemoteCommandKind, { type: 'materializeBranchWorkspaceRepository' }>,
+): string {
+  return remoteBranchWorkspacePython(command.rootPath, [
+    'import tempfile',
+    `source = ${pythonString(command.source)}`,
+    `source_is_repository = ${command.sourceIsRepository ? 'True' : 'False'}`,
+    `mode = json.loads(${pythonString(JSON.stringify(command.mode ?? null))})`,
+    `member_id = json.loads(${pythonString(JSON.stringify(command.memberId ?? null))})`,
+    `target = checked_path(${pythonString(command.targetPath)}, False)`,
+    'ensure_safe_parents(target)',
+    'if os.path.dirname(os.path.dirname(target)) != root_path: fail("workspace.branch-workspace.invalid-path")',
+    'if os.path.lexists(target): fail("workspace.branch-workspace.target-exists")',
+    'staging = tempfile.mkdtemp(prefix=".hob-clone-", dir=os.path.dirname(target))',
+    'checkout = os.path.join(staging, "repository")',
+    'def git(cwd, *args):',
+    '    return subprocess.check_output(["git", "-C", cwd] + list(args), stderr=subprocess.PIPE).decode("utf-8", "surrogateescape").rstrip("\\n")',
+    'try:',
+    '    remote_config = []',
+    '    if source_is_repository:',
+    '        try: remote_config = git(source, "config", "--get-regexp", "^(remote\\\\..*\\\\.(url|pushurl|fetch)|branch\\\\..*\\\\.(remote|merge))$").splitlines()',
+    '        except subprocess.CalledProcessError as error:',
+    '            if error.returncode != 1: raise',
+    '    git(os.path.dirname(target), "clone", "--no-local", "--no-hardlinks", "--no-checkout", "--", source, checkout)',
+    '    if source_is_repository:',
+    '        for entry in git(checkout, "for-each-ref", "--format=%(refname)%00%(objectname)", "refs/remotes/origin/").splitlines():',
+    '            ref, oid = entry.split("\\0")',
+    '            if ref != "refs/remotes/origin/HEAD": git(checkout, "update-ref", "refs/heads/" + ref[len("refs/remotes/origin/"):], oid)',
+    '    if source_is_repository:',
+    '        git(checkout, "remote", "remove", "origin")',
+    '        for entry in remote_config:',
+    '            key, value = entry.split(" ", 1)',
+    '            git(checkout, "config", "--add", key, value)',
+    '        git(checkout, "fetch", "--no-tags", "--no-write-fetch-head", "--", source, "+refs/remotes/*:refs/remotes/*")',
+    '    if mode is None: git(checkout, "checkout", "--force")',
+    '    elif mode["kind"] == "existingBranch": git(checkout, "checkout", mode["branch"])',
+    '    elif mode["kind"] == "detached": git(checkout, "checkout", "--detach", mode["ref"])',
+    '    elif mode["kind"] == "trackRemoteBranch": git(checkout, "checkout", "-b", mode["localBranch"], "--track", mode["remoteRef"])',
+    '    else:',
+    '        base = mode["creationBase"]',
+    '        git(checkout, "checkout", "-b", mode["newBranch"], base.get("branch", base.get("remoteRef")))',
+    '    os.mkdir(target)',
+    '    claim = os.lstat(target)',
+    '    def exclusive_copy(source_file, target_file):',
+    '        with open(source_file, "rb") as original, open(target_file, "xb") as output: shutil.copyfileobj(original, output)',
+    '        shutil.copystat(source_file, target_file, follow_symlinks=False)',
+    '        return target_file',
+    '    def unchanged_subset(source_dir, target_dir):',
+    '        try:',
+    '            for name in os.listdir(target_dir):',
+    '                a, b = os.path.join(source_dir, name), os.path.join(target_dir, name)',
+    '                if os.path.islink(a) and os.path.islink(b):',
+    '                    if os.readlink(a) != os.readlink(b): return False',
+    '                elif os.path.isdir(a) and os.path.isdir(b) and not os.path.islink(b):',
+    '                    if not unchanged_subset(a, b): return False',
+    '                elif os.path.isfile(a) and os.path.isfile(b) and not os.path.islink(b):',
+    '                    def digest(file_path):',
+    '                        result = hashlib.sha256()',
+    '                        with open(file_path, "rb") as stream:',
+    '                            for chunk in iter(lambda: stream.read(1024 * 1024), b""): result.update(chunk)',
+    '                        return result.digest()',
+    '                    if digest(a) != digest(b): return False',
+    '                else: return False',
+    '            return True',
+    '        except OSError: return False',
+    '    try:',
+    '        shutil.copytree(checkout, target, symlinks=True, dirs_exist_ok=True, copy_function=exclusive_copy)',
+    '    except Exception:',
+    '        current = os.lstat(target)',
+    '        if current.st_ino == claim.st_ino and current.st_dev == claim.st_dev and unchanged_subset(checkout, target): shutil.rmtree(target)',
+    '        raise',
+    '    if member_id: git(target, "config", "hobgoblin.subworkspaceMemberId", member_id)',
+    '    print(json.dumps({"ok": True, "message": "created"}))',
+    'except (OSError, subprocess.CalledProcessError) as error:',
+    '    print(json.dumps({"ok": False, "message": "workspace.branch-workspace.remote-operation-failed"}))',
+    'finally:',
+    '    shutil.rmtree(staging)',
+  ])
 }
 
 function remoteBranchWorkspacePython(rootPath: string, body: string[]): string {

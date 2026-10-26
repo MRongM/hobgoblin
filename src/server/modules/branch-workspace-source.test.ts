@@ -59,7 +59,7 @@ afterEach(async () => {
 })
 
 describe('branch workspace source', () => {
-  test('keeps actual member branches independently of the workspace label without persisting discovery metadata', async () => {
+  test('keeps actual member branches independently of the workspace label while persisting authoritative repository identity', async () => {
     const { dataFile, root } = await createFixture()
     const current = manifest(root, 'feature/label')
     current.repositories[0]!.targetBranch = 'feature/actual'
@@ -70,7 +70,9 @@ describe('branch workspace source', () => {
       kind: 'ready',
       manifests: [{ branch: 'feature/label', repositories: [{ targetBranch: 'feature/actual' }] }],
     })
-    expect(await readFile(dataFile, 'utf8')).not.toContain('repositoryId')
+    expect(
+      JSON.parse(await readFile(dataFile, 'utf8')).workspaces[0].branchWorkspaces[0].repositories[0].repositoryId,
+    ).toBe(current.repositories[0]!.repositoryId)
   })
   test('reports an unregistered workspace as missing', async () => {
     const { dataFile, root } = await createFixture()
@@ -95,7 +97,7 @@ describe('branch workspace source', () => {
       manifests,
     })
     await expect(JSON.parse(await readFile(dataFile, 'utf8'))).toEqual({
-      version: 1,
+      version: 2,
       workspaces: [{ rootId: path.resolve(root), branchWorkspaces: manifests }],
     })
   })
@@ -358,7 +360,7 @@ describe('branch workspace source', () => {
 
   test.each([
     ['invalid JSON', '{'],
-    ['unsupported version', JSON.stringify({ version: 2, workspaces: [] })],
+    ['unsupported version', JSON.stringify({ version: 999, workspaces: [] })],
     [
       'duplicate workspace roots',
       JSON.stringify({
@@ -444,7 +446,7 @@ describe('branch workspace source', () => {
       outcome: 'reset',
       removedRecords: 0,
     })
-    await expect(JSON.parse(await readFile(dataFile, 'utf8'))).toEqual({ version: 1, workspaces: [] })
+    await expect(JSON.parse(await readFile(dataFile, 'utf8'))).toEqual({ version: 2, workspaces: [] })
     await expect(readBranchWorkspaceManifests(root, { dataFile })).resolves.toEqual({ kind: 'missing' })
   })
 
@@ -489,3 +491,34 @@ function auxiliaryEntry(
     progress,
   }
 }
+
+describe('registry v2 compatibility', () => {
+  test('reads v1 without writes and backs it up on first v2 write', async () => {
+    const { dataFile, root } = await createFixture()
+    const legacy = manifest(root, 'feature/a')
+    const raw = JSON.stringify({ version: 1, workspaces: [{ rootId: root, branchWorkspaces: [legacy] }] })
+    await mkdir(path.dirname(dataFile), { recursive: true })
+    await writeFile(dataFile, raw)
+    expect(await readBranchWorkspaceManifests(root, { dataFile })).toEqual({ kind: 'ready', manifests: [legacy] })
+    expect(await readFile(dataFile, 'utf8')).toBe(raw)
+    await expect(readFile(`${dataFile}.v1.bak`, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    await updateBranchWorkspaceManifests(root, (items) => items, { dataFile })
+    expect(JSON.parse(await readFile(dataFile, 'utf8')).version).toBe(2)
+    expect(await readFile(`${dataFile}.v1.bak`, 'utf8')).toBe(raw)
+  })
+  test('persists folder and complete member identities without rewriting creation intent', async () => {
+    const { dataFile, root } = await createFixture()
+    const item = manifest(root, 'feature/a')
+    item.directoryName = 'feature set'
+    item.path = path.join(root, item.directoryName)
+    Object.assign(item.repositories[0]!, {
+      kind: 'repository',
+      memberId: 'member-a',
+      repositoryId: path.join(item.path, 'api'),
+      source: { kind: 'repository', repositoryId: path.join(root, 'source') },
+      worktreePath: path.join(item.path, 'api'),
+    })
+    await replaceBranchWorkspaceManifests(root, [item], { dataFile })
+    expect(await readBranchWorkspaceManifests(root, { dataFile })).toEqual({ kind: 'ready', manifests: [item] })
+  })
+})

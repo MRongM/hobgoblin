@@ -1,4 +1,8 @@
 import path from 'node:path'
+import {
+  inspectBranchWorkspaceRepository,
+  materializeBranchWorkspaceRepository,
+} from '#/server/modules/branch-workspace-repository-source.ts'
 import pLimit from 'p-limit'
 import {
   copyBranchWorkspaceEntry,
@@ -57,6 +61,8 @@ export interface BranchWorkspaceWriteDependencies {
   readSnapshot?: typeof readBranchWorkspaceSnapshot
   updateManifests?: typeof updateBranchWorkspaceManifests
   createDirectory?: typeof createBranchWorkspaceDirectory
+  createRepository?: typeof materializeBranchWorkspaceRepository
+  inspectRepository?: typeof inspectBranchWorkspaceRepository
   createWorktree?: typeof createRepositoryWorktree
   cleanupWorktree?: typeof cleanupRepositoryWorktree
   materializeSymlink?: typeof materializeBranchWorkspaceSymlink
@@ -92,6 +98,8 @@ export function createBranchWorkspaceWriteService(
   const retryUpdateManifests = (rootId: string, mutate: Parameters<typeof updateBranchWorkspaceManifests>[1]) =>
     withBranchWorkspaceRetry(async () => await updateManifests(rootId, mutate))
   const createDirectory = dependencies.createDirectory ?? createBranchWorkspaceDirectory
+  const createRepository = dependencies.createRepository ?? materializeBranchWorkspaceRepository
+  const inspectRepository = dependencies.inspectRepository ?? inspectBranchWorkspaceRepository
   const rawCreateWorktree = dependencies.createWorktree ?? createRepositoryWorktree
   const createWorktree = (...args: Parameters<typeof createRepositoryWorktree>) =>
     withBranchWorkspaceRetry(async () => await rawCreateWorktree(...args), {
@@ -266,7 +274,7 @@ export function createBranchWorkspaceWriteService(
           pendingByRoot.delete(rootId)
 
           for (const repository of plan.repositories) {
-            if (!repository.worktreePresent) continue
+            if (repository.kind === 'repository' || !repository.worktreePresent) continue
             const cleaned = await cleanupWorktree(
               repository.repoId,
               repository.worktreePath,
@@ -347,6 +355,8 @@ export function createBranchWorkspaceWriteService(
             let result = { ok: true, message: 'satisfied' }
             if (!repository.satisfied && repository.action === 'remove-entry') {
               try {
+                if (repository.kind === 'repository')
+                  await revalidateRepositoryDeletion(rootId, repository, inspectRepository, controller.signal)
                 await removeEntry(rootId, repository.worktreePath, controller.signal)
                 result = { ok: true, message: 'removed' }
               } catch (error) {
@@ -415,7 +425,15 @@ export function createBranchWorkspaceWriteService(
             }
             if (member.progress !== 'removed') {
               let result = { ok: true, message: 'satisfied' }
-              if (repository.worktreePresent) {
+              if (repository.kind === 'repository' && repository.action === 'remove-entry') {
+                try {
+                  await revalidateRepositoryDeletion(rootId, repository, inspectRepository, controller.signal)
+                  await removeEntry(rootId, repository.worktreePath, controller.signal)
+                  result = { ok: true, message: 'removed' }
+                } catch (error) {
+                  result = { ok: false, message: operationMessage(error) }
+                }
+              } else if (repository.worktreePresent) {
                 try {
                   result = await removeWorktree(
                     repository.repoId,
@@ -603,6 +621,19 @@ export function createBranchWorkspaceWriteService(
                       input.sourceToken,
                     )
                     if (!cleaned.ok) result = cleaned
+                  }
+                  if (!result && repository.kind === 'repository') {
+                    if (!repository.source) throw new Error('workspace.branch-workspace.repository-unavailable')
+                    result = await createRepository(
+                      rootId,
+                      {
+                        memberId: repository.memberId,
+                        source: repository.source,
+                        worktreePath: repository.worktreePath,
+                        ...(repository.checkoutDefaultBranch ? {} : { mode: repository.mode }),
+                      },
+                      controller.signal,
+                    )
                   }
                   if (!result) {
                     result = await createWorktree(
@@ -889,4 +920,18 @@ function childPath(rootId: string, parentPath: string, name: string): string {
 function operationMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   return message || 'workspace.branch-workspace.operation-failed'
+}
+
+async function revalidateRepositoryDeletion(
+  rootId: string,
+  repository: BranchWorkspacePlan['repositories'][number],
+  inspect: typeof inspectBranchWorkspaceRepository,
+  signal: AbortSignal,
+): Promise<void> {
+  const current = await inspect(rootId, repository.worktreePath, signal)
+  if (
+    (repository.memberId && current.memberId !== repository.memberId) ||
+    (repository.repositoryFingerprint && current.repositoryFingerprint !== repository.repositoryFingerprint)
+  )
+    throw new Error('workspace.branch-workspace.plan-stale')
 }

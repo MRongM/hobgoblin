@@ -213,3 +213,33 @@ describe('branch workspace discovery source', () => {
     expect(result[0]?.members[0]).toMatchObject({ repositoryId: primaryId })
   })
 })
+
+describe('registered folder discovery', () => {
+  test('probes an explicit arbitrary folder and distinguishes complete detached repositories', async () => {
+    const memberPath = path.join(ROOT, 'feature set', 'api')
+    const result = await discoverBranchWorkspaceDirectories(
+      ROOT,
+      undefined,
+      {
+        listChildren: async () => ['api'],
+        inspectPath: async (_root, candidatePath) => ({
+          path: candidatePath,
+          exists: true,
+          kind: 'directory',
+          directChild: true,
+          outsideRoot: false,
+        }),
+        getWorktrees: async () => [
+          { path: memberPath, isBare: false, isPrimary: true, isDetached: true, head: 'abcdef123' },
+        ],
+      },
+      ['feature set'],
+    )
+    expect(result).toMatchObject([
+      {
+        directoryName: 'feature set',
+        members: [{ kind: 'repository', repositoryId: memberPath, branch: '', head: 'abcdef123' }],
+      },
+    ])
+  })
+})

@@ -316,3 +316,120 @@ describe('branch workspace contracts', () => {
     })
   })
 })
+
+describe('folder subworkspace contracts', () => {
+  test('accepts a folder with spaces and independent per-member branches', () => {
+    expect(
+      normalizeBranchWorkspacePlanRequest({
+        operation: 'create',
+        directoryName: 'feature set',
+        repositories: [
+          {
+            repositoryName: 'service-a',
+            kind: 'worktree',
+            source: { kind: 'repository', repositoryId: '/workspace/source' },
+            targetBranch: 'feat/auth',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+          },
+        ],
+        auxiliaryEntries: [],
+      }),
+    ).toMatchObject({
+      ok: true,
+      request: {
+        directoryName: 'feature set',
+        branch: '',
+        repositories: [
+          {
+            kind: 'worktree',
+            targetBranch: 'feat/auth',
+            source: { kind: 'repository', repositoryId: '/workspace/source' },
+          },
+        ],
+      },
+    })
+  })
+  test.each(['../escape', 'a/b', 'a\\b', '.', '..', 'CON', 'aux.txt', 'trailing.', 'control\nname'])(
+    'rejects unsafe folder %s',
+    (directoryName) => {
+      expect(
+        normalizeBranchWorkspacePlanRequest({
+          operation: 'create',
+          branch: 'feature/a',
+          directoryName,
+          repositories: [{ repositoryName: 'api', baseBranch: 'main' }],
+          auxiliaryEntries: [],
+        }).ok,
+      ).toBe(false)
+    },
+  )
+  test('accepts a URL repository default branch without a folder-derived Git branch', () => {
+    expect(
+      normalizeBranchWorkspacePlanRequest({
+        operation: 'create',
+        directoryName: 'feature set',
+        repositories: [
+          {
+            repositoryName: 'api',
+            kind: 'repository',
+            source: { kind: 'url', url: 'https://example.com/repository.git' },
+          },
+        ],
+        auxiliaryEntries: [],
+      }),
+    ).toMatchObject({
+      ok: true,
+      request: {
+        branch: '',
+        repositories: [{ kind: 'repository', source: { kind: 'url', url: 'https://example.com/repository.git' } }],
+      },
+    })
+  })
+  test('rejects unknown member types and URL linked worktrees', () => {
+    for (const kind of ['unknown', 'worktree'])
+      expect(
+        normalizeBranchWorkspacePlanRequest({
+          operation: 'create',
+          directoryName: 'folder',
+          repositories: [
+            {
+              repositoryName: 'api',
+              kind,
+              source: { kind: 'url', url: 'https://example.com/repository.git' },
+              baseBranch: 'main',
+            },
+          ],
+          auxiliaryEntries: [],
+        }).ok,
+      ).toBe(false)
+  })
+})
+
+test('rejects conflicting mode targets, duplicate stable member IDs, and malformed folder extension identities', () => {
+  const base = { operation: 'create', directoryName: 'folder', auxiliaryEntries: [] }
+  expect(
+    normalizeBranchWorkspacePlanRequest({
+      ...base,
+      repositories: [{ repositoryName: 'api', targetBranch: 'one', mode: { kind: 'existingBranch', branch: 'two' } }],
+    }).ok,
+  ).toBe(false)
+  expect(
+    normalizeBranchWorkspacePlanRequest({
+      ...base,
+      repositories: ['api', 'web'].map((repositoryName) => ({
+        repositoryName,
+        memberId: 'same-member',
+        baseBranch: 'main',
+        targetBranch: 'topic',
+      })),
+    }).ok,
+  ).toBe(false)
+  expect(
+    normalizeBranchWorkspacePlanRequest({
+      ...base,
+      branchWorkspaceId: 42,
+      repositories: [{ repositoryName: 'api', baseBranch: 'main', targetBranch: 'topic' }],
+    }).ok,
+  ).toBe(false)
+})

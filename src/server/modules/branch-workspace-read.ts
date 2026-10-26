@@ -10,8 +10,9 @@ import {
   type BranchWorkspaceDiscoveredDirectory,
 } from '#/server/modules/branch-workspace-discovery-source.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
-import { workspaceRepositoryId } from '#/server/modules/workspace-paths.ts'
+import { branchWorkspaceMemberRepositoryId } from '#/server/modules/workspace-paths.ts'
 import { getRepositorySnapshot } from '#/server/modules/repo-read-paths.ts'
+import { isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 import type {
   BranchWorkspaceActiveOperation,
   BranchWorkspaceIssue,
@@ -68,6 +69,7 @@ export async function readBranchWorkspaceSnapshot(
     // Targeted reads must still exclude every repository and its worktrees from dependency sources.
     const repositoryNames = new Set([
       ...configuredRepositories,
+      ...allManifests.map((manifest) => manifest.directoryName).filter((name) => !isBranchWorkspaceDirectoryName(name)),
       ...allManifests.flatMap((manifest) => manifest.repositories.map((member) => member.repositoryName)),
     ])
     const referencedRepositoryIds = Array.from(
@@ -75,7 +77,7 @@ export async function readBranchWorkspaceSnapshot(
         manifests.flatMap((manifest) =>
           manifest.repositories
             .filter((member) => member.progress === 'complete' && !discoveredMember(member))
-            .map((member) => member.repositoryId ?? workspaceRepositoryId(rootId, member.repositoryName))
+            .map((member) => branchWorkspaceMemberRepositoryId(rootId, member))
             .filter((id): id is string => !!id),
         ),
       ),
@@ -160,9 +162,7 @@ async function projectBranchWorkspace(
         await reconcileRepositoryMember(
           manifest,
           member,
-          repositorySnapshots.get(
-            member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName) ?? '',
-          ),
+          repositorySnapshots.get(branchWorkspaceMemberRepositoryId(manifest.rootId, member) ?? ''),
           issues,
           discovered?.members.find((entry) => sameHostPath(manifest.rootId, entry.worktreePath, member.worktreePath)),
         ),
@@ -215,7 +215,18 @@ async function reconcileRepositoryMember(
     })
     return { ...member, ready: false }
   }
-  if (discovered) return { ...member, targetBranch: discovered.branch, ready: true }
+  if (discovered && member.kind === 'repository' && member.memberId && member.memberId !== discovered.memberId) {
+    issues.push({ kind: 'worktree-path-mismatch', repositoryName: member.repositoryName })
+    return { ...member, ready: false }
+  }
+  if (discovered && branchWorkspaceMemberRepositoryId(manifest.rootId, member) === discovered.repositoryId)
+    return {
+      ...member,
+      ...(discovered.branch ? { targetBranch: discovered.branch } : {}),
+      currentBranch: discovered.branch || null,
+      ...(discovered.head ? { head: discovered.head } : {}),
+      ready: true,
+    }
   if (!snapshotPromise) {
     issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
     return { ...member, ready: false }
@@ -242,7 +253,7 @@ async function reconcileRepositoryMember(
     issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
     return { ...member, ready: false }
   }
-  return { ...member, targetBranch: branch.name, ready: true }
+  return { ...member, targetBranch: branch.name, currentBranch: branch.name, ready: true }
 }
 
 function projectState(

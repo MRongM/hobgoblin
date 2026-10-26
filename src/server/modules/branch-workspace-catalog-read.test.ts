@@ -131,7 +131,9 @@ describe('branch workspace catalog', () => {
       manifests: [
         {
           id: 'retained-id',
-          repositories: [{ targetBranch: 'feature/switched', branchOrigin: 'pre-existing' }],
+          repositories: [
+            { targetBranch: 'feature/one', currentBranch: 'feature/switched', branchOrigin: 'pre-existing' },
+          ],
         },
       ],
     })

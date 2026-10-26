@@ -1,13 +1,18 @@
 import path from 'node:path'
+import { git } from '#/system/git/helper.ts'
 import { getRepositoryWorktrees } from '#/server/modules/repo-read-paths.ts'
 import {
   inspectBranchWorkspacePath,
   listBranchWorkspaceChildren,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
-import { workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
-import { isRemoteRepoId, normalizeRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { repositoryIdAtPath, workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
+import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
-import { isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
+import {
+  isBranchWorkspaceDirectoryName,
+  isSafeBranchWorkspaceFolderName,
+  type BranchWorkspaceMemberKind,
+} from '#/shared/branch-workspaces.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { discoverRemoteBranchWorkspaceDirectories } from '#/system/ssh/branch-workspaces.ts'
@@ -17,6 +22,9 @@ export interface BranchWorkspaceDiscoveredMember {
   repositoryId: string
   worktreePath: string
   branch: string
+  kind?: BranchWorkspaceMemberKind
+  head?: string
+  memberId?: string
 }
 
 export interface BranchWorkspaceDiscoveredDirectory {
@@ -27,6 +35,7 @@ export interface BranchWorkspaceDiscoveredDirectory {
 }
 
 export interface BranchWorkspaceDiscoveryDependencies {
+  registeredDirectoryNames?: readonly string[]
   resolveRemoteTarget?: typeof resolveRepositoryRemoteTarget
   discoverRemote?: typeof discoverRemoteBranchWorkspaceDirectories
   listChildren?: typeof listBranchWorkspaceChildren
@@ -50,7 +59,11 @@ export async function discoverBranchWorkspaceDirectories(
     const directories = await (dependencies.discoverRemote ?? discoverRemoteBranchWorkspaceDirectories)(
       target,
       rootPath,
-      { signal, ...(directoryNames ? { directoryNames } : {}) },
+      {
+        signal,
+        ...(directoryNames ? { directoryNames } : {}),
+        registeredDirectoryNames: dependencies.registeredDirectoryNames,
+      },
     )
     signal?.throwIfAborted()
     return directories.map((directory) => ({
@@ -72,7 +85,13 @@ export async function discoverBranchWorkspaceDirectories(
   // Sort directory names before probing to keep discovery deterministic across filesystems.
   for (const directoryName of [...names].sort(compareText)) {
     signal?.throwIfAborted()
-    if (!isBranchWorkspaceDirectoryName(directoryName)) continue
+    if (
+      !isSafeBranchWorkspaceFolderName(directoryName) ||
+      (!directoryNames &&
+        !dependencies.registeredDirectoryNames?.includes(directoryName) &&
+        !isBranchWorkspaceDirectoryName(directoryName))
+    )
+      continue
     const candidatePath = pathApi.join(rootPath, directoryName)
     const inspection = await inspectPath(rootId, candidatePath, signal).catch(() => null)
     if (!inspection?.exists || inspection.kind !== 'directory') continue
@@ -88,19 +107,21 @@ export async function discoverBranchWorkspaceDirectories(
       const worktrees = await getWorktrees(repositoryIdAtPath(rootId, worktreePath), signal).catch(() => [])
       signal?.throwIfAborted()
       const worktree = worktrees.find(
-        (entry) =>
-          !entry.isBare &&
-          !entry.isPrunable &&
-          sameHostPath(rootId, entry.path, worktreePath) &&
-          typeof entry.branch === 'string',
+        (entry) => !entry.isBare && !entry.isPrunable && sameHostPath(rootId, entry.path, worktreePath),
       )
-      if (!worktree?.branch) continue
+      if (!worktree) continue
       const primary = worktrees.find((entry) => entry.isPrimary)
+      const memberId = worktree.isPrimary
+        ? await git(worktreePath, ['config', '--get', 'hobgoblin.subworkspaceMemberId'], { signal }).catch(() => '')
+        : ''
       members.push({
         repositoryName,
         repositoryId: repositoryIdAtPath(rootId, primary?.path ?? worktreePath),
         worktreePath,
-        branch: worktree.branch,
+        branch: worktree.branch ?? '',
+        ...(memberId ? { memberId } : {}),
+        ...(worktree.isPrimary ? { kind: 'repository' as const } : {}),
+        ...(worktree.head ? { head: worktree.head } : {}),
       })
     }
     if (members.length === 0) continue
@@ -123,9 +144,4 @@ function sameHostPath(rootId: string, left: string, right: string): boolean {
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
-}
-
-function repositoryIdAtPath(rootId: string, repositoryPath: string): string {
-  const remote = parseRemoteRepoId(rootId)
-  return remote ? normalizeRemoteRepoId({ ...remote, remotePath: repositoryPath }) : repositoryPath
 }

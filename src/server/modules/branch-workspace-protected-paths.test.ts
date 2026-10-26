@@ -43,7 +43,7 @@ describe('branch workspace protected paths', () => {
     },
   )
 
-  test('does not scan the workspace for ordinary parent file mutations', async () => {
+  test('reads registered folder identities for direct parent file mutations', async () => {
     const deps = dependencies(manifest(ROOT))
     await expect(
       assertBranchWorkspaceFileMutationAllowed(
@@ -51,7 +51,7 @@ describe('branch workspace protected paths', () => {
         deps,
       ),
     ).resolves.toEqual({ ok: true })
-    expect(deps.readManifests).not.toHaveBeenCalled()
+    expect(deps.readManifests).toHaveBeenCalledExactlyOnceWith(ROOT)
   })
 
   test('allows released auxiliary roots to retain generic file actions', async () => {

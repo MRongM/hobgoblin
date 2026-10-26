@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { REMOTE_PATH_EXISTS_MARKER, REMOTE_PATH_MISSING_MARKER, runRemoteCommand } from '#/system/ssh/commands.ts'
 import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
-import { BRANCH_WORKSPACE_DIRECTORY_PREFIX, isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
+import { BRANCH_WORKSPACE_DIRECTORY_PREFIX, isSafeBranchWorkspaceFolderName } from '#/shared/branch-workspaces.ts'
 import {
   isRemoteRepoId,
   normalizeRemoteRepoId,
@@ -12,6 +12,7 @@ import {
   remoteWorkspaceChildRef,
   type RemoteRepoTarget,
 } from '#/shared/remote-repo.ts'
+import type { BranchWorkspaceRepositoryMember } from '#/shared/branch-workspaces.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 const branchWorkspaceReadableLength = 48
@@ -63,7 +64,7 @@ export function branchWorkspaceDirectoryName(branch: string, occupiedNames: Read
 }
 
 export function branchWorkspacePath(rootId: string, directoryName: string): string {
-  if (!isBranchWorkspaceDirectoryName(directoryName)) {
+  if (!isSafeBranchWorkspaceFolderName(directoryName)) {
     throw new Error('workspace.branch-workspace.invalid-directory')
   }
   if (!isRemoteRepoId(rootId)) return path.join(workspaceRootId(rootId), directoryName)
@@ -106,4 +107,23 @@ async function resolveWorkspaceRemoteTarget(repoId: string): Promise<RemoteRepoT
   const parsed = parseRemoteRepoId(repoId)
   if (!parsed) throw new Error('error.ssh-config-changed')
   return (await resolveRepositoryRemoteTarget(parsed)).target
+}
+
+/** Preserve opaque host identity while replacing only the filesystem path. */
+export function repositoryIdAtPath(rootId: string, repositoryPath: string): string {
+  const remote = parseRemoteRepoId(rootId)
+  return remote ? normalizeRemoteRepoId({ ...remote, remotePath: repositoryPath }) : path.resolve(repositoryPath)
+}
+
+export function branchWorkspaceMemberRepositoryId(
+  rootId: string,
+  member: Pick<BranchWorkspaceRepositoryMember, 'repositoryId' | 'repositoryName' | 'kind' | 'worktreePath' | 'source'>,
+): string | null {
+  if (member.kind === 'repository') return repositoryIdAtPath(rootId, member.worktreePath)
+  return (
+    member.repositoryId ??
+    (member.source?.kind === 'repository'
+      ? member.source.repositoryId
+      : workspaceRepositoryId(rootId, member.repositoryName))
+  )
 }

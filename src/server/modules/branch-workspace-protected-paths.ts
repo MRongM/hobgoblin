@@ -3,7 +3,6 @@ import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import { workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 
 export type BranchWorkspaceFileMutationInput = {
   rootId: string
@@ -34,10 +33,7 @@ export async function assertBranchWorkspaceFileMutationAllowed(
   if (
     !candidates.some((candidate) => {
       const normalized = pathApi.resolve(candidate)
-      return (
-        samePath(pathApi, pathApi.dirname(normalized), rootPath) &&
-        isBranchWorkspaceDirectoryName(pathApi.basename(normalized))
-      )
+      return samePath(pathApi, pathApi.dirname(normalized), rootPath)
     })
   )
     return { ok: true }

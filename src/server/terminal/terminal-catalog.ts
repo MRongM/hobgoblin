@@ -112,7 +112,8 @@ class TerminalCatalog {
   async ensureOrRestore(clientId: string, input: EnsureTerminalCatalogInput): Promise<EnsureTerminalCatalogResult> {
     if (!this.options.isValidClientId(clientId)) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidRepoLocator(input.repoRoot)) return { ok: false, message: 'error.invalid-arguments' }
-    if (!isValidBranch(input.branch)) return { ok: false, message: 'error.invalid-arguments' }
+    if (!(isValidBranch(input.branch) || (input.targetKind === 'branch-workspace' && input.branch === '')))
+      return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidCwd(input.worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
     const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
     if (!targetAuthorization.ok) return targetAuthorization
@@ -165,7 +166,11 @@ class TerminalCatalog {
     input: TerminalOpenTmuxSessionsInput,
   ): Promise<TerminalOpenTmuxSessionsResult> {
     if (!this.options.isValidClientId(clientId)) return { ok: false, message: 'error.invalid-arguments' }
-    if (!isValidRepoLocator(input.repoRoot) || !isValidBranch(input.branch) || !isValidCwd(input.worktreePath)) {
+    if (
+      !isValidRepoLocator(input.repoRoot) ||
+      !(isValidBranch(input.branch) || (input.targetKind === 'branch-workspace' && input.branch === '')) ||
+      !isValidCwd(input.worktreePath)
+    ) {
       return { ok: false, message: 'error.invalid-arguments' }
     }
     if (!isValidTerminalAttachmentId(input.attachmentId)) return { ok: false, message: 'error.invalid-arguments' }

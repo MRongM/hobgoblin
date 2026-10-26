@@ -9,8 +9,12 @@ import {
   type BranchWorkspaceDiscoveredDirectory,
   type BranchWorkspaceDiscoveredMember,
 } from '#/server/modules/branch-workspace-discovery-source.ts'
-import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
-import type { BranchWorkspaceManifest, BranchWorkspaceRepositoryMember } from '#/shared/branch-workspaces.ts'
+import { branchWorkspaceMemberRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
+import {
+  isBranchWorkspaceDirectoryName,
+  type BranchWorkspaceManifest,
+  type BranchWorkspaceRepositoryMember,
+} from '#/shared/branch-workspaces.ts'
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
@@ -50,12 +54,19 @@ export async function readBranchWorkspaceCatalog(
         : undefined
     if (manifest) directoryNames = [manifest.directoryName]
   }
+  const known = await storedRead
+  const registeredDirectoryNames =
+    known.kind === 'ready'
+      ? known.manifests
+          .map((manifest) => manifest.directoryName)
+          .filter((name) => !isBranchWorkspaceDirectoryName(name))
+      : []
   const [stored, discovered] = await Promise.all([
-    storedRead,
+    Promise.resolve(known),
     (dependencies.discoverDirectories ?? discoverBranchWorkspaceDirectories)(
       normalizedRootId,
       signal,
-      {},
+      registeredDirectoryNames.length ? { registeredDirectoryNames } : {},
       directoryNames,
     ).catch((error: unknown) => {
       signal?.throwIfAborted()
@@ -69,28 +80,35 @@ export async function readBranchWorkspaceCatalog(
     if (!directory) return manifest
     remaining.delete(directory)
     const operationInProgress = manifest.operation && manifest.operation.kind !== 'repair'
-    const actual = directory.members.map((member) =>
-      actualMember(
-        member,
-        manifest.repositories.find((entry) => entry.repositoryName === member.repositoryName),
-      ),
-    )
+    const actual = directory.members
+      .filter((member) => {
+        const recorded = manifest.repositories.find((entry) => entry.repositoryName === member.repositoryName)
+        return (
+          !recorded ||
+          (!recorded.kind && !recorded.source && !recorded.memberId) ||
+          (branchWorkspaceMemberRepositoryId(rootId, recorded) === member.repositoryId &&
+            (recorded.kind ?? 'worktree') === (member.kind ?? 'worktree') &&
+            (recorded.kind !== 'repository' || !recorded.memberId || recorded.memberId === member.memberId))
+        )
+      })
+      .map((member) =>
+        actualMember(
+          member,
+          manifest.repositories.find((entry) => entry.repositoryName === member.repositoryName),
+        ),
+      )
     return {
       ...manifest,
-      repositories: operationInProgress
-        ? manifest.repositories.map((member) => ({
-            ...member,
-            repositoryId:
-              actual.find((entry) => entry.repositoryName === member.repositoryName)?.repositoryId ??
-              member.repositoryId,
-          }))
-        : [
-            ...actual,
-            // Keep missing recorded members visible so external deletions remain repairable and removable.
-            ...manifest.repositories.filter(
-              (member) => !actual.some((entry) => entry.repositoryName === member.repositoryName),
-            ),
-          ],
+      repositories: [
+        ...manifest.repositories.map(
+          (member) => actual.find((entry) => entry.repositoryName === member.repositoryName) ?? member,
+        ),
+        ...(!operationInProgress
+          ? actual.filter(
+              (entry) => !manifest.repositories.some((member) => member.repositoryName === entry.repositoryName),
+            )
+          : []),
+      ],
     }
   })
   for (const directory of remaining) manifests.push(discoveredManifest(normalizedRootId, directory))
@@ -106,14 +124,21 @@ function actualMember(
   member: BranchWorkspaceDiscoveredMember,
   stored?: BranchWorkspaceRepositoryMember,
 ): BranchWorkspaceRepositoryMember {
-  const sameBranch = stored?.targetBranch === member.branch
+  if (stored)
+    return {
+      ...stored,
+      repositoryId: member.repositoryId,
+      currentBranch: member.branch || null,
+      ...(member.head ? { head: member.head } : {}),
+    }
   return {
     repositoryName: member.repositoryName,
     repositoryId: member.repositoryId,
+    ...(member.kind ? { kind: member.kind } : {}),
     targetBranch: member.branch,
-    creationBase: sameBranch ? stored.creationBase : { kind: 'localBranch', branch: member.branch },
-    syncBeforeCreate: sameBranch ? stored.syncBeforeCreate : false,
-    branchOrigin: sameBranch ? stored.branchOrigin : 'pre-existing',
+    creationBase: { kind: 'localBranch', branch: member.branch || 'main' },
+    syncBeforeCreate: false,
+    branchOrigin: 'pre-existing',
     worktreePath: member.worktreePath,
     progress: 'complete',
   }
