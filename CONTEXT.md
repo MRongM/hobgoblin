@@ -449,34 +449,40 @@ A multi-repository workspace whose durable, ordered repository membership is ini
 _Avoid_: Saved scan, repository registry, primary repository
 
 **Workspace configuration recovery**:
-An explicit abnormal-data escape hatch that first requests ordinary removal of every branch workspace, falls back to removing only failed branch-workspace application records, then clears the workspace configuration and imports every currently discovered repository primary worktree. It may reset the shared workspace-configuration registry when that registry cannot be parsed, but its fallback never force-deletes residual directories, worktrees, or branches.
+An explicit abnormal-data escape hatch that clears application folder registrations and workspace configuration, then imports currently discovered repository primary worktrees. It preserves directories, worktrees, local branches, and remote branches while rebuilding application records.
 _Avoid_: Delete project, force-delete worktree, ordinary repository rescan
 
-### Subworkspace model — approved product direction
-
-These terms describe the agreed replacement model. The Branch workspace entries that follow describe the existing behavior until that refactor is implemented.
+### Folder-based subworkspace model
 
 **Subworkspace**:
-A folder-named working context within one configured workspace whose repository members independently choose their branches and membership mode. Its identity belongs to the folder context and remains stable when a member changes branches.
-_Avoid_: Common branch, combined repository, nested project
+A user-registered folder location that presents the repositories and linked worktrees currently found there. The application stores the location and display identity, while users may add, remove, or switch branches manually and refresh the observed contents.
+_Avoid_: Common branch, managed member manifest, combined repository
 
-**Subworkspace member mode**:
-The per-member choice between an independent complete repository and a linked Git worktree; one subworkspace may contain both modes. The choice determines which repository owns that member's branches and Git data.
-_Avoid_: Workspace-wide repository mode, common branch mode
+**Subworkspace registration**:
+The application record of one folder's location, stable identity, parent grouping, and display order. It does not persist a required member roster, branch selection, repository provenance, or ownership claim.
+_Avoid_: Saved branch group, repository lock, creation plan
 
 **Independent repository member**:
-A complete repository cloned into a subworkspace from an existing repository or a Git remote, with its own Git data, branches, and working directory. In this design, the user's “原始仓库” means this independent repository rather than a shared reference to the source working directory.
-_Avoid_: Shared source checkout, linked worktree, repository symlink
+A complete repository found in a registered folder, with its own Git data and working directory. It may be added manually or through an optional clone helper.
+_Avoid_: Shared source checkout, linked worktree, required workspace repository
 
 **Worktree member**:
-A linked Git worktree inside a subworkspace, with its own working directory and branches governed by its owning repository's ordinary worktree constraints. Its checked-out branch may differ from every other member's branch and from the subworkspace folder name.
-_Avoid_: Same-named member branch, independent repository
+A linked Git worktree found in a registered folder. Its branch is read from Git and obeys Git's ordinary worktree constraints, independently from the folder name and other members.
+_Avoid_: Same-named member branch, application-pinned branch
+
+**Folder refresh**:
+An explicit reread of a registered folder's actual repositories, worktrees, and current branches. Manual additions, removals and branch switches change the observed list without creating a durable repair obligation.
+_Avoid_: Membership reconciliation, branch repair, automatic checkout
+
+**Folder unregistration**:
+Removal of a folder from the application list while preserving its disk contents, Git state and terminal sessions.
+_Avoid_: Folder deletion, worktree cleanup, branch deletion
 
 **Local clone of a remote subworkspace**:
-An independent local folder context reconstructed from a remote subworkspace's repository members and working files. Its Git data and member relationships belong to the destination host, while the remote subworkspace remains the source of the copy.
-_Avoid_: Remote directory mount, synchronized workspace, copied remote worktree pointer
+An optional working-copy operation that reconstructs a remote folder's Git members and files at a user-selected local location, then registers that destination folder. Progress belongs to the operation; completed members remain ordinary user-managed Git directories.
+_Avoid_: Remote mount, synchronized member roster, copied remote worktree pointer
 
-### Branch workspace model — existing behavior
+### Branch workspace model — legacy behavior
 
 **Branch workspace**:
 A branch-specific, indivisible working context owned by one configured workspace and presented by its common branch name. Within that parent, a branch name identifies at most one branch workspace; every workspace-level action targets its root directory on the same local, WSL, or SSH host as the parent, while contained repository worktrees are members rather than nested workspace contexts. A WSL branch workspace retains its opaque `wsl://` root identity, uses Linux paths, and performs filesystem and Git work inside the selected distribution. Membership may be extended through parent-scoped lifecycle actions and reduced through explicit branch workspace member removal. A reduction must retain at least one member, removes only the selected managed worktrees and membership records, and retains their local and remote branches; deleting the final member instead requires whole branch workspace removal. When active, its root context exposes folder-level file browsing and internal terminals, and selecting one member worktree exposes that repository's ordinary worktree experience without leaving the branch workspace; the parent workspace retains separate repository navigation. Its managed directory remains visible and browsable in the parent file tree but cannot be renamed, moved, or deleted there. Inside that directory, member worktree roots and their contents use the ordinary file-tree operations, including drag, move, rename, and delete; structural changes may produce member drift. Directory discovery updates observed branches and adds actual members without dropping missing durable members. Its durable membership and materialization intent remain meaningful when root or member worktrees are unavailable, a branch workspace operation is incomplete, or external filesystem changes cause member drift. Member drift is surfaced for explicit repair or removal rather than silently recreating or forgetting the branch workspace; completed members are retained without automatic rollback, and retries continue the remaining work.

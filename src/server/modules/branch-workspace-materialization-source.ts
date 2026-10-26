@@ -26,6 +26,8 @@ import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { withBranchWorkspaceRetry } from '#/server/modules/branch-workspace-retry.ts'
 
 export interface BranchWorkspaceMaterializationDependencies {
+  /** Original project scope for dependency sources when the target is stored elsewhere. */
+  sourceRootId?: string
   resolveRemoteTarget?: typeof resolveRepositoryRemoteTarget
   listRemoteCandidates?: typeof listRemoteBranchWorkspaceAuxiliaryCandidates
   inspectRemotePath?: typeof inspectRemoteBranchWorkspacePath
@@ -151,6 +153,7 @@ export async function materializeBranchWorkspaceSymlink(
 ): Promise<void> {
   signal?.throwIfAborted()
   const rootPath = requiredRootPath(rootId)
+  const sourceRootPath = requiredTransferSourceRoot(rootId, dependencies.sourceRootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
     await withBranchWorkspaceRetry(
@@ -160,13 +163,13 @@ export async function materializeBranchWorkspaceSymlink(
           rootPath,
           sourcePath,
           targetPath,
-          { signal },
+          { signal, sourceRootPath },
         ),
       { signal },
     )
     return
   }
-  assertDirectChildSource(rootPath, sourcePath)
+  assertDirectChildSource(sourceRootPath, sourcePath)
   await assertSafeTargetParents(rootPath, targetPath)
   await withBranchWorkspaceRetry(async () => await symlinkAbsolute(sourcePath, targetPath), { signal })
 }
@@ -180,6 +183,7 @@ export async function copyBranchWorkspaceEntry(
 ): Promise<void> {
   signal?.throwIfAborted()
   const rootPath = requiredRootPath(rootId)
+  const sourceRootPath = requiredTransferSourceRoot(rootId, dependencies.sourceRootId)
   if (isRemoteRepoId(rootId)) {
     const target = await resolveMaterializationRemoteTarget(rootId, signal, dependencies)
     await withBranchWorkspaceRetry(
@@ -189,13 +193,13 @@ export async function copyBranchWorkspaceEntry(
           rootPath,
           sourcePath,
           targetPath,
-          { signal },
+          { signal, sourceRootPath },
         ),
       { signal },
     )
     return
   }
-  assertDirectChildSource(rootPath, sourcePath)
+  assertDirectChildSource(sourceRootPath, sourcePath)
   await assertSafeTargetParents(rootPath, targetPath)
   const sourceStat = await lstat(sourcePath)
   const copySource = sourceStat.isSymbolicLink() ? await realpath(sourcePath) : sourcePath
@@ -451,4 +455,15 @@ function compareText(left: string, right: string): number {
 
 function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
+}
+
+function requiredTransferSourceRoot(targetRootId: string, sourceRootId = targetRootId): string {
+  const target = parseRemoteRepoId(targetRootId),
+    source = parseRemoteRepoId(sourceRootId)
+  if (
+    (target || source) &&
+    (!target || !source || target.alias !== source.alias || target.transport !== source.transport)
+  )
+    throw new Error('workspace.branch-workspace.invalid-source')
+  return requiredRootPath(sourceRootId)
 }

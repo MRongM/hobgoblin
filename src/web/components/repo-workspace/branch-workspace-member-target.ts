@@ -56,6 +56,7 @@ export function resolveBranchWorkspaceMemberTarget({
   const worktree = Object.values(repository.data.worktreesByPath).find((entry) =>
     sameLocalFilePath(entry.path, member.worktreePath),
   )
+  if (worktree?.isPrunable) return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
   if (member.ready && (member.currentBranch === null || worktree?.isDetached)) {
     return {
       ok: true,
@@ -70,12 +71,6 @@ export function resolveBranchWorkspaceMemberTarget({
     }
   }
   if (branchAtMemberPath) {
-    const warning =
-      member.currentBranch === undefined && branchAtMemberPath.name !== member.targetBranch
-        ? 'workspace.branch-workspace.member-branch-drift'
-        : !member.ready
-          ? 'workspace.branch-workspace.member-not-ready'
-          : null
     return {
       ok: true,
       target: {
@@ -85,7 +80,6 @@ export function resolveBranchWorkspaceMemberTarget({
         checkedOutBranch: branchAtMemberPath.name,
         worktreePath: member.worktreePath,
       },
-      ...(warning ? { warning } : {}),
     }
   }
   if (!member.ready) return { ok: false, reason: 'workspace.branch-workspace.member-not-ready' }

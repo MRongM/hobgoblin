@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-import path from 'node:path'
 import {
   readBranchWorkspaceManifests,
   type BranchWorkspaceManifestSourceSnapshot,
@@ -9,14 +7,8 @@ import {
   type BranchWorkspaceDiscoveredDirectory,
   type BranchWorkspaceDiscoveredMember,
 } from '#/server/modules/branch-workspace-discovery-source.ts'
-import { branchWorkspaceMemberRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
-import {
-  isBranchWorkspaceDirectoryName,
-  type BranchWorkspaceManifest,
-  type BranchWorkspaceRepositoryMember,
-} from '#/shared/branch-workspaces.ts'
-import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
-import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { branchWorkspaceStorageRootId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
+import type { BranchWorkspaceManifest, BranchWorkspaceRepositoryMember } from '#/shared/branch-workspaces.ts'
 
 export interface BranchWorkspaceCatalogDependencies {
   target?: { branchWorkspaceId: string } | { branch: string }
@@ -24,7 +16,7 @@ export interface BranchWorkspaceCatalogDependencies {
   discoverDirectories?: typeof discoverBranchWorkspaceDirectories
 }
 
-/** A read-only catalog. Discovery never registers or repairs persisted records. */
+/** Registered folder locations are durable; members and branches are always live Git observations. */
 export async function readBranchWorkspaceCatalog(
   rootId: string,
   signal?: AbortSignal,
@@ -35,129 +27,69 @@ export async function readBranchWorkspaceCatalog(
     registryError?: string
   }
 > {
-  const normalizedRootId = workspaceRootId(rootId)
+  const root = workspaceRootId(rootId)
+  const stored = await (dependencies.readManifests ?? readBranchWorkspaceManifests)(root)
   signal?.throwIfAborted()
-  const storedRead = (dependencies.readManifests ?? readBranchWorkspaceManifests)(normalizedRootId)
+  if (stored.kind !== 'ready') return stored
   const target = dependencies.target
-  // Known targets need fresh discovery only in their own directory; unregistered workspaces still need a full scan.
-  let directoryNames: string[] | undefined
-  if (target) {
-    const stored = await storedRead
-    signal?.throwIfAborted()
-    const manifest =
-      stored.kind === 'ready'
-        ? stored.manifests.find((candidate) =>
-            'branchWorkspaceId' in target
-              ? candidate.id === target.branchWorkspaceId
-              : candidate.branch === target.branch,
-          )
-        : undefined
-    if (manifest) directoryNames = [manifest.directoryName]
-  }
-  const known = await storedRead
-  const registeredDirectoryNames =
-    known.kind === 'ready'
-      ? known.manifests
-          .map((manifest) => manifest.directoryName)
-          .filter((name) => !isBranchWorkspaceDirectoryName(name))
-      : []
-  const [stored, discovered] = await Promise.all([
-    Promise.resolve(known),
-    (dependencies.discoverDirectories ?? discoverBranchWorkspaceDirectories)(
-      normalizedRootId,
-      signal,
-      registeredDirectoryNames.length ? { registeredDirectoryNames } : {},
-      directoryNames,
-    ).catch((error: unknown) => {
-      signal?.throwIfAborted()
-      return []
-    }),
-  ])
-  signal?.throwIfAborted()
-  const remaining = new Set(discovered)
-  const manifests = (stored.kind === 'ready' ? stored.manifests : []).map((manifest) => {
-    const directory = discovered.find((entry) => samePath(rootId, manifest.path, entry.path))
-    if (!directory) return manifest
-    remaining.delete(directory)
-    const operationInProgress = manifest.operation && manifest.operation.kind !== 'repair'
-    const actual = directory.members
-      .filter((member) => {
-        const recorded = manifest.repositories.find((entry) => entry.repositoryName === member.repositoryName)
-        return (
-          !recorded ||
-          (!recorded.kind && !recorded.source && !recorded.memberId) ||
-          (branchWorkspaceMemberRepositoryId(rootId, recorded) === member.repositoryId &&
-            (recorded.kind ?? 'worktree') === (member.kind ?? 'worktree') &&
-            (recorded.kind !== 'repository' || !recorded.memberId || recorded.memberId === member.memberId))
-        )
-      })
-      .map((member) =>
-        actualMember(
-          member,
-          manifest.repositories.find((entry) => entry.repositoryName === member.repositoryName),
-        ),
+  const selected = target
+    ? stored.manifests.find((manifest) =>
+        'branchWorkspaceId' in target
+          ? manifest.id === target.branchWorkspaceId
+          : !!target.branch && manifest.branch === target.branch,
       )
-    return {
-      ...manifest,
-      repositories: [
-        ...manifest.repositories.map(
-          (member) => actual.find((entry) => entry.repositoryName === member.repositoryName) ?? member,
-        ),
-        ...(!operationInProgress
-          ? actual.filter(
-              (entry) => !manifest.repositories.some((member) => member.repositoryName === entry.repositoryName),
-            )
-          : []),
-      ],
-    }
-  })
-  for (const directory of remaining) manifests.push(discoveredManifest(normalizedRootId, directory))
+    : undefined
+  const groups = new Map<string, BranchWorkspaceManifest[]>()
+  for (const manifest of selected ? [selected] : stored.manifests) {
+    const scope = branchWorkspaceStorageRootId(manifest),
+      group = groups.get(scope) ?? []
+    group.push(manifest)
+    groups.set(scope, group)
+  }
+  const discover = dependencies.discoverDirectories ?? discoverBranchWorkspaceDirectories
+  const discovered = (
+    await Promise.all(
+      [...groups].map(async ([scope, manifests]) => {
+        const names = manifests.map((manifest) => manifest.directoryName)
+        return await discover(scope, signal, { registeredDirectoryNames: names }, names).catch(() => {
+          signal?.throwIfAborted()
+          return []
+        })
+      }),
+    )
+  ).flat()
+  signal?.throwIfAborted()
   return {
     kind: 'ready',
-    manifests,
+    manifests: stored.manifests.map((manifest) => {
+      const directory = discovered.find((entry) => entry.path === manifest.path)
+      return {
+        id: manifest.id,
+        rootId: manifest.rootId,
+        branch: '',
+        directoryName: manifest.directoryName,
+        path: manifest.path,
+        parentDirectory: manifest.parentDirectory,
+        repositories: directory?.members.map(observedMember) ?? [],
+        auxiliaryEntries: [],
+      }
+    }),
     discoveredDirectories: discovered,
-    ...(stored.kind === 'invalid' ? { registryError: stored.message } : {}),
   }
 }
 
-function actualMember(
-  member: BranchWorkspaceDiscoveredMember,
-  stored?: BranchWorkspaceRepositoryMember,
-): BranchWorkspaceRepositoryMember {
-  if (stored)
-    return {
-      ...stored,
-      repositoryId: member.repositoryId,
-      currentBranch: member.branch || null,
-      ...(member.head ? { head: member.head } : {}),
-    }
+function observedMember(member: BranchWorkspaceDiscoveredMember): BranchWorkspaceRepositoryMember {
   return {
     repositoryName: member.repositoryName,
+    kind: member.kind ?? 'worktree',
     repositoryId: member.repositoryId,
-    ...(member.kind ? { kind: member.kind } : {}),
+    worktreePath: member.worktreePath,
     targetBranch: member.branch,
+    currentBranch: member.branch || null,
+    ...(member.head ? { head: member.head } : {}),
     creationBase: { kind: 'localBranch', branch: member.branch || 'main' },
     syncBeforeCreate: false,
     branchOrigin: 'pre-existing',
-    worktreePath: member.worktreePath,
     progress: 'complete',
   }
-}
-
-function discoveredManifest(rootId: string, directory: BranchWorkspaceDiscoveredDirectory): BranchWorkspaceManifest {
-  return {
-    id: `branch-workspace:${createHash('sha256').update(`${rootId}\0${directory.directoryName}`).digest('hex').slice(0, 16)}`,
-    rootId,
-    branch: directory.branch,
-    directoryName: directory.directoryName,
-    path: directory.path,
-    repositories: directory.members.map((member) => actualMember(member)),
-    auxiliaryEntries: [],
-  }
-}
-
-function samePath(rootId: string, left: string, right: string): boolean {
-  return isRemoteRepoId(rootId)
-    ? path.posix.normalize(left) === path.posix.normalize(right)
-    : sameLocalFilePath(left, right)
 }

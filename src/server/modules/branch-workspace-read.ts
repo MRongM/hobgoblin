@@ -5,25 +5,16 @@ import {
 } from '#/server/modules/branch-workspace-materialization-source.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
-import {
-  discoverBranchWorkspaceDirectories,
-  type BranchWorkspaceDiscoveredDirectory,
-} from '#/server/modules/branch-workspace-discovery-source.ts'
+import { discoverBranchWorkspaceDirectories } from '#/server/modules/branch-workspace-discovery-source.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
-import { branchWorkspaceMemberRepositoryId } from '#/server/modules/workspace-paths.ts'
+import { branchWorkspaceStorageRootId, workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
 import { getRepositorySnapshot } from '#/server/modules/repo-read-paths.ts'
-import { isBranchWorkspaceDirectoryName } from '#/shared/branch-workspaces.ts'
 import type {
   BranchWorkspaceActiveOperation,
-  BranchWorkspaceIssue,
-  BranchWorkspaceManifest,
   BranchWorkspaceReadResult,
-  BranchWorkspaceRepositorySnapshot,
   BranchWorkspaceSnapshot,
 } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
-import type { RepoSnapshot } from '#/shared/rpc.ts'
 
 interface BranchWorkspaceReadDependencies {
   branchWorkspaceId?: string
@@ -39,259 +30,81 @@ interface BranchWorkspaceReadDependencies {
   ) => BranchWorkspaceActiveOperation | null | Promise<BranchWorkspaceActiveOperation | null>
 }
 
-type RepositorySnapshotRead = { ok: true; snapshot: RepoSnapshot | null } | { ok: false; error: unknown }
-
 export async function readBranchWorkspaceSnapshot(
   rootId: string,
   signal?: AbortSignal,
   dependencies: BranchWorkspaceReadDependencies = {},
 ): Promise<BranchWorkspaceReadResult> {
   try {
-    signal?.throwIfAborted()
-    const [manifestSnapshot, configSnapshot] = await Promise.all([
+    const [catalog, config] = await Promise.all([
       readBranchWorkspaceCatalog(rootId, signal, {
         readManifests: dependencies.readManifests,
         discoverDirectories: dependencies.discoverDirectories,
-        target: dependencies.branchWorkspaceId ? { branchWorkspaceId: dependencies.branchWorkspaceId } : undefined,
+        ...(dependencies.branchWorkspaceId ? { target: { branchWorkspaceId: dependencies.branchWorkspaceId } } : {}),
       }),
       (dependencies.readConfig ?? readWorkspaceConfig)(rootId),
     ])
-    const allManifests = manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : []
-    const manifests = dependencies.branchWorkspaceId
-      ? allManifests.filter((manifest) => manifest.id === dependencies.branchWorkspaceId)
-      : allManifests
-    const discovered = manifestSnapshot.discoveredDirectories ?? []
-    const discoveredMember = (member: BranchWorkspaceManifest['repositories'][number]) =>
-      discovered.some((directory) =>
-        directory.members.some((entry) => sameHostPath(rootId, entry.worktreePath, member.worktreePath)),
-      )
-    const configuredRepositories = configSnapshot.kind === 'ready' ? configSnapshot.config.repo : []
-    // Targeted reads must still exclude every repository and its worktrees from dependency sources.
-    const repositoryNames = new Set([
-      ...configuredRepositories,
-      ...allManifests.map((manifest) => manifest.directoryName).filter((name) => !isBranchWorkspaceDirectoryName(name)),
-      ...allManifests.flatMap((manifest) => manifest.repositories.map((member) => member.repositoryName)),
+    signal?.throwIfAborted()
+    if (catalog.kind === 'invalid')
+      return { ok: true, rootId, items: [], auxiliaryCandidates: [], registryError: catalog.message }
+    const all = catalog.kind === 'ready' ? catalog.manifests : []
+    const pathApi = isRemoteRepoId(rootId) ? path.posix : path
+    const names = new Set([
+      ...(config.kind === 'ready' ? config.config.repo : []),
+      ...all
+        .filter((manifest) => pathApi.dirname(manifest.path) === workspaceRepositoryPath(rootId))
+        .map((manifest) => manifest.directoryName),
     ])
-    const referencedRepositoryIds = Array.from(
-      new Set(
-        manifests.flatMap((manifest) =>
-          manifest.repositories
-            .filter((member) => member.progress === 'complete' && !discoveredMember(member))
-            .map((member) => branchWorkspaceMemberRepositoryId(rootId, member))
-            .filter((id): id is string => !!id),
-        ),
-      ),
-    )
-    const repositorySnapshots = repositorySnapshotCache(
-      referencedRepositoryIds,
-      dependencies.readRepositorySnapshot ?? getRepositorySnapshot,
-      signal,
-    )
     const auxiliaryCandidates = await (dependencies.listCandidates ?? listBranchWorkspaceAuxiliaryCandidates)(
       rootId,
-      repositoryNames,
+      names,
       signal,
-    )
-    const items = await Promise.all(
-      manifests.map(
-        async (manifest) =>
-          await projectBranchWorkspace(
-            manifest,
-            repositorySnapshots,
-            signal,
-            dependencies,
-            discovered.find((directory) => sameHostPath(rootId, directory.path, manifest.path)),
-          ),
-      ),
-    )
-    return {
-      ok: true,
-      rootId,
-      items,
-      auxiliaryCandidates,
-      ...(manifestSnapshot.registryError ? { registryError: manifestSnapshot.registryError } : {}),
-    }
-  } catch (error) {
-    return { ok: false, message: safeReadMessage(error) }
-  }
-}
-
-function repositorySnapshotCache(
-  repositoryIds: string[],
-  readRepositorySnapshot: typeof getRepositorySnapshot,
-  signal?: AbortSignal,
-): Map<string, Promise<RepositorySnapshotRead>> {
-  return new Map(
-    repositoryIds.map((repoId) => {
-      const snapshot = readRepositorySnapshot(repoId, signal, {
-        includeWorktreeStatus: false,
-        includeRemote: false,
-      })
-        .then((value) => {
-          signal?.throwIfAborted()
-          return { ok: true as const, snapshot: value }
-        })
-        .catch((error: unknown) => ({ ok: false as const, error }))
-      return [repoId, snapshot]
-    }),
-  )
-}
-
-async function projectBranchWorkspace(
-  manifest: BranchWorkspaceManifest,
-  repositorySnapshots: Map<string, Promise<RepositorySnapshotRead>>,
-  signal: AbortSignal | undefined,
-  dependencies: BranchWorkspaceReadDependencies,
-  discovered?: BranchWorkspaceDiscoveredDirectory,
-): Promise<BranchWorkspaceSnapshot> {
-  const issues: BranchWorkspaceIssue[] = []
-  const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
-  const rootInspection = discovered
-    ? { exists: true, kind: 'directory' }
-    : await inspect(manifest.rootId, manifest.path, signal)
-  const rootReady = rootInspection.exists && rootInspection.kind === 'directory'
-  if (!rootInspection.exists || rootInspection.kind === 'missing') {
-    issues.push({ kind: 'root-missing' })
-  } else if (rootInspection.kind !== 'directory') {
-    issues.push({ kind: 'root-not-directory' })
-  }
-
-  const repositories = await Promise.all(
-    manifest.repositories.map(
-      async (member) =>
-        await reconcileRepositoryMember(
-          manifest,
-          member,
-          repositorySnapshots.get(branchWorkspaceMemberRepositoryId(manifest.rootId, member) ?? ''),
-          issues,
-          discovered?.members.find((entry) => sameHostPath(manifest.rootId, entry.worktreePath, member.worktreePath)),
-        ),
-    ),
-  )
-  const auxiliaryEntries = manifest.auxiliaryEntries
-    .filter((entry) => entry.progress !== 'complete')
-    .map((entry) => ({ ...entry, ready: false }))
-  const activeOperation = dependencies.readActiveOperation
-    ? await dependencies.readActiveOperation(manifest.rootId, manifest.id)
-    : null
-  const state = projectState(manifest, issues)
-  return {
-    id: manifest.id,
-    rootId: manifest.rootId,
-    branch: manifest.branch,
-    directoryName: manifest.directoryName,
-    path: manifest.path,
-    state,
-    available: rootReady && !(state.kind === 'needs-action' && state.action === 'continue-delete'),
-    issues,
-    repositories,
-    auxiliaryEntries,
-    ...(activeOperation ? { activeOperation } : {}),
-  }
-}
-
-async function reconcileRepositoryMember(
-  manifest: BranchWorkspaceManifest,
-  member: BranchWorkspaceManifest['repositories'][number],
-  snapshotPromise: Promise<RepositorySnapshotRead> | undefined,
-  issues: BranchWorkspaceIssue[],
-  discovered?: BranchWorkspaceDiscoveredDirectory['members'][number],
-): Promise<BranchWorkspaceRepositorySnapshot> {
-  if (
-    member.progress === 'removed' &&
-    (manifest.operation?.kind === 'remove' || manifest.operation?.kind === 'reduce')
-  ) {
-    return { ...member, ready: false }
-  }
-  if (member.progress === 'pending') {
-    issues.push({ kind: 'repository-pending', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  if (member.progress === 'failed') {
-    issues.push({
-      kind: 'repository-failed',
-      repositoryName: member.repositoryName,
-      ...(member.lastError ? { message: member.lastError } : {}),
+    ).catch(() => {
+      signal?.throwIfAborted()
+      return []
     })
-    return { ...member, ready: false }
-  }
-  if (discovered && member.kind === 'repository' && member.memberId && member.memberId !== discovered.memberId) {
-    issues.push({ kind: 'worktree-path-mismatch', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  if (discovered && branchWorkspaceMemberRepositoryId(manifest.rootId, member) === discovered.repositoryId)
+    const items: BranchWorkspaceSnapshot[] = await Promise.all(
+      all
+        .filter((manifest) => !dependencies.branchWorkspaceId || manifest.id === dependencies.branchWorkspaceId)
+        .map(async (manifest) => {
+          const observed =
+            catalog.kind === 'ready'
+              ? catalog.discoveredDirectories?.find((directory) => directory.path === manifest.path)
+              : undefined
+          const inspection = observed
+            ? { exists: true, kind: 'directory' }
+            : await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
+                branchWorkspaceStorageRootId(manifest),
+                manifest.path,
+                signal,
+              ).catch(() => null)
+          const available = !!inspection?.exists && inspection.kind === 'directory'
+          const operation = await dependencies.readActiveOperation?.(rootId, manifest.id)
+          return {
+            id: manifest.id,
+            rootId: manifest.rootId,
+            branch: '',
+            directoryName: manifest.directoryName,
+            path: manifest.path,
+            ...(manifest.parentDirectory ? { parentDirectory: manifest.parentDirectory } : {}),
+            state: { kind: 'ready' as const },
+            available,
+            issues: available ? [] : [{ kind: 'root-missing' as const }],
+            repositories: manifest.repositories.map((member) => ({ ...member, ready: true })),
+            auxiliaryEntries: [],
+            ...(operation ? { activeOperation: operation } : {}),
+          }
+        }),
+    )
+    return { ok: true, rootId, items, auxiliaryCandidates }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
     return {
-      ...member,
-      ...(discovered.branch ? { targetBranch: discovered.branch } : {}),
-      currentBranch: discovered.branch || null,
-      ...(discovered.head ? { head: discovered.head } : {}),
-      ready: true,
+      ok: false,
+      message:
+        message === 'cancelled' || message.startsWith('workspace.') || message.startsWith('error.')
+          ? message
+          : 'workspace.branch-workspace.read-failed',
     }
-  if (!snapshotPromise) {
-    issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
   }
-
-  const snapshotRead = await snapshotPromise
-  const snapshot = snapshotRead.ok ? snapshotRead.snapshot : null
-  if (!snapshot) {
-    issues.push({ kind: 'repository-unavailable', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  const branch = snapshot.branches.find(
-    (item) => item.worktree && sameHostPath(manifest.rootId, item.worktree.path, member.worktreePath),
-  )
-  if (!branch?.worktree) {
-    issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  if (!sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)) {
-    issues.push({ kind: 'worktree-path-mismatch', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  if (branch.worktree.isPrunable) {
-    issues.push({ kind: 'worktree-missing', repositoryName: member.repositoryName })
-    return { ...member, ready: false }
-  }
-  return { ...member, targetBranch: branch.name, currentBranch: branch.name, ready: true }
-}
-
-function projectState(
-  manifest: BranchWorkspaceManifest,
-  issues: BranchWorkspaceIssue[],
-): BranchWorkspaceSnapshot['state'] {
-  if (manifest.operation?.kind === 'remove') return { kind: 'needs-action', action: 'continue-delete' }
-  if (manifest.operation?.kind === 'reduce') return { kind: 'needs-action', action: 'continue-reduce' }
-  if (manifest.operation?.kind === 'repair') {
-    return { kind: 'needs-action', action: 'repair', reason: 'drift' }
-  }
-  const hasCreateProgress = issues.some(
-    (issue) => issue.kind === 'repository-pending' || issue.kind === 'repository-failed',
-  )
-  if (hasCreateProgress) {
-    return { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
-  }
-  return issues.some(
-    (issue) =>
-      issue.kind === 'root-missing' ||
-      issue.kind === 'root-not-directory' ||
-      issue.kind === 'repository-unavailable' ||
-      issue.kind === 'worktree-missing' ||
-      issue.kind === 'worktree-path-mismatch',
-  )
-    ? { kind: 'needs-action', action: 'repair', reason: 'drift' }
-    : { kind: 'ready' }
-}
-
-function sameHostPath(rootId: string, left: string, right: string): boolean {
-  return isRemoteRepoId(rootId)
-    ? path.posix.normalize(left) === path.posix.normalize(right)
-    : sameLocalFilePath(left, right)
-}
-
-function safeReadMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : ''
-  return message === 'cancelled' || message.startsWith('workspace.') || message.startsWith('error.')
-    ? message
-    : 'workspace.branch-workspace.read-failed'
 }

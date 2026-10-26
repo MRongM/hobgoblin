@@ -206,6 +206,20 @@ export async function chooseLocalRepositoryPath(): Promise<string | null> {
   return (await nativeShell()?.openDirectoryDialog?.({ title: 'Open Git Repository' })) ?? null
 }
 
+export function canChooseSubworkspaceParentPath(): boolean {
+  try {
+    const bridge = getRendererBridge()
+    return bridge.kind() === 'electron' && bridge.hasCapability('open-directory-dialog')
+  } catch {
+    return false
+  }
+}
+
+export async function chooseSubworkspaceParentPath(title: string): Promise<string | null> {
+  if (!canChooseSubworkspaceParentPath()) return null
+  return (await nativeShell()?.openDirectoryDialog?.({ title })) ?? null
+}
+
 export async function chooseCloneParentPath(): Promise<string | null> {
   return (await nativeShell()?.openDirectoryDialog?.({ title: 'Choose Clone Destination' })) ?? null
 }

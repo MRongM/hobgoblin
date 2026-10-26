@@ -159,6 +159,25 @@ describe('DetachedFileAreaWindow', () => {
     expect(container.querySelector('[data-testid="detached-panel"]')).not.toBeNull()
   })
 
+  test('shows unavailable for a prunable attached registration at the captured path', async () => {
+    seedRepoState({
+      id: '/repo',
+      branches: [createRepoBranch('main', { worktree: { path: '/repo/missing-member' } })],
+      selectedBranch: 'main',
+      worktreesByPath: {
+        '/repo/missing-member': { path: '/repo/missing-member', branch: 'main', isMain: false, isPrunable: true },
+      },
+    })
+    const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
+    await act(async () => {
+      root.render(<DetachedFileAreaWindow request={{ ...request, worktreePath: '/repo/missing-member' }} />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(container.textContent).toContain('file-area.detached.unavailable-title')
+    expect(container.querySelector('[data-testid="detached-panel"]')).toBeNull()
+  })
+
   test('hydrates the captured worktree and renders only the captured panel', async () => {
     const { DetachedFileAreaWindow } = await import('#/web/components/detached-file-area/DetachedFileAreaWindow.tsx')
     await act(async () => {

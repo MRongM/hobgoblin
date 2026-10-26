@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { fingerprintBranchWorkspaceEntry } from '#/server/modules/branch-workspace-materialization-source.ts'
-import { cp, lstat, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { runServerCancellable } from '#/server/common/network-ops.ts'
 import { repositoryIdAtPath, workspaceRepositoryPath } from '#/server/modules/workspace-paths.ts'
@@ -409,4 +409,100 @@ async function repositoryCloneCoordinationKey(
   const primary = parseWorktrees(output).find((entry) => entry.isPrimary)
   if (!primary || primary.isBare) throw new Error('workspace.branch-workspace.repository-unavailable')
   return repositoryIdAtPath(rootId, primary.path)
+}
+
+/** Register a reviewed complete repository in place; never check out or move user data. */
+export async function adoptBranchWorkspaceRepository(
+  rootId: string,
+  targetPath: string,
+  memberId: string,
+  signal?: AbortSignal,
+): Promise<ExecResult> {
+  try {
+    signal?.throwIfAborted()
+    if (!memberId || memberId.trim() !== memberId || /[\x00-\x1f\x7f]/.test(memberId))
+      return { ok: false, message: 'error.invalid-arguments' }
+    const remote = parseRemoteRepoId(rootId)
+    if (remote) {
+      const { target } = await resolveRepositoryRemoteTarget(remote, signal)
+      const result = await runRemoteCommand(
+        target,
+        { type: 'adoptBranchWorkspaceRepository', rootPath: remote.remotePath, targetPath, memberId },
+        { signal },
+      )
+      if (!result.ok)
+        return { ok: false, message: result.message ?? 'workspace.branch-workspace.repository-unavailable' }
+      const payload = JSON.parse(result.stdout) as ExecResult
+      return payload.ok
+        ? { ok: true, message: 'adopted' }
+        : { ok: false, message: payload.message || 'workspace.branch-workspace.repository-unavailable' }
+    }
+    const rootPath = workspaceRepositoryPath(rootId)!
+    const relative = path.relative(rootPath, targetPath)
+    if (
+      relative === '..' ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative) ||
+      relative.split(path.sep).length !== 2
+    )
+      throw new Error('workspace.branch-workspace.invalid-path')
+    for (const candidate of [path.dirname(targetPath), targetPath, path.join(targetPath, '.git')]) {
+      const info = await lstat(candidate)
+      if (!info.isDirectory() || info.isSymbolicLink())
+        throw new Error('workspace.branch-workspace.repository-unavailable')
+    }
+    const gitDirectory = path.join(targetPath, '.git')
+    const validateGitData = async (directory: string): Promise<void> => {
+      for (const name of await readdir(directory)) {
+        signal?.throwIfAborted()
+        const candidate = path.join(directory, name),
+          info = await lstat(candidate)
+        if (info.isSymbolicLink()) throw new Error('workspace.branch-workspace.repository-unavailable')
+        if (info.isDirectory()) await validateGitData(candidate)
+      }
+    }
+    await validateGitData(gitDirectory)
+    const alternates = await readFile(path.join(gitDirectory, 'objects', 'info', 'alternates'), 'utf8').catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return ''
+        throw error
+      },
+    )
+    if (alternates.trim()) throw new Error('workspace.branch-workspace.repository-unavailable')
+    const run = async (args: string[]) => await git(targetPath, args, { signal })
+    const resolvedPath = await realpath(targetPath)
+    const [top, common, registrations] = await Promise.all([
+      run(['rev-parse', '--show-toplevel']),
+      run(['rev-parse', '--path-format=absolute', '--git-common-dir']),
+      run(['worktree', 'list', '--porcelain']),
+    ])
+    const primary = parseWorktrees(registrations).find((entry) => entry.isPrimary && !entry.isBare && !entry.isPrunable)
+    if (
+      !primary ||
+      (await realpath(primary.path)) !== resolvedPath ||
+      (await realpath(top)) !== resolvedPath ||
+      (await realpath(common)) !== path.join(resolvedPath, '.git')
+    )
+      throw new Error('workspace.branch-workspace.repository-unavailable')
+    const existing = await run(['config', '--local', '--get', 'hobgoblin.subworkspaceMemberId']).catch(
+      (error: { exitCode?: number }) => {
+        if (error.exitCode === 1) return null
+        throw error
+      },
+    )
+    if (existing !== null && existing !== memberId) throw new Error('workspace.branch-workspace.target-exists')
+    if (existing === null) await run(['config', '--local', 'hobgoblin.subworkspaceMemberId', memberId])
+    if ((await run(['config', '--local', '--get', 'hobgoblin.subworkspaceMemberId'])) !== memberId)
+      throw new Error('workspace.branch-workspace.repository-unavailable')
+    return { ok: true, message: 'adopted' }
+  } catch (error) {
+    return {
+      ok: false,
+      message: signal?.aborted
+        ? 'cancelled'
+        : error instanceof Error
+          ? error.message
+          : 'workspace.branch-workspace.repository-unavailable',
+    }
+  }
 }

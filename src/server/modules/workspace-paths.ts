@@ -12,7 +12,7 @@ import {
   remoteWorkspaceChildRef,
   type RemoteRepoTarget,
 } from '#/shared/remote-repo.ts'
-import type { BranchWorkspaceRepositoryMember } from '#/shared/branch-workspaces.ts'
+import type { BranchWorkspaceManifest, BranchWorkspaceRepositoryMember } from '#/shared/branch-workspaces.ts'
 import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 
 const branchWorkspaceReadableLength = 48
@@ -63,14 +63,26 @@ export function branchWorkspaceDirectoryName(branch: string, occupiedNames: Read
   return `${base}-${hash}-${suffix}`
 }
 
-export function branchWorkspacePath(rootId: string, directoryName: string): string {
-  if (!isSafeBranchWorkspaceFolderName(directoryName)) {
+export function branchWorkspacePath(rootId: string, directoryName: string, parentDirectory?: string): string {
+  if (!isSafeBranchWorkspaceFolderName(directoryName)) throw new Error('workspace.branch-workspace.invalid-directory')
+  const pathApi = isRemoteRepoId(rootId) ? path.posix : path
+  const parent = parentDirectory ?? workspaceRepositoryPath(rootId)
+  if (!parent || !pathApi.isAbsolute(parent) || /[\x00-\x1f\x7f]/.test(parent))
     throw new Error('workspace.branch-workspace.invalid-directory')
-  }
-  if (!isRemoteRepoId(rootId)) return path.join(workspaceRootId(rootId), directoryName)
-  const remotePath = parseRemoteRepoId(rootId)?.remotePath
-  if (!remotePath) throw new Error('workspace.branch-workspace.invalid-root')
-  return path.posix.join(remotePath, directoryName)
+  return pathApi.join(parent, directoryName)
+}
+
+/** A location-scoped host identity for owned target filesystem operations only. */
+export function branchWorkspaceStorageRootId(
+  workspace: Pick<BranchWorkspaceManifest, 'rootId' | 'path' | 'parentDirectory'>,
+): string {
+  const pathApi = isRemoteRepoId(workspace.rootId) ? path.posix : path
+  return repositoryIdAtPath(workspace.rootId, workspace.parentDirectory ?? pathApi.dirname(workspace.path))
+}
+
+/** Scope an exact workspace path without changing the host or project ownership. */
+export function branchWorkspaceStorageRootIdAtPath(rootId: string, workspacePath: string): string {
+  return branchWorkspaceStorageRootId({ rootId, path: workspacePath })
 }
 
 interface WorkspacePathExistsDependencies {

@@ -1,12 +1,10 @@
 import path from 'node:path'
 import {
   isBranchWorkspaceDirectoryName,
-  isSafeBranchWorkspaceFolderName,
   type BranchWorkspaceAuxiliaryCandidate,
   type BranchWorkspacePathInspection,
   type BranchWorkspacePathKind,
 } from '#/shared/branch-workspaces.ts'
-import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import {
   runRemoteCommand,
@@ -22,6 +20,7 @@ type RemoteBranchWorkspaceRunner = (
 ) => Promise<RemoteCommandResult>
 
 interface RemoteBranchWorkspaceOptions {
+  sourceRootPath?: string
   signal?: AbortSignal
   run?: RemoteBranchWorkspaceRunner
 }
@@ -67,23 +66,21 @@ export async function discoverRemoteBranchWorkspaceDirectories(
     if (
       !directory ||
       !isSafeText(directory.directoryName) ||
-      !isSafeBranchWorkspaceFolderName(directory.directoryName) ||
       (!options.directoryNames?.includes(directory.directoryName) &&
         !options.registeredDirectoryNames?.includes(directory.directoryName) &&
         !isBranchWorkspaceDirectoryName(directory.directoryName)) ||
       directory.path !== path.posix.join(rootPath, directory.directoryName) ||
       typeof directory.branch !== 'string' ||
-      !Array.isArray(directory.members) ||
-      directory.members.length === 0
+      !Array.isArray(directory.members)
     )
       throw invalidResponse()
-    const directoryPath = directory.path as string
     const members = directory.members.map((value) => {
       const member = asRecord(value)
       if (
         !member ||
-        !isWorkspaceRepositoryName(member.repositoryName) ||
-        member.worktreePath !== path.posix.join(directoryPath, member.repositoryName) ||
+        !isSafeText(member.repositoryName) ||
+        !isSafeText(member.worktreePath) ||
+        !path.posix.isAbsolute(member.worktreePath) ||
         !isSafeText(member.repositoryPath) ||
         !path.posix.isAbsolute(member.repositoryPath) ||
         typeof member.branch !== 'string'
@@ -101,7 +98,7 @@ export async function discoverRemoteBranchWorkspaceDirectories(
         ...(typeof member.head === 'string' && member.head ? { head: member.head } : {}),
       }
     })
-    return { directoryName: directory.directoryName, path: directoryPath, branch: directory.branch, members }
+    return { directoryName: directory.directoryName, path: directory.path as string, branch: directory.branch, members }
   })
 }
 
@@ -159,7 +156,13 @@ export async function materializeRemoteBranchWorkspaceSymlink(
 ): Promise<void> {
   await executeMutation(
     target,
-    { type: 'materializeBranchWorkspaceSymlink', rootPath, sourcePath, targetPath },
+    {
+      type: 'materializeBranchWorkspaceSymlink',
+      rootPath,
+      sourcePath,
+      targetPath,
+      sourceRootPath: options.sourceRootPath,
+    },
     options,
   )
 }
@@ -171,7 +174,11 @@ export async function copyRemoteBranchWorkspaceEntry(
   targetPath: string,
   options: RemoteBranchWorkspaceOptions = {},
 ): Promise<void> {
-  await executeMutation(target, { type: 'copyBranchWorkspaceEntry', rootPath, sourcePath, targetPath }, options)
+  await executeMutation(
+    target,
+    { type: 'copyBranchWorkspaceEntry', rootPath, sourcePath, targetPath, sourceRootPath: options.sourceRootPath },
+    options,
+  )
 }
 
 export async function fingerprintRemoteBranchWorkspaceEntry(

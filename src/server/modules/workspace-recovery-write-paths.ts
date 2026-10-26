@@ -87,23 +87,10 @@ export function createWorkspaceRecoveryWriteService(
 
         const manifests = manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : []
         const branchManifestFingerprint = fingerprintBranchWorkspaceManifests(manifests)
-        const branches: PendingRecoveryBranch[] = []
-        for (const manifest of manifests) {
-          const ordinary = await branchService.plan(rootId, removalRequest(manifest.id))
-          if (ordinary.ok) {
-            branches.push({
-              plan: publicBranchPlan(manifest, 'remove', ordinary.plan.requiredApprovals),
-              ordinaryPlanToken: ordinary.plan.token,
-            })
-          } else {
-            if (ordinary.message === 'workspace.branch-workspace.operation-in-progress') {
-              return failure('workspace.recovery.operation-in-progress')
-            }
-            branches.push({
-              plan: publicBranchPlan(manifest, 'record-only', [], ordinary.message),
-            })
-          }
-        }
+        // Folder registrations do not give configuration recovery ownership of their contents.
+        const branches: PendingRecoveryBranch[] = manifests.map((manifest) => ({
+          plan: publicBranchPlan(manifest, 'record-only', []),
+        }))
 
         const planWithoutToken: Omit<WorkspaceRecoveryPlan, 'token'> = {
           rootId: cleanupPlan.rootId,
@@ -216,9 +203,7 @@ export function createWorkspaceRecoveryWriteService(
         publishChange(rootId, input.sourceToken)
         return {
           ok: true,
-          outcome: outcomes.some((branch) => branch.outcome === 'record-removed')
-            ? 'completed-with-residuals'
-            : 'completed',
+          outcome: 'completed',
           workspace,
           branches: outcomes,
         }
@@ -258,7 +243,7 @@ function publicBranchPlan(
 ): WorkspaceRecoveryBranchPlan {
   return {
     id: manifest.id,
-    branch: manifest.branch,
+    branch: manifest.directoryName,
     path: manifest.path,
     mode,
     requiredApprovals: [...requiredApprovals],

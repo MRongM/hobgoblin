@@ -455,7 +455,6 @@ async function authorizeBranchWorkspaceTerminalTarget(
   if (
     !manifest ||
     workspaceRootId(manifest.rootId) !== workspaceRootId(input.repoRoot) ||
-    manifest.branch !== input.branch ||
     !sameBranchWorkspaceTerminalPath(input.repoRoot, manifest.path, input.worktreePath) ||
     manifest.operation?.kind === 'remove'
   ) {

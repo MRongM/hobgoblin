@@ -1,6 +1,7 @@
 import { lstat, readdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import pLimit from 'p-limit'
+import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import { workspaceRepositoryId, workspaceRootId } from '#/server/modules/workspace-paths.ts'
 import { probeRepository as probeRepositoryDefault } from '#/server/modules/repo-read-paths.ts'
@@ -51,7 +52,7 @@ export async function discoverWorkspaceRepositories(
       rootId,
       repositories: [],
       candidates: [],
-      configuration: { kind: 'missing' },
+      configuration: await readWorkspaceConfiguration(rootId, dependencies),
       skipped: [],
     }
   }
@@ -78,7 +79,7 @@ export async function restoreWorkspaceRepositories(
       rootId,
       repositories: [],
       candidates: [],
-      configuration: { kind: 'missing' },
+      configuration: await readWorkspaceConfiguration(rootId, dependencies),
       skipped: [],
     }
   }
@@ -404,7 +405,10 @@ async function readWorkspaceConfiguration(
   rootId: string,
   dependencies: WorkspaceDiscoveryDependencies,
 ): Promise<WorkspaceConfigSnapshot> {
-  return dependencies.readConfig ? await dependencies.readConfig(rootId) : await readWorkspaceConfig(rootId)
+  const configured = dependencies.readConfig ? await dependencies.readConfig(rootId) : await readWorkspaceConfig(rootId)
+  if (configured.kind !== 'missing') return configured
+  const folders = await readBranchWorkspaceManifests(rootId)
+  return folders.kind === 'ready' && folders.manifests.length > 0 ? { kind: 'ready', config: { repo: [] } } : configured
 }
 
 function remoteWorkspaceRefForMember(rootId: string, member: string) {

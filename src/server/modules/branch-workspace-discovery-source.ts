@@ -1,7 +1,7 @@
 import path from 'node:path'
-import { git } from '#/system/git/helper.ts'
+import { readdir, realpath, stat } from 'node:fs/promises'
 import { getRepositoryWorktrees } from '#/server/modules/repo-read-paths.ts'
-import {
+import type {
   inspectBranchWorkspacePath,
   listBranchWorkspaceChildren,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
@@ -13,7 +13,6 @@ import {
   isSafeBranchWorkspaceFolderName,
   type BranchWorkspaceMemberKind,
 } from '#/shared/branch-workspaces.ts'
-import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
 import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { discoverRemoteBranchWorkspaceDirectories } from '#/system/ssh/branch-workspaces.ts'
 
@@ -75,8 +74,8 @@ export async function discoverBranchWorkspaceDirectories(
     }))
   }
 
-  const listChildren = dependencies.listChildren ?? listBranchWorkspaceChildren
-  const inspectPath = dependencies.inspectPath ?? inspectBranchWorkspacePath
+  const listChildren =
+    dependencies.listChildren ?? (async (_rootId: string, folderPath: string) => await readdir(folderPath))
   const getWorktrees = dependencies.getWorktrees ?? getRepositoryWorktrees
   const names = directoryNames ?? (await listChildren(rootId, rootPath, signal))
   const pathApi = isRemoteRepoId(rootId) ? path.posix : path
@@ -86,49 +85,55 @@ export async function discoverBranchWorkspaceDirectories(
   for (const directoryName of [...names].sort(compareText)) {
     signal?.throwIfAborted()
     if (
-      !isSafeBranchWorkspaceFolderName(directoryName) ||
+      (!directoryNames && !isSafeBranchWorkspaceFolderName(directoryName)) ||
       (!directoryNames &&
         !dependencies.registeredDirectoryNames?.includes(directoryName) &&
         !isBranchWorkspaceDirectoryName(directoryName))
     )
       continue
     const candidatePath = pathApi.join(rootPath, directoryName)
-    const inspection = await inspectPath(rootId, candidatePath, signal).catch(() => null)
-    if (!inspection?.exists || inspection.kind !== 'directory') continue
+    const rootInfo = await stat(candidatePath).catch(() => null)
+    if (!rootInfo?.isDirectory()) continue
 
-    const childNames = await listChildren(rootId, candidatePath, signal).catch(() => [])
     const members: BranchWorkspaceDiscoveredMember[] = []
-    for (const repositoryName of [...childNames].sort(compareText)) {
+    const observe = async (
+      repositoryName: string,
+      memberPath: string,
+    ): Promise<BranchWorkspaceDiscoveredMember | null> => {
+      const actualPath = await realpath(memberPath).catch(() => memberPath)
+      const worktrees = await getWorktrees(repositoryIdAtPath(rootId, memberPath), signal).catch(() => [])
       signal?.throwIfAborted()
-      if (!isWorkspaceRepositoryName(repositoryName)) continue
-      const worktreePath = pathApi.join(candidatePath, repositoryName)
-      const childInspection = await inspectPath(rootId, worktreePath, signal).catch(() => null)
-      if (!childInspection?.exists || childInspection.kind !== 'directory') continue
-      const worktrees = await getWorktrees(repositoryIdAtPath(rootId, worktreePath), signal).catch(() => [])
-      signal?.throwIfAborted()
-      const worktree = worktrees.find(
-        (entry) => !entry.isBare && !entry.isPrunable && sameHostPath(rootId, entry.path, worktreePath),
+      const actual = worktrees.find(
+        (entry) => !entry.isBare && !entry.isPrunable && sameHostPath(rootId, entry.path, actualPath),
       )
-      if (!worktree) continue
+      if (!actual) return null
       const primary = worktrees.find((entry) => entry.isPrimary)
-      const memberId = worktree.isPrimary
-        ? await git(worktreePath, ['config', '--get', 'hobgoblin.subworkspaceMemberId'], { signal }).catch(() => '')
-        : ''
-      members.push({
+      return {
         repositoryName,
-        repositoryId: repositoryIdAtPath(rootId, primary?.path ?? worktreePath),
-        worktreePath,
-        branch: worktree.branch ?? '',
-        ...(memberId ? { memberId } : {}),
-        ...(worktree.isPrimary ? { kind: 'repository' as const } : {}),
-        ...(worktree.head ? { head: worktree.head } : {}),
-      })
+        repositoryId: repositoryIdAtPath(rootId, primary?.path ?? actual.path),
+        worktreePath: actual.path,
+        branch: actual.branch ?? '',
+        kind: actual.isPrimary ? 'repository' : 'worktree',
+        ...(actual.head ? { head: actual.head } : {}),
+      }
     }
-    if (members.length === 0) continue
+    const own = await observe(pathApi.basename(candidatePath) || candidatePath, candidatePath)
+    if (own) members.push(own)
+    else {
+      const childNames = await listChildren(rootId, candidatePath, signal).catch(() => [])
+      for (const repositoryName of [...childNames].sort(compareText)) {
+        signal?.throwIfAborted()
+        if (repositoryName === '.git') continue
+        const memberPath = pathApi.join(candidatePath, repositoryName)
+        if (!(await stat(memberPath).catch(() => null))?.isDirectory()) continue
+        const member = await observe(repositoryName, memberPath)
+        if (member) members.push(member)
+      }
+    }
     results.push({
       directoryName,
       path: candidatePath,
-      branch: members[0]!.branch,
+      branch: members[0]?.branch ?? '',
       members,
     })
   }

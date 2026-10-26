@@ -5,6 +5,8 @@ import { createBranchWorkspaceWriteService } from '#/server/modules/branch-works
 import { createWorkspaceRecoveryWriteService } from '#/server/modules/workspace-recovery-write-paths.ts'
 import { createBranchWorkspaceDependencyWriteService } from '#/server/modules/branch-workspace-dependency-write-paths.ts'
 import { createBranchWorkspaceGitActionWriteService } from '#/server/modules/branch-workspace-git-action-write-paths.ts'
+import { createBranchWorkspaceCloneWriteService } from '#/server/modules/branch-workspace-clone-write-paths.ts'
+import { createBranchWorkspaceFolderWriteService } from '#/server/modules/branch-workspace-folder-write-paths.ts'
 import { discoverWorkspaceRepositories, restoreWorkspaceRepositories } from '#/server/modules/workspace-read.ts'
 import { importWorkspaceRepositories } from '#/server/modules/workspace-import-write-paths.ts'
 import { saveWorkspaceConfig } from '#/server/modules/workspace-write-paths.ts'
@@ -47,15 +49,70 @@ export function createWorkspaceRoutes(options: WorkspaceRouteOptions = {}) {
   })
   const branchWorkspaceGitActionWriteService = createBranchWorkspaceGitActionWriteService({ isOperationActive })
   const branchWorkspaceDependencyWriteService = createBranchWorkspaceDependencyWriteService({ isOperationActive })
+  const branchWorkspaceCloneWriteService = createBranchWorkspaceCloneWriteService({ isOperationActive })
+  const branchWorkspaceFolderWriteService = createBranchWorkspaceFolderWriteService({ isOperationActive })
   function isOperationActive(rootId: string): boolean {
     return (
       branchWorkspaceWriteService.isActive(rootId) ||
       branchWorkspaceGitActionWriteService.isActive(rootId) ||
-      branchWorkspaceDependencyWriteService.isActive(rootId)
+      branchWorkspaceDependencyWriteService.isActive(rootId) ||
+      branchWorkspaceCloneWriteService.isActive(rootId) ||
+      branchWorkspaceFolderWriteService.isActive(rootId)
     )
   }
   const workspaceRecoveryWriteService = createWorkspaceRecoveryWriteService({
     branchService: branchWorkspaceWriteService,
+  })
+
+  app.post('/branch-workspaces/register', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isNonEmptyString(body?.rootId) || !isNonEmptyString(body?.path)) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(await branchWorkspaceFolderWriteService.register(body.rootId, body.path))
+  })
+
+  app.post('/branch-workspaces/unregister', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isNonEmptyString(body?.rootId) || !isNonEmptyString(body?.branchWorkspaceId)) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(await branchWorkspaceFolderWriteService.unregister(body.rootId, body.branchWorkspaceId))
+  })
+
+  app.post('/branch-workspaces/clone/plan', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (
+      !isNonEmptyString(body?.sourceRootId) ||
+      !isNonEmptyString(body?.sourceBranchWorkspaceId) ||
+      !isNonEmptyString(body?.targetRootId) ||
+      !isNonEmptyString(body?.directoryName)
+    )
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    return c.json(await branchWorkspaceCloneWriteService.plan(body))
+  })
+
+  app.post('/branch-workspaces/clone/execute', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isNonEmptyString(body?.planToken)) return c.json({ ok: false, message: 'error.invalid-arguments' })
+    return c.json(
+      await branchWorkspaceCloneWriteService.execute({
+        planToken: body.planToken,
+        ...(isNonEmptyString(body?.sourceToken) ? { sourceToken: body.sourceToken } : {}),
+      }),
+    )
+  })
+
+  app.post('/branch-workspaces/clone/abort', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isNonEmptyString(body?.rootId)) return c.json({ ok: false, message: 'error.invalid-arguments' })
+    return c.json({ ok: branchWorkspaceCloneWriteService.abort(body.rootId) })
+  })
+
+  app.post('/branch-workspaces/clone/progress', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (!isNonEmptyString(body?.planToken)) return c.json(null)
+    return c.json(branchWorkspaceCloneWriteService.progress(body.planToken))
   })
 
   app.post('/discover', async (c) => {

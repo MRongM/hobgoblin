@@ -1,29 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import { link, open, readFile, unlink } from 'node:fs/promises'
+import { access, link, open, readFile, readdir, stat, unlink } from 'node:fs/promises'
 import path from 'node:path'
+import { constants } from 'node:fs'
 import { serverDataFile } from '#/server/common/data-dir.ts'
 import { enqueueFileWrite, writeJsonRegistryAtomically } from '#/server/modules/queued-json-registry.ts'
-import {
-  branchWorkspacePath,
-  repositoryIdAtPath,
-  workspaceRepositoryPath,
-  workspaceRootId,
-} from '#/server/modules/workspace-paths.ts'
-import {
-  isSafeBranchWorkspaceFolderName,
-  normalizeBranchWorkspaceMemberSource,
-  type BranchWorkspaceAuxiliaryEntry,
-  type BranchWorkspaceManifest,
-  type BranchWorkspaceOperationSnapshot,
-  type BranchWorkspaceRegistryCleanupResult,
-  type BranchWorkspaceRepositoryMember,
-} from '#/shared/branch-workspaces.ts'
-import { isRemoteRepoId } from '#/shared/remote-repo.ts'
-import { normalizeCreateWorktreeInput, normalizeWorktreeCreationBase } from '#/shared/worktree-create.ts'
-import { isWorkspaceRepositoryName } from '#/shared/workspace.ts'
+import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
+import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
+import { runRemoteCommand } from '#/system/ssh/commands.ts'
+import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import type { BranchWorkspaceManifest, BranchWorkspaceRegistryCleanupResult } from '#/shared/branch-workspaces.ts'
 
 const registryFileName = 'branch-workspaces.json'
-const invalidRegistryMessage = 'workspace.branch-workspace.invalid-registry'
+const invalidRegistryMessage = 'workspace.branch-workspace.read-failed'
 
 export type BranchWorkspaceManifestSourceSnapshot =
   | { kind: 'missing' }
@@ -35,22 +23,22 @@ export interface BranchWorkspaceSourceDependencies {
   randomId?: () => string
 }
 
-interface PersistedBranchWorkspaceGroup {
+interface FolderRegistration {
+  id: string
+  path: string
+}
+interface FolderGroup {
   rootId: string
-  branchWorkspaces: BranchWorkspaceManifest[]
+  branchWorkspaces: FolderRegistration[]
 }
-
-interface BranchWorkspaceRegistry {
-  version: 1 | 2
-  workspaces: PersistedBranchWorkspaceGroup[]
+interface FolderRegistry {
+  version: 1 | 2 | 3
+  workspaces: FolderGroup[]
 }
-
-type BranchWorkspaceRegistrySnapshot =
-  | { kind: 'missing' }
-  | { kind: 'ready'; registry: BranchWorkspaceRegistry }
-  | { kind: 'invalid' }
-
+type RegistrySnapshot = { kind: 'missing' } | { kind: 'ready'; registry: FolderRegistry } | { kind: 'invalid' }
 const writeQueues = new Map<string, Promise<void>>()
+// Optional app creation helpers may retain progress during this process. It is never serialized.
+const executionByFile = new Map<string, Map<string, BranchWorkspaceManifest[]>>()
 
 export async function readBranchWorkspaceManifests(
   rootId: string,
@@ -59,14 +47,89 @@ export async function readBranchWorkspaceManifests(
   const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
   await writeQueues.get(dataFile)?.catch(() => undefined)
   const snapshot = await readRegistry(dataFile)
-  if (snapshot.kind === 'missing') return snapshot
-  if (snapshot.kind === 'invalid') {
-    return { kind: 'invalid', message: 'workspace.branch-workspace.read-failed' }
-  }
+  if (snapshot.kind !== 'ready')
+    return snapshot.kind === 'invalid' ? { kind: 'invalid', message: invalidRegistryMessage } : snapshot
+  const root = workspaceRootId(rootId)
+  const group = snapshot.registry.workspaces.find((entry) => entry.rootId === root)
+  if (!group) return { kind: 'missing' }
+  return { kind: 'ready', manifests: projectGroup(group) }
+}
 
-  const normalizedRootId = workspaceRootId(rootId)
-  const group = snapshot.registry.workspaces.find((workspace) => workspace.rootId === normalizedRootId)
-  return group ? { kind: 'ready', manifests: cloneManifests(group.branchWorkspaces) } : { kind: 'missing' }
+/** Process-only helper state; normal persistence/catalog reads never expose this roster. */
+export async function readBranchWorkspaceExecutionManifests(
+  rootId: string,
+  dependencies: BranchWorkspaceSourceDependencies = {},
+): Promise<BranchWorkspaceManifestSourceSnapshot> {
+  const snapshot = await readBranchWorkspaceManifests(rootId, dependencies)
+  if (snapshot.kind !== 'ready') return snapshot
+  const root = workspaceRootId(rootId),
+    dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  return {
+    kind: 'ready',
+    manifests: projectGroup(
+      { rootId: root, branchWorkspaces: snapshot.manifests.map(({ id, path }) => ({ id, path })) },
+      executionByFile.get(dataFile)?.get(root),
+    ),
+  }
+}
+
+export async function readAllBranchWorkspaceManifests(
+  dependencies: BranchWorkspaceSourceDependencies = {},
+): Promise<BranchWorkspaceManifestSourceSnapshot> {
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  await writeQueues.get(dataFile)?.catch(() => undefined)
+  const snapshot = await readRegistry(dataFile)
+  if (snapshot.kind !== 'ready')
+    return snapshot.kind === 'invalid' ? { kind: 'invalid', message: invalidRegistryMessage } : snapshot
+  return { kind: 'ready', manifests: snapshot.registry.workspaces.flatMap((group) => projectGroup(group)) }
+}
+
+/** Record a readable folder location. No repository adoption, checkout, marker or file mutation. */
+export async function registerBranchWorkspaceFolder(
+  rootId: string,
+  folderPath: string,
+  dependencies: BranchWorkspaceSourceDependencies = {},
+): Promise<{ branchWorkspaceId: string }> {
+  const root = workspaceRootId(rootId)
+  const normalizedPath = normalizeFolderPath(root, folderPath)
+  const remote = parseRemoteRepoId(root)
+  if (remote) {
+    const { target } = await resolveRepositoryRemoteTarget(remote)
+    const result = await runRemoteCommand(target, { type: 'validateBranchWorkspaceFolder', path: normalizedPath })
+    if (!result.ok) throw new Error('workspace.branch-workspace.directory-unavailable')
+  } else {
+    try {
+      if (!(await stat(normalizedPath)).isDirectory()) throw new Error('not-directory')
+      await access(normalizedPath, constants.R_OK | constants.X_OK)
+      await readdir(normalizedPath)
+    } catch {
+      throw new Error('workspace.branch-workspace.directory-unavailable')
+    }
+  }
+  let branchWorkspaceId = ''
+  await updateBranchWorkspaceManifests(
+    root,
+    (manifests) => {
+      const existing = manifests.find((manifest) => sameFolderPath(root, manifest.path, normalizedPath))
+      if (existing) {
+        branchWorkspaceId = existing.id
+        return manifests
+      }
+      branchWorkspaceId = `branch-workspace:${dependencies.randomId?.() ?? randomUUID()}`
+      return [...manifests, folderManifest(root, { id: branchWorkspaceId, path: normalizedPath })]
+    },
+    dependencies,
+  )
+  return { branchWorkspaceId }
+}
+
+/** Forget only the application record. Files, Git branches, worktrees and terminals are untouched. */
+export async function unregisterBranchWorkspaceFolder(
+  rootId: string,
+  branchWorkspaceId: string,
+  dependencies: BranchWorkspaceSourceDependencies = {},
+): Promise<void> {
+  await discardBranchWorkspaceRecords(rootId, [branchWorkspaceId], dependencies)
 }
 
 export async function replaceBranchWorkspaceManifests(
@@ -74,7 +137,7 @@ export async function replaceBranchWorkspaceManifests(
   manifests: BranchWorkspaceManifest[],
   dependencies: BranchWorkspaceSourceDependencies = {},
 ): Promise<void> {
-  await mutateBranchWorkspaceManifests(rootId, () => manifests, dependencies)
+  await updateBranchWorkspaceManifests(rootId, () => manifests, dependencies)
 }
 
 export async function updateBranchWorkspaceManifests(
@@ -82,35 +145,44 @@ export async function updateBranchWorkspaceManifests(
   mutate: (manifests: BranchWorkspaceManifest[]) => BranchWorkspaceManifest[] | Promise<BranchWorkspaceManifest[]>,
   dependencies: BranchWorkspaceSourceDependencies = {},
 ): Promise<void> {
-  await mutateBranchWorkspaceManifests(rootId, mutate, dependencies)
+  const root = workspaceRootId(rootId)
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
+    const snapshot = await readRegistry(dataFile)
+    if (snapshot.kind === 'invalid') throw new Error(invalidRegistryMessage)
+    const registry: FolderRegistry = snapshot.kind === 'ready' ? snapshot.registry : { version: 3, workspaces: [] }
+    const existing = registry.workspaces.find((group) => group.rootId === root)
+    const current = existing ? projectGroup(existing, executionByFile.get(dataFile)?.get(root)) : []
+    const next = await mutate(cloneManifests(current))
+    const registrations = normalizeRegistrations(next, root)
+    const group: FolderGroup = { rootId: root, branchWorkspaces: registrations }
+    const groups = registry.workspaces.some((entry) => entry.rootId === root)
+      ? registry.workspaces.map((entry) => (entry.rootId === root ? group : entry))
+      : [...registry.workspaces, group]
+    await backupLegacyRegistry(dataFile, registry)
+    await writeJsonRegistryAtomically(
+      dataFile,
+      { version: 3, workspaces: groups },
+      dependencies.randomId?.() ?? randomUUID(),
+    )
+    const runtime = executionByFile.get(dataFile) ?? new Map<string, BranchWorkspaceManifest[]>()
+    runtime.set(root, cloneManifests(next))
+    executionByFile.set(dataFile, runtime)
+  })
 }
 
 export async function discardBranchWorkspaceRecords(
   rootId: string,
-  branchWorkspaceIds: readonly string[],
+  ids: readonly string[],
   dependencies: BranchWorkspaceSourceDependencies = {},
 ): Promise<void> {
-  if (branchWorkspaceIds.length === 0) return
-  const normalizedRootId = workspaceRootId(rootId)
-  const discardedIds = new Set(branchWorkspaceIds)
-  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
-
-  await enqueueFileWrite(writeQueues, dataFile, async () => {
-    const snapshot = await readRegistry(dataFile)
-    if (snapshot.kind === 'missing') return
-    if (snapshot.kind === 'invalid') throw new Error('workspace.branch-workspace.read-failed')
-    const group = snapshot.registry.workspaces.find((workspace) => workspace.rootId === normalizedRootId)
-    if (!group || !group.branchWorkspaces.some((manifest) => discardedIds.has(manifest.id))) return
-    const workspaces = snapshot.registry.workspaces.map((workspace) => ({
-      rootId: workspace.rootId,
-      branchWorkspaces:
-        workspace.rootId === normalizedRootId
-          ? cloneManifests(workspace.branchWorkspaces.filter((manifest) => !discardedIds.has(manifest.id)))
-          : cloneManifests(workspace.branchWorkspaces),
-    }))
-    await backupLegacyRegistry(dataFile, snapshot.registry)
-    await writeJsonRegistryAtomically(dataFile, { version: 2, workspaces }, dependencies.randomId?.() ?? randomUUID())
-  })
+  if (!ids.length) return
+  const removed = new Set(ids)
+  await updateBranchWorkspaceManifests(
+    rootId,
+    (manifests) => manifests.filter((manifest) => !removed.has(manifest.id)),
+    dependencies,
+  )
 }
 
 export async function cleanupBranchWorkspaceRegistry(
@@ -118,7 +190,6 @@ export async function cleanupBranchWorkspaceRegistry(
 ): Promise<BranchWorkspaceRegistryCleanupResult> {
   const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
   let result: BranchWorkspaceRegistryCleanupResult = { ok: true, outcome: 'unchanged', removedRecords: 0 }
-
   await enqueueFileWrite(writeQueues, dataFile, async () => {
     let raw: string
     try {
@@ -127,418 +198,171 @@ export async function cleanupBranchWorkspaceRegistry(
       if (isErrno(error, 'ENOENT')) return
       throw error
     }
-
     let parsed: unknown
     try {
       parsed = JSON.parse(raw)
     } catch {
-      await writeJsonRegistryAtomically(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
-      result = { ok: true, outcome: 'reset', removedRecords: 0 }
-      return
+      parsed = null
     }
-
     try {
       normalizeRegistry(parsed)
       return
     } catch {}
-
-    const recovered = recoverRegistry(parsed)
-    if (!recovered) {
-      await writeJsonRegistryAtomically(dataFile, emptyRegistry(), dependencies.randomId?.() ?? randomUUID())
-      result = { ok: true, outcome: 'reset', removedRecords: 0 }
-      return
-    }
-
-    const rawRegistry = asRecord(parsed)
-    if (rawRegistry?.version === 1) await backupLegacyRegistry(dataFile, { version: 1, workspaces: [] })
-    await writeJsonRegistryAtomically(dataFile, recovered.registry, dependencies.randomId?.() ?? randomUUID())
-    result = { ok: true, outcome: 'repaired', removedRecords: recovered.removedRecords }
+    const record = asRecord(parsed)
+    const groups: FolderGroup[] = [],
+      seenRoots = new Set<string>()
+    let removedRecords = 0
+    if (
+      record &&
+      (record.version === 1 || record.version === 2 || record.version === 3) &&
+      Array.isArray(record.workspaces)
+    ) {
+      for (const value of record.workspaces) {
+        const group = asRecord(value)
+        if (!group || typeof group.rootId !== 'string' || !Array.isArray(group.branchWorkspaces)) {
+          removedRecords++
+          continue
+        }
+        const rootId = workspaceRootId(group.rootId)
+        if (seenRoots.has(rootId)) {
+          removedRecords++
+          continue
+        }
+        seenRoots.add(rootId)
+        const registrations: FolderRegistration[] = [],
+          seenIds = new Set<string>(),
+          seenPaths = new Set<string>()
+        for (const value of group.branchWorkspaces) {
+          try {
+            const [registration] = normalizeRegistrations([value], rootId)
+            if (!registration || seenIds.has(registration.id) || seenPaths.has(registration.path))
+              throw new Error(invalidRegistryMessage)
+            registrations.push(registration)
+            seenIds.add(registration.id)
+            seenPaths.add(registration.path)
+          } catch {
+            removedRecords++
+          }
+        }
+        groups.push({ rootId, branchWorkspaces: registrations })
+      }
+      result = { ok: true, outcome: 'repaired', removedRecords }
+    } else result = { ok: true, outcome: 'reset', removedRecords: 0 }
+    await writeJsonRegistryAtomically(
+      dataFile,
+      { version: 3, workspaces: groups },
+      dependencies.randomId?.() ?? randomUUID(),
+    )
+    executionByFile.delete(dataFile)
   })
-
   return result
 }
 
-async function mutateBranchWorkspaceManifests(
-  rootId: string,
-  mutate: (manifests: BranchWorkspaceManifest[]) => BranchWorkspaceManifest[] | Promise<BranchWorkspaceManifest[]>,
-  dependencies: BranchWorkspaceSourceDependencies,
-): Promise<void> {
-  const normalizedRootId = workspaceRootId(rootId)
-  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
-
-  await enqueueFileWrite(writeQueues, dataFile, async () => {
-    const snapshot = await readRegistry(dataFile)
-    if (snapshot.kind === 'invalid') throw new Error('workspace.branch-workspace.read-failed')
-    const registry: BranchWorkspaceRegistry =
-      snapshot.kind === 'ready' ? snapshot.registry : { version: 2, workspaces: [] }
-    const groups = registry.workspaces.map((workspace) => ({
-      rootId: workspace.rootId,
-      branchWorkspaces: cloneManifests(workspace.branchWorkspaces),
-    }))
-    const existingIndex = groups.findIndex((workspace) => workspace.rootId === normalizedRootId)
-    const current = existingIndex >= 0 ? groups[existingIndex]!.branchWorkspaces : []
-    const next = normalizeManifestList(await mutate(cloneManifests(current)), normalizedRootId)
-    const persisted = { rootId: normalizedRootId, branchWorkspaces: next }
-    if (existingIndex >= 0) groups[existingIndex] = persisted
-    else groups.push(persisted)
-
-    await backupLegacyRegistry(dataFile, registry)
-    await writeJsonRegistryAtomically(
-      dataFile,
-      { version: 2, workspaces: groups },
-      dependencies.randomId?.() ?? randomUUID(),
-    )
-  })
-}
-
-async function readRegistry(dataFile: string): Promise<BranchWorkspaceRegistrySnapshot> {
-  let raw: string
+async function readRegistry(dataFile: string): Promise<RegistrySnapshot> {
   try {
-    raw = await readFile(dataFile, 'utf8')
+    return { kind: 'ready', registry: normalizeRegistry(JSON.parse(await readFile(dataFile, 'utf8'))) }
   } catch (error) {
     return isErrno(error, 'ENOENT') ? { kind: 'missing' } : { kind: 'invalid' }
   }
-
-  try {
-    return { kind: 'ready', registry: normalizeRegistry(JSON.parse(raw)) }
-  } catch {
-    return { kind: 'invalid' }
-  }
 }
 
-function normalizeRegistry(value: unknown): BranchWorkspaceRegistry {
-  const registry = asRecord(value)
-  if (!registry || (registry.version !== 1 && registry.version !== 2) || !Array.isArray(registry.workspaces)) {
+function normalizeRegistry(value: unknown): FolderRegistry {
+  const record = asRecord(value)
+  if (
+    !record ||
+    !(record.version === 1 || record.version === 2 || record.version === 3) ||
+    !Array.isArray(record.workspaces)
+  )
     throw new Error(invalidRegistryMessage)
-  }
-
-  const workspaces: PersistedBranchWorkspaceGroup[] = []
-  const roots = new Set<string>()
-  for (const value of registry.workspaces) {
-    const workspace = asRecord(value)
-    if (!workspace || typeof workspace.rootId !== 'string' || !Array.isArray(workspace.branchWorkspaces)) {
+  const groups: FolderGroup[] = [],
+    roots = new Set<string>()
+  for (const value of record.workspaces) {
+    const group = asRecord(value)
+    if (!group || typeof group.rootId !== 'string' || !group.rootId || !Array.isArray(group.branchWorkspaces))
       throw new Error(invalidRegistryMessage)
-    }
-    const rootId = workspaceRootId(workspace.rootId)
-    if (rootId !== workspace.rootId || roots.has(rootId)) throw new Error(invalidRegistryMessage)
+    const rootId = workspaceRootId(group.rootId)
+    if (rootId !== group.rootId || roots.has(rootId)) throw new Error(invalidRegistryMessage)
     roots.add(rootId)
-    workspaces.push({
-      rootId,
-      branchWorkspaces: normalizeManifestList(workspace.branchWorkspaces, rootId),
-    })
+    groups.push({ rootId, branchWorkspaces: normalizeRegistrations(group.branchWorkspaces, rootId) })
   }
-  return { version: registry.version, workspaces }
+  return { version: record.version as 1 | 2 | 3, workspaces: groups }
 }
 
-function recoverRegistry(value: unknown): { registry: BranchWorkspaceRegistry; removedRecords: number } | null {
-  const registry = asRecord(value)
-  if (!registry || (registry.version !== 1 && registry.version !== 2) || !Array.isArray(registry.workspaces))
-    return null
-
-  const workspaces: PersistedBranchWorkspaceGroup[] = []
-  const roots = new Set<string>()
-  let removedRecords = 0
-  for (const value of registry.workspaces) {
-    const workspace = asRecord(value)
-    const rawRootId = exactText(workspace?.rootId)
-    if (!workspace || !rawRootId || !Array.isArray(workspace.branchWorkspaces)) {
-      removedRecords += 1
-      continue
-    }
-    const rootId = workspaceRootId(rawRootId)
-    if (rootId !== rawRootId || roots.has(rootId)) {
-      removedRecords += 1
-      continue
-    }
-
-    roots.add(rootId)
-    const branchWorkspaces: BranchWorkspaceManifest[] = []
-    const ids = new Set<string>()
-    const directoryNames = new Set<string>()
-    for (const candidate of workspace.branchWorkspaces) {
-      let manifest: BranchWorkspaceManifest
-      try {
-        manifest = normalizeManifest(candidate, rootId)
-      } catch {
-        removedRecords += 1
-        continue
-      }
-      if (ids.has(manifest.id) || directoryNames.has(manifest.directoryName)) {
-        removedRecords += 1
-        continue
-      }
-      ids.add(manifest.id)
-      directoryNames.add(manifest.directoryName)
-      branchWorkspaces.push(manifest)
-    }
-    workspaces.push({ rootId, branchWorkspaces })
-  }
-  return { registry: { version: 2, workspaces }, removedRecords }
-}
-
-function emptyRegistry(): BranchWorkspaceRegistry {
-  return { version: 2, workspaces: [] }
-}
-
-function normalizeManifestList(value: unknown, rootId: string): BranchWorkspaceManifest[] {
+function normalizeRegistrations(value: unknown, rootId: string): FolderRegistration[] {
   if (!Array.isArray(value)) throw new Error(invalidRegistryMessage)
-  const manifests: BranchWorkspaceManifest[] = []
-  const ids = new Set<string>()
-  const directoryNames = new Set<string>()
-  for (const item of value) {
-    const manifest = normalizeManifest(item, rootId)
-    if (ids.has(manifest.id) || directoryNames.has(manifest.directoryName)) {
+  const ids = new Set<string>(),
+    paths = new Set<string>()
+  return value.map((value) => {
+    const record = asRecord(value)
+    if (!record || typeof record.id !== 'string' || !record.id || typeof record.path !== 'string')
       throw new Error(invalidRegistryMessage)
-    }
-    ids.add(manifest.id)
-    directoryNames.add(manifest.directoryName)
-    manifests.push(manifest)
-  }
-  return manifests
+    const folderPath = normalizeFolderPath(rootId, record.path)
+    if (ids.has(record.id) || paths.has(folderPath)) throw new Error(invalidRegistryMessage)
+    ids.add(record.id)
+    paths.add(folderPath)
+    return { id: record.id, path: folderPath }
+  })
 }
 
-function normalizeManifest(value: unknown, rootId: string): BranchWorkspaceManifest {
-  const manifest = asRecord(value)
-  const id = exactText(manifest?.id)
-  const branch = exactText(manifest?.branch)
-  const directoryName = exactText(manifest?.directoryName)
-  if (
-    !manifest ||
-    !id ||
-    manifest.rootId !== rootId ||
-    typeof manifest.branch !== 'string' ||
-    (branch === null && manifest.branch !== '') ||
-    !directoryName ||
-    !isSafeBranchWorkspaceFolderName(directoryName) ||
-    !Array.isArray(manifest.repositories) ||
-    manifest.repositories.length === 0 ||
-    !Array.isArray(manifest.auxiliaryEntries)
-  ) {
-    throw new Error(invalidRegistryMessage)
-  }
-
-  const expectedPath = branchWorkspacePath(rootId, directoryName)
-  if (manifest.path !== expectedPath) throw new Error(invalidRegistryMessage)
+function normalizeFolderPath(rootId: string, value: string): string {
   const pathApi = isRemoteRepoId(rootId) ? path.posix : path
-  const rootPath = workspaceRepositoryPath(rootId)
-  if (!rootPath) throw new Error(invalidRegistryMessage)
+  if (!value || value.includes('\0') || !pathApi.isAbsolute(value))
+    throw new Error('workspace.branch-workspace.invalid-directory')
+  return pathApi.normalize(value)
+}
 
-  const repositories: BranchWorkspaceRepositoryMember[] = []
-  const names = new Set<string>()
-  const memberIds = new Set<string>()
-  for (const value of manifest.repositories) {
-    const member = normalizeRepositoryMember(value, manifest.branch as string, expectedPath, pathApi)
-    if (names.has(member.repositoryName) || (member.memberId && memberIds.has(member.memberId)))
-      throw new Error(invalidRegistryMessage)
-    if (member.memberId) memberIds.add(member.memberId)
-    if (
-      member.kind === 'repository' &&
-      member.repositoryId &&
-      member.repositoryId !== repositoryIdAtPath(rootId, member.worktreePath)
-    )
-      throw new Error(invalidRegistryMessage)
-    names.add(member.repositoryName)
-    repositories.push(member)
-  }
-
-  const persistedOperation = manifest.operation === undefined ? undefined : normalizeOperation(manifest.operation)
-  const auxiliaryEntries: BranchWorkspaceAuxiliaryEntry[] = []
-  for (const value of manifest.auxiliaryEntries) {
-    const entry = normalizeAuxiliaryEntry(value, rootPath, expectedPath, pathApi)
-    if (names.has(entry.name)) throw new Error(invalidRegistryMessage)
-    names.add(entry.name)
-    if (entry.progress !== 'complete') auxiliaryEntries.push(entry)
-  }
-
-  const repositoriesReady = repositories.every((member) => member.progress === 'complete')
-  const operation =
-    repositoriesReady && (persistedOperation?.kind === 'create' || persistedOperation?.kind === 'extend')
-      ? undefined
-      : persistedOperation
-  const retainedAuxiliaryEntries =
-    operation?.kind === 'remove' ||
-    ((operation?.kind === 'create' || operation?.kind === 'extend') && !repositoriesReady)
-      ? auxiliaryEntries
-      : []
-
+function folderManifest(rootId: string, registration: FolderRegistration): BranchWorkspaceManifest {
+  const pathApi = isRemoteRepoId(rootId) ? path.posix : path
   return {
-    id,
+    ...registration,
     rootId,
-    branch: manifest.branch as string,
-    directoryName,
-    path: expectedPath,
-    repositories,
-    auxiliaryEntries: retainedAuxiliaryEntries,
-    ...(operation ? { operation } : {}),
+    branch: '',
+    directoryName: pathApi.basename(registration.path) || registration.path,
+    parentDirectory: pathApi.dirname(registration.path),
+    repositories: [],
+    auxiliaryEntries: [],
   }
 }
 
-function normalizeRepositoryMember(
-  value: unknown,
-  branch: string,
-  workspacePath: string,
-  pathApi: Pick<typeof path, 'join'>,
-): BranchWorkspaceRepositoryMember {
-  const member = asRecord(value)
-  const repositoryName = exactText(member?.repositoryName)
-  const hasCreationBase = member ? 'creationBase' in member : false
-  const creationBase = hasCreationBase
-    ? normalizeWorktreeCreationBase(member?.creationBase)
-    : normalizeWorktreeCreationBase({ kind: 'localBranch', branch: exactText(member?.baseBranch) })
-  const kind = member?.kind
-  if (kind !== undefined && kind !== 'worktree' && kind !== 'repository') throw new Error(invalidRegistryMessage)
-  const source = member?.source === undefined ? undefined : normalizeBranchWorkspaceMemberSource(member.source)
-  if ((member?.source !== undefined && !source) || (source?.kind === 'url' && kind !== 'repository'))
-    throw new Error(invalidRegistryMessage)
-  const memberId = member?.memberId === undefined ? undefined : exactText(member.memberId)
-  const repositoryId = member?.repositoryId === undefined ? undefined : exactText(member.repositoryId)
-  if ((member?.memberId !== undefined && !memberId) || (member?.repositoryId !== undefined && !repositoryId))
-    throw new Error(invalidRegistryMessage)
-  const mode =
-    member?.mode === undefined
-      ? undefined
-      : normalizeCreateWorktreeInput({ worktreePath: '/member', mode: member.mode })?.mode
-  if (member?.mode !== undefined && !mode) throw new Error(invalidRegistryMessage)
-  const syncBeforeCreate = member?.syncBeforeCreate ?? false
-  const worktreePath = exactText(member?.worktreePath)
-  if (
-    !member ||
-    !repositoryName ||
-    !isWorkspaceRepositoryName(repositoryName) ||
-    (!exactText(member.targetBranch) &&
-      !(member.targetBranch === '' && (kind === 'repository' || mode?.kind === 'detached'))) ||
-    !creationBase ||
-    typeof syncBeforeCreate !== 'boolean' ||
-    (member.branchOrigin !== 'created' && member.branchOrigin !== 'pre-existing') ||
-    !isProgress(member.progress) ||
-    worktreePath !== pathApi.join(workspacePath, repositoryName)
-  ) {
-    throw new Error(invalidRegistryMessage)
-  }
-  const lastError = optionalText(member.lastError)
-  const branchCleanupProgress = optionalProgress(member.branchCleanupProgress)
-  const upstreamCleanupProgress = optionalProgress(member.upstreamCleanupProgress)
-  return {
-    repositoryName,
-    ...(kind ? { kind } : {}),
-    ...(source ? { source } : {}),
-    ...(memberId ? { memberId } : {}),
-    ...(repositoryId ? { repositoryId } : {}),
-    ...(mode ? { mode } : {}),
-    targetBranch: member.targetBranch as string,
-    creationBase,
-    syncBeforeCreate,
-    branchOrigin: member.branchOrigin,
-    worktreePath,
-    progress: member.progress,
-    ...(branchCleanupProgress ? { branchCleanupProgress } : {}),
-    ...(upstreamCleanupProgress ? { upstreamCleanupProgress } : {}),
-    ...(lastError ? { lastError } : {}),
-  }
+function projectGroup(group: FolderGroup, runtime: BranchWorkspaceManifest[] = []): BranchWorkspaceManifest[] {
+  return group.branchWorkspaces.map((registration) => {
+    const transient = runtime.find((entry) => entry.id === registration.id && entry.path === registration.path)
+    return transient
+      ? {
+          ...cloneManifests([transient])[0]!,
+          ...folderManifest(group.rootId, registration),
+          repositories: cloneManifests([transient])[0]!.repositories,
+          auxiliaryEntries: transient.auxiliaryEntries,
+          operation: transient.operation,
+        }
+      : folderManifest(group.rootId, registration)
+  })
 }
-
-function normalizeAuxiliaryEntry(
-  value: unknown,
-  rootPath: string,
-  workspacePath: string,
-  pathApi: Pick<typeof path, 'join'>,
-): BranchWorkspaceAuxiliaryEntry {
-  const entry = asRecord(value)
-  const name = exactText(entry?.name)
-  const sourcePath = exactText(entry?.sourcePath)
-  const targetPath = exactText(entry?.targetPath)
-  if (
-    !entry ||
-    !name ||
-    !isWorkspaceRepositoryName(name) ||
-    (entry.mode !== 'symlink' && entry.mode !== 'copy') ||
-    !isProgress(entry.progress) ||
-    sourcePath !== pathApi.join(rootPath, name) ||
-    targetPath !== pathApi.join(workspacePath, name)
-  ) {
-    throw new Error(invalidRegistryMessage)
-  }
-  const copyBaseline = optionalText(entry.copyBaseline)
-  if (entry.copyBaseline !== undefined && !copyBaseline) throw new Error(invalidRegistryMessage)
-  if (entry.mode === 'symlink' && copyBaseline) throw new Error(invalidRegistryMessage)
-  const lastError = optionalText(entry.lastError)
-  return {
-    name,
-    mode: entry.mode,
-    sourcePath,
-    targetPath,
-    ...(copyBaseline ? { copyBaseline } : {}),
-    progress: entry.progress,
-    ...(lastError ? { lastError } : {}),
-  }
+function sameFolderPath(rootId: string, left: string, right: string): boolean {
+  return normalizeFolderPath(rootId, left) === normalizeFolderPath(rootId, right)
 }
-
-function normalizeOperation(value: unknown): BranchWorkspaceOperationSnapshot {
-  const operation = asRecord(value)
-  if (!operation || !isOperationKind(operation.kind)) throw new Error(invalidRegistryMessage)
-  return { kind: operation.kind }
-}
-
-function optionalProgress(value: unknown): BranchWorkspaceRepositoryMember['progress'] | undefined {
-  if (value === undefined) return undefined
-  if (!isProgress(value)) throw new Error(invalidRegistryMessage)
-  return value
-}
-
 function cloneManifests(manifests: BranchWorkspaceManifest[]): BranchWorkspaceManifest[] {
-  return manifests.map((manifest) => ({
-    ...manifest,
-    repositories: manifest.repositories.map((member) => ({
-      ...member,
-      creationBase: { ...member.creationBase },
-    })),
-    auxiliaryEntries: manifest.auxiliaryEntries.map((entry) => ({ ...entry })),
-    ...(manifest.operation ? { operation: { ...manifest.operation } } : {}),
-  }))
+  return structuredClone(manifests)
 }
-
-function isProgress(value: unknown): value is BranchWorkspaceRepositoryMember['progress'] {
-  return value === 'pending' || value === 'complete' || value === 'removed' || value === 'failed'
-}
-
-function isOperationKind(value: unknown): value is BranchWorkspaceOperationSnapshot['kind'] {
-  return value === 'create' || value === 'extend' || value === 'reduce' || value === 'repair' || value === 'remove'
-}
-
-function exactText(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() === value && safeText(value) ? value : null
-}
-
-function optionalText(value: unknown): string | null {
-  if (value === undefined) return null
-  return exactText(value)
-}
-
-function safeText(value: string): boolean {
-  return value.length > 0 && !value.includes('\0') && !/[\x00-\x1f\x7f]/.test(value)
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
 }
-
 function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
 }
-
-async function backupLegacyRegistry(dataFile: string, registry: BranchWorkspaceRegistry): Promise<void> {
-  if (registry.version !== 1) return
-  const raw = await readFile(dataFile)
-  const temporaryPath = `${dataFile}.v1.${randomUUID()}.tmp`
+async function backupLegacyRegistry(dataFile: string, registry: FolderRegistry): Promise<void> {
+  if (registry.version === 3) return
+  const raw = await readFile(dataFile),
+    temporaryPath = `${dataFile}.v${registry.version}.${randomUUID()}.tmp`
   const handle = await open(temporaryPath, 'wx', 0o600)
   try {
     await handle.writeFile(raw)
     await handle.sync()
     await handle.close()
     try {
-      await link(temporaryPath, `${dataFile}.v1.bak`)
+      await link(temporaryPath, `${dataFile}.v${registry.version}.bak`)
     } catch (error) {
       if (!isErrno(error, 'EEXIST')) throw error
     }

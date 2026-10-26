@@ -107,7 +107,15 @@ export interface BranchWorkspaceOperationSnapshot {
   kind: BranchWorkspaceOperationKind
 }
 
+/** Canonical durable folder registration; membership is observed at runtime. */
+export interface BranchWorkspaceFolderRegistration {
+  id: string
+  path: string
+}
+
+/** Runtime compatibility projection used by optional Git helper plans. */
 export interface BranchWorkspaceManifest {
+  parentDirectory?: string
   id: string
   rootId: string
   branch: string
@@ -175,6 +183,7 @@ export type BranchWorkspaceState =
   | { kind: 'needs-action'; action: 'continue-delete' }
 
 export interface BranchWorkspaceSnapshot {
+  parentDirectory?: string
   id: string
   rootId: string
   branch: string
@@ -217,6 +226,7 @@ export type BranchWorkspacePlanRequest =
   | {
       operation: 'create'
       directoryName?: string
+      parentDirectory?: string
       branchWorkspaceId?: string
       branch: string
       repositories: BranchWorkspaceRepositorySelection[]
@@ -317,6 +327,7 @@ export interface BranchWorkspaceAuxiliaryPlan {
 }
 
 export interface BranchWorkspacePlan {
+  parentDirectory?: string
   token: string
   rootId: string
   operation: BranchWorkspaceOperationKind
@@ -442,11 +453,13 @@ export function normalizeBranchWorkspacePlanRequest(value: unknown): BranchWorks
 function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspacePlanRequestResult {
   const directoryName = request.directoryName === undefined ? undefined : request.directoryName
   if (directoryName !== undefined && !isSafeBranchWorkspaceFolderName(directoryName)) return invalidRequest()
+  const parentDirectory = request.parentDirectory === undefined ? undefined : normalizedText(request.parentDirectory)
+  if (request.parentDirectory !== undefined && (!directoryName || !parentDirectory)) return invalidRequest()
   const branch = directoryName === undefined ? normalizedText(request.branch) : ''
   if (
     (directoryName === undefined && !branch) ||
     !Array.isArray(request.repositories) ||
-    request.repositories.length === 0
+    (directoryName === undefined && request.repositories.length === 0)
   )
     return invalidRequest()
   if (!Array.isArray(request.auxiliaryEntries)) return invalidRequest()
@@ -548,6 +561,7 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
       operation: 'create',
       branch: branch!,
       ...(directoryName !== undefined ? { directoryName } : {}),
+      ...(parentDirectory ? { parentDirectory } : {}),
       ...(normalizedText(request.branchWorkspaceId)
         ? { branchWorkspaceId: normalizedText(request.branchWorkspaceId)! }
         : {}),

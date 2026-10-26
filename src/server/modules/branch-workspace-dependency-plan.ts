@@ -1,3 +1,4 @@
+import { branchWorkspaceStorageRootIdAtPath } from '#/server/modules/workspace-paths.ts'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import {
@@ -49,7 +50,11 @@ export async function readBranchWorkspaceDependencyCandidates(
       signal?.throwIfAborted()
       if (selectedNames && !selectedNames.has(source.name)) continue
       const targetPath = pathApi.join(workspace.path, source.name)
-      const target = await inspectPath(snapshot.rootId, targetPath, signal)
+      const target = await inspectPath(
+        branchWorkspaceStorageRootIdAtPath(snapshot.rootId, workspace.path),
+        targetPath,
+        signal,
+      )
       candidates.push({
         name: source.name,
         sourcePath: source.path,
@@ -107,7 +112,7 @@ export async function buildBranchWorkspaceDependencyPlan(
       if (candidate.targetKind !== 'missing') {
         try {
           targetFingerprint = await (dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry)(
-            read.rootId,
+            targetScope(read.rootId, candidate.targetPath),
             candidate.targetPath,
             signal,
           )
@@ -157,7 +162,11 @@ export async function buildBranchWorkspaceDependencyPlan(
         sourcePath: candidate.sourcePath,
         targetPath: candidate.targetPath,
         targetKind: candidate.targetKind,
-        fingerprint: await fingerprintEntry(read.rootId, candidate.targetPath, signal),
+        fingerprint: await fingerprintEntry(
+          targetScope(read.rootId, candidate.targetPath),
+          candidate.targetPath,
+          signal,
+        ),
       })
     } catch (error) {
       if (isAbortError(error)) throw error
@@ -192,7 +201,7 @@ async function retainedSymlinkCandidate(
   const pendingEntry = pendingPlan.entries.find((entry) => entry.name === selection.name && entry.mode === 'symlink')
   if (!pendingEntry) return null
   const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
-    read.rootId,
+    targetScope(read.rootId, pendingEntry.targetPath),
     pendingEntry.targetPath,
     signal,
   )
@@ -226,4 +235,8 @@ function isAbortError(error: unknown): boolean {
 function operationMessage(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : ''
   return message || fallback
+}
+
+function targetScope(rootId: string, targetPath: string): string {
+  return branchWorkspaceStorageRootIdAtPath(rootId, (isRemoteRepoId(rootId) ? path.posix : path).dirname(targetPath))
 }

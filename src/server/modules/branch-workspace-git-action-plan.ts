@@ -1,4 +1,3 @@
-import { inspectBranchWorkspaceRepository } from '#/server/modules/branch-workspace-repository-source.ts'
 import { isBranchWorkspaceBatchMergeTemporaryWorktreePath } from '#/server/modules/branch-workspace-batch-merge-worktree.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
@@ -99,13 +98,6 @@ export async function buildBranchWorkspaceGitActionPlan(
       if (!member.kind && !member.source && member.currentBranch === undefined) continue
       const repoId = branchWorkspaceMemberRepositoryId(normalizedRootId, member)
       if (!repoId) continue
-      if (member.kind === 'repository' && member.memberId) {
-        const ownership = await inspectBranchWorkspaceRepository(normalizedRootId, member.worktreePath, signal).catch(
-          () => null,
-        )
-        if (ownership?.memberId !== member.memberId)
-          return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-      }
       const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
         includeWorktreeStatus: false,
         includeRemote: false,

@@ -2,8 +2,8 @@
 status: accepted
 ---
 
-# Give subworkspaces folder identity and explicit repository member modes
+# Register folder locations and derive Git members from disk
 
-Subworkspaces are named folder contexts whose members may use different branches, and the same subworkspace may mix independent complete repositories with linked Git worktrees. Keep the context's durable identity separate from branch names, and record each member's repository identity, source, materialized path, and mode explicitly. This supports member branch switching and independent local clones without treating a primary repository as a disposable linked worktree or making one member's branch determine the identity of the whole folder.
+A subworkspace is a user-selected folder location. Hobgoblin records its location and display identity, then derives repositories, linked worktrees and current branches from the filesystem and Git whenever it refreshes. Users may add or remove branches manually; creation-time membership, branch names, provenance and application ownership are not durable constraints.
 
-Keeping common-branch identity would preserve the existing implicit coupling between creation, deduplication, and branch names. Treating every child directory as the same kind of member would obscure Git ownership and make repair and removal unsafe. The chosen model therefore preserves Git's per-repository boundaries while making member ownership explicit; existing workspace identities and managed worktrees remain intact during migration.
+Optional worktree creation and working-copy cloning remain server-backed helpers with transient progress and normal Git safety. Removing a registration preserves the folder and its Git data. This replaces the earlier common-branch identity and managed-member manifest model, following the user's preference for simple folder-based branch management.

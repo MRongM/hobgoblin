@@ -65,11 +65,15 @@ function DetachedRepositoryFileArea({
   const [revealRequest, setRevealRequest] = useState<{ id: number; relativePath: string } | null>(null)
   const repo = useReposStore((state) => state.repos[request.repo.id])
   const capturedPath = request.kind === 'git-worktree' ? request.worktreePath : undefined
-  const branchAtPath = capturedPath
-    ? repo?.data.branches.find(
-        (branch) => branch.worktree?.path && sameLocalFilePath(branch.worktree.path, capturedPath),
-      )
+  const capturedWorktree = capturedPath
+    ? Object.values(repo?.data.worktreesByPath ?? {}).find((worktree) => sameLocalFilePath(worktree.path, capturedPath))
     : undefined
+  const branchAtPath =
+    capturedPath && capturedWorktree?.isPrunable !== true
+      ? repo?.data.branches.find(
+          (branch) => branch.worktree?.path && sameLocalFilePath(branch.worktree.path, capturedPath),
+        )
+      : undefined
   const detachedAtPath = capturedPath
     ? Object.values(repo?.data.worktreesByPath ?? {}).find(
         (worktree) => sameLocalFilePath(worktree.path, capturedPath) && isSelectableDetachedWorktree(worktree),

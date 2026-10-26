@@ -111,7 +111,7 @@ export function useProjectSummaries(): ProjectSummary[] {
                 isGitRepo: repo.isGitRepo !== false,
                 changeCount: projectChangeCount([repo, ...memberRepos]),
                 terminalWorktreeKeys: projectTerminalWorktreeKeys(repo, memberRepos),
-                branchWorkspaceRootId: s.workspaceProjects[id]?.configured ? id : null,
+                branchWorkspaceRootId: s.workspaceProjects[id] ? id : null,
               }
             : null
         })

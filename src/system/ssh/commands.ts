@@ -19,6 +19,7 @@ import { buildManagedRemoteTerminalInvocation } from '#/system/remote-terminal.t
 import { TMUX_HOST_SESSION_LIST_FORMAT, TMUX_SESSION_LIST_FORMAT } from '#/system/tmux-cleanup.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import { worktreeCreationBaseRef, type CreateWorktreeInput } from '#/shared/worktree-create.ts'
+import { workspaceSnapshotScript, type WorkspaceSnapshotCommand } from '#/system/ssh/workspace-snapshot-script.ts'
 
 const SSH_COMMAND_TIMEOUT_MS = 15_000
 const SSH_CONNECT_TIMEOUT_SEC = 10
@@ -31,6 +32,7 @@ export const REMOTE_PATH_MISSING_MARKER = '__HOBGOBLIN_PATH_MISSING__'
 export const REMOTE_WORKSPACE_LINKED_WORKTREE_MARKER = '__HOBGOBLIN_WORKSPACE_LINKED_WORKTREE__'
 
 export type RemoteCommandKind =
+  | WorkspaceSnapshotCommand
   | { type: 'printHome' }
   | { type: 'checkShell' }
   | { type: 'checkGit' }
@@ -46,6 +48,7 @@ export type RemoteCommandKind =
     }
   | { type: 'tmuxListHostSessions' }
   | { type: 'tmuxKillHostSessionByName'; sessionName: string; serverName?: string }
+  | { type: 'validateBranchWorkspaceFolder'; path: string }
   | { type: 'testDirectory'; path: string }
   | { type: 'listDirectories'; path: string; limit?: number }
   | { type: 'listWorkspaceGitDirectories'; rootPath: string }
@@ -57,6 +60,7 @@ export type RemoteCommandKind =
       directoryNames?: readonly string[]
       registeredDirectoryNames?: readonly string[]
     }
+  | { type: 'adoptBranchWorkspaceRepository'; rootPath: string; targetPath: string; memberId: string }
   | { type: 'inspectBranchWorkspaceRepository'; rootPath: string; targetPath: string }
   | {
       type: 'materializeBranchWorkspaceRepository'
@@ -72,11 +76,18 @@ export type RemoteCommandKind =
   | { type: 'createBranchWorkspaceDirectory'; rootPath: string; targetPath: string }
   | {
       type: 'materializeBranchWorkspaceSymlink'
+      sourceRootPath?: string
       rootPath: string
       sourcePath: string
       targetPath: string
     }
-  | { type: 'copyBranchWorkspaceEntry'; rootPath: string; sourcePath: string; targetPath: string }
+  | {
+      type: 'copyBranchWorkspaceEntry'
+      rootPath: string
+      sourceRootPath?: string
+      sourcePath: string
+      targetPath: string
+    }
   | { type: 'fingerprintBranchWorkspaceEntry'; rootPath: string; targetPath: string }
   | { type: 'removeBranchWorkspaceEntry'; rootPath: string; targetPath: string }
   | { type: 'listBranchWorkspaceChildren'; rootPath: string; targetPath: string }
@@ -325,6 +336,11 @@ function environmentValue(env: NodeJS.ProcessEnv, name: string): string | undefi
 
 function scriptForCommand(command: RemoteCommandKind): string {
   switch (command.type) {
+    case 'workspaceSnapshotInspect':
+    case 'workspaceSnapshotExport':
+    case 'workspaceSnapshotReadChunk':
+    case 'workspaceSnapshotCleanup':
+      return workspaceSnapshotScript(command)
     case 'printHome':
       return `printf '%s\\n' "$HOME"`
     case 'checkShell':
@@ -397,6 +413,8 @@ function scriptForCommand(command: RemoteCommandKind): string {
         `tmux -S "$tmux_socket" kill-session -t ${shellQuote(`=${command.sessionName}`)}`,
       ].join('\n')
     }
+    case 'validateBranchWorkspaceFolder':
+      return `test -d ${shellQuote(command.path)} && test -r ${shellQuote(command.path)} && test -x ${shellQuote(command.path)} && ls -A ${shellQuote(command.path)} >/dev/null`
     case 'testDirectory':
       return `test -d ${shellQuote(command.path)}`
     case 'listDirectories': {
@@ -450,6 +468,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
         'fi',
       ].join('\n')
     }
+    case 'adoptBranchWorkspaceRepository':
     case 'inspectBranchWorkspaceRepository':
     case 'materializeBranchWorkspaceRepository':
     case 'discoverBranchWorkspaceDirectories':
@@ -827,6 +846,7 @@ type RemoteBranchWorkspaceCommand = Extract<
   RemoteCommandKind,
   {
     type:
+      | 'adoptBranchWorkspaceRepository'
       | 'inspectBranchWorkspaceRepository'
       | 'materializeBranchWorkspaceRepository'
       | 'discoverBranchWorkspaceDirectories'
@@ -843,6 +863,8 @@ type RemoteBranchWorkspaceCommand = Extract<
 
 function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): string {
   switch (command.type) {
+    case 'adoptBranchWorkspaceRepository':
+      return remoteBranchWorkspaceRepositoryAdoptionScript(command)
     case 'inspectBranchWorkspaceRepository':
       return remoteBranchWorkspaceRepositoryInspectionScript(command)
     case 'materializeBranchWorkspaceRepository':
@@ -855,7 +877,7 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         'def directories(parent):',
         '    try:',
         '        with os.scandir(parent) as entries:',
-        '            return sorted(entry.name for entry in entries if entry.is_dir(follow_symlinks=False))',
+        '            return sorted(entry.name for entry in entries if entry.is_dir(follow_symlinks=True))',
         '    except OSError:',
         '        return []',
         'def worktrees(member_path):',
@@ -873,26 +895,30 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
         '            record[key] = value',
         '    if record: records.append(record)',
         '    return records',
+        'def member(repository_name, member_path):',
+        '    records = worktrees(member_path)',
+        '    for record in records:',
+        '        if "bare" in record or "prunable" in record: continue',
+        '        actual_path = record.get("worktree", "")',
+        '        if os.path.realpath(actual_path) != os.path.realpath(member_path): continue',
+        '        branch = record.get("branch", "")',
+        '        branch = branch[len("refs/heads/"):] if branch.startswith("refs/heads/") else ""',
+        '        primary = records[0].get("worktree", actual_path)',
+        '        return {"repositoryName": repository_name, "repositoryPath": primary, "worktreePath": actual_path, "branch": branch, "kind": "repository" if os.path.realpath(primary) == os.path.realpath(actual_path) else "worktree", "head": record.get("HEAD", "")}',
+        '    return None',
         'found = []',
-        'for name in directories(root_path):',
-        '    if selected_names is not None and name not in selected_names: continue',
-        '    if (selected_names is None and name not in registered_names and not name.startswith(managed_prefixes)) or name.strip() != name or "\\\\" in name: continue',
-        '    workspace_path = os.path.join(root_path, name)',
-        '    members = []',
-        '    for repository_name in directories(workspace_path):',
-        '        if repository_name.strip() != repository_name or "\\\\" in repository_name: continue',
-        '        member_path = os.path.join(workspace_path, repository_name)',
-        '        records = worktrees(member_path)',
-        '        for record in records:',
-        '            if "bare" in record or "prunable" in record: continue',
-        '            if os.path.normpath(record.get("worktree", "")) != member_path: continue',
-        '            branch = record.get("branch", "")',
-        '            branch = branch[len("refs/heads/"):] if branch.startswith("refs/heads/") else ""',
-        '            member_id = subprocess.run(["git", "-C", member_path, "config", "--get", "hobgoblin.subworkspaceMemberId"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode("utf-8", "surrogateescape").strip()',
-        '            members.append({"memberId": member_id, "repositoryName": repository_name, "repositoryPath": records[0].get("worktree", member_path), "worktreePath": member_path, "branch": branch, "kind": "repository" if records[0].get("worktree") == member_path else "worktree", "head": record.get("HEAD", "")})',
-        '            break',
-        '    if members:',
-        '        found.append({"directoryName": name, "path": workspace_path, "branch": members[0]["branch"], "members": members})',
+        'for name in (selected_names if selected_names is not None else directories(root_path)):',
+        '    if selected_names is None and name not in registered_names and not name.startswith(managed_prefixes): continue',
+        '    workspace_path = os.path.normpath(os.path.join(root_path, name))',
+        '    if not os.path.isdir(workspace_path): continue',
+        '    own = member(os.path.basename(workspace_path) or workspace_path, workspace_path)',
+        '    members = [own] if own is not None else []',
+        '    if own is None:',
+        '        for repository_name in directories(workspace_path):',
+        '            if repository_name == ".git": continue',
+        '            entry = member(repository_name, os.path.join(workspace_path, repository_name))',
+        '            if entry is not None: members.append(entry)',
+        '    found.append({"directoryName": name, "path": workspace_path, "branch": members[0]["branch"] if members else "", "members": members})',
         'print(json.dumps({"ok": True, "directories": found}, ensure_ascii=True))',
       ])
     case 'listBranchWorkspaceCandidates':
@@ -968,9 +994,10 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
       ])
     case 'materializeBranchWorkspaceSymlink':
       return remoteBranchWorkspacePython(command.rootPath, [
-        `source_path = checked_path(${pythonString(command.sourcePath)}, False)`,
+        `source_root = os.path.normpath(${pythonString(command.sourceRootPath ?? command.rootPath)})`,
+        `source_path = os.path.normpath(${pythonString(command.sourcePath)})`,
         `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
-        'if os.path.dirname(source_path) != root_path:',
+        'if not os.path.isabs(source_root) or not os.path.isabs(source_path) or os.path.dirname(source_path) != source_root:',
         '    fail("workspace.branch-workspace.invalid-source")',
         'ensure_safe_parents(target_path)',
         'os.symlink(source_path, target_path)',
@@ -978,9 +1005,10 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
       ])
     case 'copyBranchWorkspaceEntry':
       return remoteBranchWorkspacePython(command.rootPath, [
-        `source_path = checked_path(${pythonString(command.sourcePath)}, False)`,
+        `source_root = os.path.normpath(${pythonString(command.sourceRootPath ?? command.rootPath)})`,
+        `source_path = os.path.normpath(${pythonString(command.sourcePath)})`,
         `target_path = checked_path(${pythonString(command.targetPath)}, False)`,
-        'if os.path.dirname(source_path) != root_path:',
+        'if not os.path.isabs(source_root) or not os.path.isabs(source_path) or os.path.dirname(source_path) != source_root:',
         '    fail("workspace.branch-workspace.invalid-source")',
         'if not os.path.lexists(source_path):',
         '    fail("workspace.branch-workspace.source-missing")',
@@ -1061,6 +1089,42 @@ function remoteBranchWorkspaceScript(command: RemoteBranchWorkspaceCommand): str
   }
   const exhaustive: never = command
   return exhaustive
+}
+
+function remoteBranchWorkspaceRepositoryAdoptionScript(
+  command: Extract<RemoteCommandKind, { type: 'adoptBranchWorkspaceRepository' }>,
+): string {
+  return remoteBranchWorkspacePython(command.rootPath, [
+    `target = checked_path(${pythonString(command.targetPath)}, False)`,
+    `member_id = ${pythonString(command.memberId)}`,
+    'ensure_safe_parents(target)',
+    'if os.path.dirname(os.path.dirname(target)) != root_path or os.path.islink(target) or not os.path.isdir(target): fail("workspace.branch-workspace.invalid-path")',
+    'git_dir = os.path.join(target, ".git")',
+    'if not os.path.isdir(git_dir) or os.path.islink(git_dir): fail("workspace.branch-workspace.repository-unavailable")',
+    'for parent, directories, files in os.walk(git_dir, followlinks=False):',
+    '    if any(os.path.islink(os.path.join(parent, name)) for name in directories + files): fail("workspace.branch-workspace.repository-unavailable")',
+    'alternates = os.path.join(git_dir, "objects", "info", "alternates")',
+    'if os.path.exists(alternates):',
+    '    with open(alternates, "rb") as stream:',
+    '        if stream.read().strip(): fail("workspace.branch-workspace.repository-unavailable")',
+    'def git(*args): return subprocess.check_output(["git", "-C", target] + list(args), stderr=subprocess.PIPE).decode("utf-8", "surrogateescape").rstrip("\\n")',
+    'try:',
+    '    if os.path.realpath(git("rev-parse", "--show-toplevel")) != os.path.realpath(target): fail("workspace.branch-workspace.repository-unavailable")',
+    '    if os.path.realpath(git("rev-parse", "--path-format=absolute", "--git-common-dir")) != os.path.realpath(git_dir): fail("workspace.branch-workspace.repository-unavailable")',
+    '    records = git("worktree", "list", "--porcelain").split("\\n\\n")',
+    '    first = records[0].splitlines() if records else []',
+    '    primary = next((line[len("worktree "):] for line in first if line.startswith("worktree ")), None)',
+    '    if primary is None or "bare" in first or os.path.realpath(primary) != os.path.realpath(target): fail("workspace.branch-workspace.repository-unavailable")',
+    '    try: existing = git("config", "--local", "--get", "hobgoblin.subworkspaceMemberId")',
+    '    except subprocess.CalledProcessError as error:',
+    '        if error.returncode != 1: raise',
+    '        existing = None',
+    '    if existing is not None and existing != member_id: fail("workspace.branch-workspace.target-exists")',
+    '    if existing is None: git("config", "--local", "hobgoblin.subworkspaceMemberId", member_id)',
+    '    if git("config", "--local", "--get", "hobgoblin.subworkspaceMemberId") != member_id: fail("workspace.branch-workspace.repository-unavailable")',
+    '    print(json.dumps({"ok": True, "message": "adopted"}))',
+    'except (OSError, subprocess.CalledProcessError): fail("workspace.branch-workspace.repository-unavailable")',
+  ])
 }
 
 function remoteBranchWorkspaceRepositoryInspectionScript(

@@ -254,6 +254,79 @@ describe('BranchWorkspaceDialog', () => {
     expect(last?.operation === 'create' ? last.repositories[0] : null).not.toHaveProperty('worktreeBootstrap')
   })
 
+  test('plans the configured storage directory independently of the folder name', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ defaultParentDirectory: '/workspace', onPreview })
+    expect(inputValue('workspace.branch-workspace.storage-directory')).toBe('/workspace')
+    setInput('workspace.branch-workspace.storage-directory', '/other/subworkspaces')
+    setInput('workspace.branch-workspace.folder', 'feature-set')
+    act(() => repositoryCheckbox('api').click())
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        operation: 'create',
+        directoryName: 'feature-set',
+        parentDirectory: '/other/subworkspaces',
+        branch: '',
+      }),
+    )
+  })
+
+  test('extends an externally stored workspace with another alias when every source is fixed', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    const workspace = workspaceWithTwoMembers()
+    workspace.parentDirectory = '/other/subworkspaces'
+    workspace.path = '/other/subworkspaces/' + workspace.directoryName
+    const original = structuredClone(workspace.repositories)
+    renderDialog({ mode: 'extend', workspace, defaultParentDirectory: '/workspace', onPreview })
+    const location = document.querySelector<HTMLInputElement>(
+      '[aria-label="workspace.branch-workspace.storage-directory"]',
+    )
+    expect(location?.value).toBe('/other/subworkspaces')
+    expect(location?.disabled).toBe(true)
+    expect(document.querySelector('[data-branch-workspace-repository-row="api"]')).toBeNull()
+    clickSelector('[data-action="add-source-member"]')
+    const row = document.querySelector<HTMLElement>('[data-branch-workspace-repository-row="api-2"]')!
+    setRowInput(row, '[data-member-directory]', 'api-variant')
+    setRowInput(row, '[data-member-target-branch]', 'feat/variant')
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        operation: 'create',
+        branchWorkspaceId: workspace.id,
+        parentDirectory: '/other/subworkspaces',
+        repositories: [
+          expect.objectContaining({ repositoryName: 'api', targetBranch: original[0]!.targetBranch }),
+          expect.objectContaining({ repositoryName: 'web', targetBranch: original[1]!.targetBranch }),
+          expect.objectContaining({
+            repositoryName: 'api-variant',
+            source: { kind: 'repository', repositoryId: '/workspace/api' },
+            targetBranch: 'feat/variant',
+          }),
+        ],
+      }),
+    )
+    expect(workspace.repositories).toEqual(original)
+  })
+
+  test('creates an empty recorded folder without requiring repository helpers', async () => {
+    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
+    renderDialog({ defaultParentDirectory: '/workspace', repositories: [], auxiliaryCandidates: [], onPreview })
+    setInput('workspace.branch-workspace.folder', 'plain-folder')
+    await expectAutoPreview(
+      onPreview,
+      expect.objectContaining({
+        operation: 'create',
+        directoryName: 'plain-folder',
+        parentDirectory: '/workspace',
+        branch: '',
+        repositories: [],
+        auxiliaryEntries: [],
+      }),
+    )
+    expect(document.querySelector('details')?.open).toBe(false)
+  })
+
   test('presents create as a compact neutral operation console', () => {
     renderDialog({})
 

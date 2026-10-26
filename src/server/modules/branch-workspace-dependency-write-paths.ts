@@ -1,3 +1,6 @@
+import path from 'node:path'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { branchWorkspaceStorageRootIdAtPath } from '#/server/modules/workspace-paths.ts'
 import {
   buildBranchWorkspaceDependencyPlan,
   readBranchWorkspaceDependencyCandidates,
@@ -113,13 +116,25 @@ export function createBranchWorkspaceDependencyWriteService(
           for (const entry of plan.entries) {
             controller.signal.throwIfAborted()
             if (entry.targetKind !== 'missing') {
-              await removeEntry(rootId, entry.targetPath, controller.signal)
+              await removeEntry(targetScope(rootId, entry.targetPath), entry.targetPath, controller.signal)
               changed = true
             }
             if (entry.mode === 'copy') {
-              await copyEntry(rootId, entry.sourcePath, entry.targetPath, controller.signal)
+              await copyEntry(
+                targetScope(rootId, entry.targetPath),
+                entry.sourcePath,
+                entry.targetPath,
+                controller.signal,
+                { sourceRootId: rootId },
+              )
             } else {
-              await materializeSymlink(rootId, entry.sourcePath, entry.targetPath, controller.signal)
+              await materializeSymlink(
+                targetScope(rootId, entry.targetPath),
+                entry.sourcePath,
+                entry.targetPath,
+                controller.signal,
+                { sourceRootId: rootId },
+              )
             }
             changed = true
             completedNames.push(entry.name)
@@ -127,7 +142,7 @@ export function createBranchWorkspaceDependencyWriteService(
         } else {
           for (const entry of plan.entries) {
             controller.signal.throwIfAborted()
-            await removeEntry(rootId, entry.targetPath, controller.signal)
+            await removeEntry(targetScope(rootId, entry.targetPath), entry.targetPath, controller.signal)
             changed = true
             completedNames.push(entry.name)
           }
@@ -191,4 +206,8 @@ function isAbortError(error: unknown): boolean {
 function operationMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   return message || 'workspace.branch-workspace.dependency.execute-failed'
+}
+
+function targetScope(rootId: string, targetPath: string): string {
+  return branchWorkspaceStorageRootIdAtPath(rootId, (isRemoteRepoId(rootId) ? path.posix : path).dirname(targetPath))
 }

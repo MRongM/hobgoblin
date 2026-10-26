@@ -1,9 +1,20 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Eye, EyeOff, Folder, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  FolderTree,
+  LoaderCircle,
+  RefreshCw,
+  Terminal,
+} from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -15,6 +26,9 @@ import {
 } from '#/web/components/ui/context-menu.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
+import { BranchWorkspaceFolderDialog } from '#/web/components/repo-workspace/BranchWorkspaceFolderDialog.tsx'
+import { BranchWorkspaceCloneDialog } from '#/web/components/repo-workspace/BranchWorkspaceCloneDialog.tsx'
+import { openRegisteredBranchWorkspace } from '#/web/branch-workspace-navigation-write-paths.ts'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
 import {
   BranchWorkspaceGitActionPanel,
@@ -43,7 +57,7 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
-import { cleanupBranchWorkspaceRegistry } from '#/web/workspace-client.ts'
+import { cleanupBranchWorkspaceRegistry, unregisterBranchWorkspace } from '#/web/workspace-client.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
 import { useBranchWorkspaceDependencyActions } from '#/web/hooks/useBranchWorkspaceDependencyActions.ts'
 import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
@@ -53,7 +67,7 @@ import { useT } from '#/web/stores/i18n.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { getBranchWorktreeState, getWorktreeChangeCount } from '#/web/stores/repos/worktree-state.ts'
-import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
+import { activeWorkspaceRootId, workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
 import {
   branchWorkspaceMemberRepositoryId,
@@ -91,6 +105,8 @@ export function WorkspaceRepositoryRail({
   const terminalCommands = useContext(TerminalSessionContext)
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
   const repos = useReposStore((state) => state.repos)
+  const workspaceProjects = useReposStore((state) => state.workspaceProjects)
+  const repoOrder = useReposStore((state) => state.order)
   const activeContext = useReposStore(
     (state) => state.workspaceActiveContextByRoot[workspaceRootId] ?? { kind: 'overview' as const },
   )
@@ -126,6 +142,42 @@ export function WorkspaceRepositoryRail({
   const branchDependencyActions = useBranchWorkspaceDependencyActions(workspaceRootId)
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [cloneSource, setCloneSource] = useState<BranchWorkspaceSnapshot | null>(null)
+  const cloneTargets = useMemo(
+    () =>
+      [...new Set([...repoOrder, ...Object.keys(workspaceProjects)])].flatMap((rootId) => {
+        const root = repos[rootId]
+        if (
+          !root ||
+          root.isGitRepo !== false ||
+          isRemoteRepoId(rootId) ||
+          root.remote.target ||
+          root.availability.phase !== 'available'
+        )
+          return []
+        const project = workspaceProjects[rootId]
+        const repositories = [
+          ...new Set([
+            ...(project?.repositoryIds ?? []),
+            ...(project?.candidates.filter((candidate) => candidate.available).map((candidate) => candidate.id) ?? []),
+          ]),
+        ].flatMap((id) => {
+          if (isRemoteRepoId(id)) return []
+          const repository = repos[id]
+          const candidate = project?.candidates.find((entry) => entry.id === id)
+          if (
+            repository?.remote.target ||
+            repository?.isGitRepo === false ||
+            repository?.availability.phase === 'unavailable'
+          )
+            return []
+          return [{ id, name: repository?.name ?? candidate?.name ?? id }]
+        })
+        return [{ rootId, name: root.name, repositories }]
+      }),
+    [repoOrder, repos, workspaceProjects],
+  )
   const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'extend' | 'reduce' | 'repair' | 'remove'>(
     'create',
   )
@@ -147,7 +199,7 @@ export function WorkspaceRepositoryRail({
   const refreshingRepositoryIdsRef = useRef<Set<string>>(new Set())
   const [refreshingRepositoryIds, setRefreshingRepositoryIds] = useState<ReadonlySet<string>>(() => new Set())
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
-  const autoRefreshedDriftIds = useRef<Set<string>>(new Set())
+  const [unregisteringBranchWorkspaceId, setUnregisteringBranchWorkspaceId] = useState<string | null>(null)
   const dialogProgressWorkspace = branchActions.plan
     ? (branchItems.find((item) => item.id === branchActions.plan?.branchWorkspaceId) ?? null)
     : null
@@ -305,11 +357,13 @@ export function WorkspaceRepositoryRail({
       inFlight.add(item.id)
       setRefreshingBranchChanges(new Set(inFlight))
       try {
+        const refreshed = await branchQuery.refresh().catch(() => null)
+        const observed = refreshed?.ok ? (refreshed.items.find((folder) => folder.id === item.id) ?? item) : item
         const state = useReposStore.getState()
         const workspace = state.workspaceProjects[workspaceRootId]
         const repositoryIds = Array.from(
           new Set(
-            item.repositories.flatMap((member) => {
+            observed.repositories.flatMap((member) => {
               if (member.progress === 'removed') return []
               const repositoryId = branchWorkspaceMemberRepositoryId(
                 member,
@@ -332,7 +386,7 @@ export function WorkspaceRepositoryRail({
         setRefreshingBranchChanges(new Set(inFlight))
       }
     },
-    [workspaceRootId],
+    [workspaceRootId, branchQuery.refresh],
   )
   const refreshWorkspaceMemberCoreData = useCallback(() => {
     const state = useReposStore.getState()
@@ -349,25 +403,6 @@ export function WorkspaceRepositoryRail({
     if (member && member.progress !== 'removed') return
     activateBranchWorkspace(workspaceRootId, branchWorkspace.id)
   }, [activeContext, activateBranchWorkspace, branchItems, workspaceRootId])
-
-  useEffect(() => {
-    if (!branchQuery.data?.ok) return
-    const driftedIds = new Set(
-      branchItems.flatMap((item) =>
-        item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'drift'
-          ? [item.id]
-          : [],
-      ),
-    )
-    const attemptedIds = autoRefreshedDriftIds.current
-    for (const id of attemptedIds) {
-      if (!driftedIds.has(id)) attemptedIds.delete(id)
-    }
-    const newIds = [...driftedIds].filter((id) => !attemptedIds.has(id))
-    if (newIds.length === 0) return
-    for (const id of newIds) attemptedIds.add(id)
-    void branchQuery.refresh().catch(() => undefined)
-  }, [branchItems, branchQuery.data, branchQuery.refresh])
 
   if (!workspace) return null
   const branchReadError = branchQuery.data?.ok ? branchQuery.data.registryError : branchQuery.data?.message
@@ -509,6 +544,34 @@ export function WorkspaceRepositoryRail({
     setGitActionOpen(true)
     void branchGitActions.requestPlan(kind, item.id)
   }
+  const unregisterWorkspaceFolder = async (item: BranchWorkspaceSnapshot) => {
+    if (unregisteringBranchWorkspaceId !== null) return
+    setUnregisteringBranchWorkspaceId(item.id)
+    try {
+      const result = await unregisterBranchWorkspace(workspaceRootId, item.id)
+      if (!result.ok) {
+        toast.error(t(result.message ?? 'workspace.branch-workspace.unregister-failed'))
+        return
+      }
+      const state = useReposStore.getState()
+      const context = state.workspaceActiveContextByRoot[workspaceRootId]
+      if (context?.kind === 'branch-workspace' && context.branchWorkspaceId === item.id) {
+        if (activeWorkspaceRootId(state) === workspaceRootId) state.activateWorkspaceOverview(workspaceRootId)
+        else
+          useReposStore.setState((current) => ({
+            workspaceActiveContextByRoot: {
+              ...current.workspaceActiveContextByRoot,
+              [workspaceRootId]: { kind: 'overview' as const },
+            },
+          }))
+      }
+      await branchQuery.refresh().catch(() => undefined)
+    } catch {
+      toast.error(t('workspace.branch-workspace.unregister-failed'))
+    } finally {
+      setUnregisteringBranchWorkspaceId(null)
+    }
+  }
   const reloadBranchWorkspaces = async () => {
     if (branchReloadPendingRef.current) return
     branchReloadPendingRef.current = true
@@ -618,10 +681,21 @@ export function WorkspaceRepositoryRail({
         size="icon-sm"
         aria-label={t('workspace.branch-workspace.create')}
         title={t('workspace.branch-workspace.create')}
-        disabled={!batchReady || reorderPending}
+        disabled={scanning || reorderPending || branchActions.executing}
         onClick={() => openBranchDialog('create', null)}
       >
         <FolderPlus aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t('workspace.branch-workspace.folder-register.title')}
+        title={t('workspace.branch-workspace.folder-register.title')}
+        disabled={scanning || reorderPending || branchActions.executing}
+        onClick={() => setFolderDialogOpen(true)}
+      >
+        <FolderOpen aria-hidden="true" />
       </Button>
     </>
   )
@@ -768,7 +842,9 @@ export function WorkspaceRepositoryRail({
                   items={branchItems}
                   activeId={selectedBranchWorkspaceId}
                   activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
-                  disabled={branchActions.pending || branchDependencyActions.pending}
+                  disabled={
+                    branchActions.pending || branchDependencyActions.pending || unregisteringBranchWorkspaceId !== null
+                  }
                   gitActionsDisabled={branchGitActions.pending}
                   onGitAction={openGitAction}
                   changeCountById={branchWorkspaceChangeCountById}
@@ -778,29 +854,11 @@ export function WorkspaceRepositoryRail({
                   onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
                   onOpenFileArea={onOpenFileArea}
                   onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
-                  onInspect={(item) =>
-                    openBranchDialog(
-                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
-                        ? 'remove'
-                        : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
-                          ? 'reduce'
-                          : 'repair',
-                      item,
-                    )
-                  }
                   onExtend={(item) => openBranchDialog('extend', item)}
-                  onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
-                  onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
+                  onClone={setCloneSource}
                   onAddDependencies={(item) => openDependencyDialog('add', item)}
                   onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
-                  onRepair={(item) => openBranchDialog('repair', item, true)}
-                  onRemove={(item) =>
-                    openBranchDialog(
-                      'remove',
-                      item,
-                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
-                    )
-                  }
+                  onRemove={(item) => void unregisterWorkspaceFolder(item)}
                   getMemberPresentation={(_item, member) => getMemberPresentation(member)}
                   onSelectRepositoryMember={selectRepositoryMember}
                   onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
@@ -826,10 +884,31 @@ export function WorkspaceRepositoryRail({
         )}
       </div>
       {gitActionPanelElement}
+      <BranchWorkspaceFolderDialog
+        open={folderDialogOpen}
+        rootId={workspaceRootId}
+        onOpenChange={setFolderDialogOpen}
+        onRegistered={openRegisteredBranchWorkspace}
+      />
+      <BranchWorkspaceCloneDialog
+        open={cloneSource !== null}
+        source={cloneSource}
+        targets={cloneTargets}
+        onOpenChange={(open) => {
+          if (!open) setCloneSource(null)
+        }}
+        onCloned={openRegisteredBranchWorkspace}
+      />
       <BranchWorkspaceDialog
         open={branchDialogOpen}
         mode={branchDialogMode}
         repositories={repositoryOptions}
+        defaultParentDirectory={
+          repos[workspaceRootId]?.remote.target?.remotePath ??
+          parseRemoteRepoId(workspaceRootId)?.remotePath ??
+          overviewRootPath
+        }
+        allowNativeDirectoryPicker={!isRemoteRepoId(workspaceRootId)}
         auxiliaryCandidates={auxiliaryCandidates}
         workspace={dialogWorkspace}
         progressWorkspace={dialogProgressWorkspace}

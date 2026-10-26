@@ -260,7 +260,21 @@ function ProjectFileTreeContent({
         directoriesRef.current = next
         return next
       })
-      const result = await getRepositoryFileTree(repoId, worktreePath, absolutePath, signal)
+      let result: RepoFileTreeResult
+      try {
+        result = await getRepositoryFileTree(repoId, worktreePath, absolutePath, signal)
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          activeWorktreeRef.current !== worktreePath ||
+          latestDirectoryRequestTokensRef.current.get(relativePath) !== requestToken
+        )
+          return null
+        result = {
+          ok: false,
+          message: error instanceof Error && error.message ? error.message : 'error.failed-read-repo',
+        }
+      }
       if (
         signal?.aborted ||
         activeWorktreeRef.current !== worktreePath ||

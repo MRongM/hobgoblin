@@ -1,4 +1,4 @@
-import { useContext } from 'react'
+import { useContext, useState } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Folder,
   FolderGit2,
+  FolderOpen,
   FolderSearch,
   FolderTree,
   GitCompareArrows,
@@ -33,6 +34,8 @@ import {
   type ProjectSummary,
 } from '#/web/components/repo-workspace/project-switcher-model.tsx'
 import { useT } from '#/web/stores/i18n.ts'
+import { BranchWorkspaceFolderDialog } from '#/web/components/repo-workspace/BranchWorkspaceFolderDialog.tsx'
+import { openRegisteredBranchWorkspace } from '#/web/branch-workspace-navigation-write-paths.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { useProjectExternalOpenActions } from '#/web/hooks/useProjectExternalOpenActions.ts'
 import { useProjectInternalTerminalAction } from '#/web/hooks/useProjectInternalTerminalAction.ts'
@@ -152,6 +155,7 @@ function SortableProjectRow({
   const remotePrefix = remote ? `${remote.alias}:` : null
   const displayName =
     remotePrefix && !project.name.startsWith(remotePrefix) ? `${remotePrefix}${project.name}` : project.name
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
   const projectKind = project.isGitRepo ? 'git' : 'plain'
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
@@ -161,7 +165,7 @@ function SortableProjectRow({
   const activeWorkspaceContext = useReposStore((state) => state.workspaceActiveContextByRoot[project.id])
   const activateBranchWorkspace = useReposStore((state) => state.activateBranchWorkspace)
   const setDetailCollapsed = useReposStore((state) => state.setDetailCollapsed)
-  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspace?.configured ? project.id : '')
+  const branchWorkspaceQuery = useBranchWorkspaceQuery(workspace ? project.id : '')
   const branchWorkspaces = branchWorkspaceQuery.data?.ok ? branchWorkspaceQuery.data.items : []
   const rescanWorkspace = useReposStore((state) => state.rescanWorkspace)
   const creation = useRepositoryCreationActions(repo, { forceDisabled: project.unavailable })
@@ -231,6 +235,13 @@ function SortableProjectRow({
     icon: <X aria-hidden="true" />,
     disabled: false,
     onSelect: () => onClose(project.id),
+  }
+  const addFolderAction: WorkspaceListItemAction = {
+    id: 'addWorkspaceFolder',
+    label: t('workspace.branch-workspace.folder-register.title'),
+    icon: <FolderOpen aria-hidden="true" />,
+    disabled: project.unavailable,
+    onSelect: () => setFolderDialogOpen(true),
   }
   const detectWorkspaceRepositoriesAction: WorkspaceListItemAction = {
     id: 'detectWorkspaceRepositories',
@@ -318,6 +329,16 @@ function SortableProjectRow({
         }
         worktreeTerminalKeys={project.terminalWorktreeKeys}
         additionalActions={[
+          ...(!project.isGitRepo
+            ? [
+                {
+                  label: 'workspace.branch-workspace.folder-register.title',
+                  icon: <FolderOpen aria-hidden="true" />,
+                  disabled: project.unavailable,
+                  onSelect: () => setFolderDialogOpen(true),
+                },
+              ]
+            : []),
           ...(hostTmuxInventory.visible ? [hostTmuxInventory.contextAction] : []),
           ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
           ...(workspaceRecovery.visible ? [workspaceRecovery.contextAction] : []),
@@ -361,6 +382,7 @@ function SortableProjectRow({
                       : workspace
                         ? [fetchAllRepositoriesAction]
                         : [detectWorkspaceRepositoriesAction],
+                    ...(!project.isGitRepo ? [[addFolderAction]] : []),
                     [remoteAction, tmuxTerminalAction, externalTerminalAction],
                     [closeAction],
                     ...(tmuxCleanup.visible ? [[tmuxCleanup.action]] : []),
@@ -391,6 +413,14 @@ function SortableProjectRow({
           </span>
         </WorkspaceListItemFrame>
       </WorkspaceItemContextMenu>
+      {!project.isGitRepo ? (
+        <BranchWorkspaceFolderDialog
+          open={folderDialogOpen}
+          rootId={project.id}
+          onOpenChange={setFolderDialogOpen}
+          onRegistered={openRegisteredBranchWorkspace}
+        />
+      ) : null}
       {project.isGitRepo ? creation.dialogs : null}
       {hostTmuxInventory.dialog}
       {tmuxCleanup.dialog}

@@ -61,7 +61,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
           size="sm"
           className="min-w-0 gap-1.5 px-1.5"
           aria-label={t('workspace.repositories')}
-          title={currentName}
+          title={activeBranchWorkspace?.path ?? currentName}
         >
           {activeBranchWorkspace ? (
             <FolderKanban className="size-4 shrink-0" aria-hidden="true" />
@@ -105,6 +105,7 @@ export function WorkspaceRepositorySwitcher({ repoId, compact = false }: Props) 
         {branchWorkspaces.map((branchWorkspace) => (
           <DropdownMenuItem
             key={branchWorkspace.id}
+            title={branchWorkspace.path}
             aria-current={activeBranchWorkspace?.id === branchWorkspace.id ? 'page' : undefined}
             onSelect={() => activateBranchWorkspaceDestination(branchWorkspace.id)}
           >

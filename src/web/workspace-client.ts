@@ -70,6 +70,20 @@ export async function cleanupBranchWorkspaceRegistry(rootId: string): Promise<Br
   return await postServerJson('/api/workspace/branch-workspaces/cleanup', { rootId })
 }
 
+export async function registerBranchWorkspaceFolder(
+  rootId: string,
+  path: string,
+): Promise<BranchWorkspaceExecuteResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/register', { rootId, path })
+}
+
+export async function unregisterBranchWorkspace(
+  rootId: string,
+  branchWorkspaceId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  return await postServerJson('/api/workspace/branch-workspaces/unregister', { rootId, branchWorkspaceId })
+}
+
 export async function planBranchWorkspace(
   rootId: string,
   request: BranchWorkspacePlanRequest,
