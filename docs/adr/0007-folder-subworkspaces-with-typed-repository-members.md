@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Give subworkspaces folder identity and explicit repository member modes
