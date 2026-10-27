@@ -17,6 +17,7 @@ import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from 
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
+import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
@@ -358,7 +359,7 @@ export function WorkspaceRepositoryRail({
     inFlight.add(repositoryId)
     setRefreshingRepositoryIds(new Set(inFlight))
     try {
-      await state.refreshStatus(repositoryId, { token: repository.instanceToken })
+      await state.refreshCoreData(repositoryId, { token: repository.instanceToken })
     } catch {
       // The store normally projects refresh failures into the resource state;
       // keep menu actions safe if a caller still rejects unexpectedly.
@@ -395,7 +396,7 @@ export function WorkspaceRepositoryRail({
           repositoryIds.map(async (repositoryId) => {
             const repository = useReposStore.getState().repos[repositoryId]
             if (!repository || repository.availability.phase !== 'available' || repository.isGitRepo === false) return
-            await useReposStore.getState().refreshStatus(repositoryId, { token: repository.instanceToken })
+            await useReposStore.getState().refreshCoreData(repositoryId, { token: repository.instanceToken })
           }),
         )
       } finally {
@@ -521,17 +522,30 @@ export function WorkspaceRepositoryRail({
   const repositoryItems: WorkspaceRepositoryListItem[] = displayRepositoryIds.flatMap((repositoryId) => {
     const repo = repos[repositoryId]
     if (!repo) return []
+    const branch =
+      repo.availability.phase === 'available' && repo.isGitRepo !== false
+        ? repo.data.branches.find((branch) => branch.name === repo.data.currentBranch)
+        : undefined
     return [
       {
         id: repositoryId,
         name: candidateNameById.get(repositoryId) ?? repo.name,
         branch: repo.data.currentBranch,
+        ahead: branch?.ahead ?? 0,
+        behind: branch?.behind ?? 0,
         changeCount: repo.data.status.reduce((total, status) => total + status.entries.length, 0),
         terminalWorktreePaths: repoTerminalWorktreePaths(repo),
         unavailable: repo.availability.phase === 'unavailable',
       },
     ]
   })
+  const syncDelta = repositoryItems.reduce(
+    (total, repository) => ({
+      ahead: total.ahead + (repository.ahead ?? 0),
+      behind: total.behind + (repository.behind ?? 0),
+    }),
+    { ahead: 0, behind: 0 },
+  )
   const reorderReady = batchReady && !reorderPending
   const branchListVisible = currentRepoId === workspaceRootId || !repositoryListVisible
   const selectedBranchWorkspaceId = activeContext.kind === 'branch-workspace' ? activeContext.branchWorkspaceId : null
@@ -782,6 +796,7 @@ export function WorkspaceRepositoryRail({
               directoryAction={overviewDirectoryAction}
               active={activeContext.kind === 'overview'}
               name={overviewName}
+              syncDelta={syncDelta}
               terminalCount={overviewTerminalCount}
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
@@ -1005,6 +1020,7 @@ function ManifestRow({
   directoryAction,
   active,
   name,
+  syncDelta,
   terminalCount,
   hasTerminalBell,
   hasTerminalOutputActivity,
@@ -1015,6 +1031,7 @@ function ManifestRow({
   directoryAction: WorkspaceListItemAction
   active: boolean
   name: string
+  syncDelta: { ahead: number; behind: number }
   terminalCount: number
   hasTerminalBell: boolean
   hasTerminalOutputActivity: boolean
@@ -1049,6 +1066,20 @@ function ManifestRow({
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="shrink-0 font-mono text-muted-foreground">./</span>
         <span className="min-w-0 truncate font-medium">{name}</span>
+        {syncDelta.ahead > 0 ? (
+          <BranchSyncDelta
+            direction="ahead"
+            count={syncDelta.ahead}
+            label={t('branch-status.sync.ahead', { n: syncDelta.ahead })}
+          />
+        ) : null}
+        {syncDelta.behind > 0 ? (
+          <BranchSyncDelta
+            direction="behind"
+            count={syncDelta.behind}
+            label={t('branch-status.sync.behind', { n: syncDelta.behind })}
+          />
+        ) : null}
         {terminalCount > 0 ? (
           <Badge
             data-testid="overview-terminal-count-badge"

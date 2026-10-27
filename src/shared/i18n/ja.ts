@@ -1851,9 +1851,11 @@ export const ja: Record<DictKey, string> = {
   'settings.apps.status.detected': '検出済み',
   'settings.apps.status.not-detected': '未検出',
   'settings.fetch': '自動 fetch',
-  'settings.fetch-hint': 'アクティブなリポジトリをバックグラウンドで fetch します。',
+  'settings.fetch-hint':
+    '現在のプロジェクトのリモート更新を取得します。ワークスペースでは、リモートが設定された利用可能なすべてのリポジトリが対象です。オフの場合は手動で同期します。',
   'settings.status-refresh': '変更を定期更新',
-  'settings.status-refresh-hint': '現在のプロジェクトのローカル変更状態を定期的に更新します。',
+  'settings.status-refresh-hint':
+    '現在のプロジェクトのローカル変更とブランチの先行・遅延数を定期的に更新します。リモートとの差分は最後に取得したデータに基づきます。',
   'settings.general.open-from-terminal-title': 'Terminal から開く',
   'settings.general.open-from-terminal-body':
     'macOS では、Terminal やスクリプトからローカルリポジトリのパスを Hobgoblin に直接渡して開けます。',

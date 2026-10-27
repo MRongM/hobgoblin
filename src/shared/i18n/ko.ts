@@ -1819,9 +1819,11 @@ export const ko: Record<DictKey, string> = {
   'settings.apps.status.detected': '감지됨',
   'settings.apps.status.not-detected': '감지되지 않음',
   'settings.fetch': '자동 동기화',
-  'settings.fetch-hint': '활성 리포지토리를 백그라운드에서 가져옵니다.',
+  'settings.fetch-hint':
+    '현재 프로젝트의 원격 업데이트를 가져옵니다. 작업 공간에서는 원격이 설정된 사용 가능한 모든 저장소가 포함됩니다. 끄면 수동으로 동기화합니다.',
   'settings.status-refresh': '변경 사항 정기 새로 고침',
-  'settings.status-refresh-hint': '현재 프로젝트의 로컬 변경 상태를 정기적으로 새로 고칩니다.',
+  'settings.status-refresh-hint':
+    '현재 프로젝트의 로컬 변경과 브랜치의 앞선 커밋 및 뒤처진 커밋 수를 정기적으로 갱신합니다. 원격 차이는 마지막으로 가져온 데이터를 기준으로 합니다.',
   'settings.general.open-from-terminal-title': '터미널에서 열기',
   'settings.general.open-from-terminal-body':
     'macOS에서는 터미널이나 스크립트에서 로컬 리포지토리 경로를 Hobgoblin으로 바로 열 수 있습니다.',

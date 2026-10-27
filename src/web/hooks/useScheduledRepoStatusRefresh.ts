@@ -4,10 +4,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { RepoState, ReposStore } from '#/web/stores/repos/types.ts'
 import { activeProjectId, projectRepositoryIds } from '#/web/stores/repos/workspace-projects.ts'
 
-type ScheduledStatusRefreshState = Pick<
-  ReposStore,
-  'activeId' | 'activeProjectId' | 'repos' | 'workspaceProjects'
->
+type ScheduledStatusRefreshState = Pick<ReposStore, 'activeId' | 'activeProjectId' | 'repos' | 'workspaceProjects'>
 
 function isScheduledStatusRefreshEligible(repo: RepoState | null | undefined): repo is RepoState {
   return !!repo && repo.isGitRepo && repo.availability.phase === 'available'
@@ -32,7 +29,7 @@ export function useScheduledRepoStatusRefresh() {
         repoIds.map(async (id) => {
           const repo = state.repos[id]
           if (!isScheduledStatusRefreshEligible(repo)) return
-          await state.refreshStatus(id, { token: repo.instanceToken })
+          await state.refreshCoreData(id, { token: repo.instanceToken })
         }),
       )
     }, statusRefreshIntervalSec * 1_000)

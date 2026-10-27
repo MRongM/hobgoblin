@@ -21,7 +21,7 @@ vi.mock('#/web/runtime-settings-fetch.ts', () => ({
   }),
 }))
 
-const originalRefreshStatus = useReposStore.getState().refreshStatus
+const originalRefreshCoreData = useReposStore.getState().refreshCoreData
 const reactActEnvironment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 
 function Harness() {
@@ -32,15 +32,15 @@ function Harness() {
 describe('useScheduledRepoStatusRefresh', () => {
   let container: HTMLDivElement
   let root: Root
-  let refreshStatus: ReturnType<typeof vi.fn>
+  let refreshCoreData: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
     vi.useFakeTimers()
     settings.statusRefreshIntervalSec = 30
     resetReposStore()
-    refreshStatus = vi.fn().mockResolvedValue(undefined)
-    useReposStore.setState({ refreshStatus: refreshStatus as typeof originalRefreshStatus })
+    refreshCoreData = vi.fn().mockResolvedValue(undefined)
+    useReposStore.setState({ refreshCoreData: refreshCoreData as typeof originalRefreshCoreData })
     container = document.createElement('div')
     document.body.append(container)
     root = createRoot(container)
@@ -50,7 +50,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     act(() => root.unmount())
     container.remove()
     resetReposStore()
-    useReposStore.setState({ refreshStatus: originalRefreshStatus })
+    useReposStore.setState({ refreshCoreData: originalRefreshCoreData })
     vi.useRealTimers()
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
   })
@@ -95,7 +95,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     expect(scheduledStatusRefreshRepoIdsFromStore(useReposStore.getState())).toEqual([api.id])
   })
 
-  test('waits one interval, refreshes every eligible member, and stops when disabled', async () => {
+  test('waits one interval, refreshes branch snapshots and status for every eligible member, and stops when disabled', async () => {
     const rootRepo = emptyRepo('/workspace', 'workspace')
     rootRepo.isGitRepo = false
     const api = emptyRepo('/workspace/api', 'api')
@@ -119,25 +119,25 @@ describe('useScheduledRepoStatusRefresh', () => {
         },
       },
     })
-    refreshStatus.mockRejectedValueOnce(new Error('api failed')).mockResolvedValue(undefined)
+    refreshCoreData.mockRejectedValueOnce(new Error('api failed')).mockResolvedValue(undefined)
 
     await act(async () => {
       root.render(<Harness />)
     })
-    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(refreshCoreData).not.toHaveBeenCalled()
 
     await act(async () => {
       vi.advanceTimersByTime(29_999)
     })
-    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(refreshCoreData).not.toHaveBeenCalled()
 
     await act(async () => {
       vi.advanceTimersByTime(1)
       await Promise.resolve()
     })
-    expect(refreshStatus).toHaveBeenCalledTimes(2)
-    expect(refreshStatus).toHaveBeenCalledWith(api.id, { token: api.instanceToken })
-    expect(refreshStatus).toHaveBeenCalledWith(web.id, { token: web.instanceToken })
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenCalledWith(api.id, { token: api.instanceToken })
+    expect(refreshCoreData).toHaveBeenCalledWith(web.id, { token: web.instanceToken })
 
     settings.statusRefreshIntervalSec = 0
     await act(async () => {
@@ -146,7 +146,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     await act(async () => {
       vi.advanceTimersByTime(60_000)
     })
-    expect(refreshStatus).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
   })
 
   test('resets the timer when the active project changes and clears it on unmount', async () => {
@@ -170,12 +170,12 @@ describe('useScheduledRepoStatusRefresh', () => {
     await act(async () => {
       vi.advanceTimersByTime(10_000)
     })
-    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(refreshCoreData).not.toHaveBeenCalled()
     await act(async () => {
       vi.advanceTimersByTime(20_000)
       await Promise.resolve()
     })
-    expect(refreshStatus).toHaveBeenCalledWith(repoB.id, { token: repoB.instanceToken })
+    expect(refreshCoreData).toHaveBeenCalledWith(repoB.id, { token: repoB.instanceToken })
 
     act(() => root.unmount())
     expect(vi.getTimerCount()).toBe(0)

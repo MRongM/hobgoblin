@@ -1839,9 +1839,11 @@ export const en = {
   'settings.apps.status.detected': 'detected',
   'settings.apps.status.not-detected': 'not detected',
   'settings.fetch': 'Auto-fetch',
-  'settings.fetch-hint': 'Fetches the active repository in the background.',
+  'settings.fetch-hint':
+    'Fetches remote updates for the active project, including all available workspace repositories with remotes. Turn off to sync manually.',
   'settings.status-refresh': 'Scheduled change refresh',
-  'settings.status-refresh-hint': 'Refreshes local change status for the active project on a schedule.',
+  'settings.status-refresh-hint':
+    'Refreshes local changes and branch ahead/behind counts for the active project using the last fetched remote data.',
   'settings.general.open-from-terminal-title': 'Open from Terminal',
   'settings.general.open-from-terminal-body':
     'On macOS, you can open a local repository directly in Hobgoblin from Terminal or scripts.',

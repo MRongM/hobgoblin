@@ -259,6 +259,25 @@ function renderList(
 }
 
 describe('WorkspaceRepositoryList', () => {
+  test('renders separate ahead and behind counts and hides zero deltas after updates', () => {
+    const repository = repositories[0]!
+    const originalChangeCount = repository.changeCount
+    try {
+      Object.assign(repository, { ahead: 3, behind: 2, changeCount: 0 })
+      renderList()
+      const delta = (direction: string) =>
+        container?.querySelector(`[role="img"][aria-label="branch-status.sync.${direction}"]`)
+      expect(delta('ahead')?.textContent).toBe('3')
+      expect(delta('behind')?.textContent).toBe('2')
+      Object.assign(repository, { ahead: 0, behind: 0 })
+      renderList()
+      expect(delta('ahead')).toBeNull()
+      expect(delta('behind')).toBeNull()
+    } finally {
+      Object.assign(repository, { ahead: 0, behind: 0, changeCount: originalChangeCount })
+    }
+  })
+
   test('registers ordered repository ids with dedicated grip activators', () => {
     renderList()
 

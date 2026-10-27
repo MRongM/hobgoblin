@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { FolderGit2, FolderTree, GitCompareArrows, RefreshCw, Terminal, X } from 'lucide-react'
 import { useMemo } from 'react'
 import { Badge } from '#/web/components/ui/badge.tsx'
+import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import {
@@ -52,6 +53,8 @@ export interface WorkspaceRepositoryListItem {
   id: string
   name: string
   branch?: string
+  ahead?: number
+  behind?: number
   changeCount: number
   terminalWorktreePaths: string[]
   unavailable: boolean
@@ -144,6 +147,10 @@ function SortableWorkspaceRepositoryRow({
   const terminalCountLabel = terminalCount > 0 ? t('terminal.open-count', { count: terminalCount }) : null
   const changeCountLabel =
     repository.changeCount > 0 ? t('branch-status.worktree-dirty', { n: repository.changeCount }) : null
+  const ahead = repository.ahead ?? 0
+  const behind = repository.behind ?? 0
+  const aheadLabel = ahead > 0 ? t('branch-status.sync.ahead', { n: ahead }) : null
+  const behindLabel = behind > 0 ? t('branch-status.sync.behind', { n: behind }) : null
   const terminalBellLabel = t('terminal.bell-unread')
   const terminalOutputActiveLabel = t('terminal.output-active')
   const terminalWorktreeKeys = useMemo(
@@ -290,6 +297,8 @@ function SortableWorkspaceRepositoryRow({
             repository.branch,
             terminalCountLabel,
             changeCountLabel,
+            aheadLabel,
+            behindLabel,
             hasTerminalBell ? terminalBellLabel : null,
           ]
             .filter(Boolean)
@@ -322,7 +331,7 @@ function SortableWorkspaceRepositoryRow({
           {repository.branch ? (
             <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">{repository.branch}</span>
           ) : null}
-          {terminalCount > 0 || repository.changeCount > 0 || hasTerminalBell ? (
+          {terminalCount > 0 || repository.changeCount > 0 || ahead > 0 || behind > 0 || hasTerminalBell ? (
             <span data-testid="workspace-repository-status-badges" className="flex shrink-0 items-center gap-1">
               {terminalCount > 0 ? (
                 <Badge
@@ -352,6 +361,8 @@ function SortableWorkspaceRepositoryRow({
                   {repository.changeCount}
                 </Badge>
               ) : null}
+              {ahead > 0 ? <BranchSyncDelta direction="ahead" count={ahead} label={aheadLabel!} /> : null}
+              {behind > 0 ? <BranchSyncDelta direction="behind" count={behind} label={behindLabel!} /> : null}
               {hasTerminalBell ? <TerminalBellDot label={terminalBellLabel} /> : null}
             </span>
           ) : null}

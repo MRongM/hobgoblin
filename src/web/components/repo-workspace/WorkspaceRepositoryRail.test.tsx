@@ -610,6 +610,70 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('projects current branch deltas and sums directions independently as snapshots change', () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: {
+        ...state.repos,
+        [API]: replaceRepo(state.repos[API]!, (repo) => {
+          repo.data.branches = [
+            createRepoBranch('main', { ahead: 3, behind: 1 }),
+            createRepoBranch('feature/other', { ahead: 40, behind: 50 }),
+          ]
+        }),
+        [WEB]: replaceRepo(state.repos[WEB]!, (repo) => {
+          repo.availability = { phase: 'available' }
+          repo.data.currentBranch = 'main'
+          repo.data.branches = [createRepoBranch('main', { ahead: 2, behind: 4 })]
+        }),
+      },
+    })
+    renderRail()
+    expect(repositoryListState.props?.repositories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: API, ahead: 3, behind: 1 }),
+        expect.objectContaining({ id: WEB, ahead: 2, behind: 4 }),
+      ]),
+    )
+    const delta = (direction: string) =>
+      container?.querySelector(`[role="img"][aria-label="branch-status.sync.${direction}"]`)
+    expect(delta('ahead')?.textContent).toBe('5')
+    expect(delta('behind')?.textContent).toBe('5')
+    act(() => {
+      const current = useReposStore.getState()
+      useReposStore.setState({
+        repos: {
+          ...current.repos,
+          [API]: replaceRepo(current.repos[API]!, (repo) => {
+            repo.data.currentBranch = 'feature/other'
+          }),
+          [WEB]: replaceRepo(current.repos[WEB]!, (repo) => {
+            repo.availability = { phase: 'unavailable', reason: 'missing', checkedAt: 1 }
+          }),
+        },
+      })
+    })
+    expect(delta('ahead')?.textContent).toBe('40')
+    expect(delta('behind')?.textContent).toBe('50')
+    expect(repositoryListState.props?.repositories.find((repo) => repo.id === WEB)).toMatchObject({
+      ahead: 0,
+      behind: 0,
+    })
+    act(() => {
+      const current = useReposStore.getState()
+      useReposStore.setState({
+        repos: {
+          ...current.repos,
+          [API]: replaceRepo(current.repos[API]!, (repo) => {
+            repo.data.currentBranch = 'HEAD'
+          }),
+        },
+      })
+    })
+    expect(delta('ahead')).toBeNull()
+    expect(delta('behind')).toBeNull()
+  })
+
   test('uses the shared project list scrollbar contract for the repository list', () => {
     renderRail()
 
@@ -633,9 +697,9 @@ describe('WorkspaceRepositoryRail', () => {
     expect(syncAndRefresh).toHaveBeenCalledWith(WEB, { token: web.instanceToken })
   })
 
-  test('refreshes a workspace repository status with its latest token and prevents duplicate requests', async () => {
+  test('refreshes a workspace repository snapshot and status with its latest token and prevents duplicate requests', async () => {
     let resolveStatus: (() => void) | undefined
-    refreshStatus.mockImplementationOnce(
+    refreshCoreData.mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           resolveStatus = resolve
@@ -655,10 +719,10 @@ describe('WorkspaceRepositoryRail', () => {
     await act(async () => {
       await refreshRepository(API)
     })
-    expect(refreshStatus).toHaveBeenCalledTimes(1)
+    expect(refreshCoreData).toHaveBeenCalledTimes(1)
 
     const api = useReposStore.getState().repos[API]!
-    expect(refreshStatus).toHaveBeenCalledWith(API, { token: api.instanceToken })
+    expect(refreshCoreData).toHaveBeenCalledWith(API, { token: api.instanceToken })
 
     resolveStatus?.()
     await act(async () => {
@@ -668,7 +732,7 @@ describe('WorkspaceRepositoryRail', () => {
   })
 
   test('skips unavailable repositories and clears busy state after a status failure', async () => {
-    refreshStatus.mockRejectedValueOnce(new Error('offline'))
+    refreshCoreData.mockRejectedValueOnce(new Error('offline'))
     renderRail()
 
     const refreshRepository = repositoryListState.props?.onRefreshRepository
@@ -683,8 +747,8 @@ describe('WorkspaceRepositoryRail', () => {
     await act(async () => {
       await refreshRepository(WEB)
     })
-    expect(refreshStatus).toHaveBeenCalledTimes(1)
-    expect(refreshStatus).toHaveBeenCalledWith(API, { token: expect.any(Number) })
+    expect(refreshCoreData).toHaveBeenCalledTimes(1)
+    expect(refreshCoreData).toHaveBeenCalledWith(API, { token: expect.any(Number) })
   })
 
   test('renders the desktop repository list as a resizable region with the default height', () => {
@@ -1846,7 +1910,7 @@ describe('WorkspaceRepositoryRail', () => {
     })
     let releaseApi: (() => void) | undefined
     let releaseWeb: (() => void) | undefined
-    refreshStatus
+    refreshCoreData
       .mockImplementationOnce(
         () =>
           new Promise<void>((resolve) => {
@@ -1871,9 +1935,9 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set([item.id]))
 
     await act(async () => await refreshChanges(item))
-    expect(refreshStatus).toHaveBeenCalledTimes(2)
-    expect(refreshStatus).toHaveBeenNthCalledWith(1, API, { token: expect.any(Number) })
-    expect(refreshStatus).toHaveBeenNthCalledWith(2, WEB, { token: expect.any(Number) })
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API, { token: expect.any(Number) })
+    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB, { token: expect.any(Number) })
 
     releaseApi?.()
     releaseWeb?.()

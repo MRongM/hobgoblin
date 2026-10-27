@@ -94,3 +94,9 @@ Notes:
 - If the state must converge across windows right now, make it runtime-coherent.
 - If the state only needs to come back on next launch, make it restorable.
 - Let the server own runtime-coherent truth for settings, repo data, and terminal state.
+
+## Workspace Git refresh
+
+- Manual repository/member change refresh and scheduled local change refresh read both branch snapshots and worktree status, so upstream ahead/behind indicators update together with file change counts. These local reads compare against the last fetched remote refs.
+- The automatic remote sync setting registers all available Git repositories with remotes in the active project, including workspace members when the root or any member is selected. Other projects are not registered. Switching projects or disabling sync updates the server registration.
+- Remote fetch scheduling, cancellation, per-repository coalescing, and failure backoff remain server-owned. A successful background fetch publishes snapshot invalidation; renderers refetch core data and derive member and aggregate counts from that projection. A failed fetch retains the last known counts and retries according to the existing backoff schedule.

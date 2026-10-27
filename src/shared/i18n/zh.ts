@@ -1750,9 +1750,9 @@ export const zh: Record<DictKey, string> = {
   'settings.apps.status.detected': '已检测到',
   'settings.apps.status.not-detected': '未检测到',
   'settings.fetch': '自动同步',
-  'settings.fetch-hint': '后台同步当前仓库的远端更新；关闭后仅手动刷新。',
+  'settings.fetch-hint': '后台获取当前项目的远端更新；工作区包含所有可用且配置了远端的成员仓库。关闭后仅手动同步。',
   'settings.status-refresh': '定时刷新改动',
-  'settings.status-refresh-hint': '定时刷新当前项目的本地改动状态。',
+  'settings.status-refresh-hint': '定时刷新当前项目的本地改动和分支领先／落后数量；远端数据按最近一次同步计算。',
   'settings.general.open-from-terminal-title': '从终端打开',
   'settings.general.open-from-terminal-body':
     '在 macOS 上，你可以从终端或脚本里直接把本地仓库路径交给 Hobgoblin 打开。',
