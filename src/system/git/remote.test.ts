@@ -29,6 +29,97 @@ beforeEach(() => {
   gitResultWithOptionsMock.mockResolvedValue({ ok: true, message: 'ok' })
 })
 
+describe('pushBranch checked-out receiver recovery', () => {
+  const rejected = {
+    ok: false,
+    message: [
+      'remote: error: refusing to update checked out branch: refs/heads/feature/target',
+      ' ! [remote rejected] feature/test -> feature/target (branch is currently checked out)',
+    ].join('\n'),
+  }
+
+  beforeEach(() => {
+    gitMock.mockImplementation(async (_cwd: string, args: string[]) => {
+      if (args[0] === 'remote') return 'origin\t/workspace/receiver (fetch)\norigin\t/workspace/receiver (push)'
+      if (args[2] === 'branch.feature/test.remote') return 'origin'
+      if (args[2] === 'branch.feature/test.merge') return 'refs/heads/feature/target'
+      throw new Error(`Unexpected git call: ${args.join(' ')}`)
+    })
+  })
+
+  test('retries the same push with a temporary safe receiver update and the same network options', async () => {
+    const signal = new AbortController().signal
+    gitResultWithOptionsMock.mockResolvedValueOnce(rejected).mockResolvedValueOnce({ ok: true, message: 'pushed' })
+
+    await expect(pushBranch('/repo', 'feature/test', signal, { timeoutMs: 123_000 })).resolves.toEqual({
+      ok: true,
+      message: 'pushed',
+    })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(2)
+    expect(gitResultWithOptionsMock).toHaveBeenNthCalledWith(
+      2,
+      '/repo',
+      expect.objectContaining({ signal, timeoutMs: 123_000 }),
+      'push',
+      '--receive-pack=git -c receive.denyCurrentBranch=updateInstead receive-pack',
+      '--',
+      'origin',
+      'feature/test:feature/target',
+    )
+  })
+
+  test.each(['non-fast-forward', 'permission denied', 'pre-receive hook declined', 'cancelled'])(
+    'does not retry %s failures',
+    async (message) => {
+      const result = { ok: false, message }
+      gitResultWithOptionsMock.mockResolvedValueOnce(result)
+
+      await expect(pushBranch('/repo', 'feature/test')).resolves.toEqual(result)
+
+      expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  test('stops after one failed recovery attempt', async () => {
+    gitResultWithOptionsMock.mockResolvedValue(rejected)
+
+    await expect(pushBranch('/repo', 'feature/test')).resolves.toEqual(rejected)
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(2)
+  })
+
+  test('does not retry a hook rejection whose diagnostics mention a checked-out branch', async () => {
+    const result = {
+      ok: false,
+      message: [
+        'remote: refusing to update checked out branch: policy explanation',
+        ' ! [remote rejected] feature/test -> feature/target (pre-receive hook declined)',
+      ].join('\n'),
+    }
+    gitResultWithOptionsMock.mockResolvedValue(result)
+
+    await expect(pushBranch('/repo', 'feature/test')).resolves.toEqual(result)
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('cancels before recovery when the first push was aborted', async () => {
+    const controller = new AbortController()
+    gitResultWithOptionsMock.mockImplementationOnce(async () => {
+      controller.abort()
+      return rejected
+    })
+
+    await expect(pushBranch('/repo', 'feature/test', controller.signal)).resolves.toEqual({
+      ok: false,
+      message: 'cancelled',
+    })
+
+    expect(gitResultWithOptionsMock).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('getBrowserRemoteUrl', () => {
   test('returns the repository HTTPS URL from the configured remote when no branch is provided', async () => {
     gitMock.mockImplementation(async (_cwd: string, args: string[]) => {

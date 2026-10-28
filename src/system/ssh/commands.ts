@@ -25,6 +25,7 @@ import {
   type WorkspaceFolderRenameCommand,
 } from '#/system/ssh/workspace-folder-rename-script.ts'
 import { worktreeDependencyScript, type WorktreeDependencyCommand } from '#/system/ssh/worktree-dependency-script.ts'
+import { WORKTREE_UPDATE_RECEIVE_PACK } from '#/system/git/push-with-worktree-update.ts'
 
 const SSH_COMMAND_TIMEOUT_MS = 15_000
 const SSH_CONNECT_TIMEOUT_SEC = 10
@@ -148,7 +149,15 @@ export type RemoteCommandKind =
   | { type: 'gitBranchTrackRemote'; path: string; localBranch: string; remoteRef: string }
   | { type: 'gitBranchSetUpstream'; path: string; branch: string; remoteRef: string | null }
   | { type: 'gitFetchBranch'; path: string; remote: string; remoteBranch: string; branch: string }
-  | { type: 'gitPush'; path: string; remote: string; branch: string; targetBranch: string; setUpstream: boolean }
+  | {
+      type: 'gitPush'
+      path: string
+      remote: string
+      branch: string
+      targetBranch: string
+      setUpstream: boolean
+      updateWorktree?: boolean
+    }
   | { type: 'gitPushWorktreeHead'; path: string; remote: string; targetBranch: string }
   | { type: 'gitTags'; path: string }
   | { type: 'gitTagCreate'; path: string; name: string; ref: string }
@@ -699,6 +708,7 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return [
         `git -C ${shellQuote(command.path)} push`,
         command.setUpstream ? '-u' : '',
+        command.updateWorktree ? shellQuote(`--receive-pack=${WORKTREE_UPDATE_RECEIVE_PACK}`) : '',
         '--',
         shellQuote(command.remote),
         shellQuote(`${command.branch}:${command.targetBranch}`),
