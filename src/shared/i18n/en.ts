@@ -577,7 +577,9 @@ export const en = {
   'workspace.branch-workspace.reduce-retains-branches':
     'Remove selected worktree directories while keeping local and remote branches. Directory links are only unlinked; independent repositories are kept.',
   'workspace.branch-workspace.delete-warning':
-    'Managed repository members and this folder will be removed, including uncommitted changes and independent local Git history. External terminals cannot be detected.',
+    'Worktrees, repositories, and all remaining folder contents will be deleted, including uncommitted changes and local Git history, followed by the folder itself. This cannot be undone. Directory links are only unlinked.',
+  'workspace.branch-workspace.delete-cancelled':
+    'Deletion cancelled. Deleted files cannot be restored; retry to delete the remaining content.',
   'workspace.branch-workspace.delete-local-branch': 'Also delete eligible local branches',
   'workspace.branch-workspace.delete-upstream-branch': 'Also delete eligible upstream branches',
   'workspace.branch-workspace.step.delete-local-branch': 'Delete local branch in {repository}:',

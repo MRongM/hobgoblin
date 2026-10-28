@@ -561,7 +561,9 @@ export const ko: Record<DictKey, string> = {
   'workspace.branch-workspace.reduce-retains-branches':
     '선택한 워크트리 디렉터리를 제거하고 로컬 및 원격 브랜치는 유지합니다. 디렉터리 링크는 링크만 제거하며 독립 저장소는 유지합니다.',
   'workspace.branch-workspace.delete-warning':
-    '관리되는 저장소 멤버와 이 폴더를 제거합니다. 커밋하지 않은 변경 사항과 독립 저장소의 로컬 Git 기록도 삭제됩니다. 외부 터미널은 감지할 수 없습니다.',
+    '워크트리와 저장소, 커밋하지 않은 변경 사항 및 로컬 Git 기록을 포함한 모든 내용을 삭제한 다음 폴더를 삭제합니다. 되돌릴 수 없습니다. 디렉터리 링크는 링크만 제거합니다.',
+  'workspace.branch-workspace.delete-cancelled':
+    '삭제가 취소되었습니다. 삭제된 파일은 복원할 수 없습니다. 남은 내용을 삭제하려면 다시 시도하세요.',
   'workspace.branch-workspace.delete-local-branch': '대상 로컬 브랜치도 삭제',
   'workspace.branch-workspace.delete-upstream-branch': '대상 업스트림 브랜치도 삭제',
   'workspace.branch-workspace.step.delete-local-branch': '{repository}의 로컬 브랜치 삭제:',

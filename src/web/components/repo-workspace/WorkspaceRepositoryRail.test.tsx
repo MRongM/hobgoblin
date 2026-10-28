@@ -409,6 +409,7 @@ const originalActions = {
   rescanWorkspace: useReposStore.getState().rescanWorkspace,
   configureWorkspace: useReposStore.getState().configureWorkspace,
   refreshCoreData: useReposStore.getState().refreshCoreData,
+  refreshSnapshot: useReposStore.getState().refreshSnapshot,
   refreshStatus: useReposStore.getState().refreshStatus,
   syncAndRefresh: useReposStore.getState().syncAndRefresh,
 }
@@ -422,6 +423,7 @@ const selectBranch = vi.fn()
 const setDetailTab = vi.fn()
 const rescanWorkspace = vi.fn(async () => {})
 const refreshCoreData = vi.fn(async () => {})
+const refreshSnapshot = vi.fn(async () => {})
 const refreshStatus = vi.fn(async () => {})
 const syncAndRefresh = vi.fn(async () => ({ ok: true as const, message: 'fetched' }))
 const configureWorkspace = vi.fn(
@@ -457,6 +459,8 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   refreshCoreData.mockReset()
   refreshCoreData.mockResolvedValue(undefined)
+  refreshSnapshot.mockReset()
+  refreshSnapshot.mockResolvedValue(undefined)
   refreshStatus.mockReset()
   refreshStatus.mockResolvedValue(undefined)
   syncAndRefresh.mockReset()
@@ -591,6 +595,7 @@ beforeEach(() => {
     rescanWorkspace,
     configureWorkspace,
     refreshCoreData,
+    refreshSnapshot,
     refreshStatus,
     syncAndRefresh,
   })
@@ -610,6 +615,18 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('opens one whole-folder confirmation from the root delete action without checkboxes', () => {
+    const item = branchWorkspaceState.items[0]!
+    renderRail({ currentRepoId: ROOT })
+    act(() => branchWorkspaceListState.props?.onRemove?.(item))
+    const dialog = document.querySelector('[role="alertdialog"]')
+    expect(dialog?.textContent).toContain('workspace.branch-workspace.delete')
+    expect(dialog?.textContent).toContain(item.path)
+    expect(dialog?.querySelector('[role="checkbox"], input')).toBeNull()
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1)
+    expect(branchWorkspaceState.refresh).not.toHaveBeenCalled()
+  })
+
   test('projects current branch deltas and sums directions independently as snapshots change', () => {
     const state = useReposStore.getState()
     useReposStore.setState({
@@ -927,9 +944,10 @@ describe('WorkspaceRepositoryRail', () => {
 
     await act(async () => finishRefresh?.())
     expect(refresh?.disabled).toBe(false)
-    expect(refreshCoreData).toHaveBeenCalledTimes(2)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
+    expect(refreshCoreData).not.toHaveBeenCalled()
+    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(refreshSnapshot).toHaveBeenCalledWith(API, { token: expect.any(Number) })
+    expect(refreshSnapshot).not.toHaveBeenCalledWith(WEB, expect.anything())
   })
 
   test('reloads branch workspaces after a remote read failure without offering registry cleanup', async () => {
@@ -1943,6 +1961,44 @@ describe('WorkspaceRepositoryRail', () => {
     releaseWeb?.()
     await act(async () => await first)
     expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set())
+  })
+
+  test('folder refresh handles a linked worktree and a newly discovered independent repository together', async () => {
+    const item = branchWorkspaceState.items[0]!
+    const independentId = `${item.path}/independent`
+    const linked = {
+      ...item.repositories[0]!,
+      kind: 'worktree' as const,
+      repositoryId: API,
+      progress: 'complete' as const,
+      ready: true,
+    }
+    const independent = {
+      ...linked,
+      kind: 'repository' as const,
+      repositoryId: independentId,
+      repositoryName: 'independent',
+      worktreePath: independentId,
+      currentBranch: 'feature/independent',
+    }
+    const observed = { ...item, repositories: [linked, independent, { ...linked, repositoryName: 'alias' }] }
+    branchWorkspaceState.refresh.mockResolvedValueOnce({
+      ok: true,
+      rootId: ROOT,
+      items: [observed],
+      auxiliaryCandidates: [],
+    })
+    renderRail({ currentRepoId: ROOT })
+    await act(async () => {
+      await branchWorkspaceListState.props!.onRefreshChanges!(item)
+    })
+    expect(useReposStore.getState().repos[independentId]?.workspaceRootId).toBe(ROOT)
+    expect(refreshCoreData.mock.calls).toEqual([
+      [API, { token: useReposStore.getState().repos[API]!.instanceToken }],
+      [independentId, { token: useReposStore.getState().repos[independentId]!.instanceToken }],
+    ])
+    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(syncAndRefresh).not.toHaveBeenCalled()
   })
 
   test('sums changes from each branch workspace repository member worktree', () => {

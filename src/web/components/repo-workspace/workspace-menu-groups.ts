@@ -57,6 +57,7 @@ interface MenuActionDefinition {
   icon: WorkspaceMenuIcon
   preserveIcon?: boolean
   destructive?: boolean
+  topLevel?: boolean
 }
 
 // IDs describe operations, not their localized labels or the surface that rendered them.
@@ -105,7 +106,7 @@ const definitions: Record<string, MenuActionDefinition> = {
   createWorkspaceFolder: { category: 'manage', group: 0, order: 4, icon: 'folder-add' },
   cloneWorkspace: { category: 'manage', group: 0, order: 5, icon: 'folder-copy' },
   renameWorkspace: { category: 'manage', group: 1, order: 0, icon: 'rename' },
-  refreshFolder: { category: 'manage', group: 1, order: 1, icon: 'refresh' },
+  refreshFolder: { category: 'manage', group: 1, order: 1, icon: 'refresh', topLevel: true },
   detectWorkspaceRepositories: { category: 'manage', group: 1, order: 2, icon: 'detect' },
   cleanupWorktree: { category: 'manage', group: 1, order: 3, icon: 'recovery', destructive: false },
   unregisterWorkspace: { category: 'manage', group: 2, order: 0, icon: 'forget', destructive: false },
@@ -113,6 +114,7 @@ const definitions: Record<string, MenuActionDefinition> = {
   removeWorktree: { category: 'manage', group: 3, order: 0, icon: 'worktree-remove', destructive: true },
   removeWorkspaceWorktree: { category: 'manage', group: 3, order: 1, icon: 'worktree-remove', destructive: true },
   removeMembers: { category: 'manage', group: 3, order: 2, icon: 'worktree-remove', destructive: true },
+  deleteWorkspace: { category: 'manage', group: 3, order: 4, icon: 'worktree-remove', destructive: true },
   recoverWorkspace: { category: 'manage', group: 3, order: 3, icon: 'recovery', destructive: true },
 }
 
@@ -153,6 +155,7 @@ const aliases: Record<string, string> = {
   'workspace.branch-workspace.rename.action': 'renameWorkspace',
   'workspace.branch-workspace.refresh-folder': 'refreshFolder',
   'workspace.branch-workspace.remove-members': 'removeMembers',
+  'workspace.branch-workspace.delete': 'deleteWorkspace',
   'workspace.branch-workspace.unregister': 'unregisterWorkspace',
   'workspace.recovery.action': 'recoverWorkspace',
 }

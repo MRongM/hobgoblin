@@ -105,6 +105,7 @@ export interface BranchWorkspaceListProps {
   onInspect?: (item: BranchWorkspaceSnapshot) => void
   onRepair?: (item: BranchWorkspaceSnapshot) => void
   onRemove: (item: BranchWorkspaceSnapshot) => void
+  onUnregister?: (item: BranchWorkspaceSnapshot) => void
   onRename?: (item: BranchWorkspaceSnapshot) => void
   onExtend?: (item: BranchWorkspaceSnapshot) => void
   onClone?: (item: BranchWorkspaceSnapshot) => void
@@ -146,6 +147,7 @@ export function BranchWorkspaceList({
   onInspect,
   onRepair,
   onRemove,
+  onUnregister,
   onRename,
   onExtend,
   onClone,
@@ -217,6 +219,7 @@ export function BranchWorkspaceList({
               onInspect={onInspect}
               onRepair={onRepair}
               onRemove={onRemove}
+              onUnregister={onUnregister}
               onRename={onRename}
               onExtend={onExtend}
               onClone={onClone}
@@ -256,6 +259,7 @@ function BranchWorkspaceRow({
   onOpenFileArea,
   onToggleExpanded,
   onRemove,
+  onUnregister,
   onRename,
   onExtend,
   onClone,
@@ -522,18 +526,13 @@ function BranchWorkspaceRow({
               },
             ]
           : []),
-        ...(onReduce
-          ? [
-              {
-                label: 'workspace.branch-workspace.remove-members',
-                icon: <FolderMinus aria-hidden="true" />,
-                disabled:
-                  disabled || !item.repositories.some((member) => isRemovableBranchWorkspaceWorktree(item, member)),
-                destructive: true,
-                onSelect: () => onReduce(item),
-              },
-            ]
-          : []),
+        {
+          label: 'workspace.branch-workspace.delete',
+          icon: <FolderMinus aria-hidden="true" />,
+          disabled: disabled || busy,
+          destructive: true,
+          onSelect: () => onRemove(item),
+        },
       ]
     : []
   const readyDependencyActions: BranchWorkspaceItemAction[] = rootUsable
@@ -573,13 +572,17 @@ function BranchWorkspaceRow({
           },
         ]
       : []),
-    {
-      label: 'workspace.branch-workspace.unregister',
-      icon: <X aria-hidden="true" />,
-      disabled: disabled || busy,
-      separated: true,
-      onSelect: () => onRemove(item),
-    },
+    ...(onUnregister
+      ? [
+          {
+            label: 'workspace.branch-workspace.unregister',
+            icon: <X aria-hidden="true" />,
+            disabled: disabled || busy,
+            separated: true,
+            onSelect: () => onUnregister(item),
+          },
+        ]
+      : []),
   ]
   const additionalMenuActions: BranchWorkspaceItemAction[] = [
     ...refreshChangesActions,

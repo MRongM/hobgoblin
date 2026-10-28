@@ -302,23 +302,7 @@ async function buildExistingBranchWorkspacePlan(
       signal,
     )
   }
-  const registered = { ...manifest, repositories: [], auxiliaryEntries: [], operation: undefined }
-  const withoutToken: Omit<BranchWorkspacePlan, 'token'> = {
-    rootId: manifest.rootId,
-    branchWorkspaceId: manifest.id,
-    operation: 'remove',
-    branch: '',
-    directoryName: manifest.directoryName,
-    path: manifest.path,
-    parentDirectory: manifest.parentDirectory,
-    manifest: registered,
-    repositories: [],
-    auxiliaryEntries: [],
-    requiredApprovals: [],
-    steps: [],
-    terminalSessionIds: [],
-  }
-  return { ok: true, plan: { ...withoutToken, token: planToken(withoutToken) } }
+  return await buildRemovePlan(manifest, request, dependencies, signal)
 }
 
 async function buildReducePlan(
@@ -765,11 +749,23 @@ async function buildRemovePlan(
   const unmanagedMemberEntries: string[] = []
   for (const member of manifest.repositories) {
     signal?.throwIfAborted()
+    // Discovery resolves directory links; deleting this folder must never delete their external targets.
+    if (!sameHostDescendant(manifest.rootId, manifest.path, member.worktreePath)) {
+      unmanagedMemberEntries.push(member.repositoryName)
+      continue
+    }
+    if (
+      repositories.some((repository) => sameHostPath(manifest.rootId, repository.worktreePath, member.worktreePath))
+    ) {
+      unmanagedMemberEntries.push(member.repositoryName)
+      continue
+    }
     const repository = await planRemoveRepository(manifest, member, request, dependencies, signal)
     if (!repository.ok) return repository
     repositories.push(repository.repository)
     if (repository.unmanagedEntry) unmanagedMemberEntries.push(repository.unmanagedEntry)
   }
+  repositories.sort((left, right) => Number(left.kind === 'repository') - Number(right.kind === 'repository'))
 
   const auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[] = []
   let modifiedCopy = false
@@ -803,7 +799,12 @@ async function buildRemovePlan(
   }
 
   let unmanagedEntries: string[] = [...unmanagedMemberEntries]
-  if (root.exists) {
+  const removesRootAsMember = repositories.some(
+    (repository) =>
+      (repository.action === 'remove-worktree' || repository.action === 'remove-entry') &&
+      sameHostPath(manifest.rootId, repository.worktreePath, manifest.path),
+  )
+  if (root.exists && !removesRootAsMember) {
     const children = await (dependencies.listChildren ?? listBranchWorkspaceChildren)(
       branchWorkspaceStorageRootId(manifest),
       manifest.path,
@@ -910,21 +911,14 @@ async function planRemoveRepository(
     if (!primary) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
     if (primary.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
     if (
-      worktrees?.some((entry) => !entry.isPrunable && !sameHostPath(manifest.rootId, entry.path, member.worktreePath))
+      worktrees?.some((entry) => !entry.isPrunable && !sameHostDescendant(manifest.rootId, manifest.path, entry.path))
     )
       return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
-    const deletion = await (dependencies.inspectRepository ?? inspectBranchWorkspaceRepository)(
-      branchWorkspaceStorageRootId(manifest),
-      member.worktreePath,
-      signal,
-    ).catch(() => null)
-    if (!deletion) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
     return {
       ok: true,
       repository: {
         ...reduceRepositoryPlan(member, repoId, 'remove-entry', primary.branch),
         kind: 'repository',
-        ...deletion,
       },
     }
   }

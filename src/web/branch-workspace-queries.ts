@@ -35,7 +35,11 @@ export function useBranchWorkspaceQuery(rootId: string) {
     const projection = projectDiscoveredBranchWorkspaceRepositories(useReposStore.getState(), rootId, query.data.items)
     if (projection.repos !== useReposStore.getState().repos)
       useReposStore.setState({ repos: projection.repos, order: projection.order })
-    for (const id of projection.refreshIds) void useReposStore.getState().refreshCoreData(id)
+    for (const id of projection.refreshIds) {
+      const state = useReposStore.getState()
+      const repo = state.repos[id]
+      if (repo) void state.refreshSnapshot(id, { token: repo.instanceToken })
+    }
   }, [query.data, rootId])
   const refresh = useCallback(async () => await refreshBranchWorkspaceQuery(queryClient, rootId), [queryClient, rootId])
   return { ...query, refresh }

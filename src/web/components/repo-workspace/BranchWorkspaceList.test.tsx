@@ -94,6 +94,42 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceList', () => {
+  test('offers whole-folder deletion instead of root-level worktree selection, including an empty folder', async () => {
+    const onRemove = vi.fn()
+    const onUnregister = vi.fn()
+    const item = { ...workspace('ready'), repositories: [] }
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onRemove={onRemove}
+            onUnregister={onUnregister}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    await openMenuItems(container.querySelector('[data-branch-workspace-id]'))
+    await act(async () =>
+      document
+        .querySelector('[data-menu-category="manage"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' })),
+    )
+    const remove = document.querySelector<HTMLElement>('[data-action="workspace.branch-workspace.delete"]')
+    expect(remove).not.toBeNull()
+    expect(remove?.getAttribute('data-variant')).toBe('destructive')
+    expect(document.querySelector('[data-action="workspace.branch-workspace.remove-members"]')).toBeNull()
+    expect(document.querySelector('[data-action="workspace.branch-workspace.unregister"]')).not.toBeNull()
+    await act(async () => remove!.click())
+    expect(onRemove).toHaveBeenCalledWith(item)
+    expect(onUnregister).not.toHaveBeenCalled()
+  })
+
   test('protects only member worktree roots in the branch workspace folder context', () => {
     const item = workspace('ready')
     item.repositories = [repositoryMember()]

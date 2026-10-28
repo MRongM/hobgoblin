@@ -517,7 +517,7 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.git-action.destination-worktree-dirty': '合并前必须先提交或清理目标分支工作树。',
   'workspace.branch-workspace.git-action.destination-upstream-required':
     '“拉取、合并并推送”要求每个所选目标分支都有可用上游。',
-  'workspace.branch-workspace.delete': '删除子工作区',
+  'workspace.branch-workspace.delete': '删除工作区',
   'workspace.branch-workspace.force-delete': '强制删除',
   'workspace.branch-workspace.force-delete-description': '先删除子工作区文件夹和应用配置，再尝试清理成员工作树登记。',
   'workspace.branch-workspace.cancel': '取消操作',
@@ -530,7 +530,8 @@ export const zh: Record<DictKey, string> = {
   'workspace.branch-workspace.reduce-retains-branches':
     '移除所选工作树目录，保留本地和远程分支。目录链接只移除链接；独立仓库不会被删除。',
   'workspace.branch-workspace.delete-warning':
-    '将移除受管理的仓库成员和此文件夹，包括未提交改动和独立仓库的本地 Git 历史。无法检测外部终端。',
+    '将自动移除工作树、删除仓库和文件夹内的全部内容，包括未提交改动与本地 Git 历史，最后删除文件夹。此操作无法撤销；目录链接只删除链接本身。',
+  'workspace.branch-workspace.delete-cancelled': '删除已取消，已删除的文件无法恢复。可重试以删除剩余内容。',
   'workspace.branch-workspace.delete-local-branch': '同时删除符合条件的本地分支',
   'workspace.branch-workspace.delete-upstream-branch': '同时删除符合条件的上游分支',
   'workspace.branch-workspace.step.delete-local-branch': '删除 {repository} 的本地分支：',

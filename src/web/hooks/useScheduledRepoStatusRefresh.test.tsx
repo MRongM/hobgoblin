@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
 import { act } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import { branchWorkspaceQueryKey } from '#/web/branch-workspace-query-cache.ts'
+import type { BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import {
   scheduledStatusRefreshRepoIdsFromStore,
   useScheduledRepoStatusRefresh,
@@ -29,6 +32,15 @@ function Harness() {
   return null
 }
 
+const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
+function ProviderHarness() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Harness />
+    </QueryClientProvider>
+  )
+}
+
 describe('useScheduledRepoStatusRefresh', () => {
   let container: HTMLDivElement
   let root: Root
@@ -39,6 +51,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     vi.useFakeTimers()
     settings.statusRefreshIntervalSec = 30
     resetReposStore()
+    queryClient.clear()
     refreshCoreData = vi.fn().mockResolvedValue(undefined)
     useReposStore.setState({ refreshCoreData: refreshCoreData as typeof originalRefreshCoreData })
     container = document.createElement('div')
@@ -50,6 +63,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     act(() => root.unmount())
     container.remove()
     resetReposStore()
+    queryClient.clear()
     useReposStore.setState({ refreshCoreData: originalRefreshCoreData })
     vi.useRealTimers()
     reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = false
@@ -122,7 +136,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     refreshCoreData.mockRejectedValueOnce(new Error('api failed')).mockResolvedValue(undefined)
 
     await act(async () => {
-      root.render(<Harness />)
+      root.render(<ProviderHarness />)
     })
     expect(refreshCoreData).not.toHaveBeenCalled()
 
@@ -141,7 +155,7 @@ describe('useScheduledRepoStatusRefresh', () => {
 
     settings.statusRefreshIntervalSec = 0
     await act(async () => {
-      root.render(<Harness />)
+      root.render(<ProviderHarness />)
     })
     await act(async () => {
       vi.advanceTimersByTime(60_000)
@@ -160,7 +174,7 @@ describe('useScheduledRepoStatusRefresh', () => {
     })
 
     await act(async () => {
-      root.render(<Harness />)
+      root.render(<ProviderHarness />)
     })
     expect(vi.getTimerCount()).toBe(1)
     await act(async () => {
@@ -180,5 +194,142 @@ describe('useScheduledRepoStatusRefresh', () => {
     act(() => root.unmount())
     expect(vi.getTimerCount()).toBe(0)
     root = createRoot(container)
+  })
+
+  function installWorkspaceMembers(count: number) {
+    const workspace = emptyRepo('/workspace', 'workspace')
+    workspace.isGitRepo = false
+    const members = Array.from({ length: count }, (_, index) => {
+      const repo = emptyRepo(`/workspace/repo-${index}`, `repo-${index}`)
+      repo.workspaceRootId = workspace.id
+      return repo
+    })
+    useReposStore.setState({
+      activeId: workspace.id,
+      activeProjectId: workspace.id,
+      repos: Object.fromEntries([workspace, ...members].map((repo) => [repo.id, repo])),
+      workspaceProjects: {
+        [workspace.id]: {
+          rootId: workspace.id,
+          repositoryIds: members.map((repo) => repo.id),
+          candidates: [],
+          configured: true,
+          configurationError: null,
+          phase: 'ready',
+          skipped: [],
+          error: null,
+        },
+      },
+    })
+    return members
+  }
+
+  test('rotates bounded batches including independent repositories discovered in subworkspaces', async () => {
+    const members = installWorkspaceMembers(11)
+    const independent = emptyRepo('/workspace/hob-example/independent', 'independent')
+    useReposStore.setState((state) => ({ repos: { ...state.repos, [independent.id]: independent } }))
+    const folders: BranchWorkspaceSnapshot[] = [
+      {
+        id: 'folder',
+        rootId: '/workspace',
+        branch: '',
+        directoryName: 'hob-example',
+        path: '/workspace/hob-example',
+        state: { kind: 'ready' },
+        available: true,
+        issues: [],
+        auxiliaryEntries: [],
+        repositories: [
+          {
+            repositoryId: independent.id,
+            repositoryName: 'independent',
+            worktreePath: independent.id,
+            kind: 'repository',
+            targetBranch: 'main',
+            creationBase: { kind: 'localBranch', branch: 'main' },
+            syncBeforeCreate: false,
+            branchOrigin: 'pre-existing',
+            progress: 'complete',
+            ready: true,
+          },
+        ],
+      },
+    ]
+    queryClient.setQueryData(branchWorkspaceQueryKey('/workspace'), { ok: true, items: folders })
+    const all = [...members, independent]
+    refreshCoreData.mockRejectedValueOnce(new Error('temporary read failure'))
+    expect(scheduledStatusRefreshRepoIdsFromStore(useReposStore.getState(), folders)).toEqual(
+      all.map((repo) => repo.id),
+    )
+    await act(async () => root.render(<ProviderHarness />))
+    for (const expected of [all.slice(0, 5), all.slice(5, 10), all.slice(10), all.slice(0, 5)]) {
+      refreshCoreData.mockClear()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+      expect(refreshCoreData.mock.calls.map(([id]) => id)).toEqual(expected.map((repo) => repo.id))
+    }
+  })
+
+  test('waits for a batch to settle and reads the latest instance token for the next batch', async () => {
+    const members = installWorkspaceMembers(7)
+    let release!: () => void
+    refreshCoreData.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    await act(async () => root.render(<ProviderHarness />))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(5)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(5)
+    const next = members[5]!
+    act(() =>
+      useReposStore.setState((state) => ({ repos: { ...state.repos, [next.id]: { ...next, instanceToken: 999 } } })),
+    )
+    await act(async () => release())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(7)
+    expect(refreshCoreData).toHaveBeenCalledWith(next.id, { token: 999 })
+  })
+
+  test('preserves the batch lock when changing project or interval', async () => {
+    installWorkspaceMembers(6)
+    const other = emptyRepo('/other', 'other')
+    useReposStore.setState((state) => ({ repos: { ...state.repos, [other.id]: other } }))
+    let release!: () => void
+    refreshCoreData.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    await act(async () => root.render(<ProviderHarness />))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(5)
+    settings.statusRefreshIntervalSec = 10
+    await act(async () => {
+      useReposStore.setState({ activeId: other.id, activeProjectId: other.id })
+      root.render(<ProviderHarness />)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(5)
+    await act(async () => release())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(refreshCoreData).toHaveBeenLastCalledWith(other.id, { token: other.instanceToken })
   })
 })

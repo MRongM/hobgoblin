@@ -574,7 +574,9 @@ export const ja: Record<DictKey, string> = {
   'workspace.branch-workspace.reduce-retains-branches':
     '選択したワークツリーのディレクトリを削除し、ローカルとリモートのブランチは保持します。ディレクトリリンクはリンクのみ削除し、独立したリポジトリは保持します。',
   'workspace.branch-workspace.delete-warning':
-    '管理対象のリポジトリのメンバーとフォルダーを削除します。未コミットの変更と独立リポジトリのローカル Git 履歴も削除されます。外部ターミナルは検出できません。',
+    'ワークツリー、リポジトリ、未コミットの変更やローカル Git 履歴を含むすべての内容を削除し、最後にフォルダーを削除します。元に戻せません。ディレクトリリンクはリンクのみ削除します。',
+  'workspace.branch-workspace.delete-cancelled':
+    '削除をキャンセルしました。削除済みのファイルは復元できません。残りの内容を削除するには再試行してください。',
   'workspace.branch-workspace.delete-local-branch': '対象のローカルブランチも削除',
   'workspace.branch-workspace.delete-upstream-branch': '対象の upstream ブランチも削除',
   'workspace.branch-workspace.step.delete-local-branch': '{repository} のローカルブランチを削除：',

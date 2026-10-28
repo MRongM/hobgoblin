@@ -43,6 +43,15 @@ export function WorkspaceActionMenuItems({ groups, context = false, busyId, pend
   const SubTrigger = context ? ContextMenuSubTrigger : DropdownMenuSubTrigger
   const SubContent = context ? ContextMenuSubContent : DropdownMenuSubContent
   const sections = groupWorkspaceMenuActions(groups.map((group) => group.filter((action) => action.visible !== false)))
+  const primaryActions = sections.flatMap((section) =>
+    section.groups.flat().filter((action) => workspaceMenuActionDefinition(action.id)?.topLevel),
+  )
+  const submenuSections = sections.flatMap((section) => {
+    const groups = section.groups
+      .map((group) => group.filter((action) => !workspaceMenuActionDefinition(action.id)?.topLevel))
+      .filter((group) => group.length > 0)
+    return groups.length > 0 ? [{ ...section, groups }] : []
+  })
 
   function renderGroups(actionGroups: WorkspaceListItemAction[][]) {
     return actionGroups.map((group, groupIndex) => (
@@ -72,15 +81,21 @@ export function WorkspaceActionMenuItems({ groups, context = false, busyId, pend
     ))
   }
 
-  return sections.map((section) => (
-    <Sub key={section.category}>
-      <SubTrigger data-menu-category={section.category} className="min-w-44 gap-2">
-        <WorkspaceMenuCategoryIcon category={section.category} />
-        <span className="flex-1">{t(`workspace.menu.${section.category}`)}</span>
-      </SubTrigger>
-      <SubContent className="min-w-56 max-w-[calc(100vw-1rem)] max-h-[min(70vh,var(--radix-popper-available-height,70vh))] overflow-y-auto">
-        {renderGroups(section.groups)}
-      </SubContent>
-    </Sub>
-  ))
+  return (
+    <>
+      {primaryActions.length > 0 ? renderGroups([primaryActions]) : null}
+      {primaryActions.length > 0 && submenuSections.length > 0 ? <Separator /> : null}
+      {submenuSections.map((section) => (
+        <Sub key={section.category}>
+          <SubTrigger data-menu-category={section.category} className="min-w-44 gap-2">
+            <WorkspaceMenuCategoryIcon category={section.category} />
+            <span className="flex-1">{t(`workspace.menu.${section.category}`)}</span>
+          </SubTrigger>
+          <SubContent className="min-w-56 max-w-[calc(100vw-1rem)] max-h-[min(70vh,var(--radix-popper-available-height,70vh))] overflow-y-auto">
+            {renderGroups(section.groups)}
+          </SubContent>
+        </Sub>
+      ))}
+    </>
+  )
 }

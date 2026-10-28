@@ -347,6 +347,32 @@ describe('repo lifecycle', () => {
     expect(snapshotCalls).toEqual([linked, linked])
   })
 
+  test('manual workspace rescan refreshes branches without reading member change counts', async () => {
+    const root = '/workspace'
+    const member = '/workspace/api'
+    let branch = 'main'
+    const calls = installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: cwd !== root }),
+      'workspace.import': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: member, name: 'api' }],
+        candidates: [{ id: member, name: 'api', selected: true, available: true }],
+        configuration: { kind: 'ready', config: { repo: ['api'] } },
+        skipped: [],
+      }),
+      snapshot: () => ({ branches: [branchSnapshot(branch)], current: branch }),
+    })
+    await useReposStore.getState().ensureWorkspaceOpen(root)
+    await vi.waitFor(() => expect(calls.status).toEqual([member]))
+    calls.status.length = 0
+    branch = 'feature/current'
+    await useReposStore.getState().rescanWorkspace(root)
+    await vi.waitFor(() => expect(useReposStore.getState().repos[member]?.data.currentBranch).toBe(branch))
+    await flushRpc()
+    expect(calls.status).toEqual([])
+  })
+
   test('projects configured membership and reconciles the authoritative save result', async () => {
     const root = '/tmp/gbl-workspace'
     const api = `${root}/api`
