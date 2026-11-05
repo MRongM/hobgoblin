@@ -484,6 +484,17 @@ function normalizeSelectedTerminalByWorktree(value: unknown): Record<string, str
   return normalized
 }
 
+function normalizeStashedTerminals(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const result: Record<string, string> = {}
+  for (const [key, sessionId] of Object.entries(value)) {
+    const parts = key.split('\0')
+    if (parts.length !== 3 || parts.some((part) => !part) || typeof sessionId !== 'string' || !sessionId) continue
+    result[key] = sessionId
+  }
+  return result
+}
+
 function normalizeWorkspaceActiveRepoByRoot(
   value: unknown,
   openRepos: RepoSessionEntry[],
@@ -648,6 +659,7 @@ function normalizeSession(value: unknown): SessionState {
     selectedTerminalByWorktree: normalizeSelectedTerminalByWorktree(
       partial.selectedTerminalByWorktree ?? partial.activeTerminalByGroup,
     ),
+    ...(partial.stashedTerminals ? { stashedTerminals: normalizeStashedTerminals(partial.stashedTerminals) } : {}),
   }
 }
 

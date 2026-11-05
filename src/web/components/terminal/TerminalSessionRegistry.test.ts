@@ -5,6 +5,7 @@ import { TerminalSessionRegistry } from '#/web/components/terminal/TerminalSessi
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import type { TerminalRepoIndex } from '#/web/components/terminal/types.ts'
 import type { TerminalCloseResult } from '#/shared/terminal.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 
 const bridgeMocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -82,6 +83,7 @@ describe('TerminalSessionRegistry', () => {
   let outputCompletions: unknown[]
 
   beforeEach(() => {
+    useTerminalStashStore.setState({ stashedTerminals: {} })
     selectedChanges = []
     outputCompletions = []
     bridgeMocks.create.mockReset()
@@ -98,6 +100,23 @@ describe('TerminalSessionRegistry', () => {
       () => {},
       (intent) => outputCompletions.push(intent),
     )
+  })
+
+  test('restores a stashed terminal selected through another navigation path and clears it on close', () => {
+    registry.setRepoIndex(makeRepoIndex())
+    registry.reconcileServerSessions(
+      REPO_ROOT,
+      [makeServerSession('session-1', 'terminal-1')],
+      'attachment_local',
+      new Map(),
+    )
+    const key = `${WORKTREE_KEY}\0terminal-1`
+    useTerminalStashStore.getState().stash(key, 'session-1')
+    registry.selectTerminal(WORKTREE_KEY, key)
+    expect(useTerminalStashStore.getState().stashedTerminals).toEqual({})
+    useTerminalStashStore.getState().stash(key, 'session-1')
+    registry.closeTerminalAndDismissDetailIfLast(key, { repoRoot: REPO_ROOT, worktreePath: WORKTREE_PATH })
+    expect(useTerminalStashStore.getState().stashedTerminals).toEqual({})
   })
 
   test('reconciles a branch workspace folder indexed under its parent root', () => {

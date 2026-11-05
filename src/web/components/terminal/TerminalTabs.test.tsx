@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
 import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 
 const toastError = vi.hoisted(() => vi.fn())
 const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
@@ -23,6 +24,7 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 }
 
 beforeEach(() => {
+  useTerminalStashStore.setState({ stashedTerminals: {} })
   platformState.hostPlatform = 'linux'
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   vi.useFakeTimers()
@@ -55,6 +57,54 @@ afterEach(() => {
 })
 
 describe('TerminalTabs', () => {
+  test('keeps terminal creation available when the last tab is stashed', async () => {
+    const onSelect = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="scope"
+        detailId="detail"
+        panelActive
+        sessions={[session({ key: 't1', sessionId: 'session-1' })]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+    await clickTabContextMenuItem('t1', 'terminal.stash')
+    expect(document.body.querySelector('[data-terminal-tab-tooltip-id="t1"]')).toBeNull()
+    expect(document.querySelector('button[aria-label="terminal.new"]')).not.toBeNull()
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  test('stashes a tab without closing its session and selects the next visible terminal', async () => {
+    const onSelect = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <TerminalTabs
+        worktreeTerminalKey="scope"
+        detailId="detail"
+        panelActive
+        sessions={[
+          session({ key: 't1', sessionId: 'session-1' }),
+          session({ key: 't2', sessionId: 'session-2', selected: false }),
+        ]}
+        onNew={() => {}}
+        onSelect={onSelect}
+        onScrollToBottom={() => {}}
+        onClose={onClose}
+        onReorder={() => {}}
+      />,
+    )
+    await clickTabContextMenuItem('t1', 'terminal.stash')
+    expect(onSelect).toHaveBeenCalledWith('scope', 't2')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(useTerminalStashStore.getState().stashedTerminals).toEqual({ t1: 'session-1' })
+    expect(document.body.querySelector('[data-terminal-tab-tooltip-id="t1"]')).toBeNull()
+  })
   test('marks tab containers interactive so the Electron window drag region does not swallow tab drags', () => {
     render(
       <TerminalTabs

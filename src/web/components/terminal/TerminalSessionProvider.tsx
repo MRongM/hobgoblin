@@ -27,6 +27,8 @@ import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 import { RepoSyncTracker } from '#/web/components/terminal/repo-sync-tracker.ts'
 import { useRuntimeTerminalSettings } from '#/web/runtime-settings-terminal-buttons.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
+import { parseTerminalSessionKey } from '#/web/components/terminal/terminal-session-keys.ts'
 
 interface TerminalSessionProviderProps {
   currentRepoId: string | null
@@ -55,6 +57,7 @@ export function TerminalSessionProvider({
   const currentRepoInstanceToken = currentRepoId ? (repoIndex[currentRepoId]?.instanceToken ?? null) : null
   const currentRepoTerminalPaths = currentRepoId ? (repoIndex[currentRepoId]?.branchByWorktreePath ?? null) : null
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
+  const stashedTerminals = useTerminalStashStore((s) => s.stashedTerminals)
   const selectedBranchName = useReposStore(
     useCallback((s) => (currentRepoId ? (s.repos[currentRepoId]?.ui.selectedBranch ?? null) : null), [currentRepoId]),
   )
@@ -141,6 +144,13 @@ export function TerminalSessionProvider({
     },
     [loadMissingSnapshots, registry, syncTracker],
   )
+
+  useEffect(() => {
+    const roots = new Set(Object.keys(stashedTerminals).map((key) => parseTerminalSessionKey(key)?.repoRoot))
+    for (const root of roots) {
+      if (root && repoRootForTerminalIdentity(repoIndex, root)) void syncServerSessions(root)
+    }
+  }, [repoIndex, stashedTerminals, syncServerSessions])
 
   // Registry state sync
   useEffect(() => {

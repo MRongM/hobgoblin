@@ -63,6 +63,7 @@ import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
 import { isMacNavigatorPlatform } from '#/web/components/terminal/terminal-keyboard.ts'
 import { getRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { matchTerminalCycleShortcut } from '#/shared/shortcut-definitions.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 const MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX = 8
 const MOBILE_TERMINAL_LONG_PRESS_MS = 500
 const MOBILE_TERMINAL_INERTIA_FRAME_MS = 1000 / 60
@@ -140,6 +141,14 @@ interface TerminalSlotProps {
 }
 
 export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
+  const snapshot = useWorktreeTerminalSnapshot(worktreeTerminalKey(repoRoot, worktreePath))
+  const stashed = useTerminalStashStore((state) => state.stashedTerminals)
+  const selected = snapshot.sessions.find((session) => session.selected)
+  if (selected?.sessionId && stashed[selected.key] === selected.sessionId) return null
+  return <VisibleTerminalSlot repoRoot={repoRoot} worktreePath={worktreePath} onRevealPath={onRevealPath} />
+}
+
+function VisibleTerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
   const navigation = useMainWindowNavigation()
   const terminalHostId = useId()

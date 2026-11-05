@@ -18,6 +18,7 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { TerminalStashMenu } from '#/web/components/terminal/TerminalStashMenu.tsx'
 
 interface PlainWorkspaceTerminalPanelProps {
   repoId: string
@@ -185,6 +186,7 @@ export function WorktreeTerminalPanel({
             onReorder={handleReorderTerminals}
           />
         </div>
+        <TerminalStashMenu repoId={repoId} />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (

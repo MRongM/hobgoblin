@@ -126,6 +126,7 @@ export type TerminalRepoIndex = Record<string, TerminalRepoSnapshot>
 
 export interface TerminalSessionSummary {
   key: string
+  sessionId?: string | null
   worktreeTerminalKey: string
   terminalId: string
   index: number

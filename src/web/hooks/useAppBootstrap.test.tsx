@@ -9,6 +9,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useSessionRestoreStore } from '#/web/stores/session-restore.ts'
 import { resetReposStore } from '#/web/stores/repos/test-utils.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -63,6 +64,7 @@ describe('useAppBootstrap', () => {
       workspaceLayout: 'left-right',
       detailPaneSizes: { 'left-right': 45 },
       selectedTerminalByWorktree: { '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2' },
+      stashedTerminals: { '/tmp/repo\0/tmp/worktree\0terminal-1': 'session-1' },
     })
     const hydrateSession = vi.spyOn(useReposStore.getState(), 'hydrateSession').mockResolvedValue(undefined)
 
@@ -76,6 +78,9 @@ describe('useAppBootstrap', () => {
     expect(state.detailPaneSizes).toEqual({ 'left-right': 45 })
     expect(state.selectedTerminalByWorktree).toEqual({
       '/tmp/repo\0/tmp/worktree': '/tmp/repo\0/tmp/worktree\0terminal-2',
+    })
+    expect(useTerminalStashStore.getState().stashedTerminals).toEqual({
+      '/tmp/repo\0/tmp/worktree\0terminal-1': 'session-1',
     })
     expect(hydrateSession).toHaveBeenCalledWith(
       [{ kind: 'local', id: '/tmp/repo' }],

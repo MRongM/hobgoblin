@@ -17,6 +17,7 @@ const selectTerminal = vi.fn()
 const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn(async () => true)
 const terminalTabsProps: Array<Record<string, unknown>> = []
+vi.mock('#/web/components/terminal/TerminalStashMenu.tsx', () => ({ TerminalStashMenu: () => null }))
 let compactUi = false
 let snapshot = { worktreeTerminalKey: WORKTREE_KEY, sessions: [], selectedDescriptor: null, count: 0 } as any
 let requestedWorktreeKey: string | null = null

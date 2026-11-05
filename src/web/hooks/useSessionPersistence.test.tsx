@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { useSessionPersistence } from '#/web/hooks/useSessionPersistence.ts'
 import { createRepoBranch, resetReposStore, seedRepoState } from '#/web/stores/repos/test-utils.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 
 const persistSessionStateMock = vi.fn(async (_session: unknown) => {})
 
@@ -19,6 +20,7 @@ let root: Root | null = null
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   resetReposStore()
+  useTerminalStashStore.setState({ stashedTerminals: {} })
   persistSessionStateMock.mockReset()
 })
 
@@ -33,6 +35,22 @@ afterEach(() => {
 })
 
 describe('useSessionPersistence', () => {
+  test('persists and clears stashed terminal identities', async () => {
+    useReposStore.setState({ sessionReady: true })
+    await render(<Harness />)
+    await act(async () => {
+      useTerminalStashStore.getState().stash('/project\0/worktree\0terminal-1', 'session-1')
+    })
+    expect(persistSessionStateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stashedTerminals: { '/project\0/worktree\0terminal-1': 'session-1' } }),
+    )
+    await act(async () => {
+      useTerminalStashStore.getState().restore('/project\0/worktree\0terminal-1')
+    })
+    expect(persistSessionStateMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ stashedTerminals: expect.anything() }),
+    )
+  })
   test('persists the active terminal map into settings session state', async () => {
     const repo = seedRepoState({
       id: '/tmp/repo',

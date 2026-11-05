@@ -749,6 +749,7 @@ test('persists updates and notifies subscribers from the server settings store',
     openRepos: [{ kind: 'local', id: '/repo-b' }],
     activeRepo: '/repo-b',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
+    stashedTerminals: { '/repo-b\0/worktree\0terminal-1': 'session-1', invalid: 'session-2' },
   })
   await mod.addServerRecentRepo({ kind: 'local', id: '/repo-b' })
   unsubscribe()
@@ -793,6 +794,7 @@ test('persists updates and notifies subscribers from the server settings store',
     openRepos: [{ kind: 'local', id: '/repo-b' }],
     activeRepo: '/repo-b',
     selectedTerminalByWorktree: { '/repo-b\0/worktree': '/repo-b\0/worktree\0terminal-2' },
+    stashedTerminals: { '/repo-b\0/worktree\0terminal-1': 'session-1' },
   })
   expect(await reloaded.getServerRecentRepos()).toEqual([{ kind: 'local', id: '/repo-b' }])
 })

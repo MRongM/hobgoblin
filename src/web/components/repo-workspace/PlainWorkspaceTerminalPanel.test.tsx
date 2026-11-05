@@ -17,6 +17,7 @@ const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn()
 const terminalTabsProps: Array<Record<string, unknown>> = []
 const terminalSlotProps: Array<Record<string, unknown>> = []
+vi.mock('#/web/components/terminal/TerminalStashMenu.tsx', () => ({ TerminalStashMenu: () => null }))
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 let compactUi = false
 let terminalSnapshot = {

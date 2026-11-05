@@ -9,6 +9,7 @@ import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 import { FilePreviewProvider, useFilePreview } from '#/web/components/terminal/file-preview-context.tsx'
 import { MainWindowNavigationProvider } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
@@ -191,6 +192,37 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('hides the selected terminal surface while its session is stashed', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const stashedSnapshot = {
+      ...worktreeSnapshot,
+      sessions: worktreeSnapshot.sessions.map((session) => ({ ...session, sessionId: 'session-1' })),
+    }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => stashedSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    useTerminalStashStore.setState({ stashedTerminals: { [descriptor.key]: 'session-1' } })
+    await act(async () =>
+      root.render(
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+        </TerminalSessionReadContext.Provider>,
+      ),
+    )
+    expect(container.querySelector('.goblin-terminal-slot__host')).toBeNull()
+    await act(async () => root.unmount())
+    useTerminalStashStore.setState({ stashedTerminals: {} })
+    container.remove()
+  })
   test('cancels a shared pending preview when its terminal source unmounts', async () => {
     const attach = vi.fn()
     const fixture = await renderPreviewFixture({ attach }, { sharedPreview: true })
