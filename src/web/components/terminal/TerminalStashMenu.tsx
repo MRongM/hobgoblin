@@ -1,5 +1,8 @@
-import { MoreHorizontal } from 'lucide-react'
-import { useCallback, useContext, useMemo, useSyncExternalStore } from 'react'
+import { MoreHorizontal, X } from 'lucide-react'
+import { useCallback, useContext, useMemo, useState, useSyncExternalStore } from 'react'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
+import { ConfirmCheckbox } from '#/web/components/ConfirmCheckbox.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   DropdownMenu,
@@ -24,12 +27,24 @@ import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-worksp
 import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
 import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
 
-type StashedItem = { key: string; title: string; hasBell: boolean }
+type StashedItem = {
+  key: string
+  sessionId: string
+  title: string
+  fullTitle: string
+  hasBell: boolean
+  hasUserInput?: boolean
+  tmuxBacked?: boolean
+  tmuxCloseSupported?: boolean
+}
 
 export function TerminalStashMenu({ repoId }: { repoId: string }) {
   const t = useT()
   const navigation = useMainWindowNavigation()
-  const { selectTerminal } = useTerminalSessionContext()
+  const { selectTerminal, closeTerminalAndDismissDetailIfLast } = useTerminalSessionContext()
+  const [open, setOpen] = useState(false)
+  const [pendingClose, setPendingClose] = useState<StashedItem | null>(null)
+  const [closeTmuxSession, setCloseTmuxSession] = useState(false)
   const read = useContext(TerminalSessionReadContext)
   const catalog = useTerminalCatalog()
   const stashed = useTerminalStashStore((state) => state.stashedTerminals)
@@ -60,7 +75,18 @@ export function TerminalStashMenu({ repoId }: { repoId: string }) {
             ?.worktreeSnapshot(descriptor.worktreeTerminalKey)
             .sessions.find((item) => item.key === descriptor.key)
           return session?.sessionId && session.sessionId === stashed[descriptor.key]
-            ? [{ key: descriptor.key, title: session.title, hasBell: session.hasBell }]
+            ? [
+                {
+                  key: descriptor.key,
+                  sessionId: session.sessionId,
+                  title: session.title,
+                  fullTitle: session.fullTitle ?? session.title,
+                  hasBell: session.hasBell,
+                  hasUserInput: session.hasUserInput,
+                  tmuxBacked: session.tmuxBacked,
+                  tmuxCloseSupported: session.tmuxCloseSupported,
+                },
+              ]
             : []
         }),
       ),
@@ -68,6 +94,31 @@ export function TerminalStashMenu({ repoId }: { repoId: string }) {
   )
   const serialized = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const items = useMemo(() => JSON.parse(serialized) as StashedItem[], [serialized])
+
+  async function closeItem(item: StashedItem, closeTmux = false) {
+    const descriptor = candidates.find((candidate) => candidate.key === item.key)
+    const current =
+      descriptor &&
+      read?.worktreeSnapshot(descriptor.worktreeTerminalKey).sessions.find((session) => session.key === item.key)
+    if (!descriptor || current?.sessionId !== item.sessionId) {
+      setPendingClose(null)
+      return
+    }
+    try {
+      const scope = { repoRoot: descriptor.repoRoot, worktreePath: descriptor.worktreePath }
+      const result = await (closeTmux
+        ? closeTerminalAndDismissDetailIfLast(item.key, scope, { closeTmuxSession: true })
+        : closeTerminalAndDismissDetailIfLast(item.key, scope))
+      if (result && !result.ok) {
+        toast.error(t('terminal.close-tmux-session-failed'), { description: t(result.message) })
+        return
+      }
+      setPendingClose(null)
+      setCloseTmuxSession(false)
+    } catch {
+      toast.error(t('terminal.close-tmux-session-failed'), { description: t('error.tmux-command-failed') })
+    }
+  }
 
   function restore(descriptor: TerminalDescriptor) {
     const state = useReposStore.getState()
@@ -94,42 +145,101 @@ export function TerminalStashMenu({ repoId }: { repoId: string }) {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="sticky right-0 z-10 h-7 w-7 shrink-0 bg-topbar [-webkit-app-region:no-drag]"
-          aria-label={t('terminal.stashed')}
-          title={t('terminal.stashed')}
-        >
-          <MoreHorizontal size={16} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-80 min-w-56 max-w-80">
-        {items.length === 0 ? (
-          <div className="px-2 py-3 text-sm text-muted-foreground">{t('terminal.stashed-empty')}</div>
-        ) : (
-          items.map((item) => {
-            const descriptor = candidates.find((candidate) => candidate.key === item.key)
-            if (!descriptor) return null
-            return (
-              <DropdownMenuItem
-                key={item.key}
-                onSelect={() => restore(descriptor)}
-                className="flex flex-col items-start gap-0"
-              >
-                <span className="flex w-full items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  {item.hasBell && <TerminalBellDot label={t('terminal.bell-unread')} ping={false} />}
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="sticky right-0 z-10 h-7 min-w-7 w-auto shrink-0 bg-topbar px-1 [-webkit-app-region:no-drag]"
+            aria-label={t('terminal.stashed')}
+            title={t('terminal.stashed')}
+          >
+            {items.length > 0 ? (
+              <span className="text-xs tabular-nums">{items.length}</span>
+            ) : (
+              <MoreHorizontal size={16} />
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="max-h-80 w-[min(32rem,calc(100vw-1rem))]">
+          {items.length === 0 ? (
+            <div className="px-2 py-3 text-sm text-muted-foreground">{t('terminal.stashed-empty')}</div>
+          ) : (
+            items.map((item) => {
+              const descriptor = candidates.find((candidate) => candidate.key === item.key)
+              if (!descriptor) return null
+              return (
+                <div key={item.key} className="flex items-center gap-1">
+                  <DropdownMenuItem
+                    onSelect={() => restore(descriptor)}
+                    className="min-w-0 flex-1 flex-col items-start gap-0"
+                  >
+                    <span className="flex w-full items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate" title={item.fullTitle}>
+                        {item.fullTitle}
+                      </span>
+                      {item.hasBell && <TerminalBellDot label={t('terminal.bell-unread')} ping={false} />}
+                    </span>
+                    <span className="max-w-full truncate text-xs text-muted-foreground">{descriptor.worktreePath}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    asChild
+                    className="shrink-0 p-0"
+                    onSelect={(event) => {
+                      event.preventDefault()
+                      setOpen(false)
+                      if (item.hasUserInput === false) void closeItem(item)
+                      else {
+                        setCloseTmuxSession(false)
+                        setPendingClose(item)
+                      }
+                    }}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      aria-label={t('terminal.close-named', { name: item.fullTitle })}
+                      title={t('terminal.close-named', { name: item.fullTitle })}
+                    >
+                      <X size={14} />
+                    </Button>
+                  </DropdownMenuItem>
+                </div>
+              )
+            })
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ConfirmDialog
+        open={!!pendingClose}
+        title={t('terminal.close-confirm-title')}
+        message={
+          <div className="flex flex-col gap-3">
+            <p>{t('terminal.close-confirm-body', { name: pendingClose?.title ?? '' })}</p>
+            {pendingClose?.tmuxBacked === true && pendingClose.tmuxCloseSupported === false && (
+              <p className="text-xs text-muted-foreground">{t('terminal.close-tmux-session-exit-required')}</p>
+            )}
+            {pendingClose?.tmuxBacked === true && pendingClose.tmuxCloseSupported !== false && (
+              <ConfirmCheckbox checked={closeTmuxSession} onCheckedChange={setCloseTmuxSession} destructive>
+                <span className="flex flex-col gap-1">
+                  <span>{t('terminal.close-tmux-session')}</span>
+                  <span className="text-xs text-muted-foreground">{t('terminal.close-tmux-session-hint')}</span>
                 </span>
-                <span className="max-w-full truncate text-xs text-muted-foreground">{descriptor.worktreePath}</span>
-              </DropdownMenuItem>
-            )
-          })
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+              </ConfirmCheckbox>
+            )}
+          </div>
+        }
+        confirmLabel={t('terminal.close-confirm-confirm')}
+        destructive
+        onCancel={() => {
+          setPendingClose(null)
+          setCloseTmuxSession(false)
+        }}
+        onConfirm={() => (pendingClose ? closeItem(pendingClose, closeTmuxSession) : undefined)}
+      />
+    </>
   )
 }
 
