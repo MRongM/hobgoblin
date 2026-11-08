@@ -34,6 +34,8 @@ import { DEFAULT_TOPBAR_HEIGHT_PX } from '#/shared/window-chrome.ts'
 import { closeDetachedFileAreaWindows } from '#/main/detached-file-area-window.ts'
 
 const DEFAULT_BOUNDS: WindowBounds = { width: 900, height: 600 }
+const RENDERER_RECOVERY_COOLDOWN_MS = 5 * 60 * 1000
+const RENDERER_RECOVERY_DELAY_MS = 100
 const MAIN_WINDOW_SURFACE = {
   windowKey: 'main',
   capabilities: {
@@ -47,6 +49,9 @@ let mainWindowTopbarHeightPx = DEFAULT_TOPBAR_HEIGHT_PX
 
 interface StartupErrorPageState {
   shown: boolean
+  initialLoadComplete: boolean
+  recoveryInProgress: boolean
+  lastRecoveryAt: number | null
 }
 
 function startupDiagnostics(): StartupDiagnostics {
@@ -83,12 +88,49 @@ function attachStartupDiagnostics(
   win: BrowserWindow,
   diagnostics: StartupDiagnostics,
   startupErrorPageState: StartupErrorPageState,
+  entryUrl: string,
 ): void {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     diagnostics.log('renderer-did-fail-load', { errorCode, errorDescription, validatedURL })
   })
   win.webContents.on('render-process-gone', (_event, details) => {
     diagnostics.log('renderer-process-gone', { reason: details.reason, exitCode: details.exitCode })
+    const now = Date.now()
+    const canRecover =
+      details.reason === 'crashed' &&
+      startupErrorPageState.initialLoadComplete &&
+      !startupErrorPageState.shown &&
+      !startupErrorPageState.recoveryInProgress &&
+      !win.isDestroyed() &&
+      (startupErrorPageState.lastRecoveryAt === null ||
+        now - startupErrorPageState.lastRecoveryAt >= RENDERER_RECOVERY_COOLDOWN_MS)
+    if (canRecover) {
+      startupErrorPageState.lastRecoveryAt = now
+      startupErrorPageState.recoveryInProgress = true
+      diagnostics.log('renderer-recovery-start', { reason: details.reason })
+      // Let Chromium finish notifying process-exit observers before starting a new renderer.
+      setTimeout(() => {
+        if (startupErrorPageState.shown || win.isDestroyed()) {
+          startupErrorPageState.recoveryInProgress = false
+          return
+        }
+        void win.loadURL(entryUrl).then(
+          () => {
+            startupErrorPageState.recoveryInProgress = false
+            if (!startupErrorPageState.shown) diagnostics.log('renderer-recovery-complete', {})
+          },
+          (error: unknown) => {
+            startupErrorPageState.recoveryInProgress = false
+            diagnostics.log('renderer-recovery-failed', { message: errorMessage(error) })
+            if (!win.isDestroyed()) {
+              void showStartupErrorPage(win, 'renderer-process', error, startupErrorPageState).catch(() => {})
+            }
+          },
+        )
+      }, RENDERER_RECOVERY_DELAY_MS)
+      return
+    }
+    if (win.isDestroyed()) return
     void showStartupErrorPage(win, 'renderer-process', new Error(details.reason), startupErrorPageState).catch(() => {})
   })
   win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
@@ -175,10 +217,15 @@ async function createMainWindow(): Promise<BrowserWindow> {
     webPreferences,
   })
   const diagnostics = startupDiagnostics()
-  const startupErrorPageState: StartupErrorPageState = { shown: false }
-  attachStartupDiagnostics(win, diagnostics, startupErrorPageState)
+  const startupErrorPageState: StartupErrorPageState = {
+    shown: false,
+    initialLoadComplete: false,
+    recoveryInProgress: false,
+    lastRecoveryAt: null,
+  }
   attachRendererSurfaceWindow(win, { logLabel: 'window', surface: MAIN_WINDOW_SURFACE, main: true })
   const { url } = createRendererEntryUrl({ routePath: '/' })
+  attachStartupDiagnostics(win, diagnostics, startupErrorPageState, url.toString())
   const disposeNavigationCapability = configureEmbeddedServerNavigationCapability(win)
   allowRendererWindowEntryUrl(win, url.toString())
   // Persist bounds. We listen on both `resize` and `move` because the
@@ -204,6 +251,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
   try {
     diagnostics.log('renderer-load-start', { url: url.toString() })
     await win.loadURL(url.toString())
+    startupErrorPageState.initialLoadComplete = true
     diagnostics.log('renderer-load-complete', { url: url.toString() })
   } catch (err) {
     console.warn('[window] failed to load app URL', err)

@@ -120,6 +120,7 @@ describe('main window navigation boundaries', () => {
     delete process.env.GOBLIN_WEB_DEV_URL
     mocks.windows.length = 0
     mocks.windowOptions.length = 0
+    mocks.loadURL.mockReset().mockResolvedValue(undefined)
     mocks.getSettingsPrefs.mockResolvedValue(defaultSettingsPrefs({ topbarHeightPx: 39 }))
     mocks.getSettingsSnapshot.mockResolvedValue(defaultSettingsSnapshot())
     mocks.loadWindowState.mockReturnValue(Promise.resolve({ windowBounds: null }))
@@ -286,6 +287,154 @@ describe('main window navigation boundaries', () => {
     )
     expect(startupErrorPageLogs).toHaveLength(1)
     expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+  })
+
+  test('recovers a crashed renderer by reloading the application without creating a new window', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+
+    await vi.waitFor(() => {
+      expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+      expect(mocks.diagnosticsLog).toHaveBeenCalledWith('renderer-recovery-complete', expect.any(Object))
+    })
+    expect(mocks.loadURL.mock.calls[1]?.[0]).toBe(mocks.loadURL.mock.calls[0]?.[0])
+    expect(mocks.BrowserWindow).toHaveBeenCalledTimes(1)
+    expect(mocks.diagnosticsLog).not.toHaveBeenCalledWith('startup-error-page', expect.anything())
+  })
+
+  test('defers renderer recovery until after the crash event has returned', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+
+    expect(mocks.loadURL).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(mocks.loadURL).toHaveBeenCalledTimes(2))
+  })
+
+  test('shows the error page after repeated renderer crashes instead of retrying forever', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+    await vi.waitFor(() =>
+      expect(mocks.diagnosticsLog).toHaveBeenCalledWith('renderer-recovery-complete', expect.any(Object)),
+    )
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+    await vi.waitFor(() => expect(mocks.diagnosticsLog).toHaveBeenCalledWith('startup-error-page', expect.any(Object)))
+
+    expect(mocks.loadURL).toHaveBeenCalledTimes(3)
+    expect(String(mocks.loadURL.mock.calls[2]?.[0])).toContain('data:text/html')
+  })
+
+  test('shows the error page if renderer recovery fails', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+    mocks.loadURL.mockRejectedValueOnce(new Error('recovery failed'))
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+
+    await vi.waitFor(() => expect(mocks.diagnosticsLog).toHaveBeenCalledWith('startup-error-page', expect.any(Object)))
+    expect(mocks.diagnosticsLog).toHaveBeenCalledWith('renderer-recovery-failed', expect.any(Object))
+    expect(String(mocks.loadURL.mock.calls[2]?.[0])).toContain('data:text/html')
+  })
+
+  test('allows another recovery after the cooldown', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    try {
+      const { getOrCreateMainWindow } = await import('#/main/window.ts')
+      await getOrCreateMainWindow()
+      const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+        ([eventName]) => eventName === 'render-process-gone',
+      )?.[1]
+
+      renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+      await vi.waitFor(() => expect(mocks.diagnosticsLog).toHaveBeenCalledWith('renderer-recovery-complete', {}))
+      now.mockReturnValue(1_300_000)
+      renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+
+      await vi.waitFor(() => expect(mocks.loadURL).toHaveBeenCalledTimes(3))
+      expect(mocks.loadURL.mock.calls[2]?.[0]).toBe(mocks.loadURL.mock.calls[0]?.[0])
+      expect(mocks.diagnosticsLog).not.toHaveBeenCalledWith('startup-error-page', expect.anything())
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('falls back once if the renderer crashes again during recovery', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+    let rejectRecovery: (error: Error) => void = () => {}
+    mocks.loadURL.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRecovery = reject
+        }),
+    )
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+    await vi.waitFor(() => expect(mocks.loadURL).toHaveBeenCalledTimes(2))
+    renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+    rejectRecovery(new Error('renderer crashed during recovery'))
+    await vi.waitFor(() =>
+      expect(mocks.diagnosticsLog).toHaveBeenCalledWith('renderer-recovery-failed', expect.any(Object)),
+    )
+
+    expect(mocks.loadURL).toHaveBeenCalledTimes(3)
+    expect(String(mocks.loadURL.mock.calls[2]?.[0])).toContain('data:text/html')
+    expect(mocks.diagnosticsLog.mock.calls.filter(([event]) => event === 'startup-error-page')).toHaveLength(1)
+  })
+
+  test('does not reload the app if an error page is shown before the recovery delay', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    await getOrCreateMainWindow()
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+    vi.useFakeTimers()
+    try {
+      renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+      renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+      await vi.runAllTimersAsync()
+      expect(mocks.loadURL).toHaveBeenCalledTimes(2)
+      expect(String(mocks.loadURL.mock.calls[1]?.[0])).toContain('data:text/html')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('does not reload a window closed during the recovery delay', async () => {
+    const { getOrCreateMainWindow } = await import('#/main/window.ts')
+    const win = await getOrCreateMainWindow()
+    const renderProcessGone = mocks.webContentsOn.mock.calls.find(
+      ([eventName]) => eventName === 'render-process-gone',
+    )?.[1]
+    vi.useFakeTimers()
+    try {
+      renderProcessGone({}, { reason: 'crashed', exitCode: 11 })
+      vi.spyOn(win, 'isDestroyed').mockReturnValue(true)
+      await vi.runAllTimersAsync()
+      expect(mocks.loadURL).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('loads the configured renderer dev server URL in development', async () => {
