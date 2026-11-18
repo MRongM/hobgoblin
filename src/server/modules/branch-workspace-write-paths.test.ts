@@ -1,7 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
 import { createBranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
-import * as manifestSource from '#/server/modules/branch-workspace-source.ts'
-import * as catalogSource from '#/server/modules/branch-workspace-catalog-read.ts'
 import { createBranchWorkspaceDependencyWriteService } from '#/server/modules/branch-workspace-dependency-write-paths.ts'
 import { createBranchWorkspaceGitActionWriteService } from '#/server/modules/branch-workspace-git-action-write-paths.ts'
 import type {
@@ -203,33 +201,6 @@ describe('branch workspace write service', () => {
     otherActive = false
     expect((await service.execute(ROOT, { planToken: plan.token, approvals: [] })).ok).toBe(true)
     expect(service.isActive(ROOT)).toBe(false)
-  })
-  test('reads persisted execution progress without rediscovering the workspace for every member', async () => {
-    const plan = planned()
-    const source = inMemorySource()
-    const readPersisted = vi
-      .spyOn(manifestSource, 'readBranchWorkspaceManifests')
-      .mockImplementation(source.readManifests)
-    const readCatalog = vi.spyOn(catalogSource, 'readBranchWorkspaceCatalog').mockImplementation(source.readManifests)
-    try {
-      const service = createBranchWorkspaceWriteService({
-        buildPlan: async () => ({ ok: true, plan }),
-        updateManifests: source.updateManifests,
-        createDirectory: async () => {},
-        createWorktree: async () => ({ ok: true, message: 'created' }),
-        readSnapshot: async () => ({ ok: true, rootId: ROOT, items: [readySnapshot(plan)], auxiliaryCandidates: [] }),
-        publishInvalidation: () => {},
-      })
-      await service.plan(ROOT, {})
-      expect((await service.execute(ROOT, { planToken: plan.token, approvals: [] })).ok).toBe(true)
-      expect(readPersisted).toHaveBeenCalledTimes(plan.repositories.length)
-      expect(readCatalog).not.toHaveBeenCalled()
-      await expect(service.reorder(ROOT, [plan.branchWorkspaceId])).resolves.toEqual({ ok: true })
-      expect(readCatalog).toHaveBeenCalledTimes(1)
-    } finally {
-      readPersisted.mockRestore()
-      readCatalog.mockRestore()
-    }
   })
   test('returns the final ready snapshot after successful creation', async () => {
     const plan = planned()
@@ -1063,97 +1034,6 @@ describe('branch workspace write service', () => {
     })
     expect(removeWorktree).not.toHaveBeenCalled()
     expect(source.manifests[0]?.repositories.map((member) => member.repositoryName)).toEqual(['web'])
-  })
-
-  test('removes an interrupted worktree-removal residue before dropping its member record', async () => {
-    const plan = reducePlanned()
-    plan.repositories[0] = {
-      ...plan.repositories[0]!,
-      action: 'remove-entry',
-      worktreePresent: false,
-      satisfied: false,
-    }
-    plan.steps = [
-      {
-        id: 'repository:api',
-        kind: 'remove-entry',
-        label: 'api',
-        repositoryName: 'api',
-        entryName: 'api',
-      },
-    ]
-    plan.requiredApprovals = ['unmanaged-content']
-    plan.terminalSessionIds = []
-    const source = inMemorySource([plan.manifest])
-    const removeWorktree = vi.fn(async () => ({ ok: false, message: 'git removal must not run' }))
-    const removeEntry = vi.fn(async () => undefined)
-    const service = createBranchWorkspaceWriteService({
-      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
-      readManifests: source.readManifests,
-      updateManifests: source.updateManifests,
-      removeWorktree,
-      removeEntry,
-    })
-    await service.plan(ROOT, {
-      operation: 'reduce',
-      branchWorkspaceId: plan.branchWorkspaceId,
-      repositories: ['api'],
-    })
-
-    await expect(service.execute(ROOT, { planToken: plan.token, approvals: ['unmanaged-content'] })).resolves.toEqual({
-      ok: true,
-      branchWorkspaceId: plan.branchWorkspaceId,
-    })
-    expect(removeEntry).toHaveBeenCalledWith(ROOT, `${plan.path}/api`, expect.any(AbortSignal))
-    expect(removeWorktree).not.toHaveBeenCalled()
-    expect(source.manifests[0]?.repositories.map((member) => member.repositoryName)).toEqual(['web'])
-  })
-
-  test('persists partial reduction progress and retries only remaining members', async () => {
-    const plan = reducePlanned(['api', 'web'])
-    plan.requiredApprovals = []
-    plan.terminalSessionIds = []
-    const source = inMemorySource([plan.manifest])
-    const removeWorktree = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: true, message: 'removed' })
-      .mockResolvedValueOnce({ ok: false, message: 'busy' })
-      .mockResolvedValueOnce({ ok: true, message: 'removed' })
-    const service = createBranchWorkspaceWriteService({
-      buildPlan: vi.fn(async () => ({ ok: true as const, plan })),
-      readManifests: source.readManifests,
-      updateManifests: source.updateManifests,
-      createWorktree: vi.fn(async () => ({ ok: true, message: 'created' })),
-      removeWorktree,
-    })
-    const request = {
-      operation: 'reduce' as const,
-      branchWorkspaceId: plan.branchWorkspaceId,
-      repositories: ['api', 'web'],
-    }
-    await service.plan(ROOT, request)
-
-    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toMatchObject({
-      ok: false,
-      message: 'busy',
-    })
-    expect(source.manifests[0]?.operation).toEqual({ kind: 'reduce' })
-    expect(source.manifests[0]?.repositories.map((member) => [member.repositoryName, member.progress])).toEqual([
-      ['api', 'removed'],
-      ['web', 'failed'],
-      ['worker', 'complete'],
-    ])
-
-    await expect(service.execute(ROOT, { planToken: plan.token, approvals: [] })).resolves.toEqual({
-      ok: true,
-      branchWorkspaceId: plan.branchWorkspaceId,
-    })
-    expect(removeWorktree.mock.calls.map(([repoId]) => repoId)).toEqual([
-      '/workspace/api',
-      '/workspace/web',
-      '/workspace/web',
-    ])
-    expect(source.manifests[0]?.repositories.map((member) => member.repositoryName)).toEqual(['worker'])
   })
 })
 

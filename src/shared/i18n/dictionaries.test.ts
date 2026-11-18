@@ -60,7 +60,7 @@ describe('i18n dictionaries', () => {
 
   test('localizes the branch workspace operation console guidance', () => {
     expect(zh['workspace.branch-workspace.one-step.selection-description.create']).toBe(
-      '命名文件夹并独立配置每个仓库成员。',
+      '选择文件夹位置；仓库和工作树可稍后自行添加。',
     )
     expect(zh['workspace.branch-workspace.one-step.selection-description.remove']).toBe(
       '选择是否一并删除符合条件的本地和上游分支。',
@@ -369,7 +369,7 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['workspace.recovery.action']).toBe('清理项目配置并重新导入')
     expect(zh['workspace.recovery.destructive-warning']).toContain('未提交改动')
-    expect(zh['workspace.recovery.destructive-warning']).toContain('仅移除应用记录')
+    expect(zh['workspace.recovery.destructive-warning']).toContain('保留目录、Git 分支')
     expect(zh['workspace.recovery.registry-reset-warning']).toContain('所有项目')
   })
 

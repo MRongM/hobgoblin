@@ -909,36 +909,6 @@ describe('BranchWorkspaceDialog', () => {
     expect(checked('workspace.branch-workspace.repository-named')).toBe(true)
   })
 
-  test('uses only completed members as the fixed baseline after partial creation', async () => {
-    const workspace = workspaceWithTwoMembers()
-    workspace.state = { kind: 'needs-action', action: 'repair', reason: 'creation-interrupted' }
-    workspace.repositories[1] = { ...workspace.repositories[1]!, progress: 'failed', ready: false }
-
-    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
-    renderDialog({ workspace, onPreview })
-
-    expect(inputValue('workspace.branch-workspace.folder')).toBe('goblin-feature-auth')
-    const members = document.querySelectorAll<HTMLInputElement>(
-      '[aria-label="workspace.branch-workspace.repository-named"]',
-    )
-    expect(members).toHaveLength(2)
-    expect(members[0]?.checked).toBe(true)
-    expect(members[0]?.disabled).toBe(true)
-    expect(members[1]?.checked).toBe(false)
-    expect(members[1]?.disabled).toBe(false)
-    expect(document.body.textContent).toContain('workspace.branch-workspace.member-fixed')
-    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
-
-    act(() => members[1]?.click())
-    await expectAutoPreview(
-      onPreview,
-      expect.objectContaining({
-        operation: 'create',
-        repositories: expect.arrayContaining([expect.objectContaining({ repositoryName: 'web' })]),
-      }),
-    )
-  })
-
   test.each(['reduce', 'repair', 'remove'] as const)(
     'does not offer selection return for a failed %s operation',
     (mode) => {
@@ -1469,7 +1439,7 @@ describe('BranchWorkspaceDialog', () => {
     expect(mocks.getRepositoryFileTree).toHaveBeenCalledTimes(1)
   })
 
-  test('loads and submits repository dependencies with default copy mode from the selected base worktree', async () => {
+  test('loads and submits repository dependencies with default symlink mode from the selected base worktree', async () => {
     mocks.getRepositoryFileTree.mockResolvedValueOnce({
       ok: true,
       worktreePath: '/workspace/api-main',
@@ -1509,7 +1479,7 @@ describe('BranchWorkspaceDialog', () => {
           worktreeBootstrap: {
             kind: 'materialize',
             sourceWorktreePath: '/workspace/api-main',
-            selections: [{ path: 'node_modules', mode: 'copy' }],
+            selections: [{ path: 'node_modules', mode: 'symlink' }],
           },
         },
       ],
@@ -1520,7 +1490,7 @@ describe('BranchWorkspaceDialog', () => {
     clickSelector('[data-action="collapse-repository-dependencies"]')
     expect(document.querySelector<HTMLElement>('[data-branch-workspace-repository-dependency-tree]')?.hidden).toBe(true)
     expect(document.querySelector('[data-repository-dependency-summary="node_modules"]')?.textContent).toContain(
-      'worktree-dependency-tree.copy',
+      'worktree-dependency-tree.symlink',
     )
     expect(document.querySelector('[data-worktree-bootstrap-source-select]')).not.toBeNull()
     await flushAsyncWork()
@@ -2208,28 +2178,6 @@ describe('BranchWorkspaceDialog', () => {
       ],
       auxiliaryEntries: [],
     })
-  })
-
-  test('previews a member reduction while retaining at least one member', async () => {
-    const onPreview = vi.fn(async (_request: BranchWorkspacePlanRequest) => true)
-    renderDialog({ mode: 'reduce', workspace: workspaceWithTwoMembers(), onPreview })
-
-    expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete')
-    expect(document.body.textContent).toContain('workspace.branch-workspace.reduce-retains-branches')
-
-    const checkboxes = Array.from(document.querySelectorAll<HTMLInputElement>('[data-branch-workspace-reduce-member]'))
-    expect(checkboxes).toHaveLength(2)
-    act(() => checkboxes[0]?.click())
-    await expectAutoPreview(onPreview, {
-      operation: 'reduce',
-      branchWorkspaceId: 'branch-1',
-      repositories: ['api'],
-    })
-
-    act(() => checkboxes[1]?.click())
-    await vi.waitFor(() =>
-      expect(document.querySelector<HTMLElement>('[data-plan-status]')?.dataset.planStatus).toBe('incomplete'),
-    )
   })
 
   test('locks a member-scoped reduction to its preselected repository', async () => {

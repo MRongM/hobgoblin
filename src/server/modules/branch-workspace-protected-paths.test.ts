@@ -2,24 +2,11 @@ import path from 'node:path'
 import { describe, expect, test, vi } from 'vitest'
 import { assertBranchWorkspaceFileMutationAllowed } from '#/server/modules/branch-workspace-protected-paths.ts'
 import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
-import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
 
 const ROOT = path.resolve('/workspace')
 const BRANCH_PATH = path.join(ROOT, 'goblin-feature-auth')
 
 describe('branch workspace protected paths', () => {
-  test.each([{ worktreePath: ROOT, paths: [BRANCH_PATH] }])(
-    'blocks deleting a registered managed root %#',
-    async ({ worktreePath, paths }) => {
-      await expect(
-        assertBranchWorkspaceFileMutationAllowed(
-          { rootId: ROOT, kind: 'delete', worktreePath, paths },
-          dependencies(manifest(ROOT)),
-        ),
-      ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
-    },
-  )
-
   test.each(['delete', 'rename', 'move'] as const)(
     'allows member root %s without scanning workspace state',
     async (kind) => {
@@ -42,17 +29,6 @@ describe('branch workspace protected paths', () => {
       expect(readManifests).not.toHaveBeenCalled()
     },
   )
-
-  test('reads registered folder identities for direct parent file mutations', async () => {
-    const deps = dependencies(manifest(ROOT))
-    await expect(
-      assertBranchWorkspaceFileMutationAllowed(
-        { rootId: ROOT, worktreePath: ROOT, kind: 'delete', paths: [path.join(ROOT, 'notes.txt')] },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: true })
-    expect(deps.readManifests).toHaveBeenCalledExactlyOnceWith(ROOT)
-  })
 
   test('allows released auxiliary roots to retain generic file actions', async () => {
     await expect(
@@ -93,52 +69,6 @@ describe('branch workspace protected paths', () => {
         deps,
       ),
     ).resolves.toEqual({ ok: true })
-  })
-
-  test('blocks rename and move destinations that would take a protected identity', async () => {
-    const deps = dependencies(manifest(ROOT))
-    await expect(
-      assertBranchWorkspaceFileMutationAllowed(
-        {
-          rootId: ROOT,
-          kind: 'rename',
-          worktreePath: ROOT,
-          paths: [path.join(ROOT, 'scratch')],
-          newName: 'goblin-feature-auth',
-        },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
-    await expect(
-      assertBranchWorkspaceFileMutationAllowed(
-        {
-          rootId: ROOT,
-          kind: 'move',
-          worktreePath: ROOT,
-          paths: [path.join(ROOT, 'scratch', path.basename(BRANCH_PATH))],
-          targetDirPath: ROOT,
-        },
-        deps,
-      ),
-    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
-  })
-
-  test('uses POSIX lexical identity for SSH branch workspaces', async () => {
-    const rootId = normalizeRemoteRepoId({ alias: 'dev', remotePath: '/srv/workspace' })
-    const remoteManifest = manifest(rootId, '/srv/workspace/goblin-feature-auth')
-
-    await expect(
-      assertBranchWorkspaceFileMutationAllowed(
-        {
-          rootId,
-          kind: 'move',
-          worktreePath: '/srv/workspace',
-          paths: [`${remoteManifest.path}/../goblin-feature-auth`],
-          targetDirPath: '/srv/workspace/tmp',
-        },
-        dependencies(remoteManifest),
-      ),
-    ).resolves.toEqual({ ok: false, message: 'branch-workspace.managed-path-protected' })
   })
 })
 

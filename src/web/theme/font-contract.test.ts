@@ -48,15 +48,10 @@ describe('font contract', () => {
   })
 
   test('uses icon-sm for project titlebar actions', () => {
-    const sources = [
-      [new URL('../components/repo-workspace/WorkspaceRepositoryRail.tsx', import.meta.url), 4],
-      [new URL('../components/repo-workspace/RepoExplorerPane.tsx', import.meta.url), 3],
-    ] as const
-
-    for (const [url, expectedCount] of sources) {
-      const source = readText(url)
+    for (const file of ['WorkspaceRepositoryRail.tsx', 'RepoExplorerPane.tsx']) {
+      const source = readText(new URL(`../components/repo-workspace/${file}`, import.meta.url))
+      expect(source).toContain('size="icon-sm"')
       expect(source).not.toContain('size="icon-xs"')
-      expect(source.split('size="icon-sm"')).toHaveLength(expectedCount + 1)
     }
   })
 

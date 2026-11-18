@@ -141,22 +141,4 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
       reason: 'workspace.branch-workspace.member-worktree-mismatch',
     })
   })
-
-  test('uses the branch registered at the member path as a repairable drift target', () => {
-    expect(
-      resolve(member({ ready: false }), {
-        repo: repository({ branch: 'release/previous' }),
-      }),
-    ).toEqual({
-      ok: true,
-      warning: 'workspace.branch-workspace.member-branch-drift',
-      target: {
-        repositoryId,
-        repositoryName: 'api',
-        targetBranch: 'feature/auth',
-        checkedOutBranch: 'release/previous',
-        worktreePath,
-      },
-    })
-  })
 })

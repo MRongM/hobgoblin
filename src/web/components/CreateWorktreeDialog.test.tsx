@@ -499,7 +499,7 @@ describe('CreateWorktreeDialog', () => {
     expect(button('button[type="submit"]').disabled).toBe(false)
   })
 
-  test('submits a selected nested dependency with its exact source and default copy mode', async () => {
+  test('submits a selected nested dependency with its exact source and default symlink mode', async () => {
     const onCreate = vi.fn(async () => {})
     const source = branchSource('feature/base', '/tmp/repo-base')
     repoClientMocks.getRepositoryFileTree.mockImplementation(
@@ -567,7 +567,7 @@ describe('CreateWorktreeDialog', () => {
         },
         syncBeforeCreate: false,
       },
-      selections: [{ path: 'backend/.venv', mode: 'copy' }],
+      selections: [{ path: 'backend/.venv', mode: 'symlink' }],
       sourceWorktreePath: '/tmp/repo-base',
     })
   })
