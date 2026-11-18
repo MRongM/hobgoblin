@@ -74,3 +74,51 @@ test.each([false, true])('folder refresh is the first direct action (context=%s)
     environment.IS_REACT_ACT_ENVIRONMENT = false
   }
 })
+
+test('places the parent directory action after the directory action in the open menu', async () => {
+  const environment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+  environment.IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  const onParent = vi.fn()
+  const action: WorkspaceListItemAction = {
+    id: 'openDirectory',
+    label: 'Open directory',
+    icon: null,
+    disabled: false,
+    onSelect: vi.fn(),
+    parentDirectoryAction: {
+      id: 'openParentDirectory',
+      label: 'Open parent directory',
+      icon: null,
+      disabled: false,
+      onSelect: onParent,
+    },
+  }
+  try {
+    await act(async () =>
+      root.render(
+        <DropdownMenu open>
+          <DropdownMenuTrigger>Target</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <WorkspaceActionMenuItems groups={[[action]]} />
+          </DropdownMenuContent>
+        </DropdownMenu>,
+      ),
+    )
+    await act(async () => {
+      document.body
+        .querySelector('[data-menu-category="open"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }))
+    })
+    const items = [...document.body.querySelectorAll<HTMLElement>('[data-action]')]
+    expect(items.map((item) => item.textContent)).toEqual(['Open directory', 'Open parent directory'])
+    await act(async () => items[1]!.click())
+    expect(onParent).toHaveBeenCalledOnce()
+  } finally {
+    act(() => root.unmount())
+    container.remove()
+    environment.IS_REACT_ACT_ENVIRONMENT = false
+  }
+})

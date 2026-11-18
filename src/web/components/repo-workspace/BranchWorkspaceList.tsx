@@ -747,6 +747,7 @@ function BranchWorkspaceRow({
       additionalActions={additionalMenuActions}
     >
       <WorkspaceListItemFrame
+        terminalDirectoryPath={item.path}
         itemRef={setNodeRef}
         itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
         itemProps={{

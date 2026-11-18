@@ -27,6 +27,7 @@ import { BranchWorkspaceDeleteDialog } from '#/web/components/repo-workspace/Bra
 import { BranchWorkspaceFolderDialog } from '#/web/components/repo-workspace/BranchWorkspaceFolderDialog.tsx'
 import { BranchWorkspaceCloneDialog } from '#/web/components/repo-workspace/BranchWorkspaceCloneDialog.tsx'
 import { openRegisteredBranchWorkspace } from '#/web/branch-workspace-navigation-write-paths.ts'
+import { terminalDirectoryDragProps } from '#/web/components/terminal/terminal-directory-drag.ts'
 import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
 import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
@@ -224,9 +225,10 @@ export function WorkspaceRepositoryRail({
   }
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
+  const directoryPath = parseRemoteRepoId(workspaceRootId)?.remotePath ?? overviewRootPath
   const overviewDirectoryAction = useOpenDirectoryAction({
     repoId: workspaceRootId,
-    path: parseRemoteRepoId(workspaceRootId)?.remotePath ?? overviewRootPath,
+    path: directoryPath,
     disabled: repos[workspaceRootId]?.availability.phase === 'unavailable',
   })
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
@@ -824,6 +826,7 @@ export function WorkspaceRepositoryRail({
             onHeightChange={handleRepositoryListHeightChange}
           >
             <ManifestRow
+              directoryPath={repos[workspaceRootId]?.availability.phase === 'unavailable' ? null : directoryPath}
               directoryAction={overviewDirectoryAction}
               active={activeContext.kind === 'overview'}
               name={overviewName}
@@ -1076,6 +1079,7 @@ export function WorkspaceRepositoryRail({
 }
 
 function ManifestRow({
+  directoryPath,
   directoryAction,
   active,
   name,
@@ -1087,6 +1091,7 @@ function ManifestRow({
   onOpenFileArea,
   onToggleFileArea,
 }: {
+  directoryPath: string | null
   directoryAction: WorkspaceListItemAction
   active: boolean
   name: string
@@ -1114,6 +1119,7 @@ function ManifestRow({
       type="button"
       aria-current={active ? 'page' : undefined}
       title={name}
+      {...terminalDirectoryDragProps(directoryPath)}
       className={cn(
         'group relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-[13px] transition-colors',
         active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',

@@ -24,11 +24,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { ExplorerTab, RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
-export interface FileTreeRevealRequest {
-  id: number
-  repoId: string
-  relativePath: string
-}
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 
 interface RepoWorktreeExplorerProps {
   repoId: string
@@ -58,11 +54,13 @@ export function RepoWorktreeExplorer({
 }: RepoWorktreeExplorerProps) {
   const t = useT()
   const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
-  const activeRevealRequest = revealRequest?.repoId === repoId ? revealRequest : null
   const supportsPorts = isSshRepoId(repoId)
   const activeVisibleTab = activeTab === 'ports' && !supportsPorts ? 'files' : activeTab
   const repo = useReposStore((state) => state.repos[repoId])
   const selected = repo ? selectedRepoWorktree(repo) : null
+  const worktreePath = selected?.worktreePath
+  const activeRevealRequest =
+    revealRequest?.repoId === repoId && revealRequest.worktreePath === worktreePath ? revealRequest : null
   const hasWorktree = selected !== null
   const sessionEntry = repo?.remote.target ? remoteRepoSessionEntry(repo.remote.target) : localRepoSessionEntry(repoId)
   const detach = useDetachFileArea(
@@ -129,16 +127,23 @@ export function RepoWorktreeExplorer({
     )
   }
 
+  useEffect(() => setRevealRequest(null), [repoId, worktreePath])
+
   function handleRevealPath(relativePath: string) {
     onTabChange('files')
-    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
+    if (worktreePath) setRevealRequest({ repoId, worktreePath, relativePath })
   }
 
   useEffect(() => {
-    if (!externalRevealRequest) return
+    if (
+      !externalRevealRequest ||
+      externalRevealRequest.repoId !== repoId ||
+      externalRevealRequest.worktreePath !== worktreePath
+    )
+      return
     onTabChange('files')
     setRevealRequest(externalRevealRequest)
-  }, [externalRevealRequest, onTabChange])
+  }, [externalRevealRequest, onTabChange, repoId, worktreePath])
 
   return (
     <section

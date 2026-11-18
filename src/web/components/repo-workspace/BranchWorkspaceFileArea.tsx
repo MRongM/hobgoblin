@@ -1,3 +1,4 @@
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronsLeft,
@@ -44,7 +45,7 @@ export function BranchWorkspaceFileArea({
   activeTab: BranchWorkspaceFileAreaTab
   onTabChange: (tab: BranchWorkspaceFileAreaTab) => void
   onRevealPath?: (relativePath: string) => void
-  revealRequest?: { id: number; relativePath: string } | null
+  revealRequest?: FileTreeRevealRequest | null
   toolbarLeading?: ReactNode
   showToolbar?: boolean
 }) {

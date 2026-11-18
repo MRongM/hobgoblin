@@ -1,3 +1,4 @@
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import type { FileAreaTabId } from '#/shared/file-area.ts'
 import { ProjectFileTree } from '#/web/components/file-tree/ProjectFileTree.tsx'
 import { ProjectChangesPanel } from '#/web/components/repo-workspace/ProjectChangesPanel.tsx'
@@ -10,7 +11,7 @@ import { ProjectStatusPanel } from '#/web/components/repo-workspace/ProjectStatu
 interface RepoExplorerPanelProps {
   repoId: string
   activeTab: FileAreaTabId
-  revealRequest: { id: number; relativePath: string } | null
+  revealRequest: FileTreeRevealRequest | null
   onRevealPath: (relativePath: string) => void
 }
 

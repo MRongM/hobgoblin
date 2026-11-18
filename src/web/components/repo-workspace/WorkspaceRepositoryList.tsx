@@ -159,9 +159,10 @@ function SortableWorkspaceRepositoryRow({
   )
   const closeTerminalScope = useCloseTerminalScope(terminalWorktreeKeys)
   const externalActions = useProjectExternalOpenActions(repository.id)
+  const directoryPath = parseRemoteRepoId(repository.id)?.remotePath ?? repository.id
   const directoryAction = useOpenDirectoryAction({
     repoId: repository.id,
-    path: parseRemoteRepoId(repository.id)?.remotePath ?? repository.id,
+    path: directoryPath,
     disabled: repository.unavailable,
   })
   const internalTerminalAction = useProjectInternalTerminalAction(repository.id)
@@ -269,6 +270,7 @@ function SortableWorkspaceRepositoryRow({
       worktreeTerminalKeys={terminalWorktreeKeys}
     >
       <WorkspaceListItemFrame
+        terminalDirectoryPath={directoryPath}
         size="primary"
         itemRef={setNodeRef}
         itemStyle={{ transform: CSS.Transform.toString(transform), transition }}

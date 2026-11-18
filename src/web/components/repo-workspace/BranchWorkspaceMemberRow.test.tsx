@@ -334,6 +334,38 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(behindDelta?.textContent).toContain('2')
   })
 
+  test('drags the member worktree path even when the repository is elsewhere', () => {
+    const member = repositoryMember()
+    const repo = emptyRepo('/repositories/api', 'api')
+    const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
+    const presentation = {
+      dirty: false,
+      changeCount: 0,
+      navigable: true,
+      repositoryId: repo.id,
+      worktreePath: member.worktreePath,
+      actionTarget: { repo, branch },
+    }
+    const item = workspace()
+    const row = (disabled: boolean) => (
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected={false}
+        disabled={disabled}
+        presentation={presentation}
+      />
+    )
+    render(row(false))
+    const main = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')!
+    expect(main.draggable).toBe(true)
+    const setData = vi.fn()
+    main.dispatchEvent(Object.assign(new Event('dragstart', { bubbles: true }), { dataTransfer: { setData } }))
+    expect(setData).toHaveBeenCalledWith('application/x-goblin-terminal-directory', member.worktreePath)
+    render(row(true))
+    expect(main.draggable).toBe(false)
+  })
+
   test('renders a compact actionable member row without independent-worktree lifecycle actions', async () => {
     const item = workspace()
     const member = repositoryMember()

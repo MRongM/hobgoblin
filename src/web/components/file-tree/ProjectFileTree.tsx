@@ -69,6 +69,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import {
+  type FileTreeRevealRequest,
   buildFileTreeStatusIndex,
   buildGoblinFilePathDragPayload,
   mergeDirectoryEntries,
@@ -173,11 +174,6 @@ type FileTreeUndoAction =
       previousBytesBase64: string
     }
 
-export interface FileTreeRevealRequest {
-  id: number
-  relativePath: string
-}
-
 type FileTreeToolbarHeight = 'compact' | 'detail'
 
 export function ProjectFileTree(props: ProjectFileTreeProps) {
@@ -216,7 +212,6 @@ function ProjectFileTreeContent({
   const activeWorktreeRef = useRef<string | null>(worktreePath)
   const directoriesRef = useRef<Record<string, DirectoryState>>({})
   const latestDirectoryRequestTokensRef = useRef(new Map<string, symbol>())
-  const revealRequestRef = useRef<number | null>(null)
   const undoStackRef = useRef<FileTreeUndoAction[]>([])
   const undoPendingRef = useRef(false)
   const [directories, setDirectories] = useState<Record<string, DirectoryState>>({})
@@ -304,7 +299,6 @@ function ProjectFileTreeContent({
   useEffect(() => {
     latestDirectoryRequestTokensRef.current.clear()
     directoriesRef.current = {}
-    revealRequestRef.current = null
     undoStackRef.current = []
     undoPendingRef.current = false
     setDirectories({})
@@ -360,7 +354,7 @@ function ProjectFileTreeContent({
   const canUploadFiles = hasNativeFilePicker()
 
   const revealRelativePath = useCallback(
-    async (relativePath: string, options: { requestId?: number; cancelled?: () => boolean } = {}): Promise<void> => {
+    async (relativePath: string, cancelled: () => boolean): Promise<void> => {
       if (!worktreePath) return
       const activeWorktreePath = worktreePath
 
@@ -376,7 +370,7 @@ function ProjectFileTreeContent({
       if (!entries) return
 
       for (const directoryRelativePath of parentRelativePaths(relativePath)) {
-        if (options.cancelled?.()) return
+        if (cancelled()) return
         const entry = findEntry(entries, directoryRelativePath)
         if (!entry) return
         setExpandedDirs((current) => new Set(current).add(entry.relativePath))
@@ -386,8 +380,7 @@ function ProjectFileTreeContent({
 
       const finalEntry = findEntry(entries, relativePath)
       const targetId = finalEntry ? finalEntry.relativePath : `virtual:${relativePath}`
-      if (options.cancelled?.()) return
-      if (options.requestId !== undefined) revealRequestRef.current = options.requestId
+      if (cancelled()) return
       setSelection({ selected: new Set([targetId]), anchor: targetId })
       setFocusedNodeId(targetId)
       scheduleFileTreeNodeScroll(targetId)
@@ -396,16 +389,13 @@ function ProjectFileTreeContent({
   )
 
   useEffect(() => {
-    if (!worktreePath || !revealRequest) return
-    const request = revealRequest
-    if (revealRequestRef.current === request.id) return
-    revealRequestRef.current = request.id
+    if (!revealRequest || revealRequest.repoId !== repoId || revealRequest.worktreePath !== worktreePath) return
     let cancelled = false
-    void revealRelativePath(request.relativePath, { requestId: request.id, cancelled: () => cancelled })
+    void revealRelativePath(revealRequest.relativePath, () => cancelled)
     return () => {
       cancelled = true
     }
-  }, [revealRelativePath, revealRequest, worktreePath])
+  }, [repoId, revealRelativePath, revealRequest, worktreePath])
 
   const openDirectoryAction = useOpenDirectoryAction({ repoId, path: worktreePath, disabled: !view.exists })
   const canOpenLocally = !openDirectoryAction.disabled

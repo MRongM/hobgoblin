@@ -427,6 +427,7 @@ function DetachedWorktreeRow({
 
   const row = (
     <WorkspaceListItemFrame
+      terminalDirectoryPath={prunable ? null : worktree.path}
       selected={selected}
       unavailable={prunable}
       busy={actionBusy}

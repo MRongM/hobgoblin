@@ -6,7 +6,7 @@ import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarPro
 import { StatusBar } from '#/web/components/StatusBar.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
 import { FileAreaSplitPane } from '#/web/components/repo-workspace/FileAreaSplitPane.tsx'
-import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
@@ -16,6 +16,7 @@ interface PlainWorkspacePaneProps {
   repoId: string
   layout: RepoWorkspaceLayout
   revealRequest?: FileTreeRevealRequest | null
+  onRevealPath?: (relativePath: string) => void
   terminalPanel?: ReactNode
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
@@ -34,6 +35,7 @@ export function PlainWorkspacePane({
   repoId,
   layout,
   revealRequest,
+  onRevealPath,
   terminalPanel,
   fileAreaCollapsed = false,
   onToggleFileArea,
@@ -98,6 +100,7 @@ export function PlainWorkspacePane({
           repoId={repoId}
           layout={layout}
           focusMode={focusMode}
+          onRevealPath={onRevealPath}
           onExitTerminalFocus={onExitTerminalFocus}
         />
       )}

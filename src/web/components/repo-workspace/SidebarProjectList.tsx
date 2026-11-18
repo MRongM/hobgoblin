@@ -163,9 +163,10 @@ function SortableProjectRow({
   const projectKind = project.isGitRepo ? 'git' : 'plain'
   const ProjectIcon = project.isGitRepo ? FolderGit2 : Folder
   const projectExternalActions = useProjectExternalOpenActions(project.id)
+  const directoryPath = remote?.remotePath ?? project.id
   const directoryAction = useOpenDirectoryAction({
     repoId: project.id,
-    path: remote?.remotePath ?? project.id,
+    path: directoryPath,
     disabled: project.unavailable,
   })
   const projectInternalTerminalAction = useProjectInternalTerminalAction(project.id)
@@ -182,7 +183,7 @@ function SortableProjectRow({
   const dependencyMenu = useWorktreeDependencyMenu(repo, { disabled: project.unavailable, visible: project.isGitRepo })
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: project.id,
-    itemPath: remote?.remotePath ?? project.id,
+    itemPath: directoryPath,
     disabled: false,
   })
   const hostTmuxInventory = useHostTmuxInventory({ projectRoot: project.id, disabled: false })
@@ -371,6 +372,7 @@ function SortableProjectRow({
         additionalActions={additionalMenuActions}
       >
         <WorkspaceListItemFrame
+          terminalDirectoryPath={directoryPath}
           size="project"
           itemRef={setNodeRef}
           itemStyle={{ transform: CSS.Transform.toString(transform), transition }}

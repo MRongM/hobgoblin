@@ -265,6 +265,7 @@ export function TerminalSessionProvider({
       markTelegramInputTarget: registry.markTelegramInputTarget,
       scrollLines: registry.scrollLines,
       scrollByTouch: registry.scrollByTouch,
+      filePathAtPoint: registry.filePathAtPoint,
       beginMobileSelection: registry.beginMobileSelection,
       extendMobileSelection: registry.extendMobileSelection,
       finishMobileSelection: registry.finishMobileSelection,

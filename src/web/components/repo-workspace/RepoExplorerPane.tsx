@@ -19,11 +19,9 @@ import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/Workspa
 import { useBranchActionItems } from '#/web/hooks/useBranchActionItems.tsx'
 import type { BranchActionRepo } from '#/web/hooks/branch-action-state.ts'
 import { runRepoRefreshIntent } from '#/web/stores/repos/refresh-coordinator.ts'
-import {
-  RepoWorktreeExplorer,
-  type FileTreeRevealRequest,
-} from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
+import { RepoWorktreeExplorer } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
 import type { CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import { activeWorkspaceRootId } from '#/web/stores/repos/workspace-projects.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 
@@ -32,6 +30,7 @@ interface RepoExplorerPaneProps {
   layout: RepoWorkspaceLayout
   showActions: boolean
   revealRequest?: FileTreeRevealRequest | null
+  onRevealPath?: (relativePath: string) => void
   plainWorkspaceTerminalPanel?: ReactNode
   fileAreaCollapsed?: boolean
   onToggleFileArea?: () => void
@@ -51,6 +50,7 @@ export function RepoExplorerPane({
   layout,
   showActions,
   revealRequest,
+  onRevealPath,
   plainWorkspaceTerminalPanel,
   fileAreaCollapsed = false,
   onToggleFileArea,
@@ -123,6 +123,7 @@ export function RepoExplorerPane({
           layout={layout}
           revealRequest={activeRevealRequest}
           terminalPanel={plainWorkspaceTerminalPanel}
+          onRevealPath={onRevealPath}
           fileAreaCollapsed={desktopFileAreaCollapsed}
           onToggleFileArea={compact ? undefined : onToggleFileArea}
           onOpenFileArea={onOpenFileArea}

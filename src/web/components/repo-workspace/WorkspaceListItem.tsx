@@ -1,3 +1,4 @@
+import { terminalDirectoryDragProps } from '#/web/components/terminal/terminal-directory-drag.ts'
 import { forwardRef, useState, type ComponentProps, type CSSProperties, type ForwardedRef, type ReactNode } from 'react'
 import { Ellipsis, GripVertical, Loader2 } from 'lucide-react'
 import { AsyncButton } from '#/web/components/AsyncButton.tsx'
@@ -21,6 +22,7 @@ export interface WorkspaceListItemAction {
   visible?: boolean
   category?: WorkspaceMenuCategory
   onSelect: () => void | Promise<void>
+  parentDirectoryAction?: Omit<WorkspaceListItemAction, 'parentDirectoryAction'>
 }
 
 type DataAttributes = {
@@ -42,6 +44,7 @@ export interface WorkspaceListItemDragHandle {
 }
 
 type WorkspaceListItemFrameProps = WorkspaceListItemNativeProps & {
+  terminalDirectoryPath?: string | null
   size?: 'project' | 'primary' | 'member'
   selected?: boolean
   unavailable?: boolean
@@ -62,6 +65,7 @@ type WorkspaceListItemFrameProps = WorkspaceListItemNativeProps & {
 export const WorkspaceListItemFrame = forwardRef<HTMLLIElement, WorkspaceListItemFrameProps>(
   function WorkspaceListItemFrame(
     {
+      terminalDirectoryPath,
       size = 'primary',
       selected = false,
       unavailable = false,
@@ -105,6 +109,7 @@ export const WorkspaceListItemFrame = forwardRef<HTMLLIElement, WorkspaceListIte
         <div className="workspace-list-item group relative">
           <button
             {...restButtonProps}
+            {...terminalDirectoryDragProps(unavailable || restButtonProps.disabled ? null : terminalDirectoryPath)}
             type="button"
             data-workspace-list-item-main=""
             className={cn(

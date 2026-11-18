@@ -157,18 +157,22 @@
   overflow: visible;
 }
 
-.goblin-terminal-selection-copy {
+.goblin-terminal-selection-actions {
+  display: flex;
   position: fixed;
-  left: clamp(52px, var(--goblin-terminal-selection-copy-x), calc(100vw - 52px));
+  left: clamp(5.5rem, var(--goblin-terminal-selection-copy-x), calc(100vw - 5.5rem));
   top: clamp(56px, calc(var(--goblin-terminal-selection-copy-y) - 10px), calc(100dvh - 8px));
   z-index: 4;
-  min-width: 44px;
-  min-height: 44px;
   transform: translate(-50%, -100%);
   border: 1px solid var(--color-toolbar-border);
   background: color-mix(in srgb, var(--color-toolbar) 96%, var(--color-terminal-background));
   box-shadow: var(--shadow-sm);
   touch-action: manipulation;
+}
+
+.goblin-terminal-selection-actions > button {
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .goblin-terminal-slot__empty {

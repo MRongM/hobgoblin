@@ -97,7 +97,7 @@ An internal terminal explicitly hidden from its worktree's terminal tabs while i
 _Avoid_: Closed terminal, paused terminal, deleted terminal
 
 **Terminal file preview**:
-A temporary, read-only view of one supported file opened from an internal terminal path link or a file-area row. Both entry points share one preview: selecting the same file again closes it, while selecting another file replaces it. Absolute paths may refer to files outside the project on the same local or remote host. It appears beside the terminal when available, otherwise beside the workspace, and as a dismissible full-width surface in compact layouts. Changing repository or worktree clears it, and closing it returns the space without ending any terminal session. It remains local to the current view and is distinct from an external editor.
+A temporary, read-only view of one supported file. A single click on an internal terminal path reveals the file in the worktree file area when it belongs to that worktree. The terminal link’s **Open preview** context action opens the referenced file and line in the preview. File-area rows share this pane and toggle it when the same file is selected again. Absolute paths may refer to files outside the project on the same local or remote host. The preview appears beside the terminal when available, otherwise beside the workspace, and as a dismissible full-width surface in compact layouts. Changing repository or worktree clears it, and closing it returns the space without ending any terminal session. It remains local to the current view and is distinct from an external editor.
 _Avoid_: File editor, file-area tab, detached file window, restored preview
 
 **Terminal navigation controls**:

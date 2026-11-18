@@ -12,10 +12,8 @@ import { branchWorkspaceFolderContext } from '#/web/components/repo-workspace/Br
 import { BranchWorkspaceMemberContext } from '#/web/components/repo-workspace/BranchWorkspaceMemberContext.tsx'
 import { BranchWorkspaceTerminalPanel } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import { FileAreaSplitPane } from '#/web/components/repo-workspace/FileAreaSplitPane.tsx'
-import {
-  RepoWorktreeExplorer,
-  type FileTreeRevealRequest,
-} from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
+import { RepoWorktreeExplorer } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
 import { SidebarProjectHeader } from '#/web/components/repo-workspace/SidebarProjectHeader.tsx'
 import { WorkspaceRepositoryRail } from '#/web/components/repo-workspace/WorkspaceRepositoryRail.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
@@ -56,10 +54,7 @@ export function BranchWorkspacePane({
   const compact = useIsCompactUi()
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(true)
   const [branchWorkspaceFileAreaTab, setBranchWorkspaceFileAreaTab] = useState<BranchWorkspaceFileAreaTab>('files')
-  const [branchWorkspaceRevealRequest, setBranchWorkspaceRevealRequest] = useState<{
-    id: number
-    relativePath: string
-  } | null>(null)
+  const [branchWorkspaceRevealRequest, setBranchWorkspaceRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>('detail')
   const compactNavigationIntent = useRef<CompactWorkspaceSurface | null>(null)
   const [memberRevealRequest, setMemberRevealRequest] = useState<FileTreeRevealRequest | null>(null)
@@ -164,13 +159,19 @@ export function BranchWorkspacePane({
   const revealMemberPath = (relativePath: string) => {
     if (!memberTarget) return
     setExplorerTab(memberTarget.repositoryId, 'files')
-    setMemberRevealRequest((current) => ({
-      id: (current?.id ?? 0) + 1,
+    setMemberRevealRequest({
+      worktreePath: memberTarget.worktreePath,
       repoId: memberTarget.repositoryId,
       relativePath,
-    }))
+    })
     showCompactSurface('files')
     openFileArea()
+  }
+  const revealWorkspacePath = (relativePath: string) => {
+    setBranchWorkspaceFileAreaTab('files')
+    setBranchWorkspaceRevealRequest({ repoId: rootId, worktreePath: context.path, relativePath })
+    setFileAreaCollapsed(false)
+    showCompactSurface('files')
   }
 
   const compactToolbarLeading =
@@ -232,10 +233,7 @@ export function BranchWorkspacePane({
       activeTab={branchWorkspaceFileAreaTab}
       onTabChange={setBranchWorkspaceFileAreaTab}
       revealRequest={branchWorkspaceRevealRequest}
-      onRevealPath={(relativePath) => {
-        setBranchWorkspaceFileAreaTab('files')
-        setBranchWorkspaceRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
-      }}
+      onRevealPath={revealWorkspacePath}
       toolbarLeading={compactToolbarLeading}
     />
   )
@@ -296,6 +294,7 @@ export function BranchWorkspacePane({
       ) : (
         <BranchWorkspaceTerminalPanel
           context={context}
+          onRevealPath={revealWorkspacePath}
           toolbarLeading={compact ? compactScopeButton : undefined}
           terminalFocusMode={!compact && detailFocusMode}
           onExitTerminalFocus={compact ? undefined : () => setDetailFocusMode(false)}

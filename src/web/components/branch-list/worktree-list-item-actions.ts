@@ -120,6 +120,14 @@ export function branchListItemAction(item: BranchActionItem, forceDisabled = fal
     visible: item.visible,
     category: branchMenuCategory(item.id),
     onSelect: item.onSelect,
+    ...(item.parentDirectoryAction
+      ? {
+          parentDirectoryAction: {
+            ...item.parentDirectoryAction,
+            disabled: forceDisabled || item.parentDirectoryAction.disabled,
+          },
+        }
+      : {}),
   }
 }
 

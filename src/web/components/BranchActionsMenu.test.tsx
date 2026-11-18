@@ -99,8 +99,16 @@ function menuItem(label: string): HTMLElement {
   const node = Array.from(document.body.querySelectorAll<HTMLElement>('[data-slot="dropdown-menu-item"]')).find(
     (itemNode) => itemNode.textContent?.includes(label),
   )
-  expect(node).not.toBeNull()
+  expect(node).toBeDefined()
   return node!
+}
+
+async function openCategory(category: string) {
+  const trigger = document.body.querySelector<HTMLElement>(`[data-menu-category="${category}"]`)
+  expect(trigger).toBeTruthy()
+  await act(async () => {
+    trigger!.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }))
+  })
 }
 
 describe('BranchActionsDropdown split button', () => {
@@ -112,15 +120,20 @@ describe('BranchActionsDropdown split button', () => {
     expect(button('Actions').className).toContain('px-1.5')
   })
 
-  test('hideQuickAction renders only the menu trigger with the full items list', () => {
+  test('hideQuickAction renders only the menu trigger with the full items list', async () => {
     renderDropdown({ hideQuickAction: true })
 
     expect(document.body.querySelector('button[aria-label="Edit"]')).toBeNull()
     const trigger = button('Actions')
     expect(trigger.className).not.toContain('rounded-l-none')
-    menuItem('Edit')
-    menuItem('Terminal')
-    menuItem('Delete branch')
+    for (const [category, label] of [
+      ['open', 'Edit'],
+      ['terminals', 'Terminal'],
+      ['git', 'Delete branch'],
+    ] as const) {
+      await openCategory(category)
+      menuItem(label)
+    }
   })
 
   test('renders commit as the default quick action and runs it from the left button', () => {
@@ -139,7 +152,7 @@ describe('BranchActionsDropdown split button', () => {
     expect(onCommit).toHaveBeenCalledTimes(1)
   })
 
-  test('remembers a non-destructive menu action per repo and branch', () => {
+  test('remembers a non-destructive menu action per repo and branch', async () => {
     const editorA = item('editor', 'Edit A')
 
     renderDropdown({
@@ -148,7 +161,8 @@ describe('BranchActionsDropdown split button', () => {
       editor: editorA,
     })
 
-    act(() => {
+    await openCategory('open')
+    await act(async () => {
       menuItem('Edit A').click()
     })
 
@@ -168,7 +182,7 @@ describe('BranchActionsDropdown split button', () => {
     expect(button('Edit A')).toBeTruthy()
   })
 
-  test('does not remember destructive menu actions', () => {
+  test('does not remember destructive menu actions', async () => {
     const onDelete = vi.fn()
 
     renderDropdown({
@@ -177,7 +191,8 @@ describe('BranchActionsDropdown split button', () => {
       destructive: item('deleteBranch', 'Delete branch', onDelete, { destructive: true }),
     })
 
-    act(() => {
+    await openCategory('git')
+    await act(async () => {
       menuItem('Delete branch').click()
     })
 
@@ -185,14 +200,15 @@ describe('BranchActionsDropdown split button', () => {
     expect(button('Commit')).toBeTruthy()
   })
 
-  test('falls back to commit when the remembered action becomes disabled', () => {
+  test('falls back to commit when the remembered action becomes disabled', async () => {
     renderDropdown({
       repoId: '/repo/fallback',
       branchName: 'feature/fallback',
       terminal: item('terminal', 'Terminal'),
     })
 
-    act(() => {
+    await openCategory('terminals')
+    await act(async () => {
       menuItem('Terminal').click()
     })
 
@@ -203,6 +219,21 @@ describe('BranchActionsDropdown split button', () => {
     })
 
     expect(button('Commit')).toBeTruthy()
+  })
+
+  test('runs the parent directory action from the focus toolbar', async () => {
+    const onParent = vi.fn()
+    const onDirectory = vi.fn()
+    renderDropdown({
+      hideQuickAction: true,
+      editor: item('openDirectory', 'Open directory', onDirectory, {
+        parentDirectoryAction: item('openParentDirectory', 'Open parent directory', onParent),
+      }),
+    })
+    await openCategory('open')
+    await act(async () => menuItem('Open parent directory').click())
+    expect(onParent).toHaveBeenCalledOnce()
+    expect(onDirectory).not.toHaveBeenCalled()
   })
 
   test('disables the commit quick action when commit is unavailable', () => {

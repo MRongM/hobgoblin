@@ -964,6 +964,7 @@ export const ja: Record<DictKey, string> = {
   'file-tree.new-folder': '新しいフォルダ',
   'file-tree.refresh': '更新',
   'directory-open.action': 'ファイルマネージャーで開く',
+  'directory-open.parent-action': 'ファイルマネージャーで親ディレクトリを開く',
   'directory-open.failed': 'ファイルマネージャーでディレクトリを開けませんでした。',
   'directory-open.desktop-only': 'デスクトップアプリからこのディレクトリを開いてください。',
   'directory-open.remote-unavailable': 'このリモートディレクトリはローカルのファイルマネージャーで直接開けません。',
@@ -1018,6 +1019,7 @@ export const ja: Record<DictKey, string> = {
 
   // ---- Terminal ----------------------------------------------------------
   'terminal.file-preview.title': 'ファイルプレビュー',
+  'terminal.file-preview.open': 'プレビューを開く',
   'terminal.file-preview.close': 'プレビューを閉じる',
   'terminal.file-preview.loading': 'プレビューを読み込み中…',
   'terminal.file-preview.unsupported': 'この種類のファイルはプレビューできません。',

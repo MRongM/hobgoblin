@@ -72,12 +72,14 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
     focusMode,
     compactFocusPresentation,
     onShowCompactOverview,
+    onRevealPath,
     onExitTerminalFocus,
   }: {
     repoId: string
     focusMode?: boolean
     compactFocusPresentation?: boolean
     onShowCompactOverview?: () => void
+    onRevealPath?: (relativePath: string) => void
     onExitTerminalFocus?: () => void
   }) => (
     <div
@@ -86,6 +88,9 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
       data-focus-mode={String(focusMode)}
       data-compact-focus-presentation={String(compactFocusPresentation)}
     >
+      <button type="button" data-testid="terminal-reveal" onClick={() => onRevealPath?.('docs/guide.md')}>
+        Reveal file
+      </button>
       {onShowCompactOverview && (
         <button type="button" data-testid="show-compact-overview" onClick={onShowCompactOverview}>
           show overview
@@ -104,12 +109,14 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
     terminalLabel,
     compactFocusPresentation,
     onShowCompactOverview,
+    onRevealPath,
   }: {
     repoId: string
     worktreePath: string
     terminalLabel: string
     compactFocusPresentation?: boolean
     onShowCompactOverview?: () => void
+    onRevealPath?: (relativePath: string) => void
   }) => (
     <div
       data-testid="worktree-terminal-panel"
@@ -118,6 +125,9 @@ vi.mock('#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx', () =>
       data-terminal-label={terminalLabel}
       data-compact-focus-presentation={String(compactFocusPresentation)}
     >
+      <button type="button" data-testid="terminal-reveal" onClick={() => onRevealPath?.('docs/guide.md')}>
+        Reveal file
+      </button>
       {onShowCompactOverview && (
         <button type="button" data-testid="show-detached-overview" onClick={onShowCompactOverview}>
           show overview
@@ -348,6 +358,10 @@ describe('RepoView', () => {
     expect(detail?.getAttribute('data-terminal-label')).toBe('HEAD@abcdef123456')
     expect(detail?.getAttribute('data-compact-focus-presentation')).toBe('true')
     expect(container?.querySelector('[data-testid="branch-detail"]')).toBeNull()
+    act(() => container?.querySelector<HTMLButtonElement>('[data-testid="terminal-reveal"]')?.click())
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
+      'docs/guide.md',
+    )
   })
 
   test('renders only detail for a compact Git repository with a selected worktree', () => {
@@ -751,6 +765,10 @@ describe('RepoView', () => {
 
     expect(container?.querySelector('[data-testid="plain-workspace-terminal-panel"]')).not.toBeNull()
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')).toBeNull()
+    act(() => container?.querySelector<HTMLButtonElement>('[data-testid="terminal-reveal"]')?.click())
+    expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
+      'docs/guide.md',
+    )
   })
 
   test('renders the selected branch workspace as a folder context instead of a nested repository', () => {
@@ -1271,7 +1289,10 @@ describe('RepoView', () => {
   test('routes desktop terminal reveal requests and expands the file area', async () => {
     seedRepoState({
       id: REPO_ID,
-      branches: [createRepoBranch('main'), createRepoBranch('feature/a')],
+      branches: [
+        createRepoBranch('main', { worktree: { path: '/repo' } }),
+        createRepoBranch('feature/a', { worktree: { path: '/trees/a' } }),
+      ],
       currentBranch: 'main',
       selectedBranch: 'feature/a',
     })
@@ -1296,6 +1317,10 @@ describe('RepoView', () => {
     expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe(
       'src/from-terminal.ts',
     )
+    for (const branch of ['main', 'feature/a']) {
+      await act(async () => useReposStore.getState().selectBranch(REPO_ID, branch))
+      expect(container?.querySelector('[data-testid="repo-explorer-pane"]')?.getAttribute('data-reveal-path')).toBe('')
+    }
   })
 
   test('toggles the Git workspace file area locally', async () => {

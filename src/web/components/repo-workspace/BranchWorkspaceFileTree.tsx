@@ -1,3 +1,4 @@
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import type { ReactNode } from 'react'
 import { ProjectFileTree, type ProjectFileTreeContext } from '#/web/components/file-tree/ProjectFileTree.tsx'
 
@@ -18,7 +19,7 @@ export function BranchWorkspaceFileTree({
 }: {
   context: BranchWorkspaceFolderContext
   toolbarLeading?: ReactNode
-  revealRequest?: { id: number; relativePath: string } | null
+  revealRequest?: FileTreeRevealRequest | null
 }) {
   const folderContext: ProjectFileTreeContext = {
     repoId: context.rootId,

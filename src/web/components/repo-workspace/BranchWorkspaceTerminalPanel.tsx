@@ -20,6 +20,7 @@ import { TerminalStashMenu } from '#/web/components/terminal/TerminalStashMenu.t
 
 interface BranchWorkspaceTerminalPanelProps {
   context: BranchWorkspaceFolderContext
+  onRevealPath?: (relativePath: string) => void
   toolbarLeading?: ReactNode
   terminalFocusMode?: boolean
   onExitTerminalFocus?: () => void
@@ -31,6 +32,7 @@ interface OpenBranchWorkspaceInternalTerminalDependencies extends Pick<TerminalS
 
 export function BranchWorkspaceTerminalPanel({
   context,
+  onRevealPath,
   toolbarLeading,
   terminalFocusMode = false,
   onExitTerminalFocus,
@@ -125,7 +127,7 @@ export function BranchWorkspaceTerminalPanel({
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
-          <TerminalSlot repoRoot={context.rootId} worktreePath={context.path} />
+          <TerminalSlot repoRoot={context.rootId} worktreePath={context.path} onRevealPath={onRevealPath} />
         ) : null}
       </div>
     </section>

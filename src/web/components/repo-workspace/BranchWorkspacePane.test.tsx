@@ -141,16 +141,21 @@ vi.mock('#/web/components/repo-workspace/BranchWorkspaceAggregatePanel.tsx', () 
 vi.mock('#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx', () => ({
   BranchWorkspaceTerminalPanel: ({
     context,
+    onRevealPath,
     toolbarLeading,
     terminalFocusMode,
     onExitTerminalFocus,
   }: {
     context: { path: string }
+    onRevealPath?: (relativePath: string) => void
     toolbarLeading?: ReactNode
     terminalFocusMode?: boolean
     onExitTerminalFocus?: () => void
   }) => (
     <div data-testid="branch-workspace-terminal-panel" data-terminal-focus={String(!!terminalFocusMode)}>
+      <button type="button" data-testid="root-terminal-reveal" onClick={() => onRevealPath?.('docs/guide.md')}>
+        Reveal file
+      </button>
       {toolbarLeading ? <div data-testid="mock-terminal-toolbar-leading">{toolbarLeading}</div> : null}
       {onExitTerminalFocus ? (
         <button type="button" data-testid="root-exit-focus" onClick={onExitTerminalFocus}>
@@ -466,6 +471,13 @@ describe('BranchWorkspacePane', () => {
     act(() => container.querySelector<HTMLButtonElement>('[data-testid="rail-files"]')?.click())
 
     expect(container.querySelector('[data-testid="branch-workspace-file-tree"]')).not.toBeNull()
+  })
+
+  test('reveals a path from the subworkspace root terminal in the compact file area', () => {
+    compactUi = true
+    act(() => root.render(<BranchWorkspacePane rootId="/workspace" workspace={workspace()} layout="left-right" />))
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="root-terminal-reveal"]')?.click())
+    expect(container.querySelector('[data-testid="root-file-reveal"]')?.textContent).toBe('docs/guide.md')
   })
 
   test('reveals a member change through the branch workspace root file tree', () => {

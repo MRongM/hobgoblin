@@ -1,21 +1,55 @@
+// @vitest-environment jsdom
+
+import { Terminal } from '@xterm/headless'
 import { describe, expect, test, vi } from 'vitest'
 import type { ILink, ILinkProvider } from '@xterm/xterm'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
-import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
+import {
+  registerTerminalRelativePathLinkProvider,
+  terminalFilePathAtPoint,
+} from '#/web/components/terminal/terminal-path-links.ts'
+
+test('hit-tests the scrolled terminal buffer across wide characters, padding and wrapped paths', async () => {
+  const term = new Terminal({ cols: 20, rows: 2, allowProposedApi: true })
+  const screen = document.createElement('div')
+  screen.className = 'xterm-screen'
+  const element = document.createElement('div')
+  element.appendChild(screen)
+  vi.spyOn(screen, 'getBoundingClientRect').mockReturnValue(new DOMRect(10, 20, 200, 40))
+  try {
+    await new Promise<void>((done) => term.write('old output\r\n测 README.md docs/other.md', done))
+    expect(term.buffer.active.viewportY).toBe(1)
+    const target = (column: number, row: number) =>
+      terminalFilePathAtPoint(
+        { buffer: term.buffer, cols: term.cols, rows: term.rows, element },
+        { clientX: 11 + column * 10, clientY: 21 + row * 20 },
+        '/repo',
+      )
+    expect(target(1, 0)).toBeNull()
+    expect(target(3, 0)).toEqual({ path: 'README.md' })
+    expect(target(12, 0)).toBeNull()
+    expect(target(13, 0)).toEqual({ path: 'docs/other.md' })
+    expect(target(1, 1)).toEqual({ path: 'docs/other.md' })
+    expect(target(15, 1)).toBeNull()
+    expect(target(-1, 0)).toBeNull()
+  } finally {
+    term.dispose()
+  }
+})
 
 describe('registerTerminalRelativePathLinkProvider', () => {
   function pathLink({
     reveal = vi.fn(),
     editor = vi.fn(),
-    getPreview = () => null,
     text = 'created src/app.ts:12:3',
     worktree = null,
+    onHover = () => {},
   }: {
     reveal?: ((path: string) => void) | null
     editor?: ((target: FilePathTarget) => void) | null
-    getPreview?: () => ((target: FilePathTarget) => boolean) | null
     text?: string
     worktree?: string | null
+    onHover?: (target: FilePathTarget | null) => void
   } = {}): ILink[] | undefined {
     let provider: ILinkProvider | undefined
     registerTerminalRelativePathLinkProvider(
@@ -29,7 +63,7 @@ describe('registerTerminalRelativePathLinkProvider', () => {
       () => reveal,
       () => editor,
       () => worktree,
-      getPreview,
+      onHover,
     )
     let links: ILink[] | undefined
     provider?.provideLinks(1, (provided) => {
@@ -38,18 +72,14 @@ describe('registerTerminalRelativePathLinkProvider', () => {
     return links
   }
 
-  test('opens a structured preview target on single click without revealing or opening the editor', () => {
-    const preview = vi.fn(() => true)
-    const reveal = vi.fn()
-    const editor = vi.fn()
-    const link = pathLink({ reveal, editor, getPreview: () => preview })?.[0]
+  test('reports the structured path while the pointer is over a link', () => {
+    const onHover = vi.fn()
+    const link = pathLink({ onHover })?.[0]
     expect(link).toBeDefined()
-
-    link!.activate({ detail: 1 } as MouseEvent, link!.text)
-
-    expect(preview).toHaveBeenCalledExactlyOnceWith({ path: 'src/app.ts', line: 12, column: 3 })
-    expect(reveal).not.toHaveBeenCalled()
-    expect(editor).not.toHaveBeenCalled()
+    link!.hover?.({} as MouseEvent, link!.text)
+    expect(onHover).toHaveBeenLastCalledWith({ path: 'src/app.ts', line: 12, column: 3 })
+    link!.leave?.({} as MouseEvent, link!.text)
+    expect(onHover).toHaveBeenLastCalledWith(null)
   })
 
   test.each([
@@ -62,105 +92,34 @@ describe('registerTerminalRelativePathLinkProvider', () => {
     '.env.local',
     '.gitignore',
     '.editorconfig',
-  ])('provides a preview link for known root document %s', (path) => {
-    const preview = vi.fn(() => true)
-    const link = pathLink({ text: `created ${path}`, getPreview: () => preview })?.[0]
-    expect(link).toBeDefined()
-    link!.activate({ detail: 1 } as MouseEvent, link!.text)
-    expect(preview).toHaveBeenCalledExactlyOnceWith({ path: path.replace(/^\.\//u, '') })
-  })
-
-  test('reveals the relative path after preview declines a contained absolute target', () => {
-    const calls: string[] = []
-    const preview = vi.fn(() => {
-      calls.push('preview')
-      return false
-    })
-    const reveal = vi.fn(() => {
-      calls.push('reveal')
-    })
-    const link = pathLink({
-      reveal,
-      getPreview: () => preview,
-      text: 'created C:\\repo\\src\\app.ts:12:3',
-      worktree: 'C:\\repo',
-    })?.[0]
-    expect(link).toBeDefined()
-
-    link!.activate({ detail: 1 } as MouseEvent, link!.text)
-
-    expect(preview).toHaveBeenCalledExactlyOnceWith({ path: 'C:\\repo\\src\\app.ts', line: 12, column: 3 })
-    expect(reveal).toHaveBeenCalledExactlyOnceWith('src/app.ts')
-    expect(calls).toEqual(['preview', 'reveal'])
-  })
-
-  test.each(['/tmp/report.md', 'C:\\reports\\guide.md'])(
-    'previews an absolute file outside the worktree: %s',
-    (path) => {
-      const preview = vi.fn(() => true)
-      const reveal = vi.fn()
-      const editor = vi.fn()
-      const link = pathLink({ text: path, worktree: '/repo', reveal, editor, getPreview: () => preview })?.[0]
-      expect(link).toBeDefined()
-      link!.activate({ detail: 1 } as MouseEvent, link!.text)
-      expect(preview).toHaveBeenCalledExactlyOnceWith({ path })
-      expect(reveal).not.toHaveBeenCalled()
-      link!.activate({ detail: 2 } as MouseEvent, link!.text)
-      expect(editor).toHaveBeenCalledExactlyOnceWith({ path })
-    },
-  )
-
-  test('does not reveal an external absolute file when preview declines it', () => {
-    const reveal = vi.fn()
-    const preview = vi.fn(() => false)
-    const link = pathLink({
-      text: '/tmp/archive.zip',
-      worktree: '/repo',
-      reveal,
-      getPreview: () => preview,
-    })?.[0]
-    expect(link).toBeDefined()
-    link!.activate({ detail: 1 } as MouseEvent, link!.text)
-    expect(preview).toHaveBeenCalledExactlyOnceWith({ path: '/tmp/archive.zip' })
-    expect(reveal).not.toHaveBeenCalled()
-  })
-
-  test('opens only the editor on double click when a preview handler is attached', () => {
-    const preview = vi.fn(() => true)
+  ])('reveals the known root document %s on single click', (path) => {
     const reveal = vi.fn()
     const editor = vi.fn()
-    const link = pathLink({ reveal, editor, getPreview: () => preview })?.[0]
-    expect(link).toBeDefined()
+    const link = pathLink({ text: `created ${path}`, reveal, editor })![0]!
+    link.activate({ button: 0, detail: 1 } as MouseEvent, link.text)
+    expect(reveal).toHaveBeenCalledExactlyOnceWith(path.replace(/^\.\//u, ''))
+    expect(editor).not.toHaveBeenCalled()
+  })
 
-    link!.activate({ detail: 2 } as MouseEvent, link!.text)
-
-    expect(preview).not.toHaveBeenCalled()
+  test.each(['/tmp/report.md', 'C:\\reports\\guide.md'])('only opens the external link %s on double click', (path) => {
+    const reveal = vi.fn()
+    const editor = vi.fn()
+    const link = pathLink({ text: path, worktree: '/repo', reveal, editor })![0]!
+    link.activate({ button: 0, detail: 1 } as MouseEvent, link.text)
     expect(reveal).not.toHaveBeenCalled()
-    expect(editor).toHaveBeenCalledExactlyOnceWith({ path: 'src/app.ts', line: 12, column: 3 })
+    expect(editor).not.toHaveBeenCalled()
+    link.activate({ button: 0, detail: 2 } as MouseEvent, link.text)
+    expect(editor).toHaveBeenCalledExactlyOnceWith({ path })
   })
 
-  test('uses the current preview handler when an existing link is activated', () => {
-    const first = vi.fn(() => true)
-    const next = vi.fn(() => true)
-    let preview = first
-    const link = pathLink({ getPreview: () => preview })?.[0]
-    expect(link).toBeDefined()
-    preview = next
-
-    link!.activate({ detail: 1 } as MouseEvent, link!.text)
-
-    expect(first).not.toHaveBeenCalled()
-    expect(next).toHaveBeenCalledExactlyOnceWith({ path: 'src/app.ts', line: 12, column: 3 })
-  })
-
-  test('provides links when only a preview handler is attached', () => {
-    const preview = vi.fn(() => true)
-    const link = pathLink({ reveal: null, editor: null, getPreview: () => preview })?.[0]
-    expect(link).toBeDefined()
-
-    link!.activate({ detail: 1 } as MouseEvent, link!.text)
-
-    expect(preview).toHaveBeenCalledExactlyOnceWith({ path: 'src/app.ts', line: 12, column: 3 })
+  test.each([1, 2])('ignores activation with mouse button %i', (button) => {
+    const reveal = vi.fn()
+    const editor = vi.fn()
+    const link = pathLink({ reveal, editor })![0]!
+    link.activate({ button, detail: 1 } as MouseEvent, link.text)
+    link.activate({ button, detail: 2 } as MouseEvent, link.text)
+    expect(reveal).not.toHaveBeenCalled()
+    expect(editor).not.toHaveBeenCalled()
   })
 
   test('provides wrapped terminal path links with a cross-line range', () => {
@@ -211,16 +170,16 @@ describe('registerTerminalRelativePathLinkProvider', () => {
       text: 'src/components/TerminalView.tsx:42',
       range: { start: { x: 9, y: 1 }, end: { x: 19, y: 2 } },
     })
-    provided?.[0]?.activate({ detail: 1 } as MouseEvent, 'src/components/TerminalView.tsx:42')
+    provided?.[0]?.activate({ button: 0, detail: 1 } as MouseEvent, 'src/components/TerminalView.tsx:42')
     expect(reveal).toHaveBeenCalledWith('src/components/TerminalView.tsx')
   })
 
   test.each(['/tmp/reports/', 'C:\\reports\\'])(
-    'previews hard-wrapped absolute links across terminal buffer rows: %s',
+    'captures hard-wrapped absolute links for the context menu across terminal buffer rows: %s',
     (prefix) => {
       const captured: { provider?: ILinkProvider } = {}
       const lines = [`created ${prefix}`, 'report.md:4']
-      const preview = vi.fn(() => true)
+      const onHover = vi.fn()
       registerTerminalRelativePathLinkProvider(
         {
           buffer: {
@@ -234,9 +193,9 @@ describe('registerTerminalRelativePathLinkProvider', () => {
           },
         },
         () => null,
-        () => null,
+        () => vi.fn(),
         () => '/repo',
-        () => preview,
+        onHover,
       )
       let links: ILink[] | undefined
       captured.provider?.provideLinks(2, (provided) => {
@@ -244,8 +203,8 @@ describe('registerTerminalRelativePathLinkProvider', () => {
       })
       expect(links).toHaveLength(1)
       expect(links![0]!.range).toEqual({ start: { x: 9, y: 1 }, end: { x: 11, y: 2 } })
-      links![0]!.activate({ detail: 1 } as MouseEvent, links![0]!.text)
-      expect(preview).toHaveBeenCalledExactlyOnceWith({ path: `${prefix}report.md`, line: 4 })
+      links![0]!.hover?.({} as MouseEvent, links![0]!.text)
+      expect(onHover).toHaveBeenCalledExactlyOnceWith({ path: `${prefix}report.md`, line: 4 })
     },
   )
 
@@ -299,10 +258,10 @@ describe('registerTerminalRelativePathLinkProvider', () => {
       range: { start: { x: 10, y: 1 }, end: { x: 41, y: 2 } },
     })
 
-    provided?.[0]?.activate({ detail: 1 } as MouseEvent, provided[0].text)
+    provided?.[0]?.activate({ button: 0, detail: 1 } as MouseEvent, provided[0].text)
     expect(reveal).toHaveBeenCalledWith('backend/app/kooky_opt/one_person_team/repositories/agents.py')
 
-    provided?.[0]?.activate({ detail: 2 } as MouseEvent, provided[0].text)
+    provided?.[0]?.activate({ button: 0, detail: 2 } as MouseEvent, provided[0].text)
     expect(openPathInEditor).toHaveBeenCalledWith({
       path: 'backend/app/kooky_opt/one_person_team/repositories/agents.py',
       line: 45,
@@ -343,7 +302,7 @@ describe('registerTerminalRelativePathLinkProvider', () => {
     })
     expect(provided?.[0]?.text).toBe('src/app.ts:12')
 
-    provided?.[0]?.activate({ detail: 1 } as MouseEvent, 'src/app.ts:12')
+    provided?.[0]?.activate({ button: 0, detail: 1 } as MouseEvent, 'src/app.ts:12')
 
     expect(reveal).toHaveBeenCalledWith('src/app.ts')
     registration.dispose()
@@ -379,7 +338,7 @@ describe('registerTerminalRelativePathLinkProvider', () => {
       provided = links as typeof provided
     })
 
-    provided?.[0]?.activate({ detail: 2 } as MouseEvent, 'src/app.ts:12:3')
+    provided?.[0]?.activate({ button: 0, detail: 2 } as MouseEvent, 'src/app.ts:12:3')
 
     expect(reveal).not.toHaveBeenCalled()
     expect(openPathInEditor).toHaveBeenCalledWith({ path: 'src/app.ts', line: 12, column: 3 })
@@ -415,10 +374,10 @@ describe('registerTerminalRelativePathLinkProvider', () => {
       provided = links as typeof provided
     })
 
-    provided?.[0]?.activate({ detail: 1 } as MouseEvent, 'C:\\repo\\src\\app.ts:12:3')
+    provided?.[0]?.activate({ button: 0, detail: 1 } as MouseEvent, 'C:\\repo\\src\\app.ts:12:3')
     expect(reveal).toHaveBeenCalledWith('src/app.ts')
 
-    provided?.[0]?.activate({ detail: 2 } as MouseEvent, 'C:\\repo\\src\\app.ts:12:3')
+    provided?.[0]?.activate({ button: 0, detail: 2 } as MouseEvent, 'C:\\repo\\src\\app.ts:12:3')
     expect(openPathInEditor).toHaveBeenCalledWith({ path: 'C:\\repo\\src\\app.ts', line: 12, column: 3 })
   })
 
@@ -452,7 +411,7 @@ describe('registerTerminalRelativePathLinkProvider', () => {
     })
 
     expect(provided?.[0]?.text).toBe('backend/app/main.py", line 42')
-    provided?.[0]?.activate({ detail: 2 } as MouseEvent, 'backend/app/main.py", line 42')
+    provided?.[0]?.activate({ button: 0, detail: 2 } as MouseEvent, 'backend/app/main.py", line 42')
 
     expect(openPathInEditor).toHaveBeenCalledWith({ path: 'backend/app/main.py', line: 42 })
   })

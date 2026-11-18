@@ -1,5 +1,15 @@
-import { serializeGoblinFilePathDragPayload, sortRepoFileTreeEntries, type RepoFileTreeEntry } from '#/shared/file-tree.ts'
+import {
+  serializeGoblinFilePathDragPayload,
+  sortRepoFileTreeEntries,
+  type RepoFileTreeEntry,
+} from '#/shared/file-tree.ts'
 import type { StatusEntry, WorktreeStatus } from '#/web/types.ts'
+
+export interface FileTreeRevealRequest {
+  repoId: string
+  worktreePath: string
+  relativePath: string
+}
 
 export type FileTreeTone = 'attention' | 'success' | 'danger' | 'muted'
 export type FileTreeEntryKind = RepoFileTreeEntry['kind'] | 'virtual'
@@ -88,10 +98,9 @@ export function buildFileTreeStatusIndex(worktreePath: string, status: WorktreeS
     const tone = toneForStatus(entry)
     byPath.set(entry.path, { tone, entry })
     addDirectoryCounts(directoryCounts, entry.path)
-    const virtualPaths = [
-      entry.x === 'D' || entry.y === 'D' ? entry.path : null,
-      entry.originalPath ?? null,
-    ].filter((path): path is string => !!path)
+    const virtualPaths = [entry.x === 'D' || entry.y === 'D' ? entry.path : null, entry.originalPath ?? null].filter(
+      (path): path is string => !!path,
+    )
     for (const relativePath of virtualPaths) {
       const directory = parentDirectory(relativePath)
       const list = virtualByDirectory.get(directory) ?? []

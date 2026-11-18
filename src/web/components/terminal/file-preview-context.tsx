@@ -17,17 +17,11 @@ import {
   type TerminalFilePreviewTarget,
 } from '#/web/components/terminal/terminal-file-preview.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
-
-// Keep the clicked row/link in place until double-click editor intent is resolved.
-const SINGLE_CLICK_DELAY_MS = 500
+import { useDeferredFileClick } from '#/web/hooks/useDeferredFileClick.ts'
 
 export function useFilePreviewController(scopeKey: string) {
   const [selection, setSelection] = useState<{ scopeKey: string; target: TerminalFilePreviewTarget } | null>(null)
-  const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cancelPendingPreview = useCallback(() => {
-    if (pendingTimer.current !== null) clearTimeout(pendingTimer.current)
-    pendingTimer.current = null
-  }, [])
+  const { schedule, cancel: cancelPendingPreview } = useDeferredFileClick()
   const closePreview = useCallback(() => {
     cancelPendingPreview()
     setSelection(null)
@@ -38,25 +32,34 @@ export function useFilePreviewController(scopeKey: string) {
   }, [scopeKey, closePreview, cancelPendingPreview])
   const requestPreview = useCallback(
     (repoId: string, worktreePath: string, file: FilePathTarget) => {
-      cancelPendingPreview()
       const next = createTerminalFilePreviewTarget(repoId, worktreePath, file)
-      if (!next) return false
-      pendingTimer.current = setTimeout(() => {
-        pendingTimer.current = null
+      if (!next) {
+        cancelPendingPreview()
+        return false
+      }
+      schedule(() => {
         setSelection((current) =>
           current?.scopeKey === scopeKey &&
           terminalFilePreviewIdentity(current.target) === terminalFilePreviewIdentity(next)
             ? null
             : { scopeKey, target: next },
         )
-      }, SINGLE_CLICK_DELAY_MS)
+      })
       return true
+    },
+    [cancelPendingPreview, schedule, scopeKey],
+  )
+  const openPreview = useCallback(
+    (target: TerminalFilePreviewTarget) => {
+      cancelPendingPreview()
+      setSelection({ scopeKey, target })
     },
     [cancelPendingPreview, scopeKey],
   )
   return {
     target: selection?.scopeKey === scopeKey ? selection.target : null,
     requestPreview,
+    openPreview,
     cancelPendingPreview,
     closePreview,
   }
@@ -111,6 +114,7 @@ function WorkspaceFilePreview({ scopeKey, children }: { scopeKey: string; childr
     [
       controller.target,
       controller.requestPreview,
+      controller.openPreview,
       controller.cancelPendingPreview,
       controller.closePreview,
       registerTerminalSurface,

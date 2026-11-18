@@ -947,6 +947,7 @@ export const ko: Record<DictKey, string> = {
   'file-tree.new-folder': '새 폴더',
   'file-tree.refresh': '새로 고침',
   'directory-open.action': '파일 관리자에서 열기',
+  'directory-open.parent-action': '파일 관리자에서 상위 디렉터리 열기',
   'directory-open.failed': '파일 관리자에서 디렉터리를 열 수 없습니다.',
   'directory-open.desktop-only': '데스크톱 앱에서 이 디렉터리를 여세요.',
   'directory-open.remote-unavailable': '이 원격 디렉터리는 로컬 파일 관리자에서 바로 열 수 없습니다.',
@@ -1000,6 +1001,7 @@ export const ko: Record<DictKey, string> = {
 
   // ---- Terminal ----------------------------------------------------------
   'terminal.file-preview.title': '파일 미리보기',
+  'terminal.file-preview.open': '미리보기 열기',
   'terminal.file-preview.close': '미리보기 닫기',
   'terminal.file-preview.loading': '미리보기 불러오는 중…',
   'terminal.file-preview.unsupported': '이 파일 형식은 미리볼 수 없습니다.',

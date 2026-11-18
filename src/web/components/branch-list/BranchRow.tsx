@@ -107,6 +107,7 @@ export function BranchRow({
 
   const row = (
     <WorkspaceListItemFrame
+      terminalDirectoryPath={worktreePath && !repo.data.worktreesByPath[worktreePath]?.isPrunable ? worktreePath : null}
       selected={isSelected}
       dragging={sortable?.isDragging}
       itemRef={sortable || isSelected ? setItemRef : undefined}

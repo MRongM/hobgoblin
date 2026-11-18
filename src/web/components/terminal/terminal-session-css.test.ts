@@ -148,12 +148,12 @@ describe('terminal session CSS layout contract', () => {
     )
   })
 
-  test('keeps the terminal Copy action touch-sized and above terminal overlays', () => {
-    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*position:\s*fixed;/)
-    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*z-index:\s*4;/)
-    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*min-width:\s*44px;/)
-    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*min-height:\s*44px;/)
-    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*left:\s*clamp\(/)
-    expect(css).toMatch(/\.goblin-terminal-selection-copy\s*\{[^}]*top:\s*clamp\(/)
+  test('keeps the terminal selection actions touch-sized and above terminal overlays', () => {
+    expect(css).toMatch(/\.goblin-terminal-selection-actions\s*\{[^}]*position:\s*fixed;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-actions\s*\{[^}]*z-index:\s*4;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-actions > button\s*\{[^}]*min-width:\s*44px;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-actions > button\s*\{[^}]*min-height:\s*44px;/)
+    expect(css).toMatch(/\.goblin-terminal-selection-actions\s*\{[^}]*left:\s*clamp\(/)
+    expect(css).toMatch(/\.goblin-terminal-selection-actions\s*\{[^}]*top:\s*clamp\(/)
   })
 })

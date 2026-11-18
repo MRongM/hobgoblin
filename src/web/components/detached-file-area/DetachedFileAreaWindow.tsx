@@ -1,3 +1,4 @@
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, ChevronRight, RefreshCw } from 'lucide-react'
 import type {
@@ -28,7 +29,12 @@ import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { useI18nStore, useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
-import { detachedHeadTerminalLabel, isSelectableDetachedWorktree } from '#/web/stores/repos/worktree-selection.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
+import {
+  detachedHeadTerminalLabel,
+  isSelectableDetachedWorktree,
+  selectedRepoWorktree,
+} from '#/web/stores/repos/worktree-selection.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
 
 const TAB_LABEL_KEYS: Record<FileAreaTabId, string> = {
@@ -62,7 +68,7 @@ function DetachedRepositoryFileArea({
   const bootstrappedRef = useRef(false)
   const [hydrated, setHydrated] = useState(false)
   const [activeTab, setActiveTab] = useState<FileAreaTabId>(request.tab)
-  const [revealRequest, setRevealRequest] = useState<{ id: number; relativePath: string } | null>(null)
+  const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const repo = useReposStore((state) => state.repos[request.repo.id])
   const capturedPath = request.kind === 'git-worktree' ? request.worktreePath : undefined
   const capturedWorktree = capturedPath
@@ -123,7 +129,8 @@ function DetachedRepositoryFileArea({
   }, [capturedBranch, detachedAtPath?.path, repo, surfaceAvailable])
 
   function revealPath(relativePath: string) {
-    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
+    const worktreePath = repoPlainWorkspacePath(repo) ?? (repo && selectedRepoWorktree(repo)?.worktreePath)
+    if (worktreePath) setRevealRequest({ repoId: request.repo.id, worktreePath, relativePath })
     setActiveTab('files')
   }
 
@@ -232,7 +239,7 @@ function DetachedRepositoryFileArea({
 function DetachedBranchWorkspaceFileArea({ request }: { request: DetachedBranchWorkspaceFileAreaRequest }) {
   const t = useT()
   const [activeTab, setActiveTab] = useState<BranchWorkspaceFileAreaTab>(request.tab)
-  const [revealRequest, setRevealRequest] = useState<{ id: number; relativePath: string } | null>(null)
+  const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const query = useBranchWorkspaceQuery(request.root.id)
   const workspace = query.data?.ok ? query.data.items.find((item) => item.id === request.branchWorkspaceId) : undefined
@@ -255,7 +262,7 @@ function DetachedBranchWorkspaceFileArea({ request }: { request: DetachedBranchW
   }, [activeTab, request.branchWorkspaceId, t, workspace?.directoryName])
 
   function revealPath(relativePath: string) {
-    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
+    if (workspace) setRevealRequest({ repoId: request.root.id, worktreePath: workspace.path, relativePath })
     setActiveTab('files')
   }
 

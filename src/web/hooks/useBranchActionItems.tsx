@@ -1,3 +1,4 @@
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import {
   ArrowDown,
   ArrowUp,
@@ -51,6 +52,7 @@ export interface BranchActionItem {
   shortcut?: string
   icon: ReactNode
   onSelect: () => void | Promise<void>
+  parentDirectoryAction?: WorkspaceListItemAction['parentDirectoryAction']
 }
 
 export interface BranchActionItemGroups {

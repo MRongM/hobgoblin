@@ -1,3 +1,4 @@
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
@@ -594,6 +595,10 @@ export class TerminalSessionRegistry {
 
   scrollByTouch = (key: string, input: TerminalTouchScrollInput): void => {
     this.sessions.get(key)?.scrollByTouch(input)
+  }
+
+  filePathAtPoint = (key: string, point: TerminalMobileSelectionPoint): FilePathTarget | null => {
+    return this.sessions.get(key)?.filePathAtPoint(point) ?? null
   }
 
   beginMobileSelection = (key: string, point: TerminalMobileSelectionPoint): boolean => {

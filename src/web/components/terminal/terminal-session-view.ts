@@ -23,7 +23,10 @@ import {
   isMacNavigatorPlatform,
   terminalInputForMacOptionArrow,
 } from '#/web/components/terminal/terminal-keyboard.ts'
-import { registerTerminalRelativePathLinkProvider } from '#/web/components/terminal/terminal-path-links.ts'
+import {
+  registerTerminalRelativePathLinkProvider,
+  terminalFilePathAtPoint,
+} from '#/web/components/terminal/terminal-path-links.ts'
 import { registerTerminalLocalUrlLinkProvider } from '#/web/components/terminal/terminal-local-url-links.ts'
 import { registerTerminalOsc52ClipboardHandler } from '#/web/components/terminal/terminal-osc52-clipboard.ts'
 import { terminalInputForExtraKey, type TerminalExtraKeyInput } from '#/web/components/terminal/terminal-extra-keys.ts'
@@ -71,8 +74,8 @@ export class TerminalSessionView {
   private pinToBottomFrame: number | null = null
   private autoFitEnabled = true
   private host: HTMLElement | null = null
+  private hoverPathHandler: ((target: FilePathTarget | null) => void) | null = null
   private revealPathHandler: ((relativePath: string) => void) | null = null
-  private openPathPreviewHandler: ((target: FilePathTarget) => boolean) | null = null
   private openPathInEditorHandler: ((target: FilePathTarget) => void) | null = null
   private worktreePath: string | null = null
   private mobileScrollScrubber: HTMLElement | null = null
@@ -120,12 +123,12 @@ export class TerminalSessionView {
     onRenderRecoveryRequest: () => void
   }
 
-  setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
-    this.revealPathHandler = handler
+  setHoverPathHandler(handler: ((target: FilePathTarget | null) => void) | null): void {
+    this.hoverPathHandler = handler
   }
 
-  setOpenPathPreviewHandler(handler: ((target: FilePathTarget) => boolean) | null): void {
-    this.openPathPreviewHandler = handler
+  setRevealPathHandler(handler: ((relativePath: string) => void) | null): void {
+    this.revealPathHandler = handler
   }
 
   setOpenPathInEditorHandler(handler: ((target: FilePathTarget) => void) | null): void {
@@ -385,6 +388,10 @@ export class TerminalSessionView {
         }),
       )
     }
+  }
+
+  filePathAtPoint(point: TerminalMobileSelectionPoint): FilePathTarget | null {
+    return this.term ? terminalFilePathAtPoint(this.term, point, this.worktreePath) : null
   }
 
   beginMobileSelection(point: TerminalMobileSelectionPoint): boolean {
@@ -739,7 +746,7 @@ export class TerminalSessionView {
           () => this.revealPathHandler,
           () => this.openPathInEditorHandler,
           () => this.worktreePath,
-          () => this.openPathPreviewHandler,
+          (target) => this.hoverPathHandler?.(target),
         ),
       )
     } catch (err) {

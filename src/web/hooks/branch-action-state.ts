@@ -18,6 +18,7 @@ export type BranchActionItemId =
   | 'closeAllTerminals'
   | 'editor'
   | 'openDirectory'
+  | 'openParentDirectory'
   | 'createWorktree'
   | 'createTag'
   | 'createBranch'

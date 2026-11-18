@@ -298,6 +298,7 @@ function BranchWorkspaceMemberRowFrame({
     : undefined
   const row = (
     <WorkspaceListItemFrame
+      terminalDirectoryPath={member.worktreePath}
       size="member"
       leadingIcon={
         member.kind === 'repository' ? (

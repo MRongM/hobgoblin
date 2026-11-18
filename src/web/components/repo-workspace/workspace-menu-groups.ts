@@ -64,8 +64,9 @@ interface MenuActionDefinition {
 const definitions: Record<string, MenuActionDefinition> = {
   fileArea: { category: 'open', group: 0, order: 0, icon: 'files' },
   openDirectory: { category: 'open', group: 0, order: 1, icon: 'folder' },
-  editor: { category: 'open', group: 0, order: 2, icon: 'editor', preserveIcon: true },
-  remote: { category: 'open', group: 0, order: 3, icon: 'remote', preserveIcon: true },
+  openParentDirectory: { category: 'open', group: 0, order: 2, icon: 'folder' },
+  editor: { category: 'open', group: 0, order: 3, icon: 'editor', preserveIcon: true },
+  remote: { category: 'open', group: 0, order: 4, icon: 'remote', preserveIcon: true },
 
   refreshChanges: { category: 'git', group: 0, order: 0, icon: 'refresh' },
   sync: { category: 'git', group: 0, order: 1, icon: 'refresh' },

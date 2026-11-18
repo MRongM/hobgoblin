@@ -1,11 +1,11 @@
 # Terminal File Preview Design
 
-Status: extended on 2026-10-25 with file-area activation, same-file toggling, and external absolute paths.
+Updated on 2026-11-18 to describe terminal link navigation and explicit preview opening.
 
 ## Goal and terminology
 
 A temporary file preview is a read-only pane on the right of the active terminal.
-Terminal links and file-area rows share this preview. Clicking another supported file path replaces its content in the same pane; clicking the same file again closes it, even when the two clicks use equivalent relative/absolute paths or different line references.
+The terminal link’s **Open preview** action and file-area rows share this preview. Choosing **Open preview** again displays the file at the requested line. Clicking the same file-area row again closes the preview, including when its path is equivalent to the currently previewed absolute or relative path.
 Closing the pane returns its space to the terminal. This is renderer-local
 interaction state, with no session restoration or cross-window synchronization.
 
@@ -21,8 +21,9 @@ interaction state, with no session restoration or cross-window synchronization.
 
 ## Proposed interaction
 
-- The pane starts closed and opens when a supported terminal file link or file-area row is clicked.
-- One pane shows one file at a time; another file replaces it and the same file closes it.
+- A single click on a terminal link selects the corresponding file in the worktree file tree. An absolute path outside that worktree has no corresponding row.
+- The pane starts closed. Choosing **Open preview** in a supported terminal link’s context menu displays that file immediately. A file-area row can also open it.
+- On touchscreens, a stationary long press on a supported link offers **Open preview**. Dragging the selection offers **Copy**. A secondary mouse click also works on touch devices.
 - The header shows the file name, its worktree-relative path (or absolute path for an external file), and a close button.
 - When no terminal surface is mounted, the current workspace/file area supplies a fallback preview. Compact and narrow layouts show it full-width without mounting another resizable split.
 - File-area modified clicks preserve multi-selection, directory clicks preserve expansion, and double-click editor activation cancels pending preview changes.
@@ -34,12 +35,9 @@ interaction state, with no session restoration or cross-window synchronization.
   preview occupies approximately 40% of the terminal area, subject to usable
   minimum widths; the width remains local to this visit.
 - Existing double-click-to-open-in-editor remains available.
-- A supported single click waits 500 ms for double-click intent before changing
-  the terminal layout. Double-click editor activation cancels that pending
-  preview; closing, changing repository/worktree, and unmounting also cancel it.
-- Unsupported links retain the existing file-tree reveal behavior where present.
+- A file-area click waits 500 ms for double-click intent. In compact layouts a terminal click also waits before switching to the file area so a double click can reach the editor. Desktop terminal links reveal their file immediately.
 - Changing repository or worktree clears the preview. Changing terminal within
-  the same worktree may retain it; a new file click always replaces it.
+  the same worktree may retain it.
 - On compact Web layouts, the same preview becomes a dismissible full-width
   surface so it cannot squeeze the terminal into an unusable narrow column.
 
@@ -61,9 +59,7 @@ interaction state, with no session restoration or cross-window synchronization.
 ## Architecture and data flow
 
 Reuse terminal-path-links.ts and the shared file-path-target.ts recognition.
-Introduce a preview activation callback carrying the recognized file target
-without changing editor activation. Preserve available line/column information;
-a text preview can reveal its referenced line.
+Capture the recognized file target when the context menu opens. Its preview action preserves the referenced line and column even after the pointer leaves the link.
 
 Each preview target includes repository identity, worktree path, and file target.
 Relative paths retain the existing worktree-root interpretation; this feature does

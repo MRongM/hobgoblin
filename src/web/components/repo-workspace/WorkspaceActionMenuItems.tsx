@@ -42,7 +42,13 @@ export function WorkspaceActionMenuItems({ groups, context = false, busyId, pend
   const Sub = context ? ContextMenuSub : DropdownMenuSub
   const SubTrigger = context ? ContextMenuSubTrigger : DropdownMenuSubTrigger
   const SubContent = context ? ContextMenuSubContent : DropdownMenuSubContent
-  const sections = groupWorkspaceMenuActions(groups.map((group) => group.filter((action) => action.visible !== false)))
+  const sections = groupWorkspaceMenuActions(
+    groups.map((group) =>
+      group
+        .filter((action) => action.visible !== false)
+        .flatMap((action) => (action.parentDirectoryAction ? [action, action.parentDirectoryAction] : [action])),
+    ),
+  )
   const primaryActions = sections.flatMap((section) =>
     section.groups.flat().filter((action) => workspaceMenuActionDefinition(action.id)?.topLevel),
   )

@@ -964,6 +964,7 @@ export const en = {
   'file-tree.new-folder': 'New folder',
   'file-tree.refresh': 'Refresh',
   'directory-open.action': 'Open in file manager',
+  'directory-open.parent-action': 'Open parent directory in file manager',
   'directory-open.failed': 'Could not open the directory in the file manager.',
   'directory-open.desktop-only': 'Open this directory from the desktop app.',
   'directory-open.remote-unavailable': 'This remote directory cannot be opened directly in the local file manager.',
@@ -1017,6 +1018,7 @@ export const en = {
 
   // ---- Terminal -----------------------------------------------------------
   'terminal.file-preview.title': 'File preview',
+  'terminal.file-preview.open': 'Open preview',
   'terminal.file-preview.close': 'Close preview',
   'terminal.file-preview.loading': 'Loading preview…',
   'terminal.file-preview.unsupported': 'This file type cannot be previewed.',

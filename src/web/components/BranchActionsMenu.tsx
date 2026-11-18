@@ -61,7 +61,14 @@ export function BranchActionsDropdown({
   const { pending: pendingAction, run } = useAsyncPending<BranchActionItem['id']>()
   const visiblePatchItems = patchItems.filter((item) => item.visible)
   const visibleMainItems = mainItems.filter((item) => item.visible)
-  const visibleExternalItems = externalItems.filter((item) => item.visible)
+  const visibleExternalItems = externalItems
+    .filter((item) => item.visible)
+    .flatMap<BranchActionItem>((item) => {
+      const { parentDirectoryAction, ...directory } = item
+      return parentDirectoryAction
+        ? [directory, { ...parentDirectoryAction, id: 'openParentDirectory', visible: true }]
+        : [item]
+    })
   const visibleDestructiveItems = destructiveItems.filter((item) => item.visible)
   const itemGroups = [visibleExternalItems, visibleMainItems, visiblePatchItems, visibleDestructiveItems].filter(
     (items) => items.length > 0,

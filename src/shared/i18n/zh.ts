@@ -903,6 +903,7 @@ export const zh: Record<DictKey, string> = {
   'file-tree.new-folder': '新建文件夹',
   'file-tree.refresh': '刷新',
   'directory-open.action': '在文件管理器中打开',
+  'directory-open.parent-action': '在文件管理器中打开父目录',
   'directory-open.failed': '无法在文件管理器中打开目录。',
   'directory-open.desktop-only': '请在桌面应用中打开此目录。',
   'directory-open.remote-unavailable': '此远程目录无法直接用本机文件管理器打开。',
@@ -956,6 +957,7 @@ export const zh: Record<DictKey, string> = {
 
   // ---- Terminal ----------------------------------------------------------
   'terminal.file-preview.title': '文件预览',
+  'terminal.file-preview.open': '打开预览',
   'terminal.file-preview.close': '关闭预览',
   'terminal.file-preview.loading': '正在加载预览…',
   'terminal.file-preview.unsupported': '无法预览此文件类型。',
