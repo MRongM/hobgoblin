@@ -102,6 +102,8 @@ export interface SessionState {
   detailPaneSizes: WorkspaceDetailPaneSizes
   fileTreePaneSizes?: WorkspaceDetailPaneSizes
   selectedTerminalByWorktree?: Record<string, string>
+  /** Terminal keys mapped to their server session identity when hidden from the tab strip. */
+  stashedTerminals?: Record<string, string>
 }
 
 export interface RuntimeSettingsSnapshot extends SettingsPrefs {

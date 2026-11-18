@@ -1,4 +1,4 @@
-import type { ILink, ILinkProvider } from '@xterm/xterm'
+import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
 import { filePathTargetsForText, type FilePathTarget } from '#/shared/file-path-target.ts'
 import { pathStyle, worktreeRelativePathFromAbsolute } from '#/shared/path-semantics.ts'
 
@@ -22,7 +22,7 @@ interface TerminalLinkProviderHost {
 export interface TerminalRelativePathLink {
   text: string
   target: FilePathTarget
-  revealPath: string
+  revealPath: string | null
   startColumn: number
   endColumn: number
 }
@@ -41,9 +41,9 @@ interface TerminalLinkPosition {
 
 const MAX_TERMINAL_LINK_WINDOW_LENGTH = 4096
 const HARD_WRAP_PATH_PREFIX_PATTERN =
-  /(^|[\s"'`([{<：,，、;；（［【｛《〈「『])(?:\.\/)?(?:[A-Za-z0-9_@%+=.-]+\/)+$/u
+  /(^|[\s"'`([{<：,，、;；（［【｛《〈「『])(?:[A-Za-z]:[\\/]|\/|\.\/)?(?:[A-Za-z0-9_@%+=.-]+[\\/])+$/u
 const HARD_WRAP_PATH_CONTINUATION_PATTERN =
-  /^[ \t]*(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/u
+  /^[ \t]*(?:(?:[A-Za-z0-9_@%+=.-]+[\\/])+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/u
 
 function activationDetail(event: MouseEvent): number {
   const detail = (event as { detail?: unknown }).detail
@@ -55,7 +55,10 @@ function revealPathForTarget(target: FilePathTarget, worktreePath?: string | nul
   return worktreePath ? worktreeRelativePathFromAbsolute(worktreePath, target.path) : null
 }
 
-function terminalLineWindowForBufferLine(term: TerminalLinkProviderHost, lineIndex: number): TerminalLineWindow {
+function terminalLineWindowForBufferLine(
+  term: Pick<TerminalLinkProviderHost, 'buffer'>,
+  lineIndex: number,
+): TerminalLineWindow {
   let startLineIndex = lineIndex
   while (startLineIndex > 0) {
     const currentLine = term.buffer.active.getLine(startLineIndex)
@@ -118,7 +121,6 @@ function terminalRelativePathLinksForWindow(
   return filePathTargetsForText(window.text, { allowAbsolute: !!worktreePath })
     .map((span) => {
       const revealPath = revealPathForTarget(span.target, worktreePath)
-      if (!revealPath) return null
       const start = terminalPositionForOffset(window, span.startIndex)
       const end = terminalPositionForOffset(window, span.endIndex - 1)
       if (!start || !end) return null
@@ -135,11 +137,39 @@ function terminalRelativePathLinksForWindow(
     .filter((link): link is TerminalRelativePathLink & { rangeLineStart: number; rangeLineEnd: number } => !!link)
 }
 
+export function terminalFilePathAtPoint(
+  term: Pick<Terminal, 'element' | 'buffer' | 'cols' | 'rows'>,
+  point: { clientX: number; clientY: number },
+  worktreePath: string | null,
+): FilePathTarget | null {
+  const rect = term.element?.querySelector('.xterm-screen')?.getBoundingClientRect()
+  if (!rect || !rect.width || !rect.height) return null
+  const column = Math.floor(((point.clientX - rect.left) * term.cols) / rect.width)
+  const row = Math.floor(((point.clientY - rect.top) * term.rows) / rect.height)
+  if (column < 0 || column >= term.cols || row < 0 || row >= term.rows) return null
+  const lineIndex = term.buffer.active.viewportY + row
+  const line = term.buffer.active.getLine(lineIndex)
+  if (!line) return null
+  const window = terminalLineWindowForBufferLine(term, lineIndex)
+  const index = lineIndex - window.startLineIndex
+  // A wide character occupies two terminal cells but only one position in the parsed text.
+  const startColumn = column > 0 && line.getCell(column)?.getWidth() === 0 ? column - 1 : column
+  const prefixLength = line.translateToString(false, 0, startColumn).length
+  if (prefixLength >= (window.lineLengths[index] ?? 0)) return null
+  const offset = window.lineStarts[index]! + prefixLength
+  return (
+    filePathTargetsForText(window.text, { allowAbsolute: !!worktreePath }).find(
+      (span) => span.startIndex <= offset && offset < span.endIndex,
+    )?.target ?? null
+  )
+}
+
 export function registerTerminalRelativePathLinkProvider(
   term: TerminalLinkProviderHost,
   getRevealPathHandler: () => RevealPathHandler | null,
   getOpenPathInEditorHandler: () => OpenPathInEditorHandler | null,
   getWorktreePath: WorktreePathProvider = () => null,
+  onHoverPath: (target: FilePathTarget | null) => void = () => {},
 ): { dispose: () => void } {
   const provider: ILinkProvider = {
     provideLinks(bufferLineNumber, callback) {
@@ -159,12 +189,15 @@ export function registerTerminalRelativePathLinkProvider(
           },
           text: link.text,
           decorations: { pointerCursor: true, underline: true },
+          hover: () => onHoverPath(link.target),
+          leave: () => onHoverPath(null),
           activate: (event) => {
+            if (event.button !== 0) return
             if (activationDetail(event) >= 2) {
               getOpenPathInEditorHandler()?.(link.target)
               return
             }
-            getRevealPathHandler()?.(link.revealPath)
+            if (link.revealPath) getRevealPathHandler()?.(link.revealPath)
           },
         }))
       callback(links.length > 0 ? links : undefined)

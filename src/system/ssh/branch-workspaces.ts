@@ -1,7 +1,9 @@
-import type {
-  BranchWorkspaceAuxiliaryCandidate,
-  BranchWorkspacePathInspection,
-  BranchWorkspacePathKind,
+import path from 'node:path'
+import {
+  isBranchWorkspaceDirectoryName,
+  type BranchWorkspaceAuxiliaryCandidate,
+  type BranchWorkspacePathInspection,
+  type BranchWorkspacePathKind,
 } from '#/shared/branch-workspaces.ts'
 import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import {
@@ -18,8 +20,86 @@ type RemoteBranchWorkspaceRunner = (
 ) => Promise<RemoteCommandResult>
 
 interface RemoteBranchWorkspaceOptions {
+  sourceRootPath?: string
   signal?: AbortSignal
   run?: RemoteBranchWorkspaceRunner
+}
+
+export interface RemoteBranchWorkspaceDirectory {
+  directoryName: string
+  path: string
+  branch: string
+  members: {
+    repositoryName: string
+    repositoryPath: string
+    worktreePath: string
+    branch: string
+    kind?: 'repository' | 'worktree'
+    head?: string
+    memberId?: string
+  }[]
+}
+
+export async function discoverRemoteBranchWorkspaceDirectories(
+  target: RemoteRepoTarget,
+  rootPath: string,
+  options: RemoteBranchWorkspaceOptions & {
+    directoryNames?: readonly string[]
+    registeredDirectoryNames?: readonly string[]
+  } = {},
+): Promise<RemoteBranchWorkspaceDirectory[]> {
+  const payload = parsePayload(
+    await executeRemoteBranchWorkspaceCommand(
+      target,
+      {
+        type: 'discoverBranchWorkspaceDirectories',
+        rootPath,
+        ...(options.directoryNames ? { directoryNames: options.directoryNames } : {}),
+        ...(options.registeredDirectoryNames ? { registeredDirectoryNames: options.registeredDirectoryNames } : {}),
+      },
+      options,
+    ),
+  )
+  if (payload.ok !== true || !Array.isArray(payload.directories)) throw payloadError(payload)
+  return payload.directories.map((value) => {
+    const directory = asRecord(value)
+    if (
+      !directory ||
+      !isSafeText(directory.directoryName) ||
+      (!options.directoryNames?.includes(directory.directoryName) &&
+        !options.registeredDirectoryNames?.includes(directory.directoryName) &&
+        !isBranchWorkspaceDirectoryName(directory.directoryName)) ||
+      directory.path !== path.posix.join(rootPath, directory.directoryName) ||
+      typeof directory.branch !== 'string' ||
+      !Array.isArray(directory.members)
+    )
+      throw invalidResponse()
+    const members = directory.members.map((value) => {
+      const member = asRecord(value)
+      if (
+        !member ||
+        !isSafeText(member.repositoryName) ||
+        !isSafeText(member.worktreePath) ||
+        !path.posix.isAbsolute(member.worktreePath) ||
+        !isSafeText(member.repositoryPath) ||
+        !path.posix.isAbsolute(member.repositoryPath) ||
+        typeof member.branch !== 'string'
+      )
+        throw invalidResponse()
+      return {
+        repositoryName: member.repositoryName,
+        repositoryPath: member.repositoryPath,
+        worktreePath: member.worktreePath as string,
+        branch: member.branch,
+        ...(member.kind === 'repository' || member.kind === 'worktree'
+          ? { kind: member.kind as 'repository' | 'worktree' }
+          : {}),
+        ...(typeof member.memberId === 'string' && member.memberId ? { memberId: member.memberId } : {}),
+        ...(typeof member.head === 'string' && member.head ? { head: member.head } : {}),
+      }
+    })
+    return { directoryName: directory.directoryName, path: directory.path as string, branch: directory.branch, members }
+  })
 }
 
 export async function listRemoteBranchWorkspaceAuxiliaryCandidates(
@@ -76,7 +156,13 @@ export async function materializeRemoteBranchWorkspaceSymlink(
 ): Promise<void> {
   await executeMutation(
     target,
-    { type: 'materializeBranchWorkspaceSymlink', rootPath, sourcePath, targetPath },
+    {
+      type: 'materializeBranchWorkspaceSymlink',
+      rootPath,
+      sourcePath,
+      targetPath,
+      sourceRootPath: options.sourceRootPath,
+    },
     options,
   )
 }
@@ -88,7 +174,11 @@ export async function copyRemoteBranchWorkspaceEntry(
   targetPath: string,
   options: RemoteBranchWorkspaceOptions = {},
 ): Promise<void> {
-  await executeMutation(target, { type: 'copyBranchWorkspaceEntry', rootPath, sourcePath, targetPath }, options)
+  await executeMutation(
+    target,
+    { type: 'copyBranchWorkspaceEntry', rootPath, sourcePath, targetPath, sourceRootPath: options.sourceRootPath },
+    options,
+  )
 }
 
 export async function fingerprintRemoteBranchWorkspaceEntry(

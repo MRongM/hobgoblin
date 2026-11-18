@@ -11,7 +11,9 @@ import {
 } from '#/web/components/terminal/terminal-session-context.ts'
 import type { TerminalSessionContextValue, TerminalSessionReadContextValue } from '#/web/components/terminal/types.ts'
 import { emptyRepo } from '#/web/stores/repos/helpers.ts'
-import { createRepoBranch } from '#/web/stores/repos/test-utils.ts'
+import { createRepoBranch, resetReposStore } from '#/web/stores/repos/test-utils.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 
 const actionState = vi.hoisted(() => ({
   editor: vi.fn(),
@@ -25,7 +27,10 @@ const actionState = vi.hoisted(() => ({
   createWorktree: vi.fn(),
   sync: vi.fn(),
   tmuxVisible: true,
+  refreshWorkspace: vi.fn(),
 }))
+vi.mock('#/web/branch-workspace-queries.ts', () => ({ refreshBranchWorkspaceQuery: actionState.refreshWorkspace }))
+
 const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
 
 vi.mock('#/web/bootstrap.ts', () => ({
@@ -53,6 +58,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
     options?: {
       onNavigateToInternalTerminal?: (target: unknown) => void | Promise<void>
       windowsInternalTerminalShellMenu?: boolean
+      onCheckoutSuccess?: (branch: string) => void | Promise<void>
     },
   ) => ({
     externalItems: [
@@ -96,7 +102,7 @@ vi.mock('#/web/hooks/useBranchActionItems.tsx', () => ({
       branchAction('sync', actionState.sync),
       branchAction('createBranch'),
       branchAction('pullRemoteBranch'),
-      branchAction('checkoutTo'),
+      branchAction('checkoutTo', () => options?.onCheckoutSuccess?.('release/next')),
       branchAction('merge'),
       branchAction('mergeOut'),
       branchAction('commit'),
@@ -137,12 +143,14 @@ let root: Root
 
 beforeEach(() => {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  resetReposStore()
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
   Object.values(actionState).forEach((mock) => {
     if (typeof mock === 'function') mock.mockReset()
   })
+  actionState.refreshWorkspace.mockResolvedValue({ ok: true })
   actionState.tmuxVisible = true
   platformState.hostPlatform = 'linux'
 })
@@ -155,6 +163,92 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceMemberRow', () => {
+  test('refreshes a switched member while retaining parent, member, directory and terminal scope', async () => {
+    const item = workspace()
+    const member = repositoryMember()
+    const repo = emptyRepo('/workspace/api', 'api')
+    const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
+    repo.data.branches = [branch, createRepoBranch('release/next')]
+    repo.ui.selectedBranch = member.targetBranch
+    const context = {
+      kind: 'branch-workspace' as const,
+      branchWorkspaceId: item.id,
+      memberRepositoryName: member.repositoryName,
+    }
+    const refresh = vi.spyOn(useReposStore.getState(), 'refreshCoreData').mockResolvedValue(undefined)
+    useReposStore.setState({ repos: { [repo.id]: repo }, workspaceActiveContextByRoot: { [item.rootId]: context } })
+    const terminals = terminalCommandContext()
+    const terminalScope = worktreeTerminalKey(repo.id, member.worktreePath)
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: 0,
+          navigable: true,
+          repositoryId: repo.id,
+          worktreePath: member.worktreePath,
+          actionTarget: { repo, branch },
+        }}
+        onOpenInternalTerminal={vi.fn()}
+      />,
+      terminals,
+    )
+    const switchAction = (await openMenu()).find((entry) => entry.getAttribute('data-action') === 'checkoutTo')
+    expect(switchAction).toBeDefined()
+    await act(async () => {
+      switchAction!.click()
+      await Promise.resolve()
+    })
+    expect(refresh).toHaveBeenCalledWith(repo.id)
+    expect(actionState.refreshWorkspace).toHaveBeenCalledWith(expect.anything(), item.rootId)
+    expect(useReposStore.getState().workspaceActiveContextByRoot[item.rootId]).toEqual(context)
+    expect(useReposStore.getState().repos[repo.id]?.ui.selectedBranch).toBe('release/next')
+    expect(worktreeTerminalKey(repo.id, member.worktreePath)).toBe(terminalScope)
+    expect(terminals.createTerminal).not.toHaveBeenCalled()
+    expect(terminals.closeTerminalAndDismissDetailIfLast).not.toHaveBeenCalled()
+    refresh.mockRestore()
+  })
+
+  test('labels detached complete members and keeps terminal and branch-switch access', async () => {
+    const item = workspace()
+    const member = { ...repositoryMember(), kind: 'repository' as const, currentBranch: null, head: 'abcdef123456' }
+    const repo = emptyRepo('/workspace/api-copy', 'api-copy')
+    const branch = createRepoBranch('HEAD', { worktree: { path: member.worktreePath } })
+    render(
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected
+        disabled={false}
+        presentation={{
+          dirty: false,
+          changeCount: 0,
+          navigable: true,
+          repositoryId: repo.id,
+          worktreePath: member.worktreePath,
+          actionTarget: { repo, branch },
+        }}
+        onOpenInternalTerminal={vi.fn()}
+      />,
+    )
+    expect(container.querySelector('[data-testid="branch-workspace-member-current-branch"]')?.textContent).toBe(
+      'branches.detached',
+    )
+    expect(container.querySelector('[data-testid="branch-workspace-member-kind"]')?.textContent).toBe(
+      'workspace.branch-workspace.member-mode.repository',
+    )
+    expect(container.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(
+      false,
+    )
+    const menu = await openMenu()
+    expect(menu.find((entry) => entry.dataset.action === 'checkoutTo')?.hasAttribute('data-disabled')).toBe(false)
+    expect(menu.find((entry) => entry.dataset.action === 'push')?.hasAttribute('data-disabled')).toBe(true)
+  })
+
   test('shows only a non-empty abbreviated commit hash after the member name', () => {
     const item = workspace()
     const member = repositoryMember()
@@ -240,6 +334,38 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(behindDelta?.textContent).toContain('2')
   })
 
+  test('drags the member worktree path even when the repository is elsewhere', () => {
+    const member = repositoryMember()
+    const repo = emptyRepo('/repositories/api', 'api')
+    const branch = createRepoBranch(member.targetBranch, { worktree: { path: member.worktreePath } })
+    const presentation = {
+      dirty: false,
+      changeCount: 0,
+      navigable: true,
+      repositoryId: repo.id,
+      worktreePath: member.worktreePath,
+      actionTarget: { repo, branch },
+    }
+    const item = workspace()
+    const row = (disabled: boolean) => (
+      <BranchWorkspaceMemberRow
+        item={item}
+        member={member}
+        selected={false}
+        disabled={disabled}
+        presentation={presentation}
+      />
+    )
+    render(row(false))
+    const main = container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')!
+    expect(main.draggable).toBe(true)
+    const setData = vi.fn()
+    main.dispatchEvent(Object.assign(new Event('dragstart', { bubbles: true }), { dataTransfer: { setData } }))
+    expect(setData).toHaveBeenCalledWith('application/x-goblin-terminal-directory', member.worktreePath)
+    render(row(true))
+    expect(main.draggable).toBe(false)
+  })
+
   test('renders a compact actionable member row without independent-worktree lifecycle actions', async () => {
     const item = workspace()
     const member = repositoryMember()
@@ -298,6 +424,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'sync',
       'createBranch',
       'pullRemoteBranch',
+      'checkoutTo',
       'merge',
       'mergeOut',
       'commit',
@@ -428,6 +555,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'sync',
       'createBranch',
       'pullRemoteBranch',
+      'checkoutTo',
       'merge',
       'mergeOut',
       'commit',
@@ -491,42 +619,6 @@ describe('BranchWorkspaceMemberRow', () => {
     expect(sync?.hasAttribute('data-disabled')).toBe(true)
   })
 
-  test('keeps a drifted registered worktree actionable with a weak repair hint', async () => {
-    const item = workspace()
-    const member = { ...repositoryMember(), ready: false }
-    const branch = createRepoBranch('release/previous', { worktree: { path: member.worktreePath } })
-    const repo = emptyRepo('/workspace/api', 'api')
-    repo.data.branches = [branch]
-
-    render(
-      <BranchWorkspaceMemberRow
-        item={item}
-        member={member}
-        selected={false}
-        disabled={false}
-        presentation={{
-          dirty: false,
-          changeCount: null,
-          navigable: true,
-          warning: 'workspace.branch-workspace.member-branch-drift',
-          repositoryId: repo.id,
-          worktreePath: member.worktreePath,
-          actionTarget: { repo, branch },
-        }}
-        onSelectRepositoryMember={vi.fn()}
-        onOpenInternalTerminal={vi.fn()}
-      />,
-    )
-
-    expect(container.querySelector<HTMLButtonElement>('[data-testid="branch-workspace-member-api"]')?.disabled).toBe(
-      false,
-    )
-    const hint = container.querySelector('[data-testid="branch-workspace-member-repair-hint"]')
-    expect(hint?.textContent).toBe('workspace.branch-workspace.lifecycle.needs-repair')
-    expect(hint?.className).toContain('text-muted-foreground')
-    expect((await openMenu()).some((entry) => !entry.hasAttribute('data-disabled'))).toBe(true)
-  })
-
   test('reuses the member worktree target for scoped context actions', async () => {
     const item = workspace()
     const member = repositoryMember()
@@ -565,6 +657,7 @@ describe('BranchWorkspaceMemberRow', () => {
       'terminal.restore-directory-tmux',
       'createWorktree',
       'sync',
+      'checkoutTo',
       'alignRemote',
       'terminal.close-all',
       'tmux.cleanup.action',
@@ -598,10 +691,10 @@ describe('BranchWorkspaceMemberRow', () => {
   })
 })
 
-function render(children: ReactNode): void {
+function render(children: ReactNode, commands = terminalCommandContext()): void {
   act(() => {
     root.render(
-      <TerminalSessionContext.Provider value={terminalCommandContext()}>
+      <TerminalSessionContext.Provider value={commands}>
         <TerminalSessionReadContext.Provider value={terminalReadContext()}>
           <ul>{children}</ul>
         </TerminalSessionReadContext.Provider>

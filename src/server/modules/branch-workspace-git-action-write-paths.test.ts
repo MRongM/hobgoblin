@@ -279,6 +279,27 @@ function batchSetUpstreamPlan(repositoryNames = ['api', 'web']): BranchWorkspace
 }
 
 describe('createBranchWorkspaceGitActionWriteService', () => {
+  test('cancels superseded plans and never installs their late results', async () => {
+    const old = deferred<{ ok: true; plan: BranchWorkspaceGitActionPlan }>()
+    const latest = { ...batchPlan([]), token: 'sha256:latest' }
+    const buildPlan = vi
+      .fn()
+      .mockImplementationOnce(() => old.promise)
+      .mockResolvedValueOnce({ ok: true, plan: latest })
+    const validatePlan = vi.fn(async () => ({ ok: true as const, plan: latest }))
+    const service = createBranchWorkspaceGitActionWriteService({ buildPlan, validatePlan })
+    const request = { kind: 'batch-commit' as const, branchWorkspaceId: 'ws-1' }
+    const first = service.plan(ROOT, request)
+    const oldSignal = buildPlan.mock.calls[0]?.[3] as AbortSignal
+    await expect(service.plan(ROOT, request)).resolves.toEqual({ ok: true, plan: latest })
+    expect(oldSignal.aborted).toBe(true)
+    old.resolve({ ok: true, plan: batchPlan([]) })
+    await expect(first).resolves.toEqual({ ok: false, message: 'cancelled' })
+    await expect(
+      service.execute(ROOT, { kind: 'batch-commit', planToken: latest.token, messages: [] }),
+    ).resolves.toMatchObject({ ok: true })
+  })
+
   test('sets selected member upstreams in manifest order and invalidates only touched repositories', async () => {
     const plan = batchSetUpstreamPlan()
     const setUpstream = vi.fn(

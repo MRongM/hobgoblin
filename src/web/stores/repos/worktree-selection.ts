@@ -19,7 +19,7 @@ export function detachedHeadTerminalLabel(worktree: Pick<RepoWorktreeState, 'hea
 }
 
 export function isSelectableDetachedWorktree(worktree: RepoWorktreeState | undefined): worktree is RepoWorktreeState {
-  return !!worktree && worktree.isDetached === true && !worktree.isMain && !worktree.isPrunable
+  return !!worktree && worktree.isDetached === true && !worktree.isPrunable
 }
 
 export function selectedRepoWorktree(repo: RepoSelectionSource): SelectedRepoWorktreeContext | null {

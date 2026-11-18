@@ -46,6 +46,39 @@ function resolve(
 }
 
 describe('resolveBranchWorkspaceMemberTarget', () => {
+  test('preserves detached HEAD and independent target identity without configured sources', () => {
+    const repo = replaceRepo(repository(), (draft) => {
+      draft.data.branches = []
+      draft.data.worktreesByPath[worktreePath] = {
+        path: worktreePath,
+        isMain: true,
+        isDetached: true,
+        head: 'abcdef123456',
+      }
+    })
+    expect(
+      resolve(member({ repositoryId, kind: 'repository', currentBranch: null, head: 'abcdef123456' }), {
+        configured: false,
+        repo,
+      }),
+    ).toMatchObject({
+      ok: true,
+      target: { repositoryId, checkedOutBranch: null, worktreePath },
+    })
+  })
+
+  test('treats a switched member current branch as ordinary ready state', () => {
+    expect(
+      resolve(member({ currentBranch: 'release/next' }), { repo: repository({ branch: 'release/next' }) }),
+    ).toMatchObject({
+      ok: true,
+      target: { checkedOutBranch: 'release/next' },
+    })
+    expect(
+      resolve(member({ currentBranch: 'release/next' }), { repo: repository({ branch: 'release/next' }) }),
+    ).not.toHaveProperty('warning')
+  })
+
   test('resolves a discovered repository without configured workspace membership', () => {
     expect(resolve(member({ repositoryId }), { configured: false })).toMatchObject({
       ok: true,
@@ -106,24 +139,6 @@ describe('resolveBranchWorkspaceMemberTarget', () => {
     expect(resolve(member(), { repo: repository({ path: '/workspace/other/api' }) })).toEqual({
       ok: false,
       reason: 'workspace.branch-workspace.member-worktree-mismatch',
-    })
-  })
-
-  test('uses the branch registered at the member path as a repairable drift target', () => {
-    expect(
-      resolve(member({ ready: false }), {
-        repo: repository({ branch: 'release/previous' }),
-      }),
-    ).toEqual({
-      ok: true,
-      warning: 'workspace.branch-workspace.member-branch-drift',
-      target: {
-        repositoryId,
-        repositoryName: 'api',
-        targetBranch: 'feature/auth',
-        checkedOutBranch: 'release/previous',
-        worktreePath,
-      },
     })
   })
 })

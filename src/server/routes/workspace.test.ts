@@ -85,6 +85,7 @@ describe('workspace routes', () => {
       plan: mocks.planBranchWorkspace,
       execute: mocks.executeBranchWorkspace,
       abort: mocks.abortBranchWorkspace,
+      isActive: vi.fn(() => false),
       reorder: mocks.reorderBranchWorkspaces,
     })
     mocks.createBranchWorkspaceGitActionWriteService.mockReset()
@@ -92,6 +93,7 @@ describe('workspace routes', () => {
       plan: mocks.planBranchWorkspaceGitAction,
       execute: mocks.executeBranchWorkspaceGitAction,
       abort: mocks.abortBranchWorkspaceGitAction,
+      isActive: vi.fn(() => false),
       activeOperation: mocks.activeBranchWorkspaceGitAction,
     })
     mocks.createBranchWorkspaceDependencyWriteService.mockReset()
@@ -132,6 +134,25 @@ describe('workspace routes', () => {
     mocks.planWorkspacePull.mockReset()
     mocks.executeWorkspacePull.mockReset()
     mocks.abortWorkspacePull.mockReset()
+  })
+
+  test('shares live operation checks between lifecycle, dependency, and Git writes', () => {
+    createWorkspaceRoutes()
+    const factories = [
+      mocks.createBranchWorkspaceWriteService,
+      mocks.createBranchWorkspaceDependencyWriteService,
+      mocks.createBranchWorkspaceGitActionWriteService,
+    ]
+    const isOperationActive = factories[0]!.mock.calls[0]?.[0].isOperationActive
+    expect(isOperationActive('/workspace')).toBe(false)
+    for (const factory of factories) {
+      expect(factory.mock.calls[0]?.[0].isOperationActive).toBe(isOperationActive)
+      const isActive = factory.mock.results[0]?.value.isActive
+      isActive.mockReturnValue(true)
+      expect(isOperationActive('/workspace')).toBe(true)
+      isActive.mockReturnValue(false)
+    }
+    expect(isOperationActive('/workspace')).toBe(false)
   })
 
   test('delegates workspace discovery and returns its result', async () => {

@@ -809,7 +809,7 @@ describe('RepoExplorerPane', () => {
           repoId={REPO_ID}
           layout="left-right"
           showActions
-          revealRequest={{ id: 1, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }}
+          revealRequest={{ worktreePath: REPO_ID, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }}
         />,
       )
     })
@@ -1654,13 +1654,18 @@ describe('RepoExplorerPane', () => {
   })
 
   test('does not replay a file reveal request in another repo', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: 'main',
+    })
     const repoA = useReposStore.getState().repos[REPO_ID]
     const repoB = seedRepoState({ id: REPO_B_ID, selectedBranch: 'main', explorerTab: 'changes' })
     useReposStore.setState(() => ({
       repos: { [REPO_ID]: repoA!, [REPO_B_ID]: repoB },
       order: [REPO_ID, REPO_B_ID],
     }))
-    const revealRequest = { id: 1, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }
+    const revealRequest = { worktreePath: REPO_ID, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1776,6 +1781,11 @@ describe('RepoExplorerPane', () => {
   })
 
   test('changed file clicks switch back to files with a reveal request', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: 'main',
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1785,7 +1795,7 @@ describe('RepoExplorerPane', () => {
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
     await act(async () => {
-      tabs[1]?.click()
+      tabs.find((tab) => tab.getAttribute('aria-controls') === 'repo-explorer-changes-panel')!.click()
     })
     await act(async () => {
       container.querySelector<HTMLButtonElement>('[data-testid="project-changes-panel"]')?.click()
@@ -1800,6 +1810,11 @@ describe('RepoExplorerPane', () => {
   })
 
   test('history file clicks switch back to files with a reveal request', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: 'main',
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1829,6 +1844,11 @@ describe('RepoExplorerPane', () => {
   })
 
   test('external reveal requests switch to files with the requested path', async () => {
+    seedRepoState({
+      id: REPO_ID,
+      branches: [createRepoBranch('main', { worktree: { path: REPO_ID } })],
+      selectedBranch: 'main',
+    })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -1838,7 +1858,7 @@ describe('RepoExplorerPane', () => {
 
     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
     await act(async () => {
-      tabs[2]?.click()
+      tabs.find((tab) => tab.getAttribute('aria-controls') === 'repo-explorer-status-panel')!.click()
     })
     expect(container.querySelector('[data-testid="project-status-panel"]')).toBeTruthy()
 
@@ -1848,7 +1868,7 @@ describe('RepoExplorerPane', () => {
           repoId="/repo"
           layout="left-right"
           showActions
-          revealRequest={{ id: 1, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }}
+          revealRequest={{ worktreePath: REPO_ID, repoId: REPO_ID, relativePath: 'src/from-terminal.ts' }}
         />,
       )
     })

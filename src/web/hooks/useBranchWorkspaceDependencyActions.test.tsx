@@ -55,6 +55,39 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceDependencyActions', () => {
+  test('ignores an obsolete response while the latest plan is still loading', async () => {
+    const first = deferred<{ ok: true; plan: BranchWorkspaceDependencyPlan }>()
+    const latest = deferred<{ ok: true; plan: BranchWorkspaceDependencyPlan }>()
+    mocks.plan.mockImplementationOnce(() => first.promise).mockImplementationOnce(() => latest.promise)
+    let state: ReturnType<typeof useBranchWorkspaceDependencyActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    let old!: Promise<boolean>
+    let next!: Promise<boolean>
+    act(() => {
+      old = state!.requestPlan({ operation: 'remove', branchWorkspaceId: 'branch-1', names: ['.env'] })
+    })
+    act(() => {
+      next = state!.requestPlan({ operation: 'remove', branchWorkspaceId: 'branch-1', names: ['config'] })
+    })
+    await act(async () => {
+      first.resolve({ ok: true, plan })
+      await old
+    })
+    expect(state!.planning).toBe(true)
+    expect(state!.plan).toBeNull()
+    await act(async () => {
+      latest.resolve({ ok: true, plan: { ...plan, token: 'latest' } })
+      await next
+    })
+    expect(state!.plan?.token).toBe('latest')
+  })
+
   test('separates planning from execution and forwards preview cancellation', async () => {
     const execution = deferred<Awaited<ReturnType<typeof mocks.execute>>>()
     mocks.plan.mockResolvedValue({ ok: true, plan })

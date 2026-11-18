@@ -3,6 +3,7 @@ import { persistSessionState } from '#/web/settings-write-paths.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { restorableWorkspaceStateFromStore } from '#/web/stores/repos/selector-state.ts'
 import { sessionStateFromRestorableWorkspaceState } from '#/web/restorable-workspace-state.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 const SESSION_SAVE_DEBOUNCE_MS = 200
 
 export function useSessionPersistence() {
@@ -21,6 +22,7 @@ export function useSessionPersistence() {
   const detailPaneSizes = useReposStore((s) => s.detailPaneSizes)
   const fileTreePaneSizes = useReposStore((s) => s.fileTreePaneSizes)
   const selectedTerminalByWorktree = useReposStore((s) => s.selectedTerminalByWorktree)
+  const stashedTerminals = useTerminalStashStore((s) => s.stashedTerminals)
   const sessionReady = useReposStore((s) => s.sessionReady)
   const repos = useReposStore((s) => s.repos)
   const lastSavedRef = useRef<string | null>(null)
@@ -51,6 +53,7 @@ export function useSessionPersistence() {
       repos,
       restorableWorkspaceState,
     })
+    if (Object.keys(stashedTerminals).length > 0) session.stashedTerminals = stashedTerminals
     const serialized = JSON.stringify(session)
     const immediateKey = JSON.stringify({
       openRepos: session.openRepos,
@@ -63,6 +66,7 @@ export function useSessionPersistence() {
       detailFocusMode,
       workspaceLayout: restorableWorkspaceState.workspaceLayout,
       selectedTerminalByWorktree: session.selectedTerminalByWorktree,
+      stashedTerminals,
     })
     const immediate = lastImmediateKeyRef.current !== immediateKey
     lastImmediateKeyRef.current = immediateKey
@@ -94,6 +98,7 @@ export function useSessionPersistence() {
     detailPaneSizes,
     fileTreePaneSizes,
     selectedTerminalByWorktree,
+    stashedTerminals,
     repos,
   ])
 }

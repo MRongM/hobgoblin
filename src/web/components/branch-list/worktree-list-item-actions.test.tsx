@@ -60,6 +60,16 @@ function ids(groups: ReturnType<typeof projectWorktreeListItemActions>['menuGrou
 }
 
 describe('projectWorktreeListItemActions', () => {
+  test('offers member branch switching in both menus without ordinary branch navigation', () => {
+    const projection = projectWorktreeListItemActions(actionGroups(), {
+      policy: 'branch-workspace-member',
+      hasWorktree: true,
+    })
+    expect(projection.menuGroups.flat().map((item) => item.id)).toContain('checkoutTo')
+    expect(projection.menuGroups.flat().map((item) => item.id)).not.toContain('checkout')
+    expect(projection.contextMenu.actions.map((item) => item.id)).toContain('checkoutTo')
+  })
+
   test('preserves the ordinary worktree quick actions and existing menu projection', () => {
     const projection = projectWorktreeListItemActions(actionGroups(), {
       policy: 'ordinary-worktree',
@@ -180,6 +190,7 @@ describe('projectWorktreeListItemActions', () => {
         'sync',
         'createBranch',
         'pullRemoteBranch',
+        'checkoutTo',
         'merge',
         'commit',
         'copyPatch',
@@ -187,7 +198,12 @@ describe('projectWorktreeListItemActions', () => {
       ['createTag'],
       ['closeAllTerminals', 'alignRemote', 'resetHard'],
     ])
-    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual([
+      'createWorktree',
+      'sync',
+      'checkoutTo',
+      'alignRemote',
+    ])
     expect(projection.menuGroups[1]?.[0]?.disabled).toBe(true)
   })
 
@@ -203,7 +219,12 @@ describe('projectWorktreeListItemActions', () => {
     expect(projection.editor?.disabled).toBe(true)
     expect(projection.internalTerminal?.disabled).toBe(true)
     expect(projection.contextMenu.externalTerminal.disabled).toBe(true)
-    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual(['createWorktree', 'sync', 'alignRemote'])
+    expect(projection.contextMenu.actions.map((item) => item.id)).toEqual([
+      'createWorktree',
+      'sync',
+      'checkoutTo',
+      'alignRemote',
+    ])
     expect(projection.contextMenu.actions.every((item) => item.disabled)).toBe(true)
   })
 })

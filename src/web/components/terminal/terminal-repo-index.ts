@@ -80,7 +80,7 @@ export function repoIndexWithBranchWorkspaces(
       }
       clonedRoots.add(workspace.rootId)
     }
-    next[workspace.rootId]!.branchByWorktreePath[workspace.path] = workspace.branch
+    next[workspace.rootId]!.branchByWorktreePath[workspace.path] = workspace.directoryName
     next[workspace.rootId]!.branchWorkspaceIdByWorktreePath![workspace.path] = workspace.id
   }
   return next

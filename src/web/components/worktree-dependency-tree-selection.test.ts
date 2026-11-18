@@ -6,9 +6,9 @@ import {
 } from '#/web/components/worktree-dependency-tree-selection.ts'
 
 describe('worktree dependency tree selection', () => {
-  test('selects new paths as copies by default', () => {
+  test('selects new paths as symbolic links by default', () => {
     expect(selectWorktreeDependency([], 'backend/.venv', true)).toEqual([
-      { path: 'backend/.venv', mode: 'copy' },
+      { path: 'backend/.venv', mode: 'symlink' },
     ])
   })
 
@@ -24,7 +24,7 @@ describe('worktree dependency tree selection', () => {
       ),
     ).toEqual([
       { path: 'frontend/node_modules', mode: 'symlink' },
-      { path: 'backend/.venv', mode: 'copy' },
+      { path: 'backend/.venv', mode: 'symlink' },
     ])
   })
 

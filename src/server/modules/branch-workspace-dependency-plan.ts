@@ -1,3 +1,4 @@
+import { branchWorkspaceStorageRootIdAtPath } from '#/server/modules/workspace-paths.ts'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import {
@@ -14,11 +15,11 @@ import type {
   BranchWorkspaceDependencyReadResult,
   BranchWorkspaceDependencyRemovePlan,
 } from '#/shared/branch-workspace-dependencies.ts'
-import type { BranchWorkspaceReadResult } from '#/shared/branch-workspaces.ts'
+import { isBranchWorkspaceRootUsable } from '#/shared/branch-workspaces.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 
 export interface BranchWorkspaceDependencyPlanDependencies {
-  readSnapshot?: (rootId: string, signal?: AbortSignal) => Promise<BranchWorkspaceReadResult>
+  readSnapshot?: typeof readBranchWorkspaceSnapshot
   inspectPath?: typeof inspectBranchWorkspacePath
   fingerprintEntry?: typeof fingerprintBranchWorkspaceEntry
 }
@@ -28,14 +29,17 @@ export async function readBranchWorkspaceDependencyCandidates(
   branchWorkspaceId: string,
   signal?: AbortSignal,
   dependencies: BranchWorkspaceDependencyPlanDependencies = {},
+  selectedNames?: ReadonlySet<string>,
 ): Promise<BranchWorkspaceDependencyReadResult> {
   try {
     signal?.throwIfAborted()
-    const snapshot = await (dependencies.readSnapshot ?? readBranchWorkspaceSnapshot)(rootId, signal)
+    const snapshot = await (dependencies.readSnapshot ?? readBranchWorkspaceSnapshot)(rootId, signal, {
+      branchWorkspaceId,
+    })
     if (!snapshot.ok) return snapshot
     const workspace = snapshot.items.find((item) => item.id === branchWorkspaceId)
     if (!workspace) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
-    if (workspace.state.kind !== 'ready') {
+    if (!isBranchWorkspaceRootUsable(workspace)) {
       return { ok: false, message: 'workspace.branch-workspace.dependency.not-ready' }
     }
 
@@ -44,8 +48,13 @@ export async function readBranchWorkspaceDependencyCandidates(
     const candidates: BranchWorkspaceDependencyCandidate[] = []
     for (const source of snapshot.auxiliaryCandidates) {
       signal?.throwIfAborted()
+      if (selectedNames && !selectedNames.has(source.name)) continue
       const targetPath = pathApi.join(workspace.path, source.name)
-      const target = await inspectPath(snapshot.rootId, targetPath, signal)
+      const target = await inspectPath(
+        branchWorkspaceStorageRootIdAtPath(snapshot.rootId, workspace.path),
+        targetPath,
+        signal,
+      )
       candidates.push({
         name: source.name,
         sourcePath: source.path,
@@ -69,11 +78,15 @@ export async function buildBranchWorkspaceDependencyPlan(
   signal?: AbortSignal,
   pendingPlan?: BranchWorkspaceDependencyPlan,
 ): Promise<BranchWorkspaceDependencyPlanResult> {
+  const selectedNames = new Set(
+    request.operation === 'add' ? request.entries.map((entry) => entry.name) : request.names,
+  )
   const read = await readBranchWorkspaceDependencyCandidates(
     rootId,
     request.branchWorkspaceId,
     signal,
     dependencies,
+    selectedNames,
   )
   if (!read.ok) return read
   const byName = new Map(read.candidates.map((candidate) => [candidate.name, candidate]))
@@ -85,8 +98,7 @@ export async function buildBranchWorkspaceDependencyPlan(
       let candidate = byName.get(selection.name)
       if (!candidate) {
         try {
-          candidate =
-            (await retainedSymlinkCandidate(read, selection, pendingPlan, dependencies, signal)) ?? undefined
+          candidate = (await retainedSymlinkCandidate(read, selection, pendingPlan, dependencies, signal)) ?? undefined
         } catch (error) {
           if (isAbortError(error)) throw error
           return {
@@ -100,7 +112,7 @@ export async function buildBranchWorkspaceDependencyPlan(
       if (candidate.targetKind !== 'missing') {
         try {
           targetFingerprint = await (dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry)(
-            read.rootId,
+            targetScope(read.rootId, candidate.targetPath),
             candidate.targetPath,
             signal,
           )
@@ -150,7 +162,11 @@ export async function buildBranchWorkspaceDependencyPlan(
         sourcePath: candidate.sourcePath,
         targetPath: candidate.targetPath,
         targetKind: candidate.targetKind,
-        fingerprint: await fingerprintEntry(read.rootId, candidate.targetPath, signal),
+        fingerprint: await fingerprintEntry(
+          targetScope(read.rootId, candidate.targetPath),
+          candidate.targetPath,
+          signal,
+        ),
       })
     } catch (error) {
       if (isAbortError(error)) throw error
@@ -182,12 +198,10 @@ async function retainedSymlinkCandidate(
   ) {
     return null
   }
-  const pendingEntry = pendingPlan.entries.find(
-    (entry) => entry.name === selection.name && entry.mode === 'symlink',
-  )
+  const pendingEntry = pendingPlan.entries.find((entry) => entry.name === selection.name && entry.mode === 'symlink')
   if (!pendingEntry) return null
   const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
-    read.rootId,
+    targetScope(read.rootId, pendingEntry.targetPath),
     pendingEntry.targetPath,
     signal,
   )
@@ -206,10 +220,7 @@ function withoutToken(plan: Omit<BranchWorkspaceDependencyPlan, 'token'>): Branc
   return { token, ...plan } as BranchWorkspaceDependencyPlan
 }
 
-function compareName(
-  left: { name: string },
-  right: { name: string },
-): number {
+function compareName(left: { name: string }, right: { name: string }): number {
   return compareText(left.name, right.name)
 }
 
@@ -224,4 +235,8 @@ function isAbortError(error: unknown): boolean {
 function operationMessage(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : ''
   return message || fallback
+}
+
+function targetScope(rootId: string, targetPath: string): string {
+  return branchWorkspaceStorageRootIdAtPath(rootId, (isRemoteRepoId(rootId) ? path.posix : path).dirname(targetPath))
 }

@@ -9,11 +9,11 @@ import { RepoWorkspaceSkeleton } from '#/web/components/Skeleton.tsx'
 import { RepoWorkspace, RepoWorkspacePane } from '#/web/components/Layout.tsx'
 import { getRepoWorkspacePresentation, type CompactWorkspaceSurface } from '#/web/components/repo-workspace/model.ts'
 import { RepoExplorerPane } from '#/web/components/repo-workspace/RepoExplorerPane.tsx'
-import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import { PlainWorkspaceTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
 import { UnavailableRepoView } from '#/web/components/UnavailableRepoView.tsx'
 import { useResponsiveUiMode } from '#/web/hooks/useResponsiveUiMode.tsx'
-import { repoIsPlainWorkspace } from '#/web/stores/repos/capabilities.ts'
+import { repoIsPlainWorkspace, repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useEffectiveWorkspaceLayout } from '#/web/lib/effective-workspace-layout.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
 import { BranchWorkspacePane } from '#/web/components/repo-workspace/BranchWorkspacePane.tsx'
@@ -21,12 +21,29 @@ import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-worksp
 import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
 import { WorktreeTerminalPanel } from '#/web/components/repo-workspace/PlainWorkspaceTerminalPanel.tsx'
+import { FilePreviewProvider } from '#/web/components/terminal/file-preview-context.tsx'
 
 interface Props {
   repoId: string
 }
 
 export function RepoView({ repoId }: Props) {
+  const scopeKey = useReposStore((state) => {
+    const repo = state.repos[repoId]
+    return JSON.stringify([
+      repoId,
+      repo ? selectedRepoWorktree(repo)?.worktreePath : null,
+      state.workspaceActiveContextByRoot[repoId],
+    ])
+  })
+  return (
+    <FilePreviewProvider scopeKey={scopeKey}>
+      <RepoViewContent repoId={repoId} />
+    </FilePreviewProvider>
+  )
+}
+
+function RepoViewContent({ repoId }: Props) {
   const layout = useEffectiveWorkspaceLayout()
   const uiMode = useResponsiveUiMode()
   const view = useStoreWithEqualityFn(
@@ -62,6 +79,8 @@ export function RepoView({ repoId }: Props) {
   const setDetailTab = useReposStore((s) => s.setDetailTab)
   const setDetailFocusMode = useReposStore((s) => s.setDetailFocusMode)
   const repo = useReposStore((s) => s.repos[repoId])
+  const selectedWorktree = repo ? selectedRepoWorktree(repo) : null
+  const worktreePath = repoPlainWorkspacePath(repo) ?? selectedWorktree?.worktreePath
   const multiRepositoryWorkspace = useReposStore((s) => !!s.workspaceProjects[repoId])
   const [fileAreaCollapsed, setFileAreaCollapsed] = useState(false)
   const [compactSurface, setCompactSurface] = useState<CompactWorkspaceSurface>('detail')
@@ -91,17 +110,20 @@ export function RepoView({ repoId }: Props) {
   }, [])
   const handleTerminalRevealPath = useCallback(
     (relativePath: string) => {
+      if (!worktreePath) return
       setFileAreaCollapsed(false)
       setCompactSurface('files')
-      setTerminalRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, repoId, relativePath }))
+      setTerminalRevealRequest({ repoId, worktreePath, relativePath })
     },
-    [repoId],
+    [repoId, worktreePath],
   )
   const fileAreaOpenRequested = fileAreaOpenRequest !== handledFileAreaOpenRequest
   useLayoutEffect(() => {
     setCompactSurface('detail')
-    setTerminalRevealRequest(null)
   }, [repoId])
+  useLayoutEffect(() => {
+    setTerminalRevealRequest(null)
+  }, [repoId, worktreePath])
   useLayoutEffect(() => {
     if (!fileAreaOpenRequested) return
     setExplorerTab(repoId, 'files')
@@ -112,7 +134,6 @@ export function RepoView({ repoId }: Props) {
   const detailPaneSize = view.detailPaneSizes[layout]
   const isPlainWorkspace = repoIsPlainWorkspace(repo)
   const repoUnavailable = repo?.availability.phase === 'unavailable'
-  const selectedWorktree = repo ? selectedRepoWorktree(repo) : null
   const detachedWorktree = selectedWorktree?.kind === 'detached' ? selectedWorktree : null
   const desktopTerminalFocusMode =
     uiMode !== 'compact' &&
@@ -154,7 +175,7 @@ export function RepoView({ repoId }: Props) {
   if (isPlainWorkspace && uiMode === 'compact' && !repoUnavailable) {
     const compactWorkspaceOpen = compactSurface !== 'detail'
     return (
-      <section className="relative flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RepoWorkspacePane>
           {compactWorkspaceOpen ? (
             <RepoExplorerPane
@@ -162,6 +183,7 @@ export function RepoView({ repoId }: Props) {
               layout={layout}
               showActions={false}
               compactSurface={compactSurface}
+              revealRequest={terminalRevealRequest}
               onOpenFileArea={openFileArea}
               onCollapseFileArea={collapseFileArea}
               onShowCompactDetail={showCompactDetail}
@@ -171,6 +193,7 @@ export function RepoView({ repoId }: Props) {
             <PlainWorkspaceTerminalPanel
               repoId={repoId}
               layout={layout}
+              onRevealPath={handleTerminalRevealPath}
               compactFocusPresentation
               onShowCompactOverview={multiRepositoryWorkspace ? showCompactScope : showCompactFiles}
             />
@@ -181,7 +204,7 @@ export function RepoView({ repoId }: Props) {
   }
   if (isPlainWorkspace) {
     return (
-      <section className="relative flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RepoWorkspacePane>
           <RepoExplorerPane
             repoId={repoId}
@@ -189,6 +212,7 @@ export function RepoView({ repoId }: Props) {
             showActions={false}
             revealRequest={terminalRevealRequest}
             plainWorkspaceTerminalPanel={repoUnavailable ? <UnavailableRepoView repo={repo} /> : undefined}
+            onRevealPath={handleTerminalRevealPath}
             fileAreaCollapsed={fileAreaCollapsed}
             onToggleFileArea={toggleFileArea}
             onOpenFileArea={openFileArea}
@@ -209,7 +233,7 @@ export function RepoView({ repoId }: Props) {
 
   if (uiMode === 'compact' && !repoUnavailable) {
     return (
-      <section className="relative flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RepoWorkspacePane>
           {effectiveCompactSurface !== 'detail' ? (
             <RepoExplorerPane
@@ -232,6 +256,7 @@ export function RepoView({ repoId }: Props) {
               layout={layout}
               worktreePath={detachedWorktree.worktreePath}
               terminalLabel={detachedWorktree.terminalLabel}
+              onRevealPath={handleTerminalRevealPath}
               compactFocusPresentation
               onShowCompactOverview={showCompactScope}
             />
@@ -260,6 +285,7 @@ export function RepoView({ repoId }: Props) {
           layout={layout}
           worktreePath={detachedWorktree.worktreePath}
           terminalLabel={detachedWorktree.terminalLabel}
+          onRevealPath={handleTerminalRevealPath}
           focusMode={terminalFocusMode}
           onExitTerminalFocus={() => setDetailFocusMode(false)}
         />
@@ -301,7 +327,7 @@ export function RepoView({ repoId }: Props) {
     />
   )
 
-  return <section className="relative flex min-w-0 flex-1 flex-col">{workspaceBody}</section>
+  return <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">{workspaceBody}</section>
 }
 
 function ActiveBranchWorkspaceView({
@@ -346,6 +372,22 @@ function ActiveBranchWorkspaceView({
       : null
   const memberTarget = memberResolution?.ok ? memberResolution.target : null
   const memberReason = memberResolution && !memberResolution.ok ? memberResolution.reason : null
+
+  useEffect(() => {
+    if (!memberTarget) return
+    const state = useReposStore.getState()
+    const repo = state.repos[memberTarget.repositoryId]
+    if (!repo) return
+    if (memberTarget.checkedOutBranch === null) {
+      if (repo.ui.selectedDetachedWorktreePath !== memberTarget.worktreePath)
+        state.selectDetachedWorktree(repo.id, memberTarget.worktreePath)
+    } else if (
+      repo.ui.selectedBranch !== memberTarget.checkedOutBranch &&
+      repo.data.branches.some((branch) => branch.name === memberTarget.checkedOutBranch)
+    ) {
+      state.selectBranch(repo.id, memberTarget.checkedOutBranch)
+    }
+  }, [memberTarget?.repositoryId, memberTarget?.worktreePath, memberTarget?.checkedOutBranch, repos])
 
   useEffect(() => {
     if (query.data?.ok && !workspace) activateWorkspaceOverview(rootId)

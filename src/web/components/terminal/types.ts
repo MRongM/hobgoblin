@@ -112,6 +112,7 @@ export type TerminalWorktreeScope = Pick<TerminalSessionBase, 'repoRoot' | 'work
 export interface TerminalSessionAttachHandlers {
   onRevealPath?: (relativePath: string) => void
   onOpenPathInEditor?: (target: FilePathTarget) => void
+  onHoverPath?: (target: FilePathTarget | null) => void
   mobileScrollScrubber?: HTMLElement
 }
 
@@ -125,6 +126,7 @@ export type TerminalRepoIndex = Record<string, TerminalRepoSnapshot>
 
 export interface TerminalSessionSummary {
   key: string
+  sessionId?: string | null
   worktreeTerminalKey: string
   terminalId: string
   index: number
@@ -168,6 +170,7 @@ export interface TerminalSessionContextValue {
   markTelegramInputTarget?: (key: string) => void
   scrollLines: (key: string, amount: number) => void
   scrollByTouch: (key: string, input: TerminalTouchScrollInput) => void
+  filePathAtPoint?: (key: string, point: TerminalMobileSelectionPoint) => FilePathTarget | null
   beginMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => boolean
   extendMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void
   finishMobileSelection: (key: string, point: TerminalMobileSelectionPoint) => void

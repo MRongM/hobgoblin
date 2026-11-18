@@ -25,6 +25,10 @@ import type {
 } from '#/shared/terminal.ts'
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
+import type {
+  TerminalPathRelocationInput,
+  TerminalPathRelocationResult,
+} from '#/server/terminal/terminal-path-relocation.ts'
 
 export interface TerminalWorkerRequestInputs {
   attach: TerminalAttachInput
@@ -34,6 +38,7 @@ export interface TerminalWorkerRequestInputs {
   takeover: TerminalTakeoverInput
   close: TerminalSessionInput
   'close-sessions': TerminalCloseSessionsInput
+  'relocate-paths': TerminalPathRelocationInput
   'notify-bell': TerminalNotifyBellInput
   'list-sessions': { repoRoot: string }
   create: TerminalCreateInput
@@ -53,6 +58,7 @@ export interface TerminalWorkerResponseOutputs {
   takeover: TerminalTakeoverResult
   close: TerminalCloseResult
   'close-sessions': TerminalCloseSessionsResult
+  'relocate-paths': TerminalPathRelocationResult
   'notify-bell': TerminalMutationResult
   'list-sessions': TerminalSessionSummary[]
   create: TerminalCatalogMutationResult

@@ -7,7 +7,7 @@ import { useDetachFileArea } from '#/web/hooks/useDetachFileArea.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import type { FileTreeRevealRequest } from '#/web/components/repo-workspace/RepoWorktreeExplorer.tsx'
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 
 export function PlainWorkspaceFileArea({
   repoId,

@@ -14,6 +14,15 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { toast } from 'sonner'
+import { SplitPane } from '#/web/components/SplitPane.tsx'
+import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
+import { useDeferredFileClick } from '#/web/hooks/useDeferredFileClick.ts'
+import { TerminalFilePreview } from '#/web/components/terminal/TerminalFilePreview.tsx'
+import {
+  createTerminalFilePreviewTarget,
+  type TerminalFilePreviewTarget,
+} from '#/web/components/terminal/terminal-file-preview.ts'
+import { useFilePreview, useFilePreviewController } from '#/web/components/terminal/file-preview-context.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
 import {
   ContextMenu,
@@ -21,15 +30,21 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '#/web/components/ui/context-menu.tsx'
+import { TERMINAL_DIRECTORY_MIME, isTerminalDirectoryPath } from '#/web/components/terminal/terminal-directory-drag.ts'
 import { GOBLIN_FILE_PATHS_MIME, parseGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import { joinWorktreeRelativePath, pathStyle } from '#/shared/path-semantics.ts'
+import { resolveFileManagerTarget } from '#/web/file-manager-target.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { isRemoteRepoId } from '#/shared/remote-repo.ts'
 import { cn } from '#/web/lib/cn.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import {
   pathForDroppedFile,
+  canRevealInFileManager,
+  openInFinder,
   readSystemClipboardImage,
   readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste,
@@ -59,6 +74,7 @@ import type { TerminalDescriptor } from '#/web/components/terminal/types.ts'
 import { isMacNavigatorPlatform } from '#/web/components/terminal/terminal-keyboard.ts'
 import { getRuntimeShortcutSettings } from '#/web/runtime-settings-shortcuts.ts'
 import { matchTerminalCycleShortcut } from '#/shared/shortcut-definitions.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 const MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX = 8
 const MOBILE_TERMINAL_LONG_PRESS_MS = 500
 const MOBILE_TERMINAL_INERTIA_FRAME_MS = 1000 / 60
@@ -107,6 +123,7 @@ interface MobileTerminalTouchGesture {
   velocityPxPerMs: number
   remainder: number
   mode: 'pending' | 'scrolling' | 'selecting'
+  previewTarget: TerminalFilePreviewTarget | null
   longPressTimer: number | null
 }
 
@@ -118,7 +135,9 @@ interface MobileTerminalTouchInertia {
   lastTimestamp: number
 }
 
-interface MobileTerminalSelectionCopyAction {
+interface MobileTerminalSelectionActions {
+  canCopy: boolean
+  previewTarget: TerminalFilePreviewTarget | null
   key: string
   clientX: number
   clientY: number
@@ -127,6 +146,8 @@ interface MobileTerminalSelectionCopyAction {
 interface DesktopTerminalContextMenuState {
   key: string
   selectionText: string
+  previewTarget: TerminalFilePreviewTarget | null
+  fileManagerPath: string | null
 }
 
 interface TerminalSlotProps {
@@ -136,10 +157,36 @@ interface TerminalSlotProps {
 }
 
 export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
+  const snapshot = useWorktreeTerminalSnapshot(worktreeTerminalKey(repoRoot, worktreePath))
+  const stashed = useTerminalStashStore((state) => state.stashedTerminals)
+  const selected = snapshot.sessions.find((session) => session.selected)
+  if (selected?.sessionId && stashed[selected.key] === selected.sessionId) return null
+  return <VisibleTerminalSlot repoRoot={repoRoot} worktreePath={worktreePath} onRevealPath={onRevealPath} />
+}
+
+function VisibleTerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalSlotProps) {
   const t = useT()
   const navigation = useMainWindowNavigation()
   const terminalHostId = useId()
+  const previewLayoutRef = useRef<HTMLDivElement | null>(null)
+  const previewSurfaceRef = useRef<HTMLDivElement | null>(null)
+  const restorePreviewFocusRef = useRef(false)
+  const sharedPreview = useFilePreview()
+  const localPreview = useFilePreviewController(JSON.stringify([repoRoot, worktreePath]))
+  const preview = sharedPreview ?? localPreview
+  const { target: previewTarget, cancelPendingPreview, closePreview: clearPreview } = preview
+  const registerTerminalSurface = sharedPreview?.registerTerminalSurface
+  useLayoutEffect(() => registerTerminalSurface?.(), [registerTerminalSurface])
+  useEffect(() => cancelPendingPreview, [cancelPendingPreview, repoRoot, worktreePath])
+  const [previewSize, setPreviewSize] = useState(40)
+  const [previewLayoutWidth, setPreviewLayoutWidth] = useState<number | null>(null)
+  const compactUi = useIsCompactUi()
+  const { schedule: deferReveal, cancel: cancelPendingReveal } = useDeferredFileClick()
+  // Derive scope validity during render so old content never flashes before effect cleanup.
+  const activePreviewTarget =
+    previewTarget?.repoId === repoRoot && previewTarget.worktreePath === worktreePath ? previewTarget : null
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const hoveredPathRef = useRef<FilePathTarget | null>(null)
   const mobileScrollScrubberRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const bottomDockRef = useRef<HTMLDivElement | null>(null)
@@ -154,9 +201,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const [mobileFocusMode, setMobileFocusMode] = useState(false)
   const [bottomDockHeight, setBottomDockHeight] = useState<number | null>(null)
   const [visualViewportBottomInset, setVisualViewportBottomInset] = useState(0)
-  const [mobileSelectionCopyAction, setMobileSelectionCopyAction] = useState<MobileTerminalSelectionCopyAction | null>(
-    null,
-  )
+  const [mobileSelectionActions, setMobileSelectionActions] = useState<MobileTerminalSelectionActions | null>(null)
   const [desktopContextMenu, setDesktopContextMenu] = useState<DesktopTerminalContextMenuState | null>(null)
   const context = useTerminalSessionContext()
   const {
@@ -176,6 +221,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     scrollToBottom,
     pageTmux,
     scrollByTouch,
+    filePathAtPoint,
     beginMobileSelection,
     extendMobileSelection,
     finishMobileSelection,
@@ -213,6 +259,41 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   const isReadonly =
     hasSessions && snapshot.phase === 'open' && (attachment?.role === 'viewer' || attachment?.role === 'unowned')
   const isMobile = isMobileDevice()
+  const compactPreview =
+    !!activePreviewTarget && (isMobile || compactUi || previewLayoutWidth === null || previewLayoutWidth < 800)
+
+  useLayoutEffect(() => {
+    const surface = previewLayoutRef.current
+    if (!surface) return
+    const measure = () => {
+      const width = surface.getBoundingClientRect().width
+      setPreviewLayoutWidth(width > 0 ? width : null)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(surface)
+    return () => observer.disconnect()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (compactPreview)
+      previewSurfaceRef.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
+  }, [compactPreview])
+
+  useLayoutEffect(() => {
+    if (activePreviewTarget || !restorePreviewFocusRef.current) return
+    restorePreviewFocusRef.current = false
+    if (key) focusTerminal(key)
+  }, [activePreviewTarget, focusTerminal, key])
+
+  const closePreview = useCallback(() => {
+    restorePreviewFocusRef.current = !!previewSurfaceRef.current?.contains(document.activeElement)
+    clearPreview()
+  }, [clearPreview])
   const navigatorPlatform = globalThis.navigator?.platform ?? ''
   const isMacPlatform = isMacNavigatorPlatform(navigatorPlatform)
   const isWindowsPlatform = /^Win/i.test(navigatorPlatform)
@@ -225,7 +306,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
   useEffect(() => {
     setDesktopContextMenu(null)
-  }, [attachment?.role, isMobile, key])
+  }, [attachment?.role, isMobile, key, repoRoot, worktreePath])
 
   const cancelTouchInertia = useCallback(() => {
     if (touchInertiaFrameRef.current !== null) window.cancelAnimationFrame(touchInertiaFrameRef.current)
@@ -254,7 +335,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     }
     touchScrollRef.current = null
     cancelTouchInertia()
-    setMobileSelectionCopyAction(null)
+    setMobileSelectionActions(null)
   }, [
     cancelLongPressTimer,
     cancelMobileSelection,
@@ -287,7 +368,11 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
 
   const handleTouchScrollStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!isMobileTerminal || !key || event.pointerType !== 'touch' || event.isPrimary === false) return
+      if (!isMobileTerminal || !key || event.isPrimary === false) return
+      if (event.pointerType !== 'touch') {
+        setMobileSelectionActions(null)
+        return
+      }
       cancelTouchInertia()
       const existingGesture = touchScrollRef.current
       cancelLongPressTimer(existingGesture)
@@ -297,7 +382,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       } else {
         clearMobileSelection(key)
       }
-      setMobileSelectionCopyAction(null)
+      setMobileSelectionActions(null)
 
       const gesture: MobileTerminalTouchGesture = {
         host: event.currentTarget,
@@ -312,6 +397,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         velocityPxPerMs: 0,
         remainder: 0,
         mode: 'pending',
+        previewTarget: null,
         longPressTimer: null,
       }
       touchScrollRef.current = gesture
@@ -324,12 +410,17 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
           return
         }
         cancelTouchInertia()
+        const target = filePathAtPoint?.(key, point)
+        gesture.previewTarget = target ? createTerminalFilePreviewTarget(repoRoot, worktreePath, target) : null
         gesture.mode = 'selecting'
         gesture.host.setPointerCapture?.(gesture.pointerId)
       }, MOBILE_TERMINAL_LONG_PRESS_MS)
     },
     [
       beginMobileSelection,
+      filePathAtPoint,
+      repoRoot,
+      worktreePath,
       cancelLongPressTimer,
       cancelMobileSelection,
       cancelTouchInertia,
@@ -345,6 +436,12 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       if (!isMobileTerminal || !key || !gesture || event.pointerId !== gesture.pointerId) return
 
       if (gesture.mode === 'selecting') {
+        if (
+          Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) >=
+          MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX
+        ) {
+          gesture.previewTarget = null
+        }
         event.preventDefault()
         event.stopPropagation()
         gesture.lastX = event.clientX
@@ -480,10 +577,17 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         if (allowInertia && key) {
           finishMobileSelection(key, point)
           const selectedText = mobileSelectionText(key)
-          setMobileSelectionCopyAction(selectedText ? { key, ...point } : null)
+          const previewTarget =
+            Math.hypot(point.clientX - gesture.startX, point.clientY - gesture.startY) <
+            MOBILE_TERMINAL_TOUCH_DRAG_THRESHOLD_PX
+              ? gesture.previewTarget
+              : null
+          setMobileSelectionActions(
+            selectedText || previewTarget ? { key, ...point, canCopy: !!selectedText, previewTarget } : null,
+          )
         } else if (key) {
           cancelMobileSelection(key, point)
-          setMobileSelectionCopyAction(null)
+          setMobileSelectionActions(null)
         }
         cancelTouchInertia()
         return
@@ -510,18 +614,33 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     (event: ReactPointerEvent<HTMLDivElement>) => finishTouchScroll(event, false),
     [finishTouchScroll],
   )
-  const handleTouchContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    if (touchScrollRef.current?.mode !== 'selecting') return
-    event.preventDefault()
-    event.stopPropagation()
-  }, [])
+  const handleTouchContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (touchScrollRef.current || (event.nativeEvent as PointerEvent).pointerType === 'touch') {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      if (!key || event.button !== 2) return
+      const point = { clientX: event.clientX, clientY: event.clientY }
+      const target = filePathAtPoint ? filePathAtPoint(key, point) : hoveredPathRef.current
+      const previewTarget = target && createTerminalFilePreviewTarget(repoRoot, worktreePath, target)
+      const canCopy = !!mobileSelectionText(key)
+      if (!previewTarget && !canCopy) return
+      event.preventDefault()
+      event.stopPropagation()
+      cancelPendingReveal()
+      setMobileSelectionActions({ key, ...point, canCopy, previewTarget })
+    },
+    [cancelPendingReveal, filePathAtPoint, key, mobileSelectionText, repoRoot, worktreePath],
+  )
 
   const copyMobileTerminalSelection = useCallback(async () => {
-    const action = mobileSelectionCopyAction
+    const action = mobileSelectionActions
     if (!action) return
     const text = mobileSelectionText(action.key)
     if (!text) {
-      setMobileSelectionCopyAction(null)
+      setMobileSelectionActions(null)
       return
     }
     if (!(await writeTerminalClipboardText(text))) {
@@ -529,8 +648,8 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       return
     }
     clearMobileSelection(action.key)
-    setMobileSelectionCopyAction((current) => (current === action ? null : current))
-  }, [clearMobileSelection, mobileSelectionCopyAction, mobileSelectionText, t])
+    setMobileSelectionActions((current) => (current === action ? null : current))
+  }, [clearMobileSelection, mobileSelectionActions, mobileSelectionText, t])
 
   const handleDesktopContextMenuOpenChange = useCallback(
     (open: boolean) => {
@@ -540,10 +659,21 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       }
       if (isMobile || !key) return
       const capturedSelectionText = selectionText(key)
-      if (!capturedSelectionText && !isController) return
-      setDesktopContextMenu({ key, selectionText: capturedSelectionText })
+      const target = hoveredPathRef.current
+      const absolutePath =
+        target &&
+        (pathStyle(target.path) === 'relative' ? joinWorktreeRelativePath(worktreePath, target.path) : target.path)
+      const resolved =
+        absolutePath && canRevealInFileManager()
+          ? resolveFileManagerTarget(repoRoot, absolutePath, getInitialBootstrap().hostPlatform)
+          : null
+      const fileManagerPath = resolved?.ok ? resolved.path : null
+      const previewTarget = target && createTerminalFilePreviewTarget(repoRoot, worktreePath, target)
+      if (!capturedSelectionText && !isController && !fileManagerPath && !previewTarget) return
+      cancelPendingReveal()
+      setDesktopContextMenu({ key, selectionText: capturedSelectionText, fileManagerPath, previewTarget })
     },
-    [isController, isMobile, key, selectionText],
+    [cancelPendingReveal, isController, isMobile, key, repoRoot, selectionText, worktreePath],
   )
 
   const copyDesktopTerminalSelection = useCallback(async () => {
@@ -579,7 +709,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   // goblin behaviour where focus was triggered exactly once per session key.
   const focusedKeyRef = useRef<string | null>(null)
   useLayoutEffect(() => {
-    if (isMobile || !isController || !key || searchOpen || renderPending) {
+    if (compactPreview || isMobile || !isController || !key || searchOpen || renderPending) {
       if (focusedKeyRef.current === key) focusedKeyRef.current = null
       return
     }
@@ -590,7 +720,7 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     if (!isBody) return
     const textarea = hostRef.current?.querySelector('textarea')
     textarea?.focus()
-  }, [isController, isMobile, key, renderPending, searchOpen])
+  }, [compactPreview, isController, isMobile, key, renderPending, searchOpen])
 
   const openPathInEditorRef = useRef<(target: FilePathTarget) => void>(() => {})
   openPathInEditorRef.current = (target: FilePathTarget) => {
@@ -598,25 +728,44 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       if (!result.ok) toast.error(t(result.message))
     })
   }
-  const handleRevealPath = useCallback((relativePath: string) => {
-    onRevealPathRef.current?.(relativePath)
-  }, [])
-  const handleOpenPathInEditor = useCallback((target: FilePathTarget) => {
-    openPathInEditorRef.current(target)
-  }, [])
+  const handleRevealPath = useCallback(
+    (relativePath: string) => {
+      cancelPendingPreview()
+      const reveal = () => onRevealPathRef.current?.(relativePath)
+      // In compact layout the file tree replaces the terminal, including the clicked link.
+      if (compactUi) deferReveal(reveal)
+      else reveal()
+    },
+    [cancelPendingPreview, compactUi, deferReveal],
+  )
+  const handleOpenPathInEditor = useCallback(
+    (target: FilePathTarget) => {
+      cancelPendingReveal()
+      cancelPendingPreview()
+      openPathInEditorRef.current(target)
+    },
+    [cancelPendingPreview, cancelPendingReveal],
+  )
 
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host || !descriptor) return
     attach(descriptor, host, {
+      onHoverPath: (target) => {
+        hoveredPathRef.current = target
+      },
       onRevealPath: handleRevealPath,
       onOpenPathInEditor: handleOpenPathInEditor,
       ...(isMobileTerminal && mobileScrollScrubberRef.current
         ? { mobileScrollScrubber: mobileScrollScrubberRef.current }
         : {}),
     })
-    return () => detach(descriptor.key, host)
-  }, [attach, descriptor, detach, handleOpenPathInEditor, handleRevealPath, isMobileTerminal])
+    return () => {
+      cancelPendingReveal()
+      hoveredPathRef.current = null
+      detach(descriptor.key, host)
+    }
+  }, [attach, cancelPendingReveal, descriptor, detach, handleOpenPathInEditor, handleRevealPath, isMobileTerminal])
 
   useEffect(() => {
     if (!key || typeof document === 'undefined' || !document.hasFocus()) return
@@ -631,8 +780,8 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
   }, [clearBell, key])
 
   useEffect(() => {
-    if (searchOpen) searchInputRef.current?.focus({ preventScroll: true })
-  }, [searchOpen])
+    if (searchOpen && !compactPreview) searchInputRef.current?.focus({ preventScroll: true })
+  }, [compactPreview, searchOpen])
 
   useEffect(() => {
     if (!searchOpen && key) clearSearch(key)
@@ -702,10 +851,19 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         allowNativeClipboardImage: isWindowsPlatform,
       }).then((paths) => {
         if (paths.length === 0) return
-        writeInput(key, paths.map(shellEscapePath).join(' '))
+        writeInput(key, paths.map((path) => shellEscapePath(path, snapshot.processName)).join(' '))
       })
     },
-    [isController, isWindowsPlatform, key, repoRoot, temporaryFilesDirectory, worktreePath, writeInput],
+    [
+      isController,
+      isWindowsPlatform,
+      key,
+      repoRoot,
+      temporaryFilesDirectory,
+      worktreePath,
+      snapshot.processName,
+      writeInput,
+    ],
   )
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -768,10 +926,10 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       if (!isController || !key) return
       const paths = pathsForDrop(event, worktreePath)
       if (paths.length === 0) return
-      const escaped = paths.map(shellEscapePath).join(' ')
+      const escaped = paths.map((path) => shellEscapePath(path, snapshot.processName)).join(' ')
       writeInput(key, escaped)
     },
-    [isController, key, worktreePath, writeInput],
+    [isController, key, worktreePath, snapshot.processName, writeInput],
   )
   useEffect(() => {
     if (!isController) setDragOver(false)
@@ -959,11 +1117,32 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       onContextMenu={isMobileTerminal ? handleTouchContextMenu : undefined}
     />
   )
+  const menuPreviewTarget = desktopContextMenu?.previewTarget
   const terminalHostSurface = !isMobile ? (
     <ContextMenu open={desktopContextMenu !== null} onOpenChange={handleDesktopContextMenuOpenChange}>
       <ContextMenuTrigger asChild>{terminalHost}</ContextMenuTrigger>
       {desktopContextMenu !== null && (
         <ContextMenuContent>
+          {menuPreviewTarget && (
+            <ContextMenuItem onSelect={() => preview.openPreview(menuPreviewTarget)}>
+              {t('terminal.file-preview.open')}
+            </ContextMenuItem>
+          )}
+          {desktopContextMenu.fileManagerPath && (
+            <ContextMenuItem
+              onSelect={() => {
+                const path = desktopContextMenu.fileManagerPath
+                if (!path) return
+                void openInFinder(path)
+                  .then((result) => {
+                    if (!result.ok) toast.error(t(result.message))
+                  })
+                  .catch(() => toast.error(t('directory-open.failed')))
+              }}
+            >
+              {t('worktrees.reveal-title')}
+            </ContextMenuItem>
+          )}
           {desktopContextMenu.selectionText && (
             <ContextMenuItem onSelect={() => void copyDesktopTerminalSelection()}>
               {t('menu.edit.copy')}
@@ -979,9 +1158,11 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
     terminalHost
   )
 
-  return (
+  const terminalSurface = (
     <div
       className="goblin-terminal-slot focus-visible:outline-none"
+      inert={compactPreview || undefined}
+      aria-hidden={compactPreview || undefined}
       tabIndex={-1}
       style={slotStyle}
       onFocusCapture={handleFocus}
@@ -1009,26 +1190,46 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
         </div>
       )}
       {terminalHostSurface}
-      {mobileSelectionCopyAction && (
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          className="goblin-terminal-selection-copy"
+      {mobileSelectionActions && (
+        <div
+          className="goblin-terminal-selection-actions"
           style={
             {
-              '--goblin-terminal-selection-copy-x': `${mobileSelectionCopyAction.clientX}px`,
-              '--goblin-terminal-selection-copy-y': `${mobileSelectionCopyAction.clientY}px`,
+              '--goblin-terminal-selection-copy-x': `${mobileSelectionActions.clientX}px`,
+              '--goblin-terminal-selection-copy-y': `${mobileSelectionActions.clientY}px`,
             } as CSSProperties
           }
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()
           }}
-          onClick={() => void copyMobileTerminalSelection()}
         >
-          {t('menu.edit.copy')}
-        </Button>
+          {mobileSelectionActions.previewTarget && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                if (mobileSelectionActions.previewTarget) preview.openPreview(mobileSelectionActions.previewTarget)
+                clearMobileSelection(mobileSelectionActions.key)
+                setMobileSelectionActions(null)
+              }}
+            >
+              {t('terminal.file-preview.open')}
+            </Button>
+          )}
+          {mobileSelectionActions.canCopy && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="goblin-terminal-selection-copy"
+              onClick={() => void copyMobileTerminalSelection()}
+            >
+              {t('menu.edit.copy')}
+            </Button>
+          )}
+        </div>
       )}
       {isMobileTerminal && (
         <div
@@ -1146,6 +1347,28 @@ export function TerminalSlot({ repoRoot, worktreePath, onRevealPath }: TerminalS
       )}
     </div>
   )
+
+  return (
+    <div ref={previewLayoutRef} className="goblin-terminal-preview-layout">
+      <SplitPane
+        before={terminalSurface}
+        after={
+          <div ref={previewSurfaceRef} className="goblin-terminal-preview-layout__preview">
+            {activePreviewTarget && (
+              <TerminalFilePreview target={activePreviewTarget} onClose={closePreview} compact={compactPreview} />
+            )}
+          </div>
+        }
+        afterSize={previewSize}
+        onAfterSizeChange={setPreviewSize}
+        beforeMinSize="480px"
+        afterMinSize="320px"
+        beforeCollapsed={compactPreview}
+        afterCollapsed={!activePreviewTarget}
+        disabled={!activePreviewTarget || compactPreview}
+      />
+    </div>
+  )
 }
 
 interface ViewerStatusProps {
@@ -1206,17 +1429,30 @@ function isTerminalSearchShortcut(event: KeyboardEvent<HTMLDivElement>): boolean
   return event.metaKey || (event.ctrlKey && event.shiftKey)
 }
 
-function shellEscapePath(path: string): string {
+function shellEscapePath(path: string, processName: string): string {
+  const shell = processName
+    .split(/[\\/]/u)
+    .at(-1)
+    ?.toLowerCase()
+    .replace(/\.exe$/u, '')
+  if (shell === 'cmd') return /^[A-Za-z0-9_+=:,.\\/-]+$/u.test(path) ? path : `"${path}"`
+  if (shell === 'pwsh' || shell === 'powershell') return `'${path.replace(/['‘’‚‛]/gu, (quote) => quote + quote)}'`
   if (path.length === 0) return "''"
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(path)) return path
   return "'" + path.replace(/'/g, "'\\''") + "'"
 }
 
 function hasPathDrop(event: DragEvent<HTMLElement>): boolean {
-  return event.dataTransfer.types.includes(GOBLIN_FILE_PATHS_MIME) || event.dataTransfer.types.includes('Files')
+  return [TERMINAL_DIRECTORY_MIME, GOBLIN_FILE_PATHS_MIME, 'Files'].some((type) =>
+    event.dataTransfer.types.includes(type),
+  )
 }
 
 function pathsForDrop(event: DragEvent<HTMLElement>, worktreePath: string): string[] {
+  if (event.dataTransfer.types.includes(TERMINAL_DIRECTORY_MIME)) {
+    const directory = event.dataTransfer.getData(TERMINAL_DIRECTORY_MIME)
+    return isTerminalDirectoryPath(directory) ? [directory] : []
+  }
   if (event.dataTransfer.types.includes(GOBLIN_FILE_PATHS_MIME)) {
     return parseGoblinFilePathDragPayload(event.dataTransfer.getData(GOBLIN_FILE_PATHS_MIME)).map((path) =>
       pathForTerminalDrop(path, worktreePath),

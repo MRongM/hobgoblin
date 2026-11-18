@@ -1731,6 +1731,54 @@ describe('remote git helpers', () => {
     )
   })
 
+  test('pushRemoteBranch preserves WSL proxy, timeout and cancellation options during checked-out branch recovery', async () => {
+    const signal = new AbortController().signal
+    const run = vi.fn(async (command: { type: string; updateWorktree?: boolean }) => {
+      switch (command.type) {
+        case 'gitRemoteVerbose':
+          return okRemoteResult('origin\t/workspace/receiver (fetch)\norigin\t/workspace/receiver (push)')
+        case 'gitUpstream':
+          return okRemoteResult('origin/feature/target')
+        case 'gitPush':
+          return command.updateWorktree
+            ? okRemoteResult('pushed')
+            : failRemoteResult(' ! [remote rejected] feature/test -> feature/target (branch is currently checked out)')
+        default:
+          throw new Error(`Unexpected remote command: ${command.type}`)
+      }
+    })
+
+    await expect(
+      pushRemoteBranch(WSL_TARGET, 'feature/test', {
+        signal,
+        networkOptions: { timeoutMs: 123_000, proxyUrl: 'http://127.0.0.1:7890' },
+        run,
+      }),
+    ).resolves.toEqual({ ok: true, message: 'pushed' })
+
+    const pushes = run.mock.calls.filter(([command]) => command.type === 'gitPush')
+    expect(pushes).toHaveLength(2)
+    for (const [index, call] of pushes.entries()) {
+      expect(call).toEqual([
+        {
+          type: 'gitPush',
+          path: WSL_TARGET.remotePath,
+          remote: 'origin',
+          branch: 'feature/test',
+          targetBranch: 'feature/target',
+          setUpstream: false,
+          ...(index === 1 ? { updateWorktree: true } : {}),
+        },
+        WSL_TARGET,
+        expect.objectContaining({
+          signal,
+          timeoutMs: 123_000,
+          wslEnvironment: expect.objectContaining({ HTTPS_PROXY: 'http://127.0.0.1:7890' }),
+        }),
+      ])
+    }
+  })
+
   test('pushRemoteBranch creates an upstream on an explicit remote when fallback resolution is ambiguous', async () => {
     const run = vi.fn(async (command: { type: string }) => {
       switch (command.type) {

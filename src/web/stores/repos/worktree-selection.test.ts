@@ -53,7 +53,7 @@ describe('selected repo worktree', () => {
     expect(selectedWorktreeTabKey(repo)).toBe('feature/a')
   })
 
-  test('rejects primary, prunable, and stale detached selections', () => {
+  test('allows a primary detached repository and rejects prunable or stale selections', () => {
     const repo = emptyRepo('/repo', 'repo')
     repo.ui.selectedDetachedWorktreePath = DETACHED_PATH
 
@@ -64,7 +64,7 @@ describe('selected repo worktree', () => {
       isDetached: true,
       isMain: true,
     }
-    expect(selectedRepoWorktree(repo)).toBeNull()
+    expect(selectedRepoWorktree(repo)).toMatchObject({ kind: 'detached', worktreePath: DETACHED_PATH })
 
     repo.data.worktreesByPath[DETACHED_PATH] = {
       path: DETACHED_PATH,

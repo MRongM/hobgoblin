@@ -57,9 +57,23 @@ export function workspaceActiveContext(
 export function projectRepositoryIds(
   state: Pick<WorkspaceProjectLookupState, 'repos' | 'workspaceProjects'>,
   projectId: string,
+  branchWorkspaces: readonly BranchWorkspaceSnapshot[] = [],
 ): string[] {
   const workspace = state.workspaceProjects[projectId]
-  if (workspace) return workspace.repositoryIds
+  if (workspace && branchWorkspaces.length === 0) return workspace.repositoryIds
+  if (workspace)
+    return [
+      ...new Set([
+        ...workspace.repositoryIds,
+        ...branchWorkspaces
+          .filter((item) => item.rootId === projectId)
+          .flatMap((item) =>
+            item.repositories.flatMap((member) =>
+              member.repositoryId && member.ready && member.progress !== 'removed' ? [member.repositoryId] : [],
+            ),
+          ),
+      ]),
+    ]
   return state.repos[projectId] ? [projectId] : []
 }
 

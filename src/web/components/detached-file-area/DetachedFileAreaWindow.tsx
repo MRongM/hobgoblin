@@ -1,3 +1,4 @@
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, ChevronRight, RefreshCw } from 'lucide-react'
 import type {
@@ -27,6 +28,13 @@ import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useSettingsQueryInvalidationSync } from '#/web/settings-queries.ts'
 import { useI18nStore, useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
+import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
+import {
+  detachedHeadTerminalLabel,
+  isSelectableDetachedWorktree,
+  selectedRepoWorktree,
+} from '#/web/stores/repos/worktree-selection.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
 
 const TAB_LABEL_KEYS: Record<FileAreaTabId, string> = {
@@ -60,10 +68,29 @@ function DetachedRepositoryFileArea({
   const bootstrappedRef = useRef(false)
   const [hydrated, setHydrated] = useState(false)
   const [activeTab, setActiveTab] = useState<FileAreaTabId>(request.tab)
-  const [revealRequest, setRevealRequest] = useState<{ id: number; relativePath: string } | null>(null)
+  const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const repo = useReposStore((state) => state.repos[request.repo.id])
-  const capturedBranch = request.kind === 'git-worktree' ? request.branch : null
-  const branchAvailable = !capturedBranch || !!repo?.data.branches.some((branch) => branch.name === capturedBranch)
+  const capturedPath = request.kind === 'git-worktree' ? request.worktreePath : undefined
+  const capturedWorktree = capturedPath
+    ? Object.values(repo?.data.worktreesByPath ?? {}).find((worktree) => sameLocalFilePath(worktree.path, capturedPath))
+    : undefined
+  const branchAtPath =
+    capturedPath && capturedWorktree?.isPrunable !== true
+      ? repo?.data.branches.find(
+          (branch) => branch.worktree?.path && sameLocalFilePath(branch.worktree.path, capturedPath),
+        )
+      : undefined
+  const detachedAtPath = capturedPath
+    ? Object.values(repo?.data.worktreesByPath ?? {}).find(
+        (worktree) => sameLocalFilePath(worktree.path, capturedPath) && isSelectableDetachedWorktree(worktree),
+      )
+    : undefined
+  const capturedBranch =
+    request.kind === 'git-worktree' ? (capturedPath ? (branchAtPath?.name ?? null) : request.branch) : null
+  const capturedLabel = detachedAtPath ? detachedHeadTerminalLabel(detachedAtPath) : capturedBranch
+  const branchAvailable = capturedPath
+    ? !!branchAtPath || !!detachedAtPath
+    : !capturedBranch || !!repo?.data.branches.some((branch) => branch.name === capturedBranch)
   const surfaceAvailable =
     hydrated &&
     !!repo &&
@@ -82,26 +109,28 @@ function DetachedRepositoryFileArea({
       try {
         await Promise.all([useThemeStore.getState().hydrate(), useI18nStore.getState().hydrate()])
         await useReposStore.getState().hydrateSession([request.repo], request.repo.id)
-        const state = useReposStore.getState()
-        const hydratedRepo = state.repos[request.repo.id]
-        if (capturedBranch && hydratedRepo?.data.branches.some((branch) => branch.name === capturedBranch)) {
-          state.selectBranch(request.repo.id, capturedBranch)
-        }
       } catch (error) {
         console.warn('[detached-file-area] failed to hydrate captured context', error)
       } finally {
         setHydrated(true)
       }
     })()
-  }, [capturedBranch, request])
+  }, [request])
 
   useEffect(() => {
-    if (!capturedBranch || !surfaceAvailable || repo.ui.selectedBranch === capturedBranch) return
-    useReposStore.getState().selectBranch(request.repo.id, capturedBranch)
-  }, [capturedBranch, repo, request.repo.id, surfaceAvailable])
+    if (!surfaceAvailable) return
+    const state = useReposStore.getState()
+    if (detachedAtPath) {
+      if (repo.ui.selectedDetachedWorktreePath !== detachedAtPath.path)
+        state.selectDetachedWorktree(repo.id, detachedAtPath.path)
+    } else if (capturedBranch && repo.ui.selectedBranch !== capturedBranch) {
+      state.selectBranch(repo.id, capturedBranch)
+    }
+  }, [capturedBranch, detachedAtPath?.path, repo, surfaceAvailable])
 
   function revealPath(relativePath: string) {
-    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
+    const worktreePath = repoPlainWorkspacePath(repo) ?? (repo && selectedRepoWorktree(repo)?.worktreePath)
+    if (worktreePath) setRevealRequest({ repoId: request.repo.id, worktreePath, relativePath })
     setActiveTab('files')
   }
 
@@ -122,11 +151,6 @@ function DetachedRepositoryFileArea({
     void (async () => {
       try {
         await useReposStore.getState().hydrateSession([request.repo], request.repo.id)
-        const state = useReposStore.getState()
-        const refreshedRepo = state.repos[request.repo.id]
-        if (capturedBranch && refreshedRepo?.data.branches.some((branch) => branch.name === capturedBranch)) {
-          state.selectBranch(request.repo.id, capturedBranch)
-        }
       } catch (error) {
         console.warn('[detached-file-area] failed to retry captured context', error)
       } finally {
@@ -136,7 +160,9 @@ function DetachedRepositoryFileArea({
   }
 
   return (
-    <ErrorBoundary resetKey={`${request.kind}:${request.repo.id}:${capturedBranch ?? ''}:${request.tab}`}>
+    <ErrorBoundary
+      resetKey={`${request.kind}:${request.repo.id}:${capturedPath ?? capturedBranch ?? ''}:${request.tab}`}
+    >
       <div className="project-file-area-tone flex h-full min-h-0 flex-col bg-background text-foreground">
         <EffectiveProjectThemeBridge />
         <Topbar
@@ -160,10 +186,10 @@ function DetachedRepositoryFileArea({
               {repoName}
             </span>
             <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-            {capturedBranch ? (
+            {capturedLabel ? (
               <>
-                <span className="max-w-52 truncate font-mono text-muted-foreground" title={capturedBranch}>
-                  {capturedBranch}
+                <span className="max-w-52 truncate font-mono text-muted-foreground" title={capturedLabel}>
+                  {capturedLabel}
                 </span>
                 <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
               </>
@@ -213,7 +239,7 @@ function DetachedRepositoryFileArea({
 function DetachedBranchWorkspaceFileArea({ request }: { request: DetachedBranchWorkspaceFileAreaRequest }) {
   const t = useT()
   const [activeTab, setActiveTab] = useState<BranchWorkspaceFileAreaTab>(request.tab)
-  const [revealRequest, setRevealRequest] = useState<{ id: number; relativePath: string } | null>(null)
+  const [revealRequest, setRevealRequest] = useState<FileTreeRevealRequest | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const query = useBranchWorkspaceQuery(request.root.id)
   const workspace = query.data?.ok ? query.data.items.find((item) => item.id === request.branchWorkspaceId) : undefined
@@ -232,11 +258,11 @@ function DetachedBranchWorkspaceFileArea({ request }: { request: DetachedBranchW
   }, [request.root])
 
   useEffect(() => {
-    document.title = `${t(TAB_LABEL_KEYS[activeTab])} — ${workspace?.branch ?? request.branchWorkspaceId}`
-  }, [activeTab, request.branchWorkspaceId, t, workspace?.branch])
+    document.title = `${t(TAB_LABEL_KEYS[activeTab])} — ${workspace?.directoryName ?? request.branchWorkspaceId}`
+  }, [activeTab, request.branchWorkspaceId, t, workspace?.directoryName])
 
   function revealPath(relativePath: string) {
-    setRevealRequest((current) => ({ id: (current?.id ?? 0) + 1, relativePath }))
+    if (workspace) setRevealRequest({ repoId: request.root.id, worktreePath: workspace.path, relativePath })
     setActiveTab('files')
   }
 
@@ -261,7 +287,7 @@ function DetachedBranchWorkspaceFileArea({ request }: { request: DetachedBranchW
           }
         >
           <div data-testid="detached-context" className="flex min-w-0 items-center gap-1.5 text-xs">
-            <span className="truncate font-medium">{workspace?.branch ?? request.branchWorkspaceId}</span>
+            <span className="truncate font-medium">{workspace?.directoryName ?? request.branchWorkspaceId}</span>
             <Badge data-testid="detached-live" variant="secondary" className="gap-1 font-normal">
               <span className="size-1.5 rounded-full bg-success" aria-hidden="true" />
               {t('file-area.detached.live')}

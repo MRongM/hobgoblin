@@ -5,6 +5,7 @@ import { useI18nStore } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useSessionRestoreStore } from '#/web/stores/session-restore.ts'
 import { useThemeStore } from '#/web/stores/theme.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 export function useAppBootstrap() {
   const hydratedRef = useRef(false)
 
@@ -27,6 +28,7 @@ export function useAppBootstrap() {
           useI18nStore.getState().hydrate(),
         ])
         const session = useSessionRestoreStore.getState().consumeBootSessionSnapshot()
+        useTerminalStashStore.setState({ stashedTerminals: session.stashedTerminals ?? {} })
         const normalizedLayout = normalizeWorkspaceSessionLayoutState(session)
         const { hydrateSession, applySessionLayoutState, applySessionSelectedTerminalState, setProjectListExpanded } =
           useReposStore.getState()

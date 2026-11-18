@@ -5,6 +5,7 @@ import {
   inspectBranchWorkspacePath,
   listBranchWorkspaceChildren,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
+import { inspectBranchWorkspaceRepository } from '#/server/modules/branch-workspace-repository-source.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import { discoverBranchWorkspaceDirectories } from '#/server/modules/branch-workspace-discovery-source.ts'
@@ -12,13 +13,21 @@ import type { RepoSnapshotOptions } from '#/server/modules/repo-backend.ts'
 import { readWorkspaceConfig } from '#/server/modules/workspace-config-source.ts'
 import {
   branchWorkspaceDirectoryName,
+  branchWorkspaceStorageRootId,
+  branchWorkspaceStorageRootIdAtPath,
+  branchWorkspaceMemberRepositoryId,
+  repositoryIdAtPath,
   branchWorkspacePath,
   workspacePathExists,
   workspaceRepositoryId,
   workspaceRepositoryPath,
   workspaceRootId,
 } from '#/server/modules/workspace-paths.ts'
-import { getRepositorySnapshot, getRepositoryWorktrees } from '#/server/modules/repo-read-paths.ts'
+import {
+  getRepositorySnapshot,
+  getRepositoryWorktrees,
+  getRepositoryWorktreeStatusEntries,
+} from '#/server/modules/repo-read-paths.ts'
 import { getRepositoryRemoteBranches } from '#/server/modules/repo-write-paths.ts'
 import {
   normalizeBranchWorkspacePlanRequest,
@@ -29,8 +38,9 @@ import {
   type BranchWorkspacePlanRequest,
   type BranchWorkspacePlanResult,
   type BranchWorkspaceRepositoryPlan,
+  type BranchWorkspaceRepositorySelection,
 } from '#/shared/branch-workspaces.ts'
-import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import { PROTECTED_BRANCHES, type WorktreeInfo } from '#/shared/git-types.ts'
 import { isProtectedRemoteBranchRef, parseRemoteBranchRef } from '#/shared/remote-branches.ts'
@@ -42,11 +52,13 @@ import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summ
 import { isRemoteTrackingRef, type WorktreeCreationBase, worktreeCreationBaseRef } from '#/shared/worktree-create.ts'
 
 export interface BranchWorkspacePlanDependencies {
+  inspectRepository?: typeof inspectBranchWorkspaceRepository
   readConfig?: (rootId: string) => Promise<WorkspaceConfigSnapshot>
   readManifests?: typeof readBranchWorkspaceManifests
   discoverDirectories?: typeof discoverBranchWorkspaceDirectories
   getSnapshot?: (repoId: string, signal?: AbortSignal, options?: RepoSnapshotOptions) => Promise<RepoSnapshot | null>
   getWorktrees?: (repoId: string, signal?: AbortSignal) => Promise<WorktreeInfo[]>
+  getWorktreeStatusEntries?: typeof getRepositoryWorktreeStatusEntries
   getRemoteBranches?: (repoId: string, signal?: AbortSignal) => Promise<string[]>
   inspectPath?: typeof inspectBranchWorkspacePath
   pathExists?: (repoId: string, candidatePath: string) => Promise<boolean>
@@ -67,11 +79,11 @@ export async function buildBranchWorkspacePlan(
     return await buildExistingBranchWorkspacePlan(rootId, normalized.request, dependencies, signal)
   }
   const createRequest = normalized.request
-  if (!isSafeBranchName(createRequest.branch)) {
+  if (!createRequest.directoryName && !isSafeBranchName(createRequest.branch)) {
     return { ok: false, message: 'workspace.branch-workspace.invalid-branch' }
   }
   const normalizedRootId = workspaceRootId(rootId)
-  const resources = await readPlanResources(normalizedRootId, dependencies, signal)
+  const resources = await readPlanResources(normalizedRootId, createRequest, dependencies, signal)
   if (!resources.ok) return resources
   const { config, manifests } = resources
   const selectedRepositories = new Map(
@@ -81,10 +93,30 @@ export async function buildBranchWorkspacePlan(
     return { ok: false, message: 'workspace.branch-workspace.invalid-entry' }
   }
 
-  const existing = manifests.find((manifest) => manifest.branch === createRequest.branch)
+  const existing = createRequest.branchWorkspaceId
+    ? manifests.find((manifest) => manifest.id === createRequest.branchWorkspaceId)
+    : !createRequest.directoryName
+      ? manifests.find((manifest) => manifest.branch === createRequest.branch)
+      : undefined
+  if (createRequest.branchWorkspaceId && !existing)
+    return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
+  if (
+    existing &&
+    createRequest.parentDirectory &&
+    !sameHostPath(
+      normalizedRootId,
+      createRequest.parentDirectory,
+      workspaceRepositoryPath(branchWorkspaceStorageRootId(existing))!,
+    )
+  )
+    return { ok: false, message: 'workspace.branch-workspace.directory-fixed' }
+  if (existing && createRequest.directoryName && existing.directoryName !== createRequest.directoryName)
+    return { ok: false, message: 'workspace.branch-workspace.member-fixed' }
   const existingOperation = existing?.operation?.kind
   const interruptedOperation =
-    existingOperation === 'create' || existingOperation === 'extend' ? existingOperation : null
+    existingOperation === 'create' || existingOperation === 'extend' || existingOperation === 'repair'
+      ? existingOperation
+      : null
   if (existingOperation && !interruptedOperation) {
     return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
   }
@@ -99,11 +131,13 @@ export async function buildBranchWorkspacePlan(
       : existing
   const location = await resolveBranchWorkspaceLocation(
     normalizedRootId,
-    createRequest.branch,
+    createRequest.directoryName ?? createRequest.branch,
     existing,
     manifests,
     dependencies,
     signal,
+    !!createRequest.directoryName,
+    createRequest.parentDirectory,
   )
   if (!location.ok) return location
 
@@ -112,14 +146,6 @@ export async function buildBranchWorkspacePlan(
   )
   const fixedAuxiliaryEntries = new Map(planningBaseline?.auxiliaryEntries.map((entry) => [entry.name, entry]) ?? [])
   for (const selection of createRequest.repositories) {
-    const fixed = fixedRepositories.get(selection.repositoryName)
-    if (
-      fixed &&
-      (!sameCreationBase(fixed.creationBase, selection.creationBase) ||
-        fixed.syncBeforeCreate !== selection.syncBeforeCreate)
-    ) {
-      return { ok: false, message: 'workspace.branch-workspace.member-fixed' }
-    }
     if (fixedAuxiliaryEntries.has(selection.repositoryName)) {
       return { ok: false, message: 'workspace.branch-workspace.member-fixed' }
     }
@@ -134,25 +160,28 @@ export async function buildBranchWorkspacePlan(
     }
   }
 
-  const repositorySelections = [...new Set([...config.repo, ...selectedRepositories.keys()])].flatMap(
-    (repositoryName) => {
-      const selection = selectedRepositories.get(repositoryName)
-      return !selection || fixedRepositories.has(repositoryName) ? [] : [selection]
-    },
-  )
+  const repositorySelections = [
+    ...new Set([...(createRequest.directoryName ? [] : config.repo), ...selectedRepositories.keys()]),
+  ].flatMap((repositoryName) => {
+    const selection = selectedRepositories.get(repositoryName)
+    return !selection || fixedRepositories.has(repositoryName) ? [] : [selection]
+  })
   const plannedRepositories = await Promise.all(
     repositorySelections.map(async (selection) => {
       signal?.throwIfAborted()
       return await planRepository(
         normalizedRootId,
         location.path,
-        createRequest.branch,
+        selection.targetBranch ??
+          modeBranch(selection.mode) ??
+          (createRequest.directoryName ? '' : createRequest.branch),
         selection.repositoryName,
         selection.creationBase,
         selection.syncBeforeCreate,
         selection.worktreeBootstrap,
         dependencies,
         signal,
+        selection,
       )
     }),
   )
@@ -181,17 +210,35 @@ export async function buildBranchWorkspacePlan(
     return { ok: false, message: 'workspace.branch-workspace.nothing-to-add' }
   }
 
-  const branchWorkspaceId = existing?.id ?? stableBranchWorkspaceId(normalizedRootId, createRequest.branch)
+  const branchWorkspaceId =
+    existing?.id ??
+    stableBranchWorkspaceId(
+      normalizedRootId,
+      createRequest.directoryName ? `folder:${location.path}` : createRequest.branch,
+    )
+  for (const repository of repositories)
+    if (repository.kind || createRequest.directoryName)
+      repository.memberId ??= stableBranchWorkspaceId(branchWorkspaceId, repository.repositoryName)
   const manifest: BranchWorkspaceManifest = {
     id: branchWorkspaceId,
     rootId: normalizedRootId,
     branch: createRequest.branch,
     directoryName: location.directoryName,
     path: location.path,
+    ...(location.parentDirectory ? { parentDirectory: location.parentDirectory } : {}),
     repositories: [
       ...(planningBaseline?.repositories.map((member) => ({ ...member })) ?? []),
       ...repositories.map((member) => ({
         repositoryName: member.repositoryName,
+        ...(member.kind || createRequest.directoryName
+          ? {
+              kind: member.kind ?? 'worktree',
+              source: member.source ?? { kind: 'repository' as const, repositoryId: member.repoId },
+              memberId: member.memberId ?? stableBranchWorkspaceId(branchWorkspaceId, member.repositoryName),
+              repositoryId: member.repoId,
+              ...(member.checkoutDefaultBranch ? {} : { mode: member.mode }),
+            }
+          : {}),
         targetBranch: member.targetBranch,
         creationBase: { ...member.creationBase },
         syncBeforeCreate: member.syncBeforeCreate,
@@ -223,6 +270,7 @@ export async function buildBranchWorkspacePlan(
     branch: createRequest.branch,
     directoryName: location.directoryName,
     path: location.path,
+    ...(location.parentDirectory ? { parentDirectory: location.parentDirectory } : {}),
     manifest,
     repositories,
     auxiliaryEntries,
@@ -240,21 +288,11 @@ async function buildExistingBranchWorkspacePlan(
   signal?: AbortSignal,
 ): Promise<BranchWorkspacePlanResult> {
   const normalizedRootId = workspaceRootId(rootId)
-  const resources = await readPlanResources(normalizedRootId, dependencies, signal)
+  const resources = await readPlanResources(normalizedRootId, request, dependencies, signal)
   if (!resources.ok) return resources
   const manifest = resources.manifests.find((candidate) => candidate.id === request.branchWorkspaceId)
   if (!manifest) return { ok: false, message: 'workspace.branch-workspace.manifest-missing' }
-  if (request.operation === 'repair') {
-    if (manifest.operation?.kind === 'remove') {
-      return { ok: false, message: 'workspace.branch-workspace.operation-incomplete' }
-    }
-    return await buildRepairPlan(
-      manifest,
-      manifest.repositories.map((member) => member.repositoryName),
-      dependencies,
-      signal,
-    )
-  }
+  if (request.operation === 'repair') return { ok: false, message: 'workspace.branch-workspace.nothing-to-repair' }
   if (request.operation === 'reduce') {
     return await buildReducePlan(
       manifest,
@@ -282,9 +320,6 @@ async function buildReducePlan(
   if ([...requestedNames].some((name) => !memberByName.has(name))) {
     return { ok: false, message: 'workspace.branch-workspace.member-unavailable' }
   }
-  if (requestedNames.size >= manifest.repositories.length) {
-    return { ok: false, message: 'workspace.branch-workspace.member-required' }
-  }
   if (manifest.operation?.kind === 'reduce') {
     const persistedNames = new Set(
       manifest.repositories.filter((member) => member.progress !== 'complete').map((member) => member.repositoryName),
@@ -294,7 +329,6 @@ async function buildReducePlan(
     }
   }
 
-  const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
   const selectedMembers = configuredRepositories.flatMap((repositoryName) => {
     const member = memberByName.get(repositoryName)
     return member && requestedNames.has(repositoryName) ? [member] : []
@@ -306,60 +340,27 @@ async function buildReducePlan(
   const repositories: BranchWorkspaceRepositoryPlan[] = []
   for (const member of selectedMembers) {
     signal?.throwIfAborted()
-    const repoId = member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName)
+    const repoId = branchWorkspaceMemberRepositoryId(manifest.rootId, member)
     if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
     if (member.progress === 'removed' && manifest.operation?.kind === 'reduce') {
       repositories.push(reduceRepositoryPlan(member, repoId, 'satisfied'))
       continue
     }
-    const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
-      includeWorktreeStatus: false,
-      includeRemote: false,
-    }).catch(() => null)
-    if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-    const registered = registeredWorktreeAtPath(manifest.rootId, snapshot, member.worktreePath)
-    if (!registered) {
-      const worktrees = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => null)
-      if (!worktrees) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-      const registeredByPath = worktrees.find(
-        (worktree) => !worktree.isBare && sameHostPath(manifest.rootId, worktree.path, member.worktreePath),
-      )
-      if (registeredByPath) {
-        if (registeredByPath.isPrimary) {
-          return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
-        }
-        if (registeredByPath.isLocked) {
-          return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
-        }
-        repositories.push(reduceRepositoryPlan(member, repoId, 'remove-worktree', registeredByPath.branch))
-        continue
-      }
-      const target = await inspect(manifest.rootId, member.worktreePath, signal).catch(() => null)
-      if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
-      if (target.exists) {
-        repositories.push(reduceRepositoryPlan(member, repoId, 'remove-entry'))
-        continue
-      }
-      repositories.push(reduceRepositoryPlan(member, repoId, 'satisfied'))
-      continue
-    }
-    const { branch: checkedOutBranch, worktree } = registered
-    if (worktree.isPrimary) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
-    if (worktree.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
-    repositories.push(reduceRepositoryPlan(member, repoId, 'remove-worktree', checkedOutBranch))
+    const removal = await planReduceWorktree(manifest, member, dependencies, signal)
+    if (!removal.ok) return removal
+    repositories.push(removal.repository)
   }
 
   const terminalSessionIds = await terminalSessionIdsForPaths(
     manifest,
     selectedMembers.map((member) => member.repositoryName),
-    selectedMembers.map((member) => member.worktreePath),
+    repositories.map((repository) => repository.worktreePath),
     dependencies,
   )
   if (!terminalSessionIds) return { ok: false, message: 'workspace.branch-workspace.terminal-read-failed' }
   const requiredApprovals: BranchWorkspaceApproval[] = []
-  if (repositories.some((repository) => repository.action === 'remove-entry')) {
-    requiredApprovals.push('unmanaged-content')
-  }
+  if (repositories.some((repository) => repository.action === 'remove-worktree' && repository.dirty))
+    requiredApprovals.push('discard-member-changes')
   if (terminalSessionIds.length > 0) requiredApprovals.push('close-terminals')
   const reducingManifest: BranchWorkspaceManifest = {
     ...manifest,
@@ -385,6 +386,7 @@ async function buildReducePlan(
   )
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: manifest.rootId,
+    ...(manifest.parentDirectory ? { parentDirectory: manifest.parentDirectory } : {}),
     operation: 'reduce',
     branchWorkspaceId: manifest.id,
     branch: manifest.branch,
@@ -400,6 +402,78 @@ async function buildReducePlan(
   return { ok: true, plan: { token: planToken(planWithoutToken), ...planWithoutToken } }
 }
 
+/** Folder membership is observed from disk; reducing it never grants ownership of a primary repository. */
+async function planReduceWorktree(
+  manifest: BranchWorkspaceManifest,
+  member: BranchWorkspaceManifest['repositories'][number],
+  dependencies: BranchWorkspacePlanDependencies,
+  signal?: AbortSignal,
+): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
+  if (member.kind === 'repository') return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
+  const repoId = branchWorkspaceMemberRepositoryId(manifest.rootId, member)
+  if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  const paths = isRemoteRepoId(manifest.rootId) ? path.posix : path
+  const entryPath = paths.join(manifest.path, member.repositoryName)
+  if (!sameHostPath(manifest.rootId, paths.dirname(entryPath), manifest.path))
+    return { ok: false, message: 'workspace.branch-workspace.invalid-path' }
+  const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
+  const scope = branchWorkspaceStorageRootId(manifest)
+  const [folder, entry] = await Promise.all([
+    inspect(scope, manifest.path, signal).catch(() => null),
+    inspect(scope, entryPath, signal).catch(() => null),
+  ])
+  signal?.throwIfAborted()
+  if (!folder?.exists || !folder.resolvedPath || !entry?.exists || !entry.resolvedPath)
+    return { ok: false, message: 'workspace.branch-workspace.member-unavailable' }
+  if (!sameHostPath(manifest.rootId, entry.resolvedPath, member.worktreePath))
+    return { ok: false, message: 'workspace.branch-workspace.plan-stale' }
+  const worktrees = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => null)
+  signal?.throwIfAborted()
+  const registered = worktrees?.find((worktree) => sameHostPath(manifest.rootId, worktree.path, entry.resolvedPath!))
+  if (!registered || registered.isBare || registered.isPrunable)
+    return { ok: false, message: 'workspace.branch-workspace.member-unavailable' }
+  if (registered.isPrimary) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
+  if (entry.kind === 'symlink') {
+    const entryFingerprint = await (dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry)(
+      repositoryIdAtPath(manifest.rootId, manifest.path),
+      entryPath,
+      signal,
+    ).catch(() => null)
+    if (!entryFingerprint) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
+    return {
+      ok: true,
+      repository: {
+        ...reduceRepositoryPlan(member, repoId, 'remove-entry', registered.branch),
+        kind: 'worktree',
+        worktreePath: entryPath,
+        entryFingerprint,
+      },
+    }
+  }
+  if (
+    entry.kind !== 'directory' ||
+    !sameHostPath(manifest.rootId, paths.dirname(entry.resolvedPath), folder.resolvedPath)
+  )
+    return { ok: false, message: 'workspace.branch-workspace.invalid-path' }
+  if (registered.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
+  const entries = await (dependencies.getWorktreeStatusEntries ?? getRepositoryWorktreeStatusEntries)(
+    repoId,
+    registered.path,
+    signal,
+  ).catch(() => null)
+  signal?.throwIfAborted()
+  if (!entries) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
+  return {
+    ok: true,
+    repository: {
+      ...reduceRepositoryPlan(member, repoId, 'remove-worktree', registered.branch),
+      kind: 'worktree',
+      worktreePath: registered.path,
+      dirty: entries.length > 0,
+    },
+  }
+}
+
 function reduceRepositoryPlan(
   member: BranchWorkspaceManifest['repositories'][number],
   repoId: string,
@@ -409,6 +483,9 @@ function reduceRepositoryPlan(
   const satisfied = action === 'satisfied'
   return {
     repositoryName: member.repositoryName,
+    ...(member.kind ? { kind: member.kind } : {}),
+    ...(member.source ? { source: member.source } : {}),
+    ...(member.memberId ? { memberId: member.memberId } : {}),
     repoId,
     targetBranch: member.targetBranch,
     ...(checkedOutBranch ? { checkedOutBranch } : {}),
@@ -432,7 +509,7 @@ async function buildRepairPlan(
   signal?: AbortSignal,
 ): Promise<BranchWorkspacePlanResult> {
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
-  const root = await inspect(manifest.rootId, manifest.path, signal).catch(() => null)
+  const root = await inspect(branchWorkspaceStorageRootId(manifest), manifest.path, signal).catch(() => null)
   if (!root) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
   if (root.exists && root.kind !== 'directory') {
     return { ok: false, message: 'workspace.branch-workspace.target-exists' }
@@ -475,7 +552,7 @@ async function buildRepairPlan(
       return [
         {
           id: `repository:${repository.repositoryName}`,
-          kind: 'create-worktree' as const,
+          kind: repository.kind === 'repository' ? ('clone-repository' as const) : ('create-worktree' as const),
           label: repository.repositoryName,
           repositoryName: repository.repositoryName,
         },
@@ -487,6 +564,7 @@ async function buildRepairPlan(
   }
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: manifest.rootId,
+    ...(manifest.parentDirectory ? { parentDirectory: manifest.parentDirectory } : {}),
     operation: 'repair',
     branchWorkspaceId: manifest.id,
     branch: manifest.branch,
@@ -508,13 +586,86 @@ async function planRepairRepository(
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
 ): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
-  const repoId = member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName)
+  const repoId = branchWorkspaceMemberRepositoryId(manifest.rootId, member)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  if (member.kind === 'repository') {
+    const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
+      branchWorkspaceStorageRootId(manifest),
+      member.worktreePath,
+      signal,
+    ).catch(() => null)
+    if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
+    if (target.exists) {
+      const worktrees = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => [])
+      const own = worktrees.find(
+        (entry) =>
+          sameHostPath(manifest.rootId, entry.path, member.worktreePath) &&
+          entry.isPrimary &&
+          !entry.isBare &&
+          !entry.isPrunable,
+      )
+      if (own && member.memberId) {
+        const ownership = await (dependencies.inspectRepository ?? inspectBranchWorkspaceRepository)(
+          branchWorkspaceStorageRootId(manifest),
+          member.worktreePath,
+          signal,
+        ).catch(() => null)
+        if (ownership?.memberId !== member.memberId)
+          return { ok: false, message: 'workspace.branch-workspace.target-exists' }
+      }
+      if (!own || target.kind !== 'directory') return { ok: false, message: 'workspace.branch-workspace.target-exists' }
+      return {
+        ok: true,
+        repository: {
+          ...repairRepositoryPlan(
+            member,
+            repoId,
+            member.mode ?? { kind: 'existingBranch', branch: member.targetBranch },
+            true,
+          ),
+          kind: 'repository',
+          source: member.source,
+          action: 'satisfied',
+        },
+      }
+    }
+    if (!member.source) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    return await planCompleteRepository(
+      branchWorkspaceStorageRootId(manifest),
+      manifest.path,
+      member.targetBranch,
+      { ...member, kind: 'repository', mode: member.mode },
+      dependencies,
+      signal,
+    )
+  }
+  if (member.mode?.kind === 'detached' || member.currentBranch === null) {
+    const registrations = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => [])
+    const actual = registrations.find(
+      (entry) => !entry.isBare && !entry.isPrunable && sameHostPath(manifest.rootId, entry.path, member.worktreePath),
+    )
+    if (actual)
+      return {
+        ok: true,
+        repository: repairRepositoryPlan(
+          member,
+          repoId,
+          { kind: 'detached', ref: actual.head ?? (member.mode?.kind === 'detached' ? member.mode.ref : 'HEAD') },
+          true,
+        ),
+      }
+  }
   const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
     includeWorktreeStatus: false,
     includeRemote: false,
   }).catch(() => null)
   if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  const actual = registeredWorktreeAtPath(manifest.rootId, snapshot, member.worktreePath)
+  if (actual && !actual.worktree.isPrunable)
+    return {
+      ok: true,
+      repository: repairRepositoryPlan(member, repoId, { kind: 'existingBranch', branch: actual.branch }, true),
+    }
   const branch = snapshot.branches.find((candidate) => candidate.name === member.targetBranch)
   if (branch?.worktree) {
     if (!sameHostPath(manifest.rootId, branch.worktree.path, member.worktreePath)) {
@@ -530,7 +681,7 @@ async function planRepairRepository(
     }
   }
   const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
-    manifest.rootId,
+    branchWorkspaceStorageRootId(manifest),
     member.worktreePath,
     signal,
   ).catch(() => null)
@@ -564,6 +715,9 @@ function repairRepositoryPlan(
 ): BranchWorkspaceRepositoryPlan {
   return {
     repositoryName: member.repositoryName,
+    ...(member.kind ? { kind: member.kind } : {}),
+    ...(member.source ? { source: member.source } : {}),
+    ...(member.memberId ? { memberId: member.memberId } : {}),
     repoId,
     targetBranch: member.targetBranch,
     creationBase: { ...member.creationBase },
@@ -585,7 +739,7 @@ async function buildRemovePlan(
   signal?: AbortSignal,
 ): Promise<BranchWorkspacePlanResult> {
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
-  const root = await inspect(manifest.rootId, manifest.path, signal).catch(() => null)
+  const root = await inspect(branchWorkspaceStorageRootId(manifest), manifest.path, signal).catch(() => null)
   if (!root) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
   if (root.exists && root.kind !== 'directory') {
     return { ok: false, message: 'workspace.branch-workspace.root-not-directory' }
@@ -595,23 +749,35 @@ async function buildRemovePlan(
   const unmanagedMemberEntries: string[] = []
   for (const member of manifest.repositories) {
     signal?.throwIfAborted()
+    // Discovery resolves directory links; deleting this folder must never delete their external targets.
+    if (!sameHostDescendant(manifest.rootId, manifest.path, member.worktreePath)) {
+      unmanagedMemberEntries.push(member.repositoryName)
+      continue
+    }
+    if (
+      repositories.some((repository) => sameHostPath(manifest.rootId, repository.worktreePath, member.worktreePath))
+    ) {
+      unmanagedMemberEntries.push(member.repositoryName)
+      continue
+    }
     const repository = await planRemoveRepository(manifest, member, request, dependencies, signal)
     if (!repository.ok) return repository
     repositories.push(repository.repository)
     if (repository.unmanagedEntry) unmanagedMemberEntries.push(repository.unmanagedEntry)
   }
+  repositories.sort((left, right) => Number(left.kind === 'repository') - Number(right.kind === 'repository'))
 
   const auxiliaryEntries: BranchWorkspaceAuxiliaryPlan[] = []
   let modifiedCopy = false
   let unsafeManagedEntry = false
   for (const entry of manifest.auxiliaryEntries) {
     signal?.throwIfAborted()
-    const target = await inspect(manifest.rootId, entry.targetPath, signal).catch(() => null)
+    const target = await inspect(branchWorkspaceStorageRootId(manifest), entry.targetPath, signal).catch(() => null)
     if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
     let modified = false
     if (target.exists && entry.mode === 'copy') {
       const fingerprint = await (dependencies.fingerprintEntry ?? fingerprintBranchWorkspaceEntry)(
-        manifest.rootId,
+        branchWorkspaceStorageRootId(manifest),
         entry.targetPath,
         signal,
       ).catch(() => null)
@@ -633,9 +799,14 @@ async function buildRemovePlan(
   }
 
   let unmanagedEntries: string[] = [...unmanagedMemberEntries]
-  if (root.exists) {
+  const removesRootAsMember = repositories.some(
+    (repository) =>
+      (repository.action === 'remove-worktree' || repository.action === 'remove-entry') &&
+      sameHostPath(manifest.rootId, repository.worktreePath, manifest.path),
+  )
+  if (root.exists && !removesRootAsMember) {
     const children = await (dependencies.listChildren ?? listBranchWorkspaceChildren)(
-      manifest.rootId,
+      branchWorkspaceStorageRootId(manifest),
       manifest.path,
       signal,
     ).catch(() => null)
@@ -656,6 +827,8 @@ async function buildRemovePlan(
   )
   if (!terminalSessionIds) return { ok: false, message: 'workspace.branch-workspace.terminal-read-failed' }
   const requiredApprovals: BranchWorkspaceApproval[] = []
+  if (repositories.some((repository) => repository.kind === 'repository' && repository.action === 'remove-entry'))
+    requiredApprovals.push('delete-repository')
   if (modifiedCopy) requiredApprovals.push('modified-copy')
   if (unsafeManagedEntry || unmanagedEntries.length > 0) requiredApprovals.push('unmanaged-content')
   if (terminalSessionIds.length > 0) requiredApprovals.push('close-terminals')
@@ -684,6 +857,7 @@ async function buildRemovePlan(
   const steps = buildRemoveSteps(repositories, auxiliaryEntries, unmanagedEntries, root.exists, manifest.directoryName)
   const planWithoutToken: Omit<BranchWorkspacePlan, 'token'> = {
     rootId: manifest.rootId,
+    ...(manifest.parentDirectory ? { parentDirectory: manifest.parentDirectory } : {}),
     operation: 'remove',
     branchWorkspaceId: manifest.id,
     branch: manifest.branch,
@@ -713,27 +887,79 @@ async function planRemoveRepository(
 ): Promise<
   { ok: true; repository: BranchWorkspaceRepositoryPlan; unmanagedEntry?: string } | { ok: false; message: string }
 > {
-  const repoId = member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName)
+  const repoId = branchWorkspaceMemberRepositoryId(manifest.rootId, member)
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-  const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
-    includeWorktreeStatus: false,
-    includeRemote: false,
-  }).catch(() => null)
-  if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
-  const branch = snapshot.branches.find((candidate) => candidate.name === member.targetBranch)
-  const registered = registeredWorktreeAtPath(manifest.rootId, snapshot, member.worktreePath)
+  if (member.kind === 'repository') {
+    const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
+      branchWorkspaceStorageRootId(manifest),
+      member.worktreePath,
+      signal,
+    ).catch(() => null)
+    if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
+    if (!target.exists)
+      return { ok: true, repository: { ...reduceRepositoryPlan(member, repoId, 'satisfied'), kind: 'repository' } }
+    if (target.kind !== 'directory' || target.outsideRoot)
+      return { ok: false, message: 'workspace.branch-workspace.target-exists' }
+    const worktrees = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => null)
+    const primary = worktrees?.find(
+      (entry) =>
+        sameHostPath(manifest.rootId, entry.path, member.worktreePath) &&
+        entry.isPrimary &&
+        !entry.isBare &&
+        !entry.isPrunable,
+    )
+    if (!primary) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    if (primary.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
+    if (
+      worktrees?.some((entry) => !entry.isPrunable && !sameHostDescendant(manifest.rootId, manifest.path, entry.path))
+    )
+      return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
+    return {
+      ok: true,
+      repository: {
+        ...reduceRepositoryPlan(member, repoId, 'remove-entry', primary.branch),
+        kind: 'repository',
+      },
+    }
+  }
+  const snapshot = request.alsoDeleteBranch
+    ? await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
+        includeWorktreeStatus: false,
+        includeRemote: false,
+      }).catch(() => null)
+    : null
+  signal?.throwIfAborted()
+  if (request.alsoDeleteBranch && !snapshot)
+    return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  const snapshotWorktree = snapshot
+    ? registeredWorktreeAtPath(manifest.rootId, snapshot, member.worktreePath)
+    : undefined
+  const worktrees = snapshotWorktree
+    ? null
+    : await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => null)
+  signal?.throwIfAborted()
+  const branch = snapshot?.branches.find((candidate) => candidate.name === member.targetBranch)
+  const registeredWorktree = worktrees?.find((entry) => sameHostPath(manifest.rootId, entry.path, member.worktreePath))
+  if (registeredWorktree?.isBare) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
+  const registered =
+    snapshotWorktree ??
+    (registeredWorktree ? { branch: registeredWorktree.branch, worktree: registeredWorktree } : undefined)
   const worktree = registered?.worktree
   if (worktree?.isPrimary) return { ok: false, message: 'workspace.branch-workspace.primary-worktree' }
   if (worktree?.isLocked) return { ok: false, message: 'workspace.branch-workspace.locked-worktree' }
   let unmanagedEntry: string | undefined
   if (!worktree) {
     const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
-      manifest.rootId,
+      branchWorkspaceStorageRootId(manifest),
       member.worktreePath,
       signal,
     ).catch(() => null)
     if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
-    if (target.exists) unmanagedEntry = member.repositoryName
+    if (target.exists) {
+      // An empty list can mean Git is unreadable; only absent paths can be forgotten without worktree metadata.
+      if (!worktrees?.length) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+      unmanagedEntry = member.repositoryName
+    }
   }
 
   const targetCheckedOutElsewhere =
@@ -787,8 +1013,7 @@ async function descendantTerminalSessionIds(
   const scopes = [
     manifest.rootId,
     ...manifest.repositories
-      .filter((member) => configuredRepositories.includes(member.repositoryName))
-      .map((member) => member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName))
+      .map((member) => branchWorkspaceMemberRepositoryId(manifest.rootId, member))
       .filter((repoId): repoId is string => !!repoId),
   ]
   try {
@@ -826,7 +1051,7 @@ async function terminalSessionIdsForPaths(
     manifest.rootId,
     ...manifest.repositories
       .filter((member) => configuredRepositories.includes(member.repositoryName))
-      .map((member) => member.repositoryId ?? workspaceRepositoryId(manifest.rootId, member.repositoryName))
+      .map((member) => branchWorkspaceMemberRepositoryId(manifest.rootId, member))
       .filter((repoId): repoId is string => !!repoId),
   ]
   try {
@@ -883,6 +1108,16 @@ function buildRemoveSteps(
     ...repositories.flatMap((repository) => {
       if (repository.satisfied) return []
       return [
+        ...(repository.kind === 'repository' && repository.action === 'remove-entry'
+          ? [
+              {
+                id: `repository:${repository.repositoryName}`,
+                kind: 'remove-entry' as const,
+                label: repository.repositoryName,
+                repositoryName: repository.repositoryName,
+              },
+            ]
+          : []),
         ...(repository.worktreePresent
           ? [
               {
@@ -935,6 +1170,7 @@ function buildRemoveSteps(
 
 async function readPlanResources(
   rootId: string,
+  request: BranchWorkspacePlanRequest,
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
 ): Promise<
@@ -946,17 +1182,26 @@ async function readPlanResources(
   | { ok: false; message: string }
 > {
   try {
+    signal?.throwIfAborted()
+    const stored = await (dependencies.readManifests ?? readBranchWorkspaceManifests)(rootId)
+    signal?.throwIfAborted()
+    if (stored.kind === 'invalid') return { ok: false, message: stored.message }
     const [configSnapshot, manifestSnapshot] = await Promise.all([
-      (dependencies.readConfig ?? readWorkspaceConfig)(rootId),
+      request.operation === 'create' ? (dependencies.readConfig ?? readWorkspaceConfig)(rootId) : Promise.resolve(null),
       readBranchWorkspaceCatalog(rootId, signal, {
-        readManifests: dependencies.readManifests,
+        readManifests: async () => stored,
         discoverDirectories: dependencies.discoverDirectories,
+        target:
+          request.operation === 'create'
+            ? { branch: request.branch }
+            : { branchWorkspaceId: request.branchWorkspaceId },
       }),
     ])
     if (manifestSnapshot.kind === 'invalid') return { ok: false, message: manifestSnapshot.message }
+    if (manifestSnapshot.registryError) return { ok: false, message: manifestSnapshot.registryError }
     return {
       ok: true,
-      config: configSnapshot.kind === 'ready' ? configSnapshot.config : { repo: [] },
+      config: configSnapshot?.kind === 'ready' ? configSnapshot.config : { repo: [] },
       manifests: manifestSnapshot.kind === 'ready' ? manifestSnapshot.manifests : [],
     }
   } catch (error) {
@@ -967,32 +1212,83 @@ async function readPlanResources(
 
 async function resolveBranchWorkspaceLocation(
   rootId: string,
-  branch: string,
+  name: string,
   existing: BranchWorkspaceManifest | undefined,
   manifests: BranchWorkspaceManifest[],
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
+  folder = false,
+  requestedParent?: string,
 ): Promise<
-  { ok: true; directoryName: string; path: string; createDirectory: boolean } | { ok: false; message: string }
+  | { ok: true; directoryName: string; path: string; createDirectory: boolean; parentDirectory?: string }
+  | { ok: false; message: string }
 > {
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
+  const pathApi = isRemoteRepoId(rootId) ? path.posix : path
   if (existing) {
-    const observed = await inspect(rootId, existing.path, signal).catch(() => null)
-    if (observed?.exists && observed.kind === 'directory') {
-      return { ok: true, directoryName: existing.directoryName, path: existing.path, createDirectory: false }
+    const observed = await inspect(branchWorkspaceStorageRootId(existing), existing.path, signal).catch(() => null)
+    const location = {
+      directoryName: existing.directoryName,
+      path: existing.path,
+      ...(existing.parentDirectory ? { parentDirectory: existing.parentDirectory } : {}),
+    }
+    if (observed?.exists) {
+      if (
+        existing.repositories.some((member) =>
+          sameHostPath(rootId, member.worktreePath, observed.resolvedPath ?? existing.path),
+        )
+      )
+        return { ok: false, message: 'workspace.branch-workspace.not-container' }
+      if (observed.kind === 'directory') return { ok: true, ...location, createDirectory: false }
+      if (observed.kind === 'symlink' && observed.resolvedPath) {
+        const target = await inspect(
+          repositoryIdAtPath(rootId, pathApi.dirname(observed.resolvedPath)),
+          observed.resolvedPath,
+          signal,
+        ).catch(() => null)
+        if (target?.kind === 'directory') return { ok: true, ...location, createDirectory: false }
+      }
     }
     return observed && !observed.exists && existing.operation?.kind === 'create'
-      ? { ok: true, directoryName: existing.directoryName, path: existing.path, createDirectory: true }
+      ? { ok: true, ...location, createDirectory: true }
       : { ok: false, message: 'workspace.branch-workspace.needs-repair' }
   }
-
-  const occupied = new Set(manifests.map((manifest) => manifest.directoryName))
+  let parentDirectory: string | undefined
+  try {
+    if (requestedParent !== undefined) {
+      branchWorkspacePath(rootId, name, requestedParent)
+      parentDirectory = pathApi.normalize(requestedParent)
+    }
+  } catch {
+    return { ok: false, message: 'workspace.branch-workspace.invalid-directory' }
+  }
+  const parentPath = parentDirectory ?? workspaceRepositoryPath(rootId)!
+  const scopeId = repositoryIdAtPath(rootId, parentPath)
+  if (parentDirectory) {
+    const parent = await inspect(scopeId, parentPath, signal).catch(() => null)
+    if (!parent?.exists || parent.kind !== 'directory' || parent.outsideRoot)
+      return { ok: false, message: 'workspace.branch-workspace.directory-unavailable' }
+  }
+  const occupied = new Set(
+    manifests
+      .filter((manifest) => sameHostPath(rootId, pathApi.dirname(manifest.path), parentPath))
+      .map((manifest) => manifest.directoryName),
+  )
+  if (folder && occupied.has(name)) return { ok: false, message: 'workspace.branch-workspace.target-exists' }
   while (true) {
-    const directoryName = branchWorkspaceDirectoryName(branch, occupied)
-    const candidatePath = branchWorkspacePath(rootId, directoryName)
-    const observed = await inspect(rootId, candidatePath, signal).catch(() => null)
+    const directoryName = folder ? name : branchWorkspaceDirectoryName(name, occupied)
+    const candidatePath = branchWorkspacePath(rootId, directoryName, parentDirectory)
+    const observed = await inspect(scopeId, candidatePath, signal).catch(() => null)
     if (!observed) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
-    if (!observed.exists) return { ok: true, directoryName, path: candidatePath, createDirectory: true }
+    if (!observed.exists)
+      return {
+        ok: true,
+        directoryName,
+        path: candidatePath,
+        createDirectory: true,
+        ...(parentDirectory ? { parentDirectory } : {}),
+      }
+    if (folder) return { ok: false, message: 'workspace.branch-workspace.target-exists' }
     occupied.add(directoryName)
   }
 }
@@ -1007,9 +1303,26 @@ async function planRepository(
   requestedBootstrap: WorktreeBootstrapDecision | undefined,
   dependencies: BranchWorkspacePlanDependencies,
   signal?: AbortSignal,
+  selection?: BranchWorkspaceRepositorySelection,
 ): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
-  const repoId = workspaceRepositoryId(rootId, repositoryName)
+  const source = selection?.source
+  let repoId = source?.kind === 'repository' ? source.repositoryId : workspaceRepositoryId(rootId, repositoryName)
+  if (source?.kind === 'repository' && !sameRepositoryHost(rootId, source.repositoryId))
+    return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  if (selection?.kind === 'repository')
+    return planCompleteRepository(rootId, workspacePath, targetBranch, selection, dependencies, signal)
+  if (!targetBranch && selection?.mode?.kind !== 'detached')
+    return { ok: false, message: 'workspace.branch-workspace.invalid-branch' }
+  if (targetBranch && !isSafeBranchName(targetBranch))
+    return { ok: false, message: 'workspace.branch-workspace.invalid-branch' }
   if (!repoId) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  if (source?.kind === 'repository') {
+    const registrations = await (dependencies.getWorktrees ?? getRepositoryWorktrees)(repoId, signal).catch(() => [])
+    signal?.throwIfAborted()
+    const primary = registrations.find((entry) => entry.isPrimary && !entry.isBare && !entry.isPrunable)
+    if (!primary) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    repoId = repositoryIdAtPath(rootId, primary.path)
+  }
   let snapshot: RepoSnapshot | null
   try {
     snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(repoId, signal, {
@@ -1023,14 +1336,17 @@ async function planRepository(
   const pathApi = isRemoteRepoId(rootId) ? path.posix : path
   const worktreePath = pathApi.join(workspacePath, repositoryName)
   const target = snapshot.branches.find((candidate) => candidate.name === targetBranch)
-  const creationBase: WorktreeCreationBase = target
-    ? { kind: 'localBranch', branch: targetBranch }
-    : requestedCreationBase
+  const creationBase: WorktreeCreationBase =
+    selection?.mode?.kind === 'trackRemoteBranch'
+      ? { kind: 'remoteBranch', remoteRef: selection.mode.remoteRef }
+      : target
+        ? { kind: 'localBranch', branch: targetBranch }
+        : requestedCreationBase
   const localBase =
     creationBase.kind === 'localBranch'
       ? snapshot.branches.find((candidate) => candidate.name === creationBase.branch)
       : undefined
-  if (creationBase.kind === 'localBranch' && !localBase) {
+  if (selection?.mode?.kind !== 'detached' && creationBase.kind === 'localBranch' && !localBase) {
     return { ok: false, message: 'workspace.branch-workspace.base-unavailable' }
   }
   if (
@@ -1048,7 +1364,7 @@ async function planRepository(
       return { ok: false, message: 'workspace.branch-workspace.base-unavailable' }
     }
   }
-  if (target?.worktree) {
+  if (target?.worktree && selection?.mode?.kind !== 'detached') {
     if (!sameHostPath(rootId, target.worktree.path, worktreePath)) {
       return { ok: false, message: 'workspace.branch-workspace.worktree-elsewhere' }
     }
@@ -1057,6 +1373,9 @@ async function planRepository(
       repository: {
         repositoryName,
         repoId,
+        ...(selection?.kind ? { kind: selection.kind } : {}),
+        ...(source ? { source } : {}),
+        ...(selection?.memberId ? { memberId: selection.memberId } : {}),
         targetBranch,
         creationBase,
         syncBeforeCreate,
@@ -1070,9 +1389,11 @@ async function planRepository(
     }
   }
 
-  const mode = target
-    ? ({ kind: 'existingBranch', branch: targetBranch } as const)
-    : ({ kind: 'newBranch', newBranch: targetBranch, creationBase } as const)
+  const mode =
+    selection?.mode ??
+    (target
+      ? ({ kind: 'existingBranch', branch: targetBranch } as const)
+      : ({ kind: 'newBranch', newBranch: targetBranch, creationBase } as const))
   try {
     if (await (dependencies.pathExists ?? workspacePathExists)(repoId, worktreePath)) {
       return { ok: false, message: 'workspace.branch-workspace.target-exists' }
@@ -1104,6 +1425,9 @@ async function planRepository(
     repository: {
       repositoryName,
       repoId,
+      ...(selection?.kind ? { kind: selection.kind } : {}),
+      ...(source ? { source } : {}),
+      ...(selection?.memberId ? { memberId: selection.memberId } : {}),
       targetBranch,
       creationBase,
       syncBeforeCreate,
@@ -1133,7 +1457,7 @@ async function planAuxiliaryEntry(
   const inspect = dependencies.inspectPath ?? inspectBranchWorkspacePath
   const [source, target] = await Promise.all([
     inspect(rootId, sourcePath, signal).catch(() => null),
-    inspect(rootId, targetPath, signal).catch(() => null),
+    inspect(branchWorkspaceStorageRootIdAtPath(rootId, workspacePath), targetPath, signal).catch(() => null),
   ])
   if (!source?.exists || !source.directChild) {
     return { ok: false, message: 'workspace.branch-workspace.source-unavailable' }
@@ -1165,7 +1489,7 @@ function buildSteps(
       .filter((repository) => !repository.satisfied)
       .map((repository) => ({
         id: `repository:${repository.repositoryName}`,
-        kind: 'create-worktree' as const,
+        kind: repository.kind === 'repository' ? ('clone-repository' as const) : ('create-worktree' as const),
         label: repository.repositoryName,
         repositoryName: repository.repositoryName,
       })),
@@ -1194,10 +1518,6 @@ function sameHostPath(rootId: string, left: string, right: string): boolean {
     : sameLocalFilePath(left, right)
 }
 
-function sameCreationBase(left: WorktreeCreationBase, right: WorktreeCreationBase): boolean {
-  return left.kind === right.kind && worktreeCreationBaseRef(left) === worktreeCreationBaseRef(right)
-}
-
 function registeredWorktreeAtPath(
   rootId: string,
   snapshot: RepoSnapshot,
@@ -1219,4 +1539,90 @@ function safePlanMessage(error: unknown, fallback: string): string {
   return message === 'cancelled' || message.startsWith('workspace.') || message.startsWith('error.')
     ? message
     : fallback
+}
+
+function modeBranch(mode: BranchWorkspaceRepositorySelection['mode']): string | undefined {
+  if (!mode) return undefined
+  return mode.kind === 'existingBranch'
+    ? mode.branch
+    : mode.kind === 'newBranch'
+      ? mode.newBranch
+      : mode.kind === 'trackRemoteBranch'
+        ? mode.localBranch
+        : ''
+}
+
+function sameRepositoryHost(left: string, right: string): boolean {
+  const a = parseRemoteRepoId(left),
+    b = parseRemoteRepoId(right)
+  return a || b ? !!a && !!b && a.alias === b.alias && a.transport === b.transport : path.isAbsolute(right)
+}
+
+async function planCompleteRepository(
+  rootId: string,
+  workspacePath: string,
+  targetBranch: string,
+  selection: BranchWorkspaceRepositorySelection,
+  dependencies: BranchWorkspacePlanDependencies,
+  signal?: AbortSignal,
+): Promise<{ ok: true; repository: BranchWorkspaceRepositoryPlan } | { ok: false; message: string }> {
+  const worktreePath = (isRemoteRepoId(rootId) ? path.posix : path).join(workspacePath, selection.repositoryName)
+  const source = selection.source ?? {
+    kind: 'repository' as const,
+    repositoryId: workspaceRepositoryId(rootId, selection.repositoryName)!,
+  }
+  if (
+    !source ||
+    (source.kind === 'repository' && (!source.repositoryId || !sameRepositoryHost(rootId, source.repositoryId)))
+  )
+    return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+  if (targetBranch && !isSafeBranchName(targetBranch))
+    return { ok: false, message: 'workspace.branch-workspace.invalid-branch' }
+  if (selection.syncBeforeCreate || selection.worktreeBootstrap?.kind === 'materialize')
+    return { ok: false, message: 'error.invalid-arguments' }
+  const target = await (dependencies.inspectPath ?? inspectBranchWorkspacePath)(
+    branchWorkspaceStorageRootIdAtPath(rootId, workspacePath),
+    worktreePath,
+    signal,
+  ).catch(() => null)
+  if (!target) return { ok: false, message: 'workspace.branch-workspace.read-failed' }
+  if (target.exists) return { ok: false, message: 'workspace.branch-workspace.target-exists' }
+  let mode = selection.mode
+  if (source.kind === 'repository') {
+    const snapshot = await (dependencies.getSnapshot ?? getRepositorySnapshot)(source.repositoryId, signal, {
+      includeWorktreeStatus: false,
+      includeRemote: false,
+    }).catch(() => null)
+    if (!snapshot) return { ok: false, message: 'workspace.branch-workspace.repository-unavailable' }
+    const existing = snapshot.branches.find((branch) => branch.name === targetBranch)
+    if (!mode && targetBranch)
+      mode = existing
+        ? { kind: 'existingBranch', branch: targetBranch }
+        : { kind: 'newBranch', newBranch: targetBranch, creationBase: selection.creationBase }
+    const base = mode?.kind === 'newBranch' ? mode.creationBase : undefined
+    if (base?.kind === 'localBranch' && !snapshot.branches.some((branch) => branch.name === base.branch))
+      return { ok: false, message: 'workspace.branch-workspace.base-unavailable' }
+  }
+  return {
+    ok: true,
+    repository: {
+      kind: 'repository',
+      source,
+      ...(selection.memberId ? { memberId: selection.memberId } : {}),
+      repositoryName: selection.repositoryName,
+      repoId: repositoryIdAtPath(rootId, worktreePath),
+      targetBranch,
+      creationBase: selection.creationBase,
+      syncBeforeCreate: false,
+      branchOrigin: mode?.kind === 'newBranch' ? 'created' : 'pre-existing',
+      worktreePath,
+      ...(!mode && !targetBranch ? { checkoutDefaultBranch: true } : {}),
+      mode:
+        mode ?? (targetBranch ? { kind: 'existingBranch', branch: targetBranch } : { kind: 'detached', ref: 'HEAD' }),
+      worktreeBootstrap: { kind: 'skip' },
+      confirmationRequired: false,
+      satisfied: false,
+      action: 'clone-repository',
+    },
+  }
 }

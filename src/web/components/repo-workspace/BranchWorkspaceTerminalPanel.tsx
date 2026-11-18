@@ -16,9 +16,11 @@ import { useT } from '#/web/stores/i18n.ts'
 import { cn } from '#/web/lib/cn.ts'
 import type { TerminalSessionBase, TerminalSessionContextValue } from '#/web/components/terminal/types.ts'
 import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
+import { TerminalStashMenu } from '#/web/components/terminal/TerminalStashMenu.tsx'
 
 interface BranchWorkspaceTerminalPanelProps {
   context: BranchWorkspaceFolderContext
+  onRevealPath?: (relativePath: string) => void
   toolbarLeading?: ReactNode
   terminalFocusMode?: boolean
   onExitTerminalFocus?: () => void
@@ -30,6 +32,7 @@ interface OpenBranchWorkspaceInternalTerminalDependencies extends Pick<TerminalS
 
 export function BranchWorkspaceTerminalPanel({
   context,
+  onRevealPath,
   toolbarLeading,
   terminalFocusMode = false,
   onExitTerminalFocus,
@@ -120,10 +123,11 @@ export function BranchWorkspaceTerminalPanel({
           />
         </div>
         <div aria-hidden="true" className="w-2 shrink-0 self-stretch" />
+        <TerminalStashMenu repoId={context.rootId} />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
-          <TerminalSlot repoRoot={context.rootId} worktreePath={context.path} />
+          <TerminalSlot repoRoot={context.rootId} worktreePath={context.path} onRevealPath={onRevealPath} />
         ) : null}
       </div>
     </section>

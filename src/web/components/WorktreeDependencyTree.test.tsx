@@ -84,12 +84,12 @@ describe('WorktreeDependencyTree', () => {
     )
 
     click(dependencyCheckbox('backend/.venv')!)
-    expect(selectedPaths()).toEqual([{ path: 'backend/.venv', mode: 'copy' }])
-    changeSelect(modeSelect('backend/.venv'), 'symlink')
     expect(selectedPaths()).toEqual([{ path: 'backend/.venv', mode: 'symlink' }])
+    changeSelect(modeSelect('backend/.venv'), 'copy')
+    expect(selectedPaths()).toEqual([{ path: 'backend/.venv', mode: 'copy' }])
 
     click(dependencyCheckbox('backend')!)
-    expect(selectedPaths()).toEqual([{ path: 'backend', mode: 'copy' }])
+    expect(selectedPaths()).toEqual([{ path: 'backend', mode: 'symlink' }])
     expect(dependencyCheckbox('backend/.venv')?.disabled).toBe(true)
   })
 

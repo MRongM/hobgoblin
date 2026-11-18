@@ -9,6 +9,27 @@ import type {
 import { projectBranchWorkspaceOperationProgress } from '#/web/components/repo-workspace/branch-workspace-operation-progress.ts'
 
 describe('branch workspace operation progress', () => {
+  test('tracks independent clone creation and removal by repository member progress', () => {
+    expect(
+      statuses(
+        projectBranchWorkspaceOperationProgress(
+          plan('create', [step('repository:api', 'clone-repository', { repositoryName: 'api' })]),
+          snapshot({ repositories: [{ ...member('api', 'complete'), kind: 'repository' }] }),
+          { executing: true, failed: false },
+        ),
+      ),
+    ).toEqual([['repository:api', 'complete']])
+    expect(
+      statuses(
+        projectBranchWorkspaceOperationProgress(
+          plan('remove', [step('repository:api', 'remove-entry', { repositoryName: 'api' })]),
+          snapshot({ repositories: [{ ...member('api', 'removed'), kind: 'repository' }] }),
+          { executing: true, failed: false },
+        ),
+      ),
+    ).toEqual([['repository:api', 'complete']])
+  })
+
   test('starts the first creation step before the first server snapshot arrives', () => {
     const progress = projectBranchWorkspaceOperationProgress(
       plan('create', [

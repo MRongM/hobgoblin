@@ -67,7 +67,11 @@ export function BranchWorkspaceAggregatePanel({
             <ProjectHistoryPanel
               repoId={member.target.repositoryId}
               target={{
-                branchName: member.target.checkedOutBranch,
+                branchName:
+                  member.target.checkedOutBranch ??
+                  member.target.head ??
+                  member.repo.data.worktreesByPath[member.target.worktreePath]?.head ??
+                  'HEAD',
                 worktreePath: member.target.worktreePath,
               }}
               onRevealPath={(relativePath) => onRevealPath?.(member.repositoryName, relativePath)}

@@ -86,6 +86,7 @@ import { isSafeBranchName } from '#/shared/refnames.ts'
 import { hasUnmergedStatusEntries } from '#/shared/git-conflicts.ts'
 import { buildGitNetworkEnv, type GitNetworkOptions } from '#/system/git/helper.ts'
 import { scheduleGitStatusRead } from '#/system/git/concurrency.ts'
+import { pushWithWorktreeUpdate } from '#/system/git/push-with-worktree-update.ts'
 
 type RemoteGitRunner = (
   command: RemoteCommandKind,
@@ -882,23 +883,26 @@ export async function pushRemoteBranch(
   })
   if (options.signal?.aborted) return { ok: false, message: 'cancelled' }
   if ('ok' in pushTarget) return pushTarget
-  const result = await run(
-    {
-      type: 'gitPush',
-      path: target.remotePath,
-      remote: pushTarget.remote,
-      branch,
-      targetBranch: pushTarget.branch,
-      setUpstream: pushTarget.setUpstream,
-    },
-    target,
-    remoteGitNetworkCommandOptions(
+  return await pushWithWorktreeUpdate(async (updateWorktree) => {
+    const result = await run(
+      {
+        type: 'gitPush',
+        path: target.remotePath,
+        remote: pushTarget.remote,
+        branch,
+        targetBranch: pushTarget.branch,
+        setUpstream: pushTarget.setUpstream,
+        ...(updateWorktree ? { updateWorktree: true } : {}),
+      },
       target,
-      { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
-      options.networkOptions,
-    ),
-  )
-  return remoteExecResult(result)
+      remoteGitNetworkCommandOptions(
+        target,
+        { signal: options.signal, timeoutMs: REMOTE_BRANCH_OP_TIMEOUT_MS },
+        options.networkOptions,
+      ),
+    )
+    return remoteExecResult(result)
+  }, options.signal)
 }
 
 export async function pushRemoteWorktreeHeadToRemoteBranch(

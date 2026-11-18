@@ -1,4 +1,4 @@
-import { Plus, X, ChevronDown, Terminal } from 'lucide-react'
+import { Plus, X, ChevronDown, Terminal, Archive } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   useCallback,
@@ -47,6 +47,8 @@ import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '#/web
 import type { TerminalLaunchMode } from '#/shared/terminal.ts'
 import { parseWorktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
+import { nextVisibleTerminal, reorderVisibleTerminals } from '#/web/components/terminal/terminal-stash.ts'
 
 interface TerminalTabsProps {
   worktreeTerminalKey: string
@@ -75,7 +77,7 @@ type PendingBulkClose = { kind: 'all' } | { kind: 'others'; targetKey: string }
 
 export function TerminalTabs({
   worktreeTerminalKey,
-  sessions,
+  sessions: allSessions,
   detailId,
   responsiveCompact,
   panelActive,
@@ -91,6 +93,12 @@ export function TerminalTabs({
   onNavigateOut,
 }: TerminalTabsProps) {
   const t = useT()
+  const stashedTerminals = useTerminalStashStore((state) => state.stashedTerminals)
+  const stash = useTerminalStashStore((state) => state.stash)
+  const sessions = useMemo(
+    () => allSessions.filter((session) => !session.sessionId || stashedTerminals[session.key] !== session.sessionId),
+    [allSessions, stashedTerminals],
+  )
   const showCollapsedTabs = !!responsiveCompact
   const selectedSession = sessions.find((s) => s.selected) ?? sessions[0]
   const internalFocusRegistry = useFocusRegistry<string, HTMLButtonElement>()
@@ -105,8 +113,36 @@ export function TerminalTabs({
   const pendingCloseSession = sessions.find((session) => session.key === pendingCloseKey) ?? null
   const pendingBulkCloseKeys =
     pendingBulkClose?.kind === 'others'
-      ? sessions.filter((session) => session.key !== pendingBulkClose.targetKey).map((session) => session.key)
-      : sessions.map((session) => session.key)
+      ? allSessions.filter((session) => session.key !== pendingBulkClose.targetKey).map((session) => session.key)
+      : allSessions.map((session) => session.key)
+
+  useLayoutEffect(() => {
+    const selected = allSessions.find((session) => session.selected)
+    if (panelActive && selected && !sessions.some((session) => session.key === selected.key) && sessions[0]) {
+      onSelect(worktreeTerminalKey, sessions[0].key)
+    }
+  }, [allSessions, sessions, onSelect, panelActive, worktreeTerminalKey])
+
+  const handleStash = useCallback(
+    (key: string) => {
+      const session = allSessions.find((item) => item.key === key)
+      if (!session?.sessionId) return
+      const hiddenKeys = new Set(
+        allSessions
+          .filter((item) => item.sessionId && stashedTerminals[item.key] === item.sessionId)
+          .map((item) => item.key),
+      )
+      hiddenKeys.add(key)
+      const next = nextVisibleTerminal(
+        allSessions.map((item) => item.key),
+        hiddenKeys,
+        key,
+      )
+      if (session.selected && next) onSelect(worktreeTerminalKey, next)
+      stash(key, session.sessionId)
+    },
+    [allSessions, onSelect, stash, stashedTerminals, worktreeTerminalKey],
+  )
 
   useLayoutEffect(() => {
     if (sessions.length <= prevSessionCountRef.current) {
@@ -289,9 +325,15 @@ export function TerminalTabs({
         oldIndex,
         newIndex,
       )
-      onReorder(worktreeTerminalKey, next)
+      onReorder(
+        worktreeTerminalKey,
+        reorderVisibleTerminals(
+          allSessions.map((session) => session.key),
+          next,
+        ),
+      )
     },
-    [sessions, onReorder, worktreeTerminalKey],
+    [allSessions, sessions, onReorder, worktreeTerminalKey],
   )
 
   if (sessions.length === 0) {
@@ -323,7 +365,7 @@ export function TerminalTabs({
               session={selectedSession}
               isActive={!!panelActive && selectedSession.selected}
               isSelected={selectedSession.selected}
-              contextSessionCount={sessions.length}
+              contextSessionCount={allSessions.length}
               compactSwitcher
               tabId={`${detailId}-terminal-tab`}
               buttonRef={focusRegistry.setRef(selectedSession.key)}
@@ -332,6 +374,7 @@ export function TerminalTabs({
               onClose={handleClose}
               onNew={onNew}
               onRequestClose={requestContextClose}
+              onStash={handleStash}
               onKeyDown={handleTabKeyDown}
               t={t}
             />
@@ -418,12 +461,14 @@ export function TerminalTabs({
                   isSelected={session.selected}
                   index={index}
                   total={sessions.length}
+                  contextSessionCount={allSessions.length}
                   tabId={index === 0 ? `${detailId}-terminal-tab` : `${detailId}-terminal-tab-${session.key}`}
                   focusRegistry={focusRegistry}
                   onSelect={handleSelect}
                   onClose={handleClose}
                   onNew={onNew}
                   onRequestClose={requestContextClose}
+                  onStash={handleStash}
                   onKeyDown={handleTabKeyDown}
                   t={t}
                 />
@@ -485,7 +530,7 @@ export function TerminalTabs({
       <ConfirmDialog
         open={pendingBulkClose?.kind === 'all'}
         title={t('terminal.close-all-confirm-title')}
-        message={t('terminal.close-all-confirm-body', { count: sessions.length })}
+        message={t('terminal.close-all-confirm-body', { count: allSessions.length })}
         confirmLabel={t('terminal.close-all-confirm-confirm')}
         destructive
         onCancel={() => setPendingBulkClose(null)}
@@ -517,6 +562,7 @@ interface TerminalTabProps {
   onClose: (event: React.MouseEvent, key: string) => void
   onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
+  onStash: (key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }
@@ -539,6 +585,7 @@ interface TerminalTabChromeProps {
   onClose: (event: React.MouseEvent, key: string) => void
   onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
+  onStash: (key: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>, sessionKey: string) => void
   t: (key: string, params?: Record<string, string | number>) => string
 }
@@ -561,6 +608,7 @@ function TerminalTabChrome({
   onClose,
   onNew,
   onRequestClose,
+  onStash,
   onKeyDown,
   t,
 }: TerminalTabChromeProps) {
@@ -596,6 +644,8 @@ function TerminalTabChrome({
           tmuxMenuVisible={tmuxMenuVisible}
           onNew={onNew}
           onRequestClose={onRequestClose}
+          onStash={onStash}
+          canStash={!!session.sessionId}
           t={t}
         />
       }
@@ -646,6 +696,7 @@ function SortableTerminalTab({
   onClose,
   onNew,
   onRequestClose,
+  onStash,
   onKeyDown,
   t,
 }: TerminalTabProps) {
@@ -673,6 +724,7 @@ function SortableTerminalTab({
         onClose={onClose}
         onNew={onNew}
         onRequestClose={onRequestClose}
+        onStash={onStash}
         onKeyDown={(e) => {
           sortable.sortableOnKeyDown?.(e)
           if (e.defaultPrevented || sortable.isDragging) return
@@ -690,6 +742,8 @@ function TerminalTabContextMenu({
   tmuxMenuVisible,
   onNew,
   onRequestClose,
+  onStash,
+  canStash,
   t,
 }: {
   sessionKey: string
@@ -697,6 +751,8 @@ function TerminalTabContextMenu({
   tmuxMenuVisible: boolean
   onNew: (launchMode: TerminalLaunchMode) => void
   onRequestClose: (scope: TerminalCloseScope, key: string) => void
+  onStash: (key: string) => void
+  canStash: boolean
   t: (key: string, params?: Record<string, string | number>) => string
 }) {
   return (
@@ -711,6 +767,11 @@ function TerminalTabContextMenu({
           {t('terminal.new-with-tmux')}
         </ContextMenuItem>
       ) : null}
+      <ContextMenuSeparator />
+      <ContextMenuItem disabled={!canStash} onSelect={() => onStash(sessionKey)}>
+        <Archive />
+        {t('terminal.stash')}
+      </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={() => onRequestClose('current', sessionKey)}>
         <X />

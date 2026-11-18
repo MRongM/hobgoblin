@@ -1,3 +1,4 @@
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import {
   ArrowDown,
   ArrowUp,
@@ -5,6 +6,7 @@ import {
   ExternalLink,
   GitBranch,
   GitFork,
+  Link2,
   RefreshCw,
   Tag,
   Terminal,
@@ -35,6 +37,8 @@ import { useMainWindowNavigation } from '#/web/main-window-navigation.tsx'
 import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import { useCreateWorktreeAction } from '#/web/hooks/useRepositoryCreationActions.tsx'
 import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
+import { WorktreeDependencyDialog } from '#/web/components/repo-workspace/WorktreeDependencyDialog.tsx'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
 export interface BranchActionItem {
   id: BranchActionItemId
   label: string
@@ -48,6 +52,7 @@ export interface BranchActionItem {
   shortcut?: string
   icon: ReactNode
   onSelect: () => void | Promise<void>
+  parentDirectoryAction?: WorkspaceListItemAction['parentDirectoryAction']
 }
 
 export interface BranchActionItemGroups {
@@ -62,6 +67,7 @@ export interface BranchActionItemGroups {
 export interface UseBranchActionItemsOptions {
   onNavigateToInternalTerminal?: (target: TerminalSessionBase) => void | Promise<void>
   windowsInternalTerminalShellMenu?: boolean
+  onCheckoutSuccess?: (branch: string) => void | Promise<void>
 }
 
 export function visibleBranchActionItems({
@@ -103,6 +109,7 @@ export function useBranchActionItems(
   const writeActions = useBranchWriteActions(repo, branch, {
     canPush: capabilities.canPush,
     onPush: actions.push,
+    onCheckoutSuccess: options.onCheckoutSuccess,
   })
   const createWorktree = useCreateWorktreeAction(repo, {
     defaultBranch: branch.name,
@@ -111,6 +118,12 @@ export function useBranchActionItems(
   })
   const createTagDialog = useRetainedDialogState<string>()
   const upstreamDialog = useRetainedDialogState<string>()
+  const dependencyDialog = useRetainedDialogState<{ operation: 'add' | 'remove'; worktreePath: string }>()
+  const directoryAction = useOpenDirectoryAction({
+    repoId: repo.id,
+    path: branch.worktree?.path ?? null,
+    disabled: !!branch.worktree?.path && !!repo.data.worktreesByPath[branch.worktree.path]?.isPrunable,
+  })
   const { createTerminal, restoreTmuxSessions } = useTerminalSessionContext()
   const disabled = blocked
   const busy = (id: BranchActionItemId) => busyAction === id
@@ -241,6 +254,20 @@ export function useBranchActionItems(
       onSelect: () => upstreamDialog.openWith(branch.name),
     },
     createWorktree.item,
+    ...(['add', 'remove'] as const).map(
+      (operation): BranchActionItem => ({
+        id: operation === 'add' ? 'addDependencies' : 'removeDependencies',
+        label: t(`worktree-dependencies.${operation}.action`),
+        disabled: disabled || !branch.worktree?.path || !!repo.data.worktreesByPath[branch.worktree.path]?.isPrunable,
+        visible: true,
+        menuOnly: true,
+        destructive: operation === 'remove',
+        icon: createElement(operation === 'add' ? Link2 : Trash2),
+        onSelect: () => {
+          if (branch.worktree?.path) dependencyDialog.openWith({ operation, worktreePath: branch.worktree.path })
+        },
+      }),
+    ),
     {
       id: 'sync',
       label: t('action.refresh'),
@@ -264,6 +291,7 @@ export function useBranchActionItems(
       icon: createElement(EditorAppIcon, { pref: resolvedEditorApp ?? editorApp }),
       onSelect: actions.openEditor,
     },
+    { ...directoryAction, id: 'openDirectory', visible: true, menuOnly: true },
     {
       id: 'terminal',
       label: t('terminal.internal'),
@@ -431,6 +459,23 @@ export function useBranchActionItems(
         onClose: upstreamDialog.close,
         onSubmit: actions.setUpstream,
       }),
+      dependencyDialog.payload
+        ? createElement(WorktreeDependencyDialog, {
+            open: dependencyDialog.open,
+            operation: dependencyDialog.payload.operation,
+            repoId: repo.id,
+            worktreePath: dependencyDialog.payload.worktreePath,
+            sourceWorktrees: Object.values(repo.data.worktreesByPath)
+              .filter((worktree) => !worktree.isPrunable)
+              .map((worktree) => ({ path: worktree.path, branch: worktree.branch ?? '' })),
+            onOpenChange: (open) => {
+              if (!open) dependencyDialog.close()
+            },
+            onCompleted: async () => {
+              await useReposStore.getState().refreshCoreData(repo.id)
+            },
+          })
+        : null,
       closeTerminalScope.dialog,
       createWorktree.dialog,
     ),

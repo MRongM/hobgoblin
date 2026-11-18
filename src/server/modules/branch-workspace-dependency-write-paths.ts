@@ -1,3 +1,6 @@
+import path from 'node:path'
+import { isRemoteRepoId } from '#/shared/remote-repo.ts'
+import { branchWorkspaceStorageRootIdAtPath } from '#/server/modules/workspace-paths.ts'
 import {
   buildBranchWorkspaceDependencyPlan,
   readBranchWorkspaceDependencyCandidates,
@@ -24,6 +27,7 @@ interface PendingBranchWorkspaceDependencyPlan {
 }
 
 export interface BranchWorkspaceDependencyWriteDependencies {
+  isOperationActive?: (rootId: string) => boolean
   buildPlan?: typeof buildBranchWorkspaceDependencyPlan
   readCandidates?: typeof readBranchWorkspaceDependencyCandidates
   planDependencies?: BranchWorkspaceDependencyPlanDependencies
@@ -40,10 +44,7 @@ export interface BranchWorkspaceDependencyWriteService {
     request: BranchWorkspaceDependencyPlanRequest,
     signal?: AbortSignal,
   ): Promise<BranchWorkspaceDependencyPlanResult>
-  execute(
-    rootId: string,
-    input: BranchWorkspaceDependencyExecuteInput,
-  ): Promise<BranchWorkspaceDependencyExecuteResult>
+  execute(rootId: string, input: BranchWorkspaceDependencyExecuteInput): Promise<BranchWorkspaceDependencyExecuteResult>
   abort(rootId: string): boolean
   isActive(rootId: string): boolean
 }
@@ -53,6 +54,7 @@ export function createBranchWorkspaceDependencyWriteService(
 ): BranchWorkspaceDependencyWriteService {
   const pendingByRoot = new Map<string, PendingBranchWorkspaceDependencyPlan>()
   const activeByRoot = new Map<string, AbortController>()
+  const planningByRoot = new Map<string, AbortController>()
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspaceDependencyPlan
   const readCandidates = dependencies.readCandidates ?? readBranchWorkspaceDependencyCandidates
   const copyEntry = dependencies.copyEntry ?? copyBranchWorkspaceEntry
@@ -66,12 +68,24 @@ export function createBranchWorkspaceDependencyWriteService(
     },
 
     async plan(rootId, request, signal) {
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.dependency.operation-in-progress' }
       }
-      const result = await buildPlan(rootId, request, dependencies.planDependencies, signal)
-      if (result.ok) pendingByRoot.set(rootId, { plan: result.plan, request })
-      return result
+      planningByRoot.get(rootId)?.abort()
+      const controller = new AbortController()
+      planningByRoot.set(rootId, controller)
+      const planningSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+      try {
+        const result = await buildPlan(rootId, request, dependencies.planDependencies, planningSignal)
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        if (result.ok) pendingByRoot.set(rootId, { plan: result.plan, request })
+        return result
+      } catch (error) {
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        throw error
+      } finally {
+        if (planningByRoot.get(rootId) === controller) planningByRoot.delete(rootId)
+      }
     },
 
     async execute(rootId, input) {
@@ -80,7 +94,7 @@ export function createBranchWorkspaceDependencyWriteService(
         return { ok: false, message: 'workspace.branch-workspace.dependency.plan-stale', completedNames: [] }
       }
       const { plan } = pending
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return failure(plan, 'workspace.branch-workspace.dependency.operation-in-progress', [])
       }
       const approvals = new Set(input.approvals)
@@ -93,13 +107,7 @@ export function createBranchWorkspaceDependencyWriteService(
       const completedNames: string[] = []
       let changed = false
       try {
-        const rebuilt = await buildPlan(
-          rootId,
-          pending.request,
-          dependencies.planDependencies,
-          controller.signal,
-          plan,
-        )
+        const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal, plan)
         if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
           return failure(plan, 'workspace.branch-workspace.dependency.plan-stale', completedNames)
         }
@@ -108,13 +116,25 @@ export function createBranchWorkspaceDependencyWriteService(
           for (const entry of plan.entries) {
             controller.signal.throwIfAborted()
             if (entry.targetKind !== 'missing') {
-              await removeEntry(rootId, entry.targetPath, controller.signal)
+              await removeEntry(targetScope(rootId, entry.targetPath), entry.targetPath, controller.signal)
               changed = true
             }
             if (entry.mode === 'copy') {
-              await copyEntry(rootId, entry.sourcePath, entry.targetPath, controller.signal)
+              await copyEntry(
+                targetScope(rootId, entry.targetPath),
+                entry.sourcePath,
+                entry.targetPath,
+                controller.signal,
+                { sourceRootId: rootId },
+              )
             } else {
-              await materializeSymlink(rootId, entry.sourcePath, entry.targetPath, controller.signal)
+              await materializeSymlink(
+                targetScope(rootId, entry.targetPath),
+                entry.sourcePath,
+                entry.targetPath,
+                controller.signal,
+                { sourceRootId: rootId },
+              )
             }
             changed = true
             completedNames.push(entry.name)
@@ -122,7 +142,7 @@ export function createBranchWorkspaceDependencyWriteService(
         } else {
           for (const entry of plan.entries) {
             controller.signal.throwIfAborted()
-            await removeEntry(rootId, entry.targetPath, controller.signal)
+            await removeEntry(targetScope(rootId, entry.targetPath), entry.targetPath, controller.signal)
             changed = true
             completedNames.push(entry.name)
           }
@@ -186,4 +206,8 @@ function isAbortError(error: unknown): boolean {
 function operationMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   return message || 'workspace.branch-workspace.dependency.execute-failed'
+}
+
+function targetScope(rootId: string, targetPath: string): string {
+  return branchWorkspaceStorageRootIdAtPath(rootId, (isRemoteRepoId(rootId) ? path.posix : path).dirname(targetPath))
 }

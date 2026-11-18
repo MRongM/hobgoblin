@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 
-import { act } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { TerminalCustomButton } from '#/shared/settings.ts'
 import type { ClipboardBinaryFilePayload } from '#/shared/clipboard-binary-temp-files.ts'
 import { NON_GIT_WORKSPACE_TERMINAL_BRANCH } from '#/shared/terminal.ts'
 import { GOBLIN_FILE_PATHS_MIME, serializeGoblinFilePathDragPayload } from '#/shared/file-tree.ts'
 import { normalizeRemoteRepoId } from '#/shared/remote-repo.ts'
+import { TERMINAL_DIRECTORY_MIME } from '#/web/components/terminal/terminal-directory-drag.ts'
+import { WorkspaceListItemFrame } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
 import { TerminalSlot } from '#/web/components/terminal/TerminalSlot.tsx'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
+import { FilePreviewProvider, useFilePreview } from '#/web/components/terminal/file-preview-context.tsx'
 import { MainWindowNavigationProvider } from '#/web/main-window-navigation.tsx'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import {
@@ -51,10 +56,14 @@ const appShellMocks = vi.hoisted(() => ({
   readSystemClipboardImage: vi.fn(async (): Promise<ClipboardBinaryFilePayload | null> => null),
   readSystemClipboardFilePaths: vi.fn(async () => [] as string[]),
   saveClipboardBinaryFilesFromPaste: vi.fn(),
+  canRevealInFileManager: vi.fn(() => false),
+  openInFinder: vi.fn(async () => ({ ok: true, message: '' })),
 }))
 
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: () => '',
+  canRevealInFileManager: appShellMocks.canRevealInFileManager,
+  openInFinder: appShellMocks.openInFinder,
   readSystemClipboardImage: appShellMocks.readSystemClipboardImage,
   readSystemClipboardFilePaths: appShellMocks.readSystemClipboardFilePaths,
   saveClipboardBinaryFilesFromPaste: appShellMocks.saveClipboardBinaryFilesFromPaste,
@@ -62,10 +71,14 @@ vi.mock('#/web/app-shell-client.ts', () => ({
 
 const repoClientMocks = vi.hoisted(() => ({
   transferRepositoryFiles: vi.fn(),
+  readRepositoryFileTreeTextFile: vi.fn(async () => ({ ok: true, content: 'preview content', truncated: false })),
+  readRepositoryFileTreeBinaryFile: vi.fn(),
 }))
 
 vi.mock('#/web/repo-client.ts', () => ({
   transferRepositoryFiles: repoClientMocks.transferRepositoryFiles,
+  readRepositoryFileTreeTextFile: repoClientMocks.readRepositoryFileTreeTextFile,
+  readRepositoryFileTreeBinaryFile: repoClientMocks.readRepositoryFileTreeBinaryFile,
 }))
 
 const editorOpenMocks = vi.hoisted(() => ({
@@ -82,6 +95,47 @@ const mobileDetectionMocks = vi.hoisted(() => ({
 
 vi.mock('#/web/components/terminal/mobile-detection.ts', () => ({
   isMobileDevice: () => mobileDetectionMocks.isMobileDevice,
+}))
+
+const previewLayoutMocks = vi.hoisted(() => ({
+  compact: false,
+  onLayoutChanged: null as ((layout: Record<string, number>) => void) | null,
+  setLayout: vi.fn(),
+}))
+
+vi.mock('#/web/hooks/useResponsiveUiMode.tsx', () => ({
+  useIsCompactUi: () => previewLayoutMocks.compact,
+}))
+
+vi.mock('react-resizable-panels', () => ({
+  useGroupRef: () => ({ current: { setLayout: previewLayoutMocks.setLayout } }),
+}))
+
+vi.mock('#/web/components/ui/resizable.tsx', () => ({
+  ResizablePanelGroup: ({
+    children,
+    className,
+    onLayoutChanged,
+  }: {
+    children: ReactNode
+    className?: string
+    onLayoutChanged?: (layout: Record<string, number>) => void
+  }) => {
+    previewLayoutMocks.onLayoutChanged = onLayoutChanged ?? null
+    return (
+      <div className={className} data-testid="preview-split">
+        {children}
+      </div>
+    )
+  },
+  ResizablePanel: ({ children, id, className }: { children: ReactNode; id: string; className?: string }) => (
+    <div className={className} data-testid={`preview-panel-${id}`}>
+      {children}
+    </div>
+  ),
+  ResizableHandle: ({ disabled, className }: { disabled?: boolean; className?: string }) => (
+    <div data-testid="preview-divider" data-disabled={String(!!disabled)} className={className} />
+  ),
 }))
 
 const runtimeSettingsMocks = vi.hoisted(() => ({
@@ -124,6 +178,10 @@ afterEach(() => {
   appShellMocks.readSystemClipboardImage.mockResolvedValue(null)
   appShellMocks.readSystemClipboardFilePaths.mockReset()
   appShellMocks.readSystemClipboardFilePaths.mockResolvedValue([])
+  appShellMocks.canRevealInFileManager.mockReset()
+  appShellMocks.canRevealInFileManager.mockReturnValue(false)
+  appShellMocks.openInFinder.mockReset()
+  appShellMocks.openInFinder.mockResolvedValue({ ok: true, message: '' })
   appShellMocks.saveClipboardBinaryFilesFromPaste.mockReset()
   repoClientMocks.transferRepositoryFiles.mockReset()
   editorOpenMocks.openWorktreeEditorTarget.mockReset()
@@ -134,6 +192,9 @@ afterEach(() => {
   clipboardMocks.readTerminalClipboardText.mockResolvedValue('')
   toastMocks.error.mockReset()
   mobileDetectionMocks.isMobileDevice = false
+  previewLayoutMocks.compact = false
+  previewLayoutMocks.setLayout.mockClear()
+  repoClientMocks.readRepositoryFileTreeTextFile.mockClear()
   runtimeShortcutSettingsMocks.shortcutsDisabled = false
   document.body.innerHTML = ''
   vi.useRealTimers()
@@ -142,6 +203,535 @@ afterEach(() => {
 const REMOTE_REPO_ID = normalizeRemoteRepoId({ alias: 'prod', remotePath: '/srv/repo' })
 
 describe('TerminalSlot', () => {
+  test('hides the selected terminal surface while its session is stashed', async () => {
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const { descriptor, worktreeSnapshot, snapshot } = controllerFixture()
+    const stashedSnapshot = {
+      ...worktreeSnapshot,
+      sessions: worktreeSnapshot.sessions.map((session) => ({ ...session, sessionId: 'session-1' })),
+    }
+    const readContext: TerminalSessionReadContextValue = {
+      worktreeSnapshot: () => stashedSnapshot,
+      subscribeWorktree: () => () => {},
+      repoSyncReady: () => true,
+      subscribeRepoSync: () => () => {},
+      snapshot: () => snapshot,
+      subscribeSnapshot: () => () => {},
+    }
+    useTerminalStashStore.setState({ stashedTerminals: { [descriptor.key]: 'session-1' } })
+    await act(async () =>
+      root.render(
+        <TerminalSessionReadContext.Provider value={readContext}>
+          <TerminalSlot repoRoot="/repo" worktreePath="/worktree" />
+        </TerminalSessionReadContext.Provider>,
+      ),
+    )
+    expect(container.querySelector('.goblin-terminal-slot__host')).toBeNull()
+    await act(async () => root.unmount())
+    useTerminalStashStore.setState({ stashedTerminals: {} })
+    container.remove()
+  })
+  test('cancels a shared pending preview when its terminal surface unmounts', async () => {
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.render({ hideTerminal: true })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('shares file-area activation with the terminal preview and keeps exactly one pane', async () => {
+    const attach = vi.fn()
+    const detach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach, detach })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelectorAll('[data-terminal-file-preview]')).toHaveLength(1)
+      expect(
+        fixture.container.querySelector('[data-terminal-file-preview]')?.closest('.goblin-terminal-preview-layout'),
+      ).not.toBeNull()
+      await fixture.clickFileArea({ path: '/worktree/src/app.ts' })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      expect(attach).toHaveBeenCalledTimes(1)
+      expect(detach).not.toHaveBeenCalled()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('toggles the same document across relative and absolute file-area paths without detaching the terminal', async () => {
+    const attach = vi.fn()
+    const detach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach, detach })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts', line: 2 })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).not.toBeNull()
+      await fixture.clickFileArea({ path: '/worktree/src/app.ts', line: 8 })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).not.toBeNull()
+      expect(attach).toHaveBeenCalledTimes(1)
+      expect(detach).not.toHaveBeenCalled()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('keeps a compact terminal link available for double click before navigating to files', async () => {
+    previewLayoutMocks.compact = true
+    const attach = vi.fn()
+    const onRevealPath = vi.fn()
+    const fixture = await renderPreviewFixture({ attach }, { onRevealPath })
+    try {
+      const handlers = attach.mock.calls[0]![2]
+      const target = { path: 'src/app.ts', line: 3, column: 2 }
+      handlers.onRevealPath(target.path)
+      await act(async () => vi.advanceTimersByTimeAsync(499))
+      expect(onRevealPath).not.toHaveBeenCalled()
+      await act(async () => handlers.onOpenPathInEditor(target))
+      expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenCalledWith('/repo', '/worktree', target)
+      await fixture.flushPreviewClick()
+      expect(onRevealPath).not.toHaveBeenCalled()
+      handlers.onRevealPath(target.path)
+      await fixture.flushPreviewClick()
+      expect(onRevealPath).toHaveBeenCalledExactlyOnceWith(target.path)
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('opens only the latest single-click target after its double-click window expires', async () => {
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      await fixture.clickFileArea({ path: 'docs/guide.md' })
+      await act(async () => vi.advanceTimersByTimeAsync(499))
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+      await act(async () => vi.advanceTimersByTimeAsync(1))
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')?.textContent).toContain('docs/guide.md')
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).toHaveBeenCalledTimes(1)
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('closing an existing preview cancels a pending replacement', async () => {
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      await fixture.clickFileArea({ path: 'docs/guide.md' })
+      await act(async () =>
+        fixture.container.querySelector<HTMLButtonElement>('[aria-label="terminal.file-preview.close"]')?.click(),
+      )
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).toHaveBeenCalledTimes(1)
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test.each([{ repoRoot: '/another-repo' }, { worktreePath: '/another-worktree' }])(
+    'cancels a pending preview when its scope changes to %j, including after returning',
+    async (scope) => {
+      const attach = vi.fn()
+      const fixture = await renderPreviewFixture({ attach })
+      try {
+        await fixture.clickFileArea({ path: 'src/app.ts' })
+        await fixture.render(scope)
+        await fixture.render({ repoRoot: '/repo', worktreePath: '/worktree' })
+        await fixture.flushPreviewClick()
+        expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+        expect(repoClientMocks.readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+      } finally {
+        await fixture.cleanup()
+      }
+    },
+  )
+
+  test('cancels a pending preview timer on unmount', async () => {
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      expect(vi.getTimerCount()).toBe(1)
+    } finally {
+      await fixture.cleanup()
+    }
+    expect(vi.getTimerCount()).toBe(0)
+    await fixture.flushPreviewClick()
+    expect(repoClientMocks.readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+  })
+
+  test('opens, replaces, resizes and closes a preview without replacing or reattaching the terminal', async () => {
+    const attach = vi.fn()
+    const detach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach, detach })
+    try {
+      const host = fixture.container.querySelector('.goblin-terminal-slot__host')
+      await fixture.clickFileArea({ path: 'src/app.ts', line: 3, column: 2 })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')?.textContent).toContain('src/app.ts')
+      expect(fixture.container.querySelector('[data-testid="preview-divider"]')?.getAttribute('data-disabled')).toBe(
+        'false',
+      )
+      expect(previewLayoutMocks.setLayout).toHaveBeenLastCalledWith({ before: 60, after: 40 })
+      await act(async () => previewLayoutMocks.onLayoutChanged?.({ before: 55, after: 45 }))
+      expect(previewLayoutMocks.setLayout).toHaveBeenLastCalledWith({ before: 55, after: 45 })
+      await fixture.clickFileArea({ path: 'docs/guide.md' })
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelectorAll('[data-terminal-file-preview]')).toHaveLength(1)
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')?.textContent).toContain('docs/guide.md')
+      await act(async () =>
+        fixture.container.querySelector<HTMLButtonElement>('[aria-label="terminal.file-preview.close"]')?.click(),
+      )
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      expect(fixture.container.querySelector('.goblin-terminal-slot__host')).toBe(host)
+      expect(attach).toHaveBeenCalledTimes(1)
+      expect(detach).not.toHaveBeenCalled()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('reveals a terminal document without opening or replacing the shared preview', async () => {
+    const attach = vi.fn()
+    const onRevealPath = vi.fn()
+    const fixture = await renderPreviewFixture({ attach }, { onRevealPath })
+    try {
+      const handlers = attach.mock.calls[0]?.[2]
+      await act(async () => handlers.onRevealPath('docs/guide.md'))
+      await fixture.flushPreviewClick()
+      expect(onRevealPath).toHaveBeenCalledWith('docs/guide.md')
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).not.toHaveBeenCalled()
+
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      await act(async () => handlers.onRevealPath('docs/guide.md'))
+      await fixture.flushPreviewClick()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')?.textContent).toContain('src/app.ts')
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).toHaveBeenCalledTimes(1)
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('isolates preview keyboard, clipboard, focus and drag interactions from terminal controls', async () => {
+    const attach = vi.fn()
+    const writeInput = vi.fn()
+    const markTelegramInputTarget = vi.fn()
+    const fixture = await renderPreviewFixture({
+      attach,
+      writeInput,
+      markTelegramInputTarget,
+      isTerminalFocusTarget: () => true,
+    })
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      const preview = fixture.container.querySelector<HTMLElement>('[data-terminal-file-preview]')!
+      const keydown = new KeyboardEvent('keydown', {
+        key: 'f',
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      })
+      const paste = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '', files: [], items: [] } })
+      await act(async () => {
+        preview.dispatchEvent(keydown)
+        preview.dispatchEvent(paste)
+        preview.querySelector<HTMLButtonElement>('button')?.focus()
+        preview.dispatchEvent(terminalPathDragEvent('drop'))
+      })
+      expect(keydown.defaultPrevented).toBe(false)
+      expect(paste.defaultPrevented).toBe(false)
+      expect(fixture.container.querySelector('.goblin-terminal-slot__search')).toBeNull()
+      expect(writeInput).not.toHaveBeenCalled()
+      expect(markTelegramInputTarget).not.toHaveBeenCalled()
+      expect(preview.closest('.goblin-terminal-slot')).toBeNull()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test.each(['compact', 'mobile', 'narrow'] as const)(
+    'uses a full-width dismissible preview for %s layout while keeping the host mounted',
+    async (layout) => {
+      previewLayoutMocks.compact = layout === 'compact'
+      mobileDetectionMocks.isMobileDevice = layout === 'mobile'
+      const attach = vi.fn()
+      const detach = vi.fn()
+      const focusTerminal = vi.fn()
+      const fixture = await renderPreviewFixture(
+        { attach, detach, focusTerminal },
+        { width: layout === 'narrow' ? 600 : 1200 },
+      )
+      try {
+        const host = fixture.container.querySelector('.goblin-terminal-slot__host')
+        const textarea = document.createElement('textarea')
+        host?.append(textarea)
+        textarea.focus()
+        await fixture.clickFileArea({ path: 'src/app.ts' })
+        await fixture.flushPreviewClick()
+        const preview = fixture.container.querySelector('[data-terminal-file-preview]')
+        expect(preview?.classList.contains('goblin-terminal-file-preview--compact')).toBe(true)
+        expect(fixture.container.querySelector('.goblin-terminal-slot')?.hasAttribute('inert')).toBe(true)
+        expect(document.activeElement).toBe(preview?.querySelector('button'))
+        expect(fixture.container.querySelector('[data-testid="preview-divider"]')?.getAttribute('data-disabled')).toBe(
+          'true',
+        )
+        expect(
+          fixture.container.querySelector('[data-testid="preview-panel-before"]')?.classList.contains('hidden'),
+        ).toBe(true)
+        expect(fixture.container.querySelectorAll('.goblin-terminal-slot__host')).toHaveLength(1)
+        expect(fixture.container.querySelector('.goblin-terminal-slot__host')).toBe(host)
+        expect(attach).toHaveBeenCalledTimes(1)
+        expect(detach).not.toHaveBeenCalled()
+        await act(async () =>
+          fixture.container.querySelector<HTMLButtonElement>('[aria-label="terminal.file-preview.close"]')?.click(),
+        )
+        expect(
+          fixture.container.querySelector('[data-testid="preview-panel-before"]')?.classList.contains('hidden'),
+        ).toBe(false)
+        expect(fixture.container.querySelector('.goblin-terminal-slot__host')).toBe(host)
+        expect(focusTerminal).toHaveBeenCalledWith('terminal-1')
+      } finally {
+        await fixture.cleanup()
+      }
+    },
+  )
+
+  test('changes between wide and narrow previews without host or attachment churn and preserves the split size', async () => {
+    const attach = vi.fn()
+    const detach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach, detach })
+    try {
+      const host = fixture.container.querySelector('.goblin-terminal-slot__host')
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      await act(async () => previewLayoutMocks.onLayoutChanged?.({ before: 55, after: 45 }))
+      await fixture.resize(600)
+      expect(
+        fixture.container
+          .querySelector('[data-terminal-file-preview]')
+          ?.classList.contains('goblin-terminal-file-preview--compact'),
+      ).toBe(true)
+      await fixture.resize(1200)
+      expect(
+        fixture.container
+          .querySelector('[data-terminal-file-preview]')
+          ?.classList.contains('goblin-terminal-file-preview--compact'),
+      ).toBe(false)
+      expect(previewLayoutMocks.setLayout).toHaveBeenLastCalledWith({ before: 55, after: 45 })
+      expect(fixture.container.querySelector('.goblin-terminal-slot__host')).toBe(host)
+      expect(attach).toHaveBeenCalledTimes(1)
+      expect(detach).not.toHaveBeenCalled()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('does not focus the hidden terminal when the selected session changes during a compact preview', async () => {
+    previewLayoutMocks.compact = true
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    try {
+      const textarea = document.createElement('textarea')
+      fixture.container.querySelector('.goblin-terminal-slot__host')?.append(textarea)
+      const focusSpy = vi.spyOn(textarea, 'focus')
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      ;(document.activeElement as HTMLElement)?.blur()
+      await fixture.render({ terminalKey: 'terminal-2' })
+      expect(focusSpy).not.toHaveBeenCalled()
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).not.toBeNull()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test.each([{ repoRoot: '/another-repo' }, { worktreePath: '/another-worktree' }])(
+    'clears a preview when its scope changes to %j',
+    async (scope) => {
+      const attach = vi.fn()
+      const fixture = await renderPreviewFixture({ attach })
+      try {
+        await fixture.clickFileArea({ path: 'src/app.ts' })
+        await fixture.flushPreviewClick()
+        expect(fixture.container.querySelector('[data-terminal-file-preview]')).not.toBeNull()
+        await fixture.render(scope)
+        expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      } finally {
+        await fixture.cleanup()
+      }
+    },
+  )
+
+  test('keeps scope callbacks current, retains previews across terminal switches and clears on scope changes', async () => {
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    try {
+      const handlers = attach.mock.calls[0]?.[2]
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await fixture.flushPreviewClick()
+      await fixture.render({ terminalKey: 'terminal-2' })
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).not.toBeNull()
+      await fixture.render({ repoRoot: '/other-repo', worktreePath: '/other-worktree' })
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      await fixture.clickFileArea({ path: '/other-worktree/docs/guide.md' })
+      await fixture.flushPreviewClick()
+      expect(repoClientMocks.readRepositoryFileTreeTextFile).toHaveBeenLastCalledWith(
+        '/other-repo',
+        '/other-worktree',
+        '/other-worktree/docs/guide.md',
+        expect.any(AbortSignal),
+      )
+      await act(async () => handlers.onOpenPathInEditor({ path: 'src/editor.ts', line: 7 }))
+      expect(editorOpenMocks.openWorktreeEditorTarget).toHaveBeenLastCalledWith('/other-repo', '/other-worktree', {
+        path: 'src/editor.ts',
+        line: 7,
+      })
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test('opens the captured path immediately from the context menu and keeps repeated opens visible', async () => {
+    const attach = vi.fn()
+    const fixture = await renderPreviewFixture({ attach })
+    const openFromMenu = async (target: FilePathTarget) => {
+      const handlers = attach.mock.calls.at(-1)![2]
+      handlers.onHoverPath(target)
+      await act(async () => {
+        fixture.container
+          .querySelector('.goblin-terminal-slot__host')!
+          .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      })
+      handlers.onHoverPath(null)
+      const open = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'terminal.file-preview.open',
+      )
+      expect(open).toBeDefined()
+      await act(async () => open!.click())
+    }
+    try {
+      await fixture.clickFileArea({ path: 'src/app.ts' })
+      await openFromMenu({ path: 'docs/guide.md', line: 3, column: 2 })
+      const content = () => fixture.container.querySelector('[data-terminal-file-preview]')?.textContent
+      expect(content()).toContain('docs/guide.md')
+      expect(content()).toContain('terminal.file-preview.line-column')
+      await fixture.flushPreviewClick()
+      expect(content()).toContain('docs/guide.md')
+      await openFromMenu({ path: '/worktree/docs/guide.md', line: 8 })
+      expect(content()).toContain('docs/guide.md')
+      expect(content()).toContain('terminal.file-preview.line')
+      expect(content()).not.toContain('terminal.file-preview.line-column')
+      expect(attach).toHaveBeenCalledTimes(1)
+    } finally {
+      await fixture.cleanup()
+    }
+  })
+
+  test.each([
+    { target: { path: 'src/app.ts', line: 12, column: 3 }, expected: '/worktree/src/app.ts' },
+    { target: { path: '/tmp/other.txt', line: 2 }, expected: '/tmp/other.txt' },
+  ])('reveals a hovered terminal path in the file manager', async ({ target, expected }) => {
+    appShellMocks.canRevealInFileManager.mockReturnValue(true)
+    const attach = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', { attach })
+    try {
+      const handlers = attach.mock.calls.at(-1)?.[2]
+      handlers.onHoverPath(target)
+      await act(async () => {
+        container
+          .querySelector('.goblin-terminal-slot__host')
+          ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      })
+      const item = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (element) => element.textContent === 'worktrees.reveal-title',
+      )
+      expect(item).toBeDefined()
+      await act(async () => {
+        item?.click()
+      })
+      expect(appShellMocks.openInFinder).toHaveBeenCalledWith(expected)
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test.each([
+    { path: 'src/app.ts', items: ['terminal.file-preview.open'] },
+    { path: '/outside/guide.md', items: ['terminal.file-preview.open'] },
+    { path: '/outside/archive.zip', items: [] },
+  ])('offers only the supported preview action for remote path $path', async ({ path, items }) => {
+    appShellMocks.canRevealInFileManager.mockReturnValue(true)
+    const attach = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture(
+      'viewer',
+      { attach },
+      {
+        repoRoot: normalizeRemoteRepoId({ alias: 'example', remotePath: '/repo' }),
+      },
+    )
+    try {
+      const handlers = attach.mock.calls.at(-1)?.[2]
+      handlers.onHoverPath({ path })
+      await act(async () => {
+        container
+          .querySelector('.goblin-terminal-slot__host')
+          ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      })
+      expect([...document.body.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual(items)
+      expect(appShellMocks.openInFinder).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
+  test('clears path actions when the pointer leaves a link', async () => {
+    appShellMocks.canRevealInFileManager.mockReturnValue(true)
+    const attach = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture('viewer', { attach })
+    try {
+      const handlers = attach.mock.calls.at(-1)?.[2]
+      handlers.onHoverPath({ path: 'src/app.ts' })
+      handlers.onHoverPath(null)
+      await act(async () => {
+        container
+          .querySelector('.goblin-terminal-slot__host')
+          ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }))
+      })
+      expect(document.body.querySelector('[role="menuitem"]')).toBeNull()
+    } finally {
+      await act(async () => root.unmount())
+      container.remove()
+    }
+  })
+
   test.each(['viewer', 'unowned'] as const)(
     'offers Copy without Paste for a selected %s desktop terminal',
     async (role) => {
@@ -1209,6 +1799,7 @@ describe('TerminalSlot', () => {
         extendMobileSelection,
         finishMobileSelection,
         mobileSelectionText,
+        filePathAtPoint: () => ({ path: 'src/selection.ts' }),
         writeInput,
         takeover,
       })
@@ -1245,6 +1836,7 @@ describe('TerminalSlot', () => {
         expect(selectionEnd.defaultPrevented).toBe(true)
         expect(extendMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 145, clientY: 150 })
         expect(finishMobileSelection).toHaveBeenCalledWith('terminal-1', { clientX: 150, clientY: 155 })
+        expect(container.querySelectorAll('.goblin-terminal-selection-actions button')).toHaveLength(1)
         expect(mobileSelectionText).toHaveBeenCalledWith('terminal-1')
         expect(releasePointerCapture).toHaveBeenCalledWith(1)
         expect(container.querySelector('.goblin-terminal-selection-copy')?.textContent).toBe('menu.edit.copy')
@@ -1256,6 +1848,36 @@ describe('TerminalSlot', () => {
       }
     },
   )
+
+  test.each(['touch', 'mouse'] as const)('opens an external file explicitly with a mobile %s input', async (input) => {
+    mobileDetectionMocks.isMobileDevice = true
+    const point = { clientX: 40, clientY: 60 }
+    const filePathAtPoint = vi.fn(() => ({ path: '/outside/notes.md', line: 3 }))
+    const fixture = await renderPreviewFixture({ beginMobileSelection: () => true, filePathAtPoint })
+    try {
+      const host = fixture.container.querySelector<HTMLElement>('.goblin-terminal-slot__host')!
+      if (input === 'touch') {
+        await act(async () => host.dispatchEvent(terminalPointerEvent('pointerdown', point)))
+        await act(async () => vi.advanceTimersByTimeAsync(501))
+        await act(async () => host.dispatchEvent(terminalPointerEvent('pointerup', point)))
+      } else {
+        await act(async () =>
+          host.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, ...point })),
+        )
+      }
+      expect(filePathAtPoint).toHaveBeenCalledWith('terminal-1', point)
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')).toBeNull()
+      const open = fixture.container.querySelector<HTMLButtonElement>('.goblin-terminal-selection-actions button')
+      expect(open?.textContent).toBe('terminal.file-preview.open')
+      await act(async () => open!.click())
+      expect(fixture.container.querySelector('[data-terminal-file-preview]')?.textContent).toContain(
+        '/outside/notes.md',
+      )
+      expect(fixture.container.querySelector('.goblin-terminal-selection-actions')).toBeNull()
+    } finally {
+      await fixture.cleanup()
+    }
+  })
 
   test('copies the current selection and clears it only after clipboard success', async () => {
     vi.useFakeTimers()
@@ -2692,6 +3314,75 @@ describe('TerminalSlot', () => {
     }
   })
 
+  test.each([
+    { role: 'controller', shell: 'zsh', path: '/worktree', expected: '/worktree' },
+    { role: 'controller', shell: 'zsh', path: "/worktree/it's a repo", expected: "'/worktree/it'\\''s a repo'" },
+    {
+      role: 'controller',
+      shell: 'pwsh.exe',
+      path: "C:\\work trees\\it's mine",
+      expected: "'C:\\work trees\\it''s mine'",
+    },
+    { role: 'controller', shell: 'cmd.exe', path: 'C:\\work trees\\api', expected: '"C:\\work trees\\api"' },
+    { role: 'viewer', shell: 'zsh', path: '/worktree/member', expected: null },
+  ] as const)('drags a directory row $path into the $role terminal', async ({ role, shell, path, expected }) => {
+    const writeInput = vi.fn()
+    const { container, root } = await renderTerminalSlotFixture(role, { writeInput }, { processName: shell })
+    const list = document.createElement('ul')
+    const listRoot = createRoot(list)
+    document.body.appendChild(list)
+    try {
+      await act(async () =>
+        listRoot.render(
+          <WorkspaceListItemFrame
+            terminalDirectoryPath={path}
+            buttonProps={{}}
+            dragHandle={{ label: 'Reorder', props: {} }}
+          >
+            Repository
+          </WorkspaceListItemFrame>,
+        ),
+      )
+      const row = list.querySelector<HTMLButtonElement>('[data-workspace-list-item-main]')!
+      expect(row.draggable).toBe(true)
+      expect(list.querySelector<HTMLButtonElement>('[data-workspace-list-item-drag-handle]')?.draggable).toBe(false)
+      const payload = new Map<string, string>()
+      const transfer = {
+        effectAllowed: '',
+        get types() {
+          return [...payload.keys()]
+        },
+        files: [],
+        setData: (key: string, value: string) => payload.set(key, value),
+        getData: (key: string) => payload.get(key) ?? '',
+      }
+      const dispatch = (target: Element, type: string) =>
+        target.dispatchEvent(
+          Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer: transfer }),
+        )
+      await act(async () => dispatch(row, 'dragstart'))
+      expect(transfer.types).toEqual([TERMINAL_DIRECTORY_MIME])
+      expect(transfer.effectAllowed).toBe('copy')
+      const slot = container.querySelector('.goblin-terminal-slot')!
+      await act(async () => dispatch(slot, 'dragenter'))
+      expect(!!container.querySelector('.goblin-terminal-slot__drop-overlay')).toBe(role === 'controller')
+      await act(async () => dispatch(slot, 'drop'))
+      if (expected !== null) expect(writeInput).toHaveBeenCalledExactlyOnceWith('terminal-1', expected)
+      else expect(writeInput).not.toHaveBeenCalled()
+      writeInput.mockClear()
+      transfer.setData(TERMINAL_DIRECTORY_MIME, '/repo\nnext')
+      await act(async () => dispatch(slot, 'drop'))
+      expect(writeInput).not.toHaveBeenCalled()
+    } finally {
+      await act(async () => {
+        listRoot.unmount()
+        root.unmount()
+      })
+      list.remove()
+      container.remove()
+    }
+  })
+
   test('does not advertise or write path drops for a viewer terminal', async () => {
     ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement('div')
@@ -3316,9 +4007,124 @@ describe('TerminalSlot', () => {
   })
 })
 
+function FileAreaPreviewTrigger({
+  repoId,
+  worktreePath,
+  getTarget,
+}: {
+  repoId: string
+  worktreePath: string
+  getTarget: () => FilePathTarget
+}) {
+  const preview = useFilePreview()
+  return (
+    <button data-file-area-preview onClick={() => preview?.requestPreview(repoId, worktreePath, getTarget())}>
+      Preview file
+    </button>
+  )
+}
+
+async function renderPreviewFixture(
+  overrides: Partial<TerminalSessionContextValue> = {},
+  options: { width?: number; onRevealPath?: (path: string) => void } = {},
+) {
+  vi.useFakeTimers()
+  ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+    width: options.width ?? 1200,
+    height: 600,
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: options.width ?? 1200,
+    bottom: 600,
+    toJSON: () => ({}),
+  }))
+  const context = terminalContext(overrides)
+  let current = controllerFixture()
+  let fileAreaTarget: FilePathTarget = { path: 'src/app.ts' }
+  const readContext: TerminalSessionReadContextValue = {
+    worktreeSnapshot: () => current.worktreeSnapshot,
+    subscribeWorktree: () => () => {},
+    repoSyncReady: () => true,
+    subscribeRepoSync: () => () => {},
+    snapshot: () => current.snapshot,
+    subscribeSnapshot: () => () => {},
+  }
+  const render = async (
+    scope: { repoRoot?: string; worktreePath?: string; terminalKey?: string; hideTerminal?: boolean } = {},
+  ) => {
+    if (scope.repoRoot || scope.worktreePath) current = controllerFixture('controller', scope)
+    if (scope.terminalKey) {
+      const descriptor = { ...current.descriptor, key: scope.terminalKey, terminalId: scope.terminalKey }
+      current = {
+        ...current,
+        descriptor,
+        worktreeSnapshot: { ...current.worktreeSnapshot, selectedDescriptor: descriptor },
+      }
+    }
+    const terminal = (
+      <TerminalSlot
+        repoRoot={current.descriptor.repoRoot}
+        worktreePath={current.descriptor.worktreePath}
+        onRevealPath={options.onRevealPath}
+      />
+    )
+    await act(async () =>
+      root.render(
+        <TerminalSessionContext.Provider value={context}>
+          <TerminalSessionReadContext.Provider value={readContext}>
+            <FilePreviewProvider
+              scopeKey={JSON.stringify([current.descriptor.repoRoot, current.descriptor.worktreePath])}
+            >
+              <FileAreaPreviewTrigger
+                repoId={current.descriptor.repoRoot}
+                worktreePath={current.descriptor.worktreePath}
+                getTarget={() => fileAreaTarget}
+              />
+              {!scope.hideTerminal && terminal}
+            </FilePreviewProvider>
+          </TerminalSessionReadContext.Provider>
+        </TerminalSessionContext.Provider>,
+      ),
+    )
+  }
+  await render()
+  return {
+    container,
+    render,
+    clickFileArea: async (target: FilePathTarget) => {
+      fileAreaTarget = target
+      await act(async () => container.querySelector<HTMLButtonElement>('[data-file-area-preview]')!.click())
+    },
+    flushPreviewClick: async () => {
+      await act(async () => vi.advanceTimersByTimeAsync(500))
+    },
+    resize: async (width: number) => {
+      options.width = width
+      await act(async () => window.dispatchEvent(new Event('resize')))
+    },
+    cleanup: async () => {
+      await act(async () => root.unmount())
+      container.remove()
+      rectSpy.mockRestore()
+    },
+  }
+}
+
 function controllerFixture(
   role: 'controller' | 'viewer' | 'unowned' = 'controller',
-  options: { repoRoot?: string; worktreePath?: string; branch?: string; tmuxBacked?: boolean } = {},
+  options: {
+    repoRoot?: string
+    worktreePath?: string
+    branch?: string
+    processName?: string
+    tmuxBacked?: boolean
+  } = {},
 ) {
   const repoRoot = options.repoRoot ?? '/repo'
   const worktreePath = options.worktreePath ?? '/worktree'
@@ -3342,7 +4148,7 @@ function controllerFixture(
   const snapshot = {
     phase: 'open' as const,
     message: null,
-    processName: 'zsh',
+    processName: options.processName ?? 'zsh',
     attachment: {
       role,
       controllerStatus: role === 'unowned' ? ('none' as const) : ('connected' as const),
@@ -3358,7 +4164,7 @@ function controllerFixture(
 async function renderTerminalSlotFixture(
   role: 'controller' | 'viewer' | 'unowned',
   contextOverrides: Partial<TerminalSessionContextValue> = {},
-  fixtureOptions: { tmuxBacked?: boolean; repoRoot?: string; worktreePath?: string } = {},
+  fixtureOptions: { processName?: string; tmuxBacked?: boolean; repoRoot?: string; worktreePath?: string } = {},
 ): Promise<{ container: HTMLDivElement; root: Root }> {
   ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   const container = document.createElement('div')

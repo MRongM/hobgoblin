@@ -1,9 +1,16 @@
 import path from 'node:path'
+import { branchWorkspaceStorageRootId, repositoryIdAtPath } from '#/server/modules/workspace-paths.ts'
+import { acquireFolderMutationScopes } from '#/server/modules/folder-mutation-locks.ts'
+import {
+  inspectBranchWorkspaceRepository,
+  materializeBranchWorkspaceRepository,
+} from '#/server/modules/branch-workspace-repository-source.ts'
 import pLimit from 'p-limit'
 import {
   copyBranchWorkspaceEntry,
   createBranchWorkspaceDirectory,
   fingerprintBranchWorkspaceEntry,
+  inspectBranchWorkspacePath,
   materializeBranchWorkspaceSymlink,
   removeBranchWorkspaceEntry,
 } from '#/server/modules/branch-workspace-materialization-source.ts'
@@ -14,10 +21,13 @@ import {
 } from '#/server/modules/branch-workspace-plan.ts'
 import {
   readBranchWorkspaceManifests,
+  readBranchWorkspaceExecutionManifests,
   updateBranchWorkspaceManifests,
 } from '#/server/modules/branch-workspace-source.ts'
 import { readBranchWorkspaceCatalog } from '#/server/modules/branch-workspace-catalog-read.ts'
 import { readBranchWorkspaceSnapshot } from '#/server/modules/branch-workspace-read.ts'
+import { getRepositoryWorktrees } from '#/server/modules/repo-read-paths.ts'
+import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import {
   cleanupRepositoryWorktree,
   createRepositoryWorktree,
@@ -50,12 +60,15 @@ interface PendingBranchWorkspacePlan {
 }
 
 export interface BranchWorkspaceWriteDependencies {
+  isOperationActive?: (rootId: string) => boolean
   buildPlan?: typeof buildBranchWorkspacePlan
   planDependencies?: BranchWorkspacePlanDependencies
   readManifests?: typeof readBranchWorkspaceManifests
   readSnapshot?: typeof readBranchWorkspaceSnapshot
   updateManifests?: typeof updateBranchWorkspaceManifests
   createDirectory?: typeof createBranchWorkspaceDirectory
+  createRepository?: typeof materializeBranchWorkspaceRepository
+  inspectRepository?: typeof inspectBranchWorkspaceRepository
   createWorktree?: typeof createRepositoryWorktree
   cleanupWorktree?: typeof cleanupRepositoryWorktree
   materializeSymlink?: typeof materializeBranchWorkspaceSymlink
@@ -73,6 +86,7 @@ export interface BranchWorkspaceWriteService {
   plan(rootId: string, request: unknown, signal?: AbortSignal): Promise<BranchWorkspacePlanResult>
   execute(rootId: string, input: BranchWorkspaceExecuteInput): Promise<BranchWorkspaceExecuteResult>
   abort(rootId: string): boolean
+  isActive(rootId: string): boolean
   reorder(rootId: string, orderedIds: string[]): Promise<BranchWorkspaceReorderResult>
 }
 
@@ -81,13 +95,17 @@ export function createBranchWorkspaceWriteService(
 ): BranchWorkspaceWriteService {
   const pendingByRoot = new Map<string, PendingBranchWorkspacePlan>()
   const activeByRoot = new Map<string, AbortController>()
+  const planningByRoot = new Map<string, AbortController>()
   const buildPlan = dependencies.buildPlan ?? buildBranchWorkspacePlan
-  const readManifests = dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId))
+  const readManifests = dependencies.readManifests ?? readBranchWorkspaceExecutionManifests
+  const readCatalog = dependencies.readManifests ?? ((rootId: string) => readBranchWorkspaceCatalog(rootId))
   const readSnapshot = dependencies.readSnapshot ?? readBranchWorkspaceSnapshot
   const updateManifests = dependencies.updateManifests ?? updateBranchWorkspaceManifests
   const retryUpdateManifests = (rootId: string, mutate: Parameters<typeof updateBranchWorkspaceManifests>[1]) =>
     withBranchWorkspaceRetry(async () => await updateManifests(rootId, mutate))
   const createDirectory = dependencies.createDirectory ?? createBranchWorkspaceDirectory
+  const createRepository = dependencies.createRepository ?? materializeBranchWorkspaceRepository
+  const getWorktrees = dependencies.planDependencies?.getWorktrees ?? getRepositoryWorktrees
   const rawCreateWorktree = dependencies.createWorktree ?? createRepositoryWorktree
   const createWorktree = (...args: Parameters<typeof createRepositoryWorktree>) =>
     withBranchWorkspaceRetry(async () => await rawCreateWorktree(...args), {
@@ -154,20 +172,32 @@ export function createBranchWorkspaceWriteService(
 
   return {
     async plan(rootId, request, signal) {
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.operation-in-progress' }
       }
-      const result = await buildPlan(rootId, request, dependencies.planDependencies, signal)
-      if (result.ok) {
-        pendingByRoot.set(rootId, {
-          plan: result.plan,
-          request,
-          persisted: false,
-          directoryReady: !result.plan.steps.some((step) => step.kind === 'create-directory'),
-          terminalsClosed: result.plan.terminalSessionIds.length === 0,
-        })
+      planningByRoot.get(rootId)?.abort()
+      const controller = new AbortController()
+      planningByRoot.set(rootId, controller)
+      const planningSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
+      try {
+        const result = await buildPlan(rootId, request, dependencies.planDependencies, planningSignal)
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        if (result.ok) {
+          pendingByRoot.set(rootId, {
+            plan: result.plan,
+            request,
+            persisted: false,
+            directoryReady: !result.plan.steps.some((step) => step.kind === 'create-directory'),
+            terminalsClosed: result.plan.terminalSessionIds.length === 0,
+          })
+        }
+        return result
+      } catch (error) {
+        if (planningSignal.aborted) return { ok: false, message: 'cancelled' }
+        throw error
+      } finally {
+        if (planningByRoot.get(rootId) === controller) planningByRoot.delete(rootId)
       }
-      return result
     },
 
     async execute(rootId, input) {
@@ -175,7 +205,7 @@ export function createBranchWorkspaceWriteService(
       if (!pending || pending.plan.token !== input.planToken) {
         return { ok: false, message: 'workspace.branch-workspace.plan-stale' }
       }
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return {
           ok: false,
           message: 'workspace.branch-workspace.operation-in-progress',
@@ -194,6 +224,8 @@ export function createBranchWorkspaceWriteService(
       const controller = new AbortController()
       activeByRoot.set(rootId, controller)
       const { plan } = pending
+      const targetRootId = branchWorkspaceStorageRootId(plan)
+      let releaseFolderScopes: (() => void) | null = null
       const warnings: BranchWorkspaceExecutionWarning[] = []
       const persistExecution = (
         targetRootId: string,
@@ -201,10 +233,19 @@ export function createBranchWorkspaceWriteService(
         branchWorkspaceId: string,
       ) => persist(targetRootId, mutate, branchWorkspaceId, input.sourceToken)
       try {
+        releaseFolderScopes = acquireFolderMutationScopes([
+          { repoId: rootId, path: plan.path },
+          ...plan.repositories.map((repository) => ({ repoId: repository.repoId, path: repository.worktreePath })),
+        ])
+        if (!releaseFolderScopes)
+          return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.operation-in-progress')
         if (input.force === true) {
           if (plan.operation !== 'remove') {
             return failOperation(plan.branchWorkspaceId, 'error.invalid-arguments')
           }
+          const registry = await readManifests(rootId)
+          controller.signal.throwIfAborted()
+          if (registry.kind === 'invalid') return failOperation(plan.branchWorkspaceId, registry.message)
           if (!pending.persisted) {
             const rebuilt = await buildPlan(rootId, pending.request, dependencies.planDependencies, controller.signal)
             if (!rebuilt.ok || rebuilt.plan.token !== plan.token) {
@@ -231,7 +272,7 @@ export function createBranchWorkspaceWriteService(
           }
 
           try {
-            await removeEntry(rootId, plan.path, controller.signal)
+            await removeEntry(targetRootId, plan.path, controller.signal)
           } catch (error) {
             return failOperation(plan.branchWorkspaceId, operationMessage(error))
           }
@@ -247,7 +288,7 @@ export function createBranchWorkspaceWriteService(
           pendingByRoot.delete(rootId)
 
           for (const repository of plan.repositories) {
-            if (!repository.worktreePresent) continue
+            if (repository.kind === 'repository' || !repository.worktreePresent) continue
             const cleaned = await cleanupWorktree(
               repository.repoId,
               repository.worktreePath,
@@ -325,10 +366,50 @@ export function createBranchWorkspaceWriteService(
             if (controller.signal.aborted) {
               return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
+            if (repository.kind === 'repository')
+              return failOperation(plan.branchWorkspaceId, 'workspace.branch-workspace.primary-worktree')
+            // A partially completed removal may be retried after the user changed a remaining directory.
+            // Read its current Git/path identity again before touching that member.
+            const latest = await buildPlan(
+              rootId,
+              {
+                operation: 'reduce',
+                branchWorkspaceId: plan.branchWorkspaceId,
+                repositories: [repository.repositoryName],
+              },
+              dependencies.planDependencies,
+              controller.signal,
+            )
+            const latestRepository = latest.ok ? latest.plan.repositories[0] : undefined
+            if (
+              !latest.ok ||
+              !latestRepository ||
+              !sameRemovalTarget(repository, latestRepository) ||
+              latest.plan.requiredApprovals.some((approval) => !approvals.has(approval)) ||
+              latest.plan.terminalSessionIds.length > 0
+            ) {
+              return failOperation(
+                plan.branchWorkspaceId,
+                latest.ok ? 'workspace.branch-workspace.plan-stale' : latest.message,
+              )
+            }
             let result = { ok: true, message: 'satisfied' }
             if (!repository.satisfied && repository.action === 'remove-entry') {
               try {
-                await removeEntry(rootId, repository.worktreePath, controller.signal)
+                const entryScope = repositoryIdAtPath(rootId, plan.path)
+                const entry = await (dependencies.planDependencies?.inspectPath ?? inspectBranchWorkspacePath)(
+                  entryScope,
+                  repository.worktreePath,
+                  controller.signal,
+                )
+                if (
+                  entry.kind !== 'symlink' ||
+                  !repository.entryFingerprint ||
+                  (await fingerprintEntry(entryScope, repository.worktreePath, controller.signal)) !==
+                    repository.entryFingerprint
+                )
+                  throw new Error('workspace.branch-workspace.plan-stale')
+                await removeEntry(entryScope, repository.worktreePath, controller.signal)
                 result = { ok: true, message: 'removed' }
               } catch (error) {
                 result = { ok: false, message: operationMessage(error) }
@@ -340,8 +421,8 @@ export function createBranchWorkspaceWriteService(
                   branch: repository.checkedOutBranch ?? repository.targetBranch,
                   worktreePath: repository.worktreePath,
                   alsoDeleteBranch: false,
-                  forceRemoveWorktree: true,
-                  skipWorktreeStatus: true,
+                  forceRemoveWorktree: repository.dirty === true && approvals.has('discard-member-changes'),
+                  skipWorktreeStatus: false,
                   forceDeleteBranch: false,
                   alsoDeleteUpstream: false,
                 },
@@ -396,7 +477,21 @@ export function createBranchWorkspaceWriteService(
             }
             if (member.progress !== 'removed') {
               let result = { ok: true, message: 'satisfied' }
-              if (repository.worktreePresent) {
+              if (repository.kind === 'repository' && repository.action === 'remove-entry') {
+                try {
+                  await validateRepositoryDeletionTarget(
+                    targetRootId,
+                    plan.path,
+                    repository,
+                    getWorktrees,
+                    controller.signal,
+                  )
+                  await removeEntry(targetRootId, repository.worktreePath, controller.signal)
+                  result = { ok: true, message: 'removed' }
+                } catch (error) {
+                  result = { ok: false, message: operationMessage(error) }
+                }
+              } else if (repository.worktreePresent) {
                 try {
                   result = await removeWorktree(
                     repository.repoId,
@@ -512,7 +607,7 @@ export function createBranchWorkspaceWriteService(
               return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
             try {
-              await removeEntry(rootId, entry.targetPath, controller.signal)
+              await removeEntry(targetRootId, entry.targetPath, controller.signal)
               await persistAuxiliaryProgress(persistExecution, rootId, plan.branchWorkspaceId, entry.name, 'removed')
             } catch (error) {
               const message = operationMessage(error)
@@ -533,14 +628,14 @@ export function createBranchWorkspaceWriteService(
               return failOperation(plan.branchWorkspaceId, 'cancelled')
             }
             try {
-              await removeEntry(rootId, childPath(rootId, plan.path, entryName), controller.signal)
+              await removeEntry(targetRootId, childPath(rootId, plan.path, entryName), controller.signal)
             } catch (error) {
               return failOperation(plan.branchWorkspaceId, operationMessage(error))
             }
           }
           if (plan.steps.some((step) => step.kind === 'remove-directory')) {
             try {
-              await removeEntry(rootId, plan.path, controller.signal)
+              await removeEntry(targetRootId, plan.path, controller.signal)
             } catch (error) {
               return failOperation(plan.branchWorkspaceId, operationMessage(error))
             }
@@ -555,7 +650,7 @@ export function createBranchWorkspaceWriteService(
 
         if (!pending.directoryReady) {
           try {
-            await createDirectory(rootId, plan.path, controller.signal)
+            await createDirectory(targetRootId, plan.path, controller.signal)
             pending.directoryReady = true
           } catch (error) {
             return failOperation(plan.branchWorkspaceId, operationMessage(error))
@@ -584,6 +679,18 @@ export function createBranchWorkspaceWriteService(
                       input.sourceToken,
                     )
                     if (!cleaned.ok) result = cleaned
+                  }
+                  if (!result && repository.kind === 'repository') {
+                    if (!repository.source) throw new Error('workspace.branch-workspace.repository-unavailable')
+                    result = await createRepository(
+                      targetRootId,
+                      {
+                        source: repository.source,
+                        worktreePath: repository.worktreePath,
+                        ...(repository.checkoutDefaultBranch ? {} : { mode: repository.mode }),
+                      },
+                      controller.signal,
+                    )
                   }
                   if (!result) {
                     result = await createWorktree(
@@ -649,14 +756,18 @@ export function createBranchWorkspaceWriteService(
           }
           try {
             if (entry.action === 'replace-symlink') {
-              await removeEntry(rootId, entry.targetPath, controller.signal)
+              await removeEntry(targetRootId, entry.targetPath, controller.signal)
             }
             if (entry.mode === 'symlink') {
-              await materializeSymlink(rootId, entry.sourcePath, entry.targetPath, controller.signal)
+              await materializeSymlink(targetRootId, entry.sourcePath, entry.targetPath, controller.signal, {
+                sourceRootId: rootId,
+              })
               await persistAuxiliaryProgress(persistExecution, rootId, plan.branchWorkspaceId, entry.name, 'complete')
             } else {
-              await copyEntry(rootId, entry.sourcePath, entry.targetPath, controller.signal)
-              const copyBaseline = await fingerprintEntry(rootId, entry.targetPath, controller.signal)
+              await copyEntry(targetRootId, entry.sourcePath, entry.targetPath, controller.signal, {
+                sourceRootId: rootId,
+              })
+              const copyBaseline = await fingerprintEntry(targetRootId, entry.targetPath, controller.signal)
               await persistAuxiliaryProgress(
                 persistExecution,
                 rootId,
@@ -712,6 +823,7 @@ export function createBranchWorkspaceWriteService(
       } catch (error) {
         return failOperation(plan.branchWorkspaceId, operationMessage(error))
       } finally {
+        releaseFolderScopes?.()
         if (activeByRoot.get(rootId) === controller) activeByRoot.delete(rootId)
       }
     },
@@ -724,10 +836,10 @@ export function createBranchWorkspaceWriteService(
     },
 
     async reorder(rootId, orderedIds) {
-      if (activeByRoot.has(rootId)) {
+      if (activeByRoot.has(rootId) || dependencies.isOperationActive?.(rootId)) {
         return { ok: false, message: 'workspace.branch-workspace.operation-in-progress' }
       }
-      const snapshot = await readManifests(rootId)
+      const snapshot = await readCatalog(rootId)
       if (snapshot.kind === 'invalid') return { ok: false, message: snapshot.message }
       const manifests = snapshot.kind === 'ready' ? snapshot.manifests : []
       const knownIds = new Set(manifests.map((manifest) => manifest.id))
@@ -743,6 +855,10 @@ export function createBranchWorkspaceWriteService(
       await retryUpdateManifests(rootId, () => reordered)
       publishInvalidation(rootId)
       return { ok: true }
+    },
+
+    isActive(rootId) {
+      return activeByRoot.has(rootId)
     },
   }
 }
@@ -866,4 +982,50 @@ function childPath(rootId: string, parentPath: string, name: string): string {
 function operationMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : ''
   return message || 'workspace.branch-workspace.operation-failed'
+}
+
+async function validateRepositoryDeletionTarget(
+  rootId: string,
+  folderPath: string,
+  repository: BranchWorkspacePlan['repositories'][number],
+  getWorktrees: typeof getRepositoryWorktrees,
+  signal: AbortSignal,
+): Promise<void> {
+  const target = await inspectBranchWorkspacePath(rootId, repository.worktreePath, signal)
+  if (!target.exists) return
+  if (target.kind !== 'directory' || target.outsideRoot) throw new Error('workspace.branch-workspace.invalid-path')
+  const worktrees = await getWorktrees(repository.repoId, signal)
+  const pathApi = isRemoteRepoId(rootId) ? path.posix : path
+  const primary = worktrees.find((entry) => entry.isPrimary && !entry.isBare && !entry.isPrunable)
+  if (
+    !primary ||
+    !(isRemoteRepoId(rootId)
+      ? path.posix.normalize(primary.path) === path.posix.normalize(repository.worktreePath)
+      : sameLocalFilePath(primary.path, repository.worktreePath))
+  )
+    throw new Error('workspace.branch-workspace.repository-unavailable')
+  if (
+    worktrees.some((entry) => {
+      if (entry.isPrunable) return false
+      const relative = pathApi.relative(folderPath, entry.path)
+      return relative === '..' || relative.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(relative)
+    })
+  )
+    throw new Error('workspace.branch-workspace.worktree-elsewhere')
+}
+
+function sameRemovalTarget(
+  left: BranchWorkspacePlan['repositories'][number],
+  right: BranchWorkspacePlan['repositories'][number],
+): boolean {
+  return (
+    left.repositoryName === right.repositoryName &&
+    left.repoId === right.repoId &&
+    left.kind === right.kind &&
+    left.action === right.action &&
+    left.worktreePath === right.worktreePath &&
+    left.checkedOutBranch === right.checkedOutBranch &&
+    left.dirty === right.dirty &&
+    left.entryFingerprint === right.entryFingerprint
+  )
 }

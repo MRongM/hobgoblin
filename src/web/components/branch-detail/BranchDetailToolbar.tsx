@@ -20,6 +20,7 @@ import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { useFocusRegistry } from '#/web/components/tab-strip/useFocusRegistry.ts'
 import { FocusProjectSwitcher } from '#/web/components/repo-workspace/FocusProjectSwitcher.tsx'
 import { WorkspaceRepositorySwitcher } from '#/web/components/repo-workspace/WorkspaceRepositorySwitcher.tsx'
+import { TerminalStashMenu } from '#/web/components/terminal/TerminalStashMenu.tsx'
 import {
   branchDetailToolbarStoreActionsEqual,
   branchDetailToolbarStoreActionsFromStore,
@@ -199,6 +200,7 @@ export function BranchDetailToolbar({
         )}
       </div>
       <div aria-hidden="true" className={cn('min-w-2 flex-1 self-stretch', compact && 'hidden')} />
+      <TerminalStashMenu repoId={repo.id} />
     </Toolbar>
   )
 }

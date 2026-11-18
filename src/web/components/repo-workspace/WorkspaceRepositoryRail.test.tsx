@@ -64,6 +64,8 @@ const repositoryListState = vi.hoisted(() => ({
     onReorder: (fromId: string, toId: string) => void
     onToggleFileArea?: () => void
     onOpenFileArea?: () => void
+    refreshingRepositoryIds?: ReadonlySet<string>
+    onRefreshRepository?: (repositoryId: string) => void | Promise<void>
   },
 }))
 
@@ -216,6 +218,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
     onOpenFileArea?: () => void
     changeCountById?: Readonly<Record<string, number>>
+    refreshingChangeIds?: ReadonlySet<string>
     getMemberPresentation?: (
       item: BranchWorkspaceSnapshot,
       member: BranchWorkspaceSnapshot['repositories'][number],
@@ -247,6 +250,7 @@ const branchWorkspaceListState = vi.hoisted(() => ({
     onRemove?: (item: BranchWorkspaceSnapshot) => void
     onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
     onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
+    onRefreshChanges?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   },
 }))
 
@@ -405,6 +409,8 @@ const originalActions = {
   rescanWorkspace: useReposStore.getState().rescanWorkspace,
   configureWorkspace: useReposStore.getState().configureWorkspace,
   refreshCoreData: useReposStore.getState().refreshCoreData,
+  refreshSnapshot: useReposStore.getState().refreshSnapshot,
+  refreshStatus: useReposStore.getState().refreshStatus,
   syncAndRefresh: useReposStore.getState().syncAndRefresh,
 }
 
@@ -417,6 +423,8 @@ const selectBranch = vi.fn()
 const setDetailTab = vi.fn()
 const rescanWorkspace = vi.fn(async () => {})
 const refreshCoreData = vi.fn(async () => {})
+const refreshSnapshot = vi.fn(async () => {})
+const refreshStatus = vi.fn(async () => {})
 const syncAndRefresh = vi.fn(async () => ({ ok: true as const, message: 'fetched' }))
 const configureWorkspace = vi.fn(
   async (_rootId: string, _config: WorkspaceConfig): Promise<{ ok: true } | { ok: false; message: string }> => ({
@@ -451,6 +459,10 @@ beforeEach(() => {
   rescanWorkspace.mockResolvedValue(undefined)
   refreshCoreData.mockReset()
   refreshCoreData.mockResolvedValue(undefined)
+  refreshSnapshot.mockReset()
+  refreshSnapshot.mockResolvedValue(undefined)
+  refreshStatus.mockReset()
+  refreshStatus.mockResolvedValue(undefined)
   syncAndRefresh.mockReset()
   syncAndRefresh.mockResolvedValue({ ok: true, message: 'fetched' })
   branchWorkspaceState.refresh.mockReset()
@@ -583,6 +595,8 @@ beforeEach(() => {
     rescanWorkspace,
     configureWorkspace,
     refreshCoreData,
+    refreshSnapshot,
+    refreshStatus,
     syncAndRefresh,
   })
   container = document.createElement('div')
@@ -601,6 +615,82 @@ afterEach(() => {
 })
 
 describe('WorkspaceRepositoryRail', () => {
+  test('opens one whole-folder confirmation from the root delete action without checkboxes', () => {
+    const item = branchWorkspaceState.items[0]!
+    renderRail({ currentRepoId: ROOT })
+    act(() => branchWorkspaceListState.props?.onRemove?.(item))
+    const dialog = document.querySelector('[role="alertdialog"]')
+    expect(dialog?.textContent).toContain('workspace.branch-workspace.delete')
+    expect(dialog?.textContent).toContain(item.path)
+    expect(dialog?.querySelector('[role="checkbox"], input')).toBeNull()
+    expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(1)
+    expect(branchWorkspaceState.refresh).not.toHaveBeenCalled()
+  })
+
+  test('projects current branch deltas and sums directions independently as snapshots change', () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: {
+        ...state.repos,
+        [API]: replaceRepo(state.repos[API]!, (repo) => {
+          repo.data.branches = [
+            createRepoBranch('main', { ahead: 3, behind: 1 }),
+            createRepoBranch('feature/other', { ahead: 40, behind: 50 }),
+          ]
+        }),
+        [WEB]: replaceRepo(state.repos[WEB]!, (repo) => {
+          repo.availability = { phase: 'available' }
+          repo.data.currentBranch = 'main'
+          repo.data.branches = [createRepoBranch('main', { ahead: 2, behind: 4 })]
+        }),
+      },
+    })
+    renderRail()
+    expect(repositoryListState.props?.repositories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: API, ahead: 3, behind: 1 }),
+        expect.objectContaining({ id: WEB, ahead: 2, behind: 4 }),
+      ]),
+    )
+    const delta = (direction: string) =>
+      container?.querySelector(`[role="img"][aria-label="branch-status.sync.${direction}"]`)
+    expect(delta('ahead')?.textContent).toBe('5')
+    expect(delta('behind')?.textContent).toBe('5')
+    act(() => {
+      const current = useReposStore.getState()
+      useReposStore.setState({
+        repos: {
+          ...current.repos,
+          [API]: replaceRepo(current.repos[API]!, (repo) => {
+            repo.data.currentBranch = 'feature/other'
+          }),
+          [WEB]: replaceRepo(current.repos[WEB]!, (repo) => {
+            repo.availability = { phase: 'unavailable', reason: 'missing', checkedAt: 1 }
+          }),
+        },
+      })
+    })
+    expect(delta('ahead')?.textContent).toBe('40')
+    expect(delta('behind')?.textContent).toBe('50')
+    expect(repositoryListState.props?.repositories.find((repo) => repo.id === WEB)).toMatchObject({
+      ahead: 0,
+      behind: 0,
+    })
+    act(() => {
+      const current = useReposStore.getState()
+      useReposStore.setState({
+        repos: {
+          ...current.repos,
+          [API]: replaceRepo(current.repos[API]!, (repo) => {
+            repo.data.currentBranch = 'HEAD'
+          }),
+        },
+      })
+    })
+    expect(delta('ahead')).toBeNull()
+    expect(delta('behind')).toBeNull()
+  })
+
   test('uses the shared project list scrollbar contract for the repository list', () => {
     renderRail()
 
@@ -622,6 +712,60 @@ describe('WorkspaceRepositoryRail', () => {
     expect(syncAndRefresh).toHaveBeenCalledTimes(2)
     expect(syncAndRefresh).toHaveBeenCalledWith(API, { token: api.instanceToken })
     expect(syncAndRefresh).toHaveBeenCalledWith(WEB, { token: web.instanceToken })
+  })
+
+  test('refreshes a workspace repository snapshot and status with its latest token and prevents duplicate requests', async () => {
+    let resolveStatus: (() => void) | undefined
+    refreshCoreData.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStatus = resolve
+        }),
+    )
+    renderRail()
+
+    const refreshRepository = repositoryListState.props?.onRefreshRepository
+    expect(refreshRepository).toBeTypeOf('function')
+    if (!refreshRepository) return
+    const first = refreshRepository(API)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(repositoryListState.props?.refreshingRepositoryIds).toEqual(new Set([API]))
+
+    await act(async () => {
+      await refreshRepository(API)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(1)
+
+    const api = useReposStore.getState().repos[API]!
+    expect(refreshCoreData).toHaveBeenCalledWith(API, { token: api.instanceToken })
+
+    resolveStatus?.()
+    await act(async () => {
+      await first
+    })
+    expect(repositoryListState.props?.refreshingRepositoryIds).toEqual(new Set())
+  })
+
+  test('skips unavailable repositories and clears busy state after a status failure', async () => {
+    refreshCoreData.mockRejectedValueOnce(new Error('offline'))
+    renderRail()
+
+    const refreshRepository = repositoryListState.props?.onRefreshRepository
+    expect(refreshRepository).toBeTypeOf('function')
+    if (!refreshRepository) return
+
+    await act(async () => {
+      await refreshRepository(API)
+    })
+    expect(repositoryListState.props?.refreshingRepositoryIds).toEqual(new Set())
+
+    await act(async () => {
+      await refreshRepository(WEB)
+    })
+    expect(refreshCoreData).toHaveBeenCalledTimes(1)
+    expect(refreshCoreData).toHaveBeenCalledWith(API, { token: expect.any(Number) })
   })
 
   test('renders the desktop repository list as a resizable region with the default height', () => {
@@ -800,9 +944,10 @@ describe('WorkspaceRepositoryRail', () => {
 
     await act(async () => finishRefresh?.())
     expect(refresh?.disabled).toBe(false)
-    expect(refreshCoreData).toHaveBeenCalledTimes(2)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API)
-    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB)
+    expect(refreshCoreData).not.toHaveBeenCalled()
+    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(refreshSnapshot).toHaveBeenCalledWith(API, { token: expect.any(Number) })
+    expect(refreshSnapshot).not.toHaveBeenCalledWith(WEB, expect.anything())
   })
 
   test('reloads branch workspaces after a remote read failure without offering registry cleanup', async () => {
@@ -874,85 +1019,28 @@ describe('WorkspaceRepositoryRail', () => {
     expect(container?.textContent).toContain('workspace.branch-workspace.remote-operation-failed')
   })
 
-  test('refreshes a newly drifted branch workspace once per drift episode', async () => {
-    const originalItems = branchWorkspaceState.items
-    const drifted = {
-      ...originalItems[0]!,
-      state: { kind: 'needs-action' as const, action: 'repair' as const, reason: 'drift' as const },
+  test('offers registry cleanup alongside discovered workspaces when configuration is damaged', async () => {
+    branchWorkspaceState.queryResult = {
+      ok: true,
+      rootId: ROOT,
+      items: branchWorkspaceState.items,
+      auxiliaryCandidates: [],
+      registryError: 'workspace.branch-workspace.read-failed',
     }
-    try {
-      branchWorkspaceState.items = [drifted, ...originalItems.slice(1)]
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
-
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
-
-      branchWorkspaceState.items = originalItems
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-
-      branchWorkspaceState.items = [drifted, ...originalItems.slice(1)]
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(2)
-    } finally {
-      branchWorkspaceState.items = originalItems
-    }
-  })
-
-  test('coalesces new drift and ignores other repair lifecycle states', async () => {
-    const originalItems = branchWorkspaceState.items
-    try {
-      branchWorkspaceState.items = originalItems.map((item) => ({
-        ...item,
-        state: { kind: 'needs-action' as const, action: 'repair' as const, reason: 'drift' as const },
-      }))
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
-
-      branchWorkspaceState.refresh.mockClear()
-      branchWorkspaceState.items = [
-        {
-          ...originalItems[0]!,
-          state: {
-            kind: 'needs-action' as const,
-            action: 'repair' as const,
-            reason: 'creation-interrupted' as const,
-          },
-        },
-        { ...originalItems[1]!, state: { kind: 'needs-action' as const, action: 'continue-delete' as const } },
-      ]
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      expect(branchWorkspaceState.refresh).not.toHaveBeenCalled()
-    } finally {
-      branchWorkspaceState.items = originalItems
-    }
-  })
-
-  test('does not loop when automatic drift refresh rejects', async () => {
-    const originalItems = branchWorkspaceState.items
-    branchWorkspaceState.refresh.mockRejectedValue(new Error('temporary read failure'))
-    try {
-      branchWorkspaceState.items = [
-        {
-          ...originalItems[0]!,
-          state: { kind: 'needs-action' as const, action: 'repair' as const, reason: 'drift' as const },
-        },
-        ...originalItems.slice(1),
-      ]
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      renderRail({ currentRepoId: ROOT })
-      await act(async () => Promise.resolve())
-      expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
-    } finally {
-      branchWorkspaceState.items = originalItems
-    }
+    branchWorkspaceCleanupState.cleanup.mockResolvedValue({ ok: true, outcome: 'repaired', removedRecords: 1 })
+    renderRail({ currentRepoId: ROOT })
+    expect(container?.textContent).toContain('feature/auth')
+    const cleanup = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="workspace.branch-workspace.cleanup"]',
+    )
+    expect(cleanup).not.toBeNull()
+    act(() => cleanup?.click())
+    const confirm = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')).find(
+      (button) => button.textContent === 'workspace.branch-workspace.cleanup-confirm',
+    )
+    await act(async () => confirm?.click())
+    expect(branchWorkspaceCleanupState.cleanup).toHaveBeenCalledWith(ROOT)
+    expect(branchWorkspaceState.refresh).toHaveBeenCalledTimes(1)
   })
 
   test('confirms and runs registry cleanup only for the branch workspace read failure', async () => {
@@ -1348,32 +1436,6 @@ describe('WorkspaceRepositoryRail', () => {
     expect(terminalCommands.focusTerminal).not.toHaveBeenCalled()
   })
 
-  test('uses the checked-out branch for a repairable drifted member', () => {
-    const state = useReposStore.getState()
-    const api = replaceRepo(state.repos[API]!, (repo) => {
-      repo.data.branches = [
-        ...repo.data.branches.filter((branch) => branch.name !== 'release/previous'),
-        createRepoBranch('release/previous', { worktree: { path: '/workspace/goblin-feature-auth/api' } }),
-      ]
-    })
-    useReposStore.setState({ repos: { ...state.repos, [API]: api } })
-    const item = branchWorkspaceState.items[0]!
-    const member = { ...item.repositories[0]!, ready: false }
-    renderRail({ currentRepoId: ROOT })
-
-    expect(branchWorkspaceListState.props?.getMemberPresentation?.(item, member)).toMatchObject({
-      navigable: true,
-      warning: 'workspace.branch-workspace.member-branch-drift',
-      actionTarget: {
-        repo: api,
-        branch: expect.objectContaining({ name: 'release/previous' }),
-      },
-    })
-
-    act(() => branchWorkspaceListState.props?.onSelectRepositoryMember?.(item, member))
-    expect(selectBranch).toHaveBeenCalledWith(API, 'release/previous')
-  })
-
   test('forwards branch workspace item file area toggles to the owning pane', () => {
     const onToggleFileArea = vi.fn()
     renderRail({ currentRepoId: ROOT, onToggleFileArea })
@@ -1597,10 +1659,11 @@ describe('WorkspaceRepositoryRail', () => {
       branchWorkspaceListState.props?.onReduce?.(interrupted, true)
       await Promise.resolve()
     })
-    expect(branchWorkspaceState.requestPlan).toHaveBeenCalledWith({
-      operation: 'reduce',
-      branchWorkspaceId: interrupted.id,
-      repositories: ['api', 'web'],
+    expect(branchWorkspaceState.requestPlan).not.toHaveBeenCalled()
+    expect(branchWorkspaceState.dialogProps).toMatchObject({
+      open: true,
+      mode: 'reduce',
+      workspace: interrupted,
     })
   })
 
@@ -1739,11 +1802,96 @@ describe('WorkspaceRepositoryRail', () => {
     expect(branchWorkspaceState.cancel).not.toHaveBeenCalled()
   })
 
-  test('does not expose per-row change refresh controls to the branch workspace list', () => {
+  test('exposes per-row change refresh controls to the branch workspace list', () => {
     renderRail({ currentRepoId: ROOT })
 
-    expect(branchWorkspaceListState.props).not.toHaveProperty('onRefreshChanges')
-    expect(branchWorkspaceListState.props).not.toHaveProperty('refreshingChangeIds')
+    expect(branchWorkspaceListState.props?.onRefreshChanges).toBeTypeOf('function')
+    expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set())
+  })
+
+  test('refreshes available branch workspace members and prevents duplicate refreshes', async () => {
+    const state = useReposStore.getState()
+    useReposStore.setState({
+      repos: {
+        ...state.repos,
+        [WEB]: replaceRepo(state.repos[WEB]!, (repo) => {
+          repo.availability = { phase: 'available' }
+        }),
+      },
+    })
+    let releaseApi: (() => void) | undefined
+    let releaseWeb: (() => void) | undefined
+    refreshCoreData
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseApi = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseWeb = resolve
+          }),
+      )
+    renderRail({ currentRepoId: ROOT })
+
+    const refreshChanges = branchWorkspaceListState.props?.onRefreshChanges
+    const item = branchWorkspaceState.items[0]!
+    expect(refreshChanges).toBeTypeOf('function')
+    if (!refreshChanges) return
+
+    const first = refreshChanges(item)
+    await act(async () => await Promise.resolve())
+    expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set([item.id]))
+
+    await act(async () => await refreshChanges(item))
+    expect(refreshCoreData).toHaveBeenCalledTimes(2)
+    expect(refreshCoreData).toHaveBeenNthCalledWith(1, API, { token: expect.any(Number) })
+    expect(refreshCoreData).toHaveBeenNthCalledWith(2, WEB, { token: expect.any(Number) })
+
+    releaseApi?.()
+    releaseWeb?.()
+    await act(async () => await first)
+    expect(branchWorkspaceListState.props?.refreshingChangeIds).toEqual(new Set())
+  })
+
+  test('folder refresh handles a linked worktree and a newly discovered independent repository together', async () => {
+    const item = branchWorkspaceState.items[0]!
+    const independentId = `${item.path}/independent`
+    const linked = {
+      ...item.repositories[0]!,
+      kind: 'worktree' as const,
+      repositoryId: API,
+      progress: 'complete' as const,
+      ready: true,
+    }
+    const independent = {
+      ...linked,
+      kind: 'repository' as const,
+      repositoryId: independentId,
+      repositoryName: 'independent',
+      worktreePath: independentId,
+      currentBranch: 'feature/independent',
+    }
+    const observed = { ...item, repositories: [linked, independent, { ...linked, repositoryName: 'alias' }] }
+    branchWorkspaceState.refresh.mockResolvedValueOnce({
+      ok: true,
+      rootId: ROOT,
+      items: [observed],
+      auxiliaryCandidates: [],
+    })
+    renderRail({ currentRepoId: ROOT })
+    await act(async () => {
+      await branchWorkspaceListState.props!.onRefreshChanges!(item)
+    })
+    expect(useReposStore.getState().repos[independentId]?.workspaceRootId).toBe(ROOT)
+    expect(refreshCoreData.mock.calls).toEqual([
+      [API, { token: useReposStore.getState().repos[API]!.instanceToken }],
+      [independentId, { token: useReposStore.getState().repos[independentId]!.instanceToken }],
+    ])
+    expect(refreshStatus).not.toHaveBeenCalled()
+    expect(syncAndRefresh).not.toHaveBeenCalled()
   })
 
   test('sums changes from each branch workspace repository member worktree', () => {
@@ -1810,6 +1958,74 @@ describe('WorkspaceRepositoryRail', () => {
     renderRail({ currentRepoId: ROOT })
 
     expect(branchWorkspaceListState.props?.changeCountById?.['branch-1']).toBe(0)
+  })
+
+  test('sums equivalent Windows member paths using authoritative repository identities', () => {
+    const originalItems = branchWorkspaceState.items
+    const item = originalItems[0]!
+    const state = useReposStore.getState()
+    const members = item.repositories.map((member) => ({
+      ...member,
+      repositoryId: `/repositories/${member.repositoryName}`,
+      worktreePath: `C:\\workspace\\goblin-feature-auth\\${member.repositoryName}`,
+    }))
+    branchWorkspaceState.items = [{ ...item, repositories: members }]
+    const countedRepos = Object.fromEntries(
+      members.map((member, index) => {
+        const repo = replaceRepo(emptyRepo(member.repositoryId, member.repositoryName), (draft) => {
+          const gitPath = `c:/workspace/goblin-feature-auth/${member.repositoryName}`
+          draft.data.branches = [createRepoBranch('feature/auth', { worktree: { path: gitPath } })]
+          draft.data.status = [
+            {
+              path: gitPath,
+              branch: 'feature/auth',
+              isMain: false,
+              entries: Array.from({ length: index + 2 }, (_, entry) => ({ x: 'M', y: ' ', path: `file-${entry}.ts` })),
+            },
+          ]
+        })
+        return [member.repositoryId, repo]
+      }),
+    )
+    useReposStore.setState({ repos: { ...state.repos, ...countedRepos } })
+    try {
+      renderRail({ currentRepoId: ROOT })
+      expect(branchWorkspaceListState.props?.changeCountById?.['branch-1']).toBe(5)
+      expect(
+        members.map((member) => branchWorkspaceListState.props?.getMemberPresentation?.(item, member).changeCount),
+      ).toEqual([2, 3])
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
+  })
+
+  test('excludes removed members from the root change count', () => {
+    const originalItems = branchWorkspaceState.items
+    const item = originalItems[0]!
+    branchWorkspaceState.items = [
+      {
+        ...item,
+        repositories: item.repositories.map((member) => ({ ...member, progress: 'removed' as const })),
+      },
+    ]
+    const state = useReposStore.getState()
+    const api = replaceRepo(state.repos[API]!, (repo) => {
+      repo.data.status = [
+        {
+          path: item.repositories[0]!.worktreePath,
+          branch: 'feature/auth',
+          isMain: false,
+          entries: [{ x: 'M', y: ' ', path: 'removed.ts' }],
+        },
+      ]
+    })
+    useReposStore.setState({ repos: { ...state.repos, [API]: api } })
+    try {
+      renderRail({ currentRepoId: ROOT })
+      expect(branchWorkspaceListState.props?.changeCountById?.['branch-1']).toBe(0)
+    } finally {
+      branchWorkspaceState.items = originalItems
+    }
   })
 
   test('does not show terminal status in Overview without an open root terminal', () => {

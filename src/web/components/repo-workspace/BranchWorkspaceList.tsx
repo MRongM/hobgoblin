@@ -22,26 +22,30 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
-  Eye,
+  Copy,
   FileMinus2,
   FilePlus2,
-  FolderMinus,
   FolderKanban,
   FolderPlus,
+  FolderMinus,
   FolderTree,
   GitCompareArrows,
   GitFork,
   GitMerge,
+  Pencil,
   RefreshCw,
   RotateCcw,
   SendHorizontal,
   Terminal,
-  Trash2,
   X,
 } from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
+import {
+  canAddBranchWorkspaceWorktree,
+  isRemovableBranchWorkspaceWorktree,
+} from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import type { TerminalLaunchMode, WindowsInternalTerminalShellOverride } from '#/shared/terminal.ts'
-import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { type BranchWorkspaceRepositorySnapshot, type BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { EditorAppIcon, TerminalAppIcon } from '#/web/components/ExternalAppIcon/index.tsx'
 import { Tip } from '#/web/components/Tip.tsx'
 import { Badge } from '#/web/components/ui/badge.tsx'
@@ -50,6 +54,7 @@ import { TerminalBellDot } from '#/web/components/terminal/TerminalBellDot.tsx'
 import { TerminalOutputActivityIndicator } from '#/web/components/terminal/TerminalOutputActivityIndicator.tsx'
 import { TerminalSessionContext } from '#/web/components/terminal/terminal-session-context.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
+import { useCloseTerminalScope } from '#/web/components/terminal/TerminalScopeContextMenu.tsx'
 import {
   useWorktreeTerminalCount,
   useWorktreeTerminalHasBell,
@@ -61,8 +66,8 @@ import {
 } from '#/web/components/repo-workspace/BranchWorkspaceTerminalPanel.tsx'
 import type { BranchWorkspaceFolderContext } from '#/web/components/repo-workspace/BranchWorkspaceFileTree.tsx'
 import { useFolderExternalOpenActions } from '#/web/hooks/useFolderExternalOpenActions.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
 import { cn } from '#/web/lib/cn.ts'
-import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { WorkspaceItemContextMenu } from '#/web/components/repo-workspace/WorkspaceItemContextMenu.tsx'
 import {
@@ -92,18 +97,23 @@ export interface BranchWorkspaceListProps {
   activeMemberRepositoryName?: string | null
   disabled?: boolean
   changeCountById?: Readonly<Record<string, number>>
+  refreshingChangeIds?: ReadonlySet<string>
   onActivate: (id: string) => void
   onToggleFileArea?: (item: BranchWorkspaceSnapshot) => void
   onOpenFileArea?: () => void
   onReorder: (orderedIds: string[]) => void | Promise<void>
-  onInspect: (item: BranchWorkspaceSnapshot) => void
-  onRepair: (item: BranchWorkspaceSnapshot) => void
+  onInspect?: (item: BranchWorkspaceSnapshot) => void
+  onRepair?: (item: BranchWorkspaceSnapshot) => void
   onRemove: (item: BranchWorkspaceSnapshot) => void
+  onUnregister?: (item: BranchWorkspaceSnapshot) => void
+  onRename?: (item: BranchWorkspaceSnapshot) => void
   onExtend?: (item: BranchWorkspaceSnapshot) => void
+  onClone?: (item: BranchWorkspaceSnapshot) => void
   onReduce?: (item: BranchWorkspaceSnapshot, resume?: boolean) => void
   onReduceMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onAddDependencies?: (item: BranchWorkspaceSnapshot) => void
   onRemoveDependencies?: (item: BranchWorkspaceSnapshot) => void
+  onRefreshChanges?: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   onCancel: (item: BranchWorkspaceSnapshot) => void | Promise<void>
   getMemberPresentation?: (
     item: BranchWorkspaceSnapshot,
@@ -129,6 +139,7 @@ export function BranchWorkspaceList({
   activeMemberRepositoryName = null,
   disabled = false,
   changeCountById = {},
+  refreshingChangeIds = new Set(),
   onActivate,
   onToggleFileArea,
   onOpenFileArea,
@@ -136,11 +147,15 @@ export function BranchWorkspaceList({
   onInspect,
   onRepair,
   onRemove,
+  onUnregister,
+  onRename,
   onExtend,
+  onClone,
   onReduce,
   onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
+  onRefreshChanges,
   onCancel,
   getMemberPresentation,
   onSelectRepositoryMember,
@@ -196,6 +211,7 @@ export function BranchWorkspaceList({
               expanded={expandedIds.has(item.id)}
               disabled={disabled}
               changeCountById={changeCountById}
+              refreshingChangeIds={refreshingChangeIds}
               onActivate={selectRoot}
               onToggleFileArea={onToggleFileArea}
               onOpenFileArea={onOpenFileArea}
@@ -203,11 +219,15 @@ export function BranchWorkspaceList({
               onInspect={onInspect}
               onRepair={onRepair}
               onRemove={onRemove}
+              onUnregister={onUnregister}
+              onRename={onRename}
               onExtend={onExtend}
+              onClone={onClone}
               onReduce={onReduce}
               onReduceMember={onReduceMember}
               onAddDependencies={onAddDependencies}
               onRemoveDependencies={onRemoveDependencies}
+              onRefreshChanges={onRefreshChanges}
               onCancel={onCancel}
               getMemberPresentation={getMemberPresentation}
               onSelectRepositoryMember={onSelectRepositoryMember}
@@ -233,18 +253,21 @@ function BranchWorkspaceRow({
   expanded,
   disabled,
   changeCountById,
+  refreshingChangeIds = new Set(),
   onActivate,
   onToggleFileArea,
   onOpenFileArea,
   onToggleExpanded,
-  onInspect,
-  onRepair,
   onRemove,
+  onUnregister,
+  onRename,
   onExtend,
+  onClone,
   onReduce,
   onReduceMember,
   onAddDependencies,
   onRemoveDependencies,
+  onRefreshChanges,
   onCancel,
   getMemberPresentation,
   onSelectRepositoryMember,
@@ -264,18 +287,20 @@ function BranchWorkspaceRow({
   const t = useT()
   const busy = item.activeOperation !== undefined
   const folderAvailable = item.available
-  const completeReady = item.state.kind === 'ready' && !busy
-  const rootUsable = (item.state.kind === 'ready' || isRepairableDrift(item)) && folderAvailable && !busy
-  const recoveryAction = item.state.kind === 'needs-action' ? item.state.action : null
-  const creationInterrupted =
-    item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'creation-interrupted'
+  const rootUsable = folderAvailable && !busy
   const context = branchWorkspaceFolderContext(rootId, item)
   const windowsInternalTerminalShellMenu = supportsWindowsInternalTerminalShellMenu(rootId)
   const tmuxMenuVisible = supportsTmuxMenu(rootId)
   const externalActions = useFolderExternalOpenActions({ repoId: rootId, path: item.path, available: folderAvailable })
+  const directoryAction = useOpenDirectoryAction({
+    repoId: rootId,
+    path: item.path,
+    disabled: disabled || !folderAvailable,
+  })
   const terminalContext = useContext(TerminalSessionContext)
   const terminalKey = worktreeTerminalKey(rootId, item.path)
   const terminalKeys = useMemo(() => [terminalKey], [terminalKey])
+  const closeTerminalScope = useCloseTerminalScope(terminalKeys)
   const terminalCount = useWorktreeTerminalCount(terminalKey)
   const changeCount = changeCountById?.[item.id] ?? 0
   const memberPresentations = item.repositories.map((member) => {
@@ -355,52 +380,75 @@ function BranchWorkspaceRow({
         onSelect: () => openInternal('native'),
       }
     : undefined
-  const rootOpenMenuActions: BranchWorkspaceItemAction[] = rootUsable
-    ? [
-        ...(windowsInternalTerminalShellMenu
-          ? [
-              {
-                label: 'terminal.internal-powershell',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: () => openInternal('native', 'powershell'),
-              },
-              {
-                label: 'terminal.internal-wsl',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: () => openInternal('native', 'wsl'),
-              },
-            ]
-          : []),
-        ...(tmuxMenuVisible
-          ? [
-              {
-                label: 'terminal.new-with-tmux',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: () => openInternal('tmux-if-available'),
-              },
-              {
-                label: 'terminal.restore-directory-tmux',
-                icon: <Terminal aria-hidden="true" />,
-                disabled: openActionsDisabled,
-                onSelect: restoreTmuxTerminals,
-              },
-            ]
-          : []),
-        {
-          label: 'terminal.external',
-          icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
-          disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
-          busy: externalActions.externalTerminal.busy,
-          onSelect: () =>
-            onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect(),
-        },
-      ]
-    : []
+  const rootOpenMenuActions: BranchWorkspaceItemAction[] = [
+    {
+      id: 'terminal',
+      label: 'terminal.internal',
+      icon: <Terminal aria-hidden="true" />,
+      disabled: openActionsDisabled,
+      onSelect: () => openInternal('native'),
+    },
+    ...(windowsInternalTerminalShellMenu
+      ? [
+          {
+            id: 'terminalPowerShell',
+            label: 'terminal.internal-powershell',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: () => openInternal('native', 'powershell'),
+          },
+          {
+            id: 'terminalWsl',
+            label: 'terminal.internal-wsl',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: () => openInternal('native', 'wsl'),
+          },
+        ]
+      : []),
+    ...(tmuxMenuVisible
+      ? [
+          {
+            id: 'terminalTmux',
+            label: 'terminal.new-with-tmux',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: () => openInternal('tmux-if-available'),
+          },
+          {
+            id: 'restoreTmuxTerminals',
+            label: 'terminal.restore-directory-tmux',
+            icon: <Terminal aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: restoreTmuxTerminals,
+          },
+        ]
+      : []),
+    {
+      id: 'externalTerminal',
+      label: 'terminal.external',
+      icon: <TerminalAppIcon pref={externalActions.externalTerminal.iconPref} />,
+      disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
+      busy: externalActions.externalTerminal.busy,
+      onSelect: () =>
+        onOpenExternalTerminal ? onOpenExternalTerminal(item) : externalActions.externalTerminal.onSelect(),
+    },
+  ]
+  const refreshChangesActions: BranchWorkspaceItemAction[] =
+    rootUsable && onRefreshChanges
+      ? [
+          {
+            label: 'workspace.branch-workspace.refresh-folder',
+            icon: <RefreshCw aria-hidden="true" />,
+            disabled,
+            busy: refreshingChangeIds.has(item.id),
+            separated: true,
+            onSelect: () => onRefreshChanges(item),
+          },
+        ]
+      : []
   const readyGitActions: BranchWorkspaceItemAction[] =
-    completeReady && onGitAction
+    rootUsable && item.repositories.some((member) => member.ready) && onGitAction
       ? [
           {
             label: 'workspace.branch-workspace.git-action.batch-commit',
@@ -455,33 +503,39 @@ function BranchWorkspaceRow({
           },
         ]
       : []
-  const readyMembershipActions: BranchWorkspaceItemAction[] = completeReady
+  const readyMembershipActions: BranchWorkspaceItemAction[] = rootUsable
     ? [
         ...(onExtend
           ? [
               {
                 label: 'workspace.branch-workspace.add-members',
                 icon: <FolderPlus aria-hidden="true" />,
-                disabled,
+                disabled: disabled || !canAddBranchWorkspaceWorktree(item),
                 separated: true,
                 onSelect: () => onExtend(item),
               },
             ]
           : []),
-        ...(onReduce
+        ...(onClone
           ? [
               {
-                label: 'workspace.branch-workspace.remove-members',
-                icon: <FolderMinus aria-hidden="true" />,
+                label: 'workspace.branch-workspace.clone.title',
+                icon: <Copy aria-hidden="true" />,
                 disabled,
-                destructive: true,
-                onSelect: () => onReduce(item),
+                onSelect: () => onClone(item),
               },
             ]
           : []),
+        {
+          label: 'workspace.branch-workspace.delete',
+          icon: <FolderMinus aria-hidden="true" />,
+          disabled: disabled || busy,
+          destructive: true,
+          onSelect: () => onRemove(item),
+        },
       ]
     : []
-  const readyDependencyActions: BranchWorkspaceItemAction[] = completeReady
+  const readyDependencyActions: BranchWorkspaceItemAction[] = rootUsable
     ? [
         ...(onAddDependencies
           ? [
@@ -507,71 +561,74 @@ function BranchWorkspaceRow({
           : []),
       ]
     : []
-  const lowFrequencyActions: BranchWorkspaceItemAction[] = completeReady
-    ? [
-        {
-          label: 'workspace.branch-workspace.delete',
-          icon: <Trash2 aria-hidden="true" />,
-          disabled,
-          destructive: true,
-          separated: true,
-          onSelect: () => onRemove(item),
-        },
-      ]
-    : recoveryAction === 'continue-reduce' || recoveryAction === 'repair'
+  const lowFrequencyActions: BranchWorkspaceItemAction[] = [
+    ...(onRename
       ? [
           {
-            label: 'workspace.branch-workspace.inspect',
-            icon: <Eye aria-hidden="true" />,
-            disabled,
-            onSelect: () => onInspect(item),
-          },
-          {
-            label: 'workspace.branch-workspace.delete',
-            icon: <Trash2 aria-hidden="true" />,
-            disabled,
-            destructive: true,
-            separated: true,
-            onSelect: () => onRemove(item),
+            label: 'workspace.branch-workspace.rename.action',
+            icon: <Pencil aria-hidden="true" />,
+            disabled: disabled || !rootUsable,
+            onSelect: () => onRename(item),
           },
         ]
-      : recoveryAction === 'continue-delete'
-        ? [
-            {
-              label: 'workspace.branch-workspace.inspect',
-              icon: <Eye aria-hidden="true" />,
-              disabled,
-              onSelect: () => onInspect(item),
-            },
-          ]
-        : []
-  const rowMenuActions = [
-    ...rootOpenMenuActions,
-    ...readyMembershipActions,
-    ...readyDependencyActions,
-    ...readyGitActions,
-    ...lowFrequencyActions,
-    ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
+      : []),
+    ...(onUnregister
+      ? [
+          {
+            label: 'workspace.branch-workspace.unregister',
+            icon: <X aria-hidden="true" />,
+            disabled: disabled || busy,
+            separated: true,
+            onSelect: () => onUnregister(item),
+          },
+        ]
+      : []),
+  ]
+  const additionalMenuActions: BranchWorkspaceItemAction[] = [
+    ...refreshChangesActions,
+    ...readyMembershipActions.map((action) => ({ ...action, category: 'manage' as const })),
+    ...readyDependencyActions.map((action) => ({ ...action, category: 'dependencies' as const })),
+    ...readyGitActions.map((action) => ({ ...action, category: 'git' as const })),
+    ...lowFrequencyActions.map((action) => ({ ...action, category: 'manage' as const })),
+    ...(tmuxCleanup.visible ? [{ ...tmuxCleanup.contextAction, category: 'terminals' as const }] : []),
+  ]
+  const rowMenuActions: BranchWorkspaceItemAction[] = [
+    ...(onOpenFileArea
+      ? [
+          {
+            id: 'fileArea',
+            label: 'file-area.open',
+            icon: <FolderTree aria-hidden="true" />,
+            disabled: openActionsDisabled,
+            onSelect: openFileArea,
+          },
+        ]
+      : []),
+    {
+      id: 'editor',
+      label: 'worktrees.open-in-editor-label',
+      icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
+      disabled: openActionsDisabled || externalActions.editor.disabled,
+      busy: externalActions.editor.busy,
+      onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
+    },
+    { ...directoryAction, label: 'directory-open.action' },
+    ...rootOpenMenuActions.map((action) => ({ ...action, category: 'terminals' as const })),
+    {
+      id: 'closeAllTerminals',
+      label: 'terminal.close-all',
+      category: 'terminals',
+      icon: <X aria-hidden="true" />,
+      disabled: closeTerminalScope.disabled,
+      destructive: true,
+      onSelect: closeTerminalScope.requestClose,
+    },
+    ...additionalMenuActions,
   ]
   const moreMenu = rowMenuActions.length > 0 ? <BranchWorkspaceItemMenu actions={rowMenuActions} /> : undefined
   const stateAction = busy ? (
     <RowAction label="workspace.branch-workspace.cancel" onClick={() => void onCancel(item)}>
       <X />
-    </RowAction>
-  ) : recoveryAction === 'repair' ? (
-    <RowAction
-      label={creationInterrupted ? 'workspace.branch-workspace.retry' : 'workspace.branch-workspace.repair'}
-      onClick={() => onRepair(item)}
-    >
-      <RotateCcw />
-    </RowAction>
-  ) : recoveryAction === 'continue-reduce' && onReduce ? (
-    <RowAction label="workspace.branch-workspace.continue-reduce" destructive onClick={() => onReduce(item, true)}>
-      <FolderMinus />
-    </RowAction>
-  ) : recoveryAction === 'continue-delete' ? (
-    <RowAction label="workspace.branch-workspace.continue-delete" destructive onClick={() => onRemove(item)}>
-      <Trash2 />
     </RowAction>
   ) : null
   const branchWorkspaceAuxiliaryActions = (
@@ -615,15 +672,8 @@ function BranchWorkspaceRow({
             onToggleFileArea={onToggleFileArea ? () => onToggleFileArea(item) : undefined}
             onOpenFileArea={onOpenFileArea}
             onOpenInternalTerminal={onOpenRepositoryMemberTerminal}
-            onRemoveMember={
-              recoveryAction !== 'continue-reduce' &&
-              recoveryAction !== 'continue-delete' &&
-              member.progress !== 'removed' &&
-              item.repositories.length > 1 &&
-              onReduceMember
-                ? onReduceMember
-                : undefined
-            }
+            onAddWorktree={onExtend}
+            onRemoveMember={onReduceMember}
           />
         ))}
       </ul>
@@ -646,6 +696,7 @@ function BranchWorkspaceRow({
         icon: <EditorAppIcon pref={externalActions.editor.iconPref} />,
         onSelect: () => (onOpenEditor ? onOpenEditor(item) : externalActions.editor.onSelect()),
       }}
+      directory={directoryAction}
       externalTerminal={{
         ...externalActions.externalTerminal,
         disabled: openActionsDisabled || externalActions.externalTerminal.disabled,
@@ -693,15 +744,10 @@ function BranchWorkspaceRow({
           : undefined
       }
       worktreeTerminalKeys={terminalKeys}
-      additionalActions={[
-        ...readyGitActions.filter(
-          (action) => action.label === 'workspace.branch-workspace.git-action.batch-align-remote',
-        ),
-        ...lowFrequencyActions,
-        ...(tmuxCleanup.visible ? [tmuxCleanup.contextAction] : []),
-      ]}
+      additionalActions={additionalMenuActions}
     >
       <WorkspaceListItemFrame
+        terminalDirectoryPath={item.path}
         itemRef={setNodeRef}
         itemStyle={{ transform: CSS.Transform.toString(transform), transition }}
         itemProps={{
@@ -726,7 +772,7 @@ function BranchWorkspaceRow({
           'data-testid': `branch-workspace-root-${item.id}`,
           'aria-current': rootSelected ? 'page' : undefined,
           disabled: disabled || !folderAvailable || busy,
-          title: item.branch,
+          title: item.path,
           className: 'pr-[7.25rem]',
           onClick: activate,
           onDoubleClick: onToggleFileArea ? () => onToggleFileArea(item) : undefined,
@@ -743,6 +789,7 @@ function BranchWorkspaceRow({
           <>
             {memberList}
             {tmuxCleanup.dialog}
+            {closeTerminalScope.dialog}
           </>
         }
       >
@@ -753,7 +800,7 @@ function BranchWorkspaceRow({
             aria-hidden="true"
           />
         ) : null}
-        <span className="min-w-0 truncate font-medium">{item.branch}</span>
+        <span className="min-w-0 truncate font-medium">{item.directoryName}</span>
         {terminalCount > 0 ? (
           <Badge
             data-testid="branch-workspace-terminal-count-badge"
@@ -803,7 +850,6 @@ function BranchWorkspaceRow({
 }
 
 function StateSummary({ item }: { item: BranchWorkspaceSnapshot }) {
-  const t = useT()
   if (item.activeOperation) {
     return (
       <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
@@ -811,19 +857,7 @@ function StateSummary({ item }: { item: BranchWorkspaceSnapshot }) {
       </span>
     )
   }
-  if (item.state.kind === 'ready') return null
-  return (
-    <span
-      data-testid="branch-workspace-state-summary"
-      className={cn('ml-auto shrink-0 text-[9px]', isRepairableDrift(item) ? 'text-muted-foreground' : 'text-warning')}
-    >
-      {t(`workspace.branch-workspace.lifecycle.${branchWorkspaceStateName(item)}`)}
-    </span>
-  )
-}
-
-function isRepairableDrift(item: BranchWorkspaceSnapshot): boolean {
-  return item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'drift'
+  return null
 }
 
 function RowAction({
@@ -869,16 +903,10 @@ export function branchWorkspaceFolderContext(
     path: item.path,
     available: item.available,
     busy: item.activeOperation !== undefined,
-    managedRootNames: Array.from(
-      new Set(item.repositories.map((member) => lastPathSegment(member.worktreePath)).filter(Boolean)),
-    ),
+    managedRootNames: [],
   }
 }
 
 function branchWorkspaceStateName(item: BranchWorkspaceSnapshot): string {
-  if (item.activeOperation) return 'active'
-  if (item.state.kind === 'ready') return 'ready'
-  if (item.state.action === 'continue-reduce') return 'reduce-incomplete'
-  if (item.state.action === 'continue-delete') return 'delete-incomplete'
-  return item.state.reason === 'creation-interrupted' ? 'creation-interrupted' : 'needs-repair'
+  return item.activeOperation ? 'active' : 'ready'
 }

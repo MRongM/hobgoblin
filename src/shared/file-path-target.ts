@@ -1,4 +1,5 @@
 import { pathStyle, safeRelativePath } from '#/shared/path-semantics.ts'
+import { isKnownTextFilePreviewName } from '#/shared/file-preview.ts'
 
 export interface FilePathTarget {
   path: string
@@ -21,8 +22,11 @@ export interface FilePathTargetParseOptions {
 
 const PATH_TOKEN_PATTERN =
   /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
+const TEXT_BASENAME_TOKEN_PATTERN =
+  /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?[A-Za-z0-9_.-]+(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
 const HARD_WRAPPED_PATH_TOKEN_PATTERN =
-  /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:\.\/)?(?:[A-Za-z0-9_@%+=.-]+\/)+(?:\r?\n[ \t]*)(?:(?:[A-Za-z0-9_@%+=.-]+\/)+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
+  /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:[A-Za-z]:[\\/]|\/|\.\/)?(?:[A-Za-z0-9_@%+=.-]+[\\/])+(?:\r?\n[ \t]*)(?:(?:[A-Za-z0-9_@%+=.-]+[\\/])+[A-Za-z0-9_@%+=.,-]+|[A-Za-z0-9_@%+=-]+\.[A-Za-z0-9][A-Za-z0-9._-]*)(?::\d+(?::\d+)?)?)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
+const QUOTED_ABSOLUTE_PATH_TOKEN_PATTERN = /(["'`])(?<token>(?:[A-Za-z]:[\\/]|\/)[^\r\n]*?)\1/gu
 const ABSOLUTE_PATH_TOKEN_PATTERN =
   /(^|[\s"'`([{<:：,，、;；（［【｛《〈「『])(?<token>(?:[A-Za-z]:[\\/]|\/)[^\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、]+)(?=$|[\s"'`,;)\]}>，。、；：！？）］】｝》〉」』、])/gu
 const PYTHON_FILE_LINE_PATTERN =
@@ -85,7 +89,8 @@ export function parseFilePathTarget(raw: string, options: FilePathTargetParseOpt
   if (!relativePath) return null
   const segments = relativePath.split('/')
   if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return null
-  if (!relativePath.includes('/') && !relativePath.includes('.')) return null
+  if (!relativePath.includes('/') && !relativePath.includes('.') && !isKnownTextFilePreviewName(relativePath))
+    return null
 
   return target.column === undefined
     ? target.line === undefined
@@ -107,6 +112,19 @@ export function filePathTargetsForText(text: string, options: FilePathTargetPars
     const target = parseFilePathTarget(`${path}:${line}`, options)
     if (!target || spanOverlaps(spans, startIndex, endIndex)) continue
     spans.push({ text: text.slice(startIndex, endIndex), target, startIndex, endIndex })
+  }
+
+  if (options.allowAbsolute) {
+    for (const match of text.matchAll(QUOTED_ABSOLUTE_PATH_TOKEN_PATTERN)) {
+      const token = match.groups?.token
+      if (!token || match.index === undefined) continue
+      const target = parseFilePathTarget(token, options)
+      if (!target) continue
+      const startIndex = match.index + 1
+      const endIndex = startIndex + token.length
+      if (spanOverlaps(spans, startIndex, endIndex)) continue
+      spans.push({ text: token, target, startIndex, endIndex })
+    }
   }
 
   for (const match of text.matchAll(HARD_WRAPPED_PATH_TOKEN_PATTERN)) {
@@ -138,17 +156,20 @@ export function filePathTargetsForText(text: string, options: FilePathTargetPars
     }
   }
 
-  for (const match of text.matchAll(PATH_TOKEN_PATTERN)) {
-    const token = match.groups?.token
-    if (!token || match.index === undefined) continue
-    const target = parseFilePathTarget(token, options)
-    if (!target) continue
-    const tokenOffset = match[0].indexOf(token)
-    const startIndex = match.index + tokenOffset
-    const endIndex = startIndex + token.length
-    if (startsInUrlLikeColonContext(text, startIndex, token)) continue
-    if (spanOverlaps(spans, startIndex, endIndex)) continue
-    spans.push({ text: token, target, startIndex, endIndex })
+  for (const pattern of [PATH_TOKEN_PATTERN, TEXT_BASENAME_TOKEN_PATTERN]) {
+    for (const match of text.matchAll(pattern)) {
+      const token = match.groups?.token
+      if (!token || match.index === undefined) continue
+      const target = parseFilePathTarget(token, options)
+      if (!target) continue
+      if (pattern === TEXT_BASENAME_TOKEN_PATTERN && !isKnownTextFilePreviewName(target.path)) continue
+      const tokenOffset = match[0].indexOf(token)
+      const startIndex = match.index + tokenOffset
+      const endIndex = startIndex + token.length
+      if (startsInUrlLikeColonContext(text, startIndex, token)) continue
+      if (spanOverlaps(spans, startIndex, endIndex)) continue
+      spans.push({ text: token, target, startIndex, endIndex })
+    }
   }
   return spans.sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex)
 }
@@ -157,6 +178,7 @@ function startsInUrlLikeColonContext(text: string, startIndex: number, token: st
   if (text[startIndex - 1] !== ':') return false
   const prefix = TOKEN_PREFIX_PATTERN.exec(text.slice(0, startIndex - 1))?.[0] ?? ''
   if (!prefix) return false
+  if (token.startsWith('//') && /^[A-Za-z][A-Za-z0-9+.-]*$/u.test(prefix)) return true
   if (URL_SCHEME_PREFIX_PATTERN.test(prefix)) return true
   if (LOOPBACK_HOST_PATTERN.test(prefix) && /^\d+\//u.test(token)) return true
   return /[@.]/u.test(prefix)
@@ -172,5 +194,7 @@ export function editorTargetPath(target: EditorOpenTarget): string {
 
 export function editorTargetPathArgument(target: EditorOpenTarget): string {
   if (typeof target === 'string' || target.line === undefined) return editorTargetPath(target)
-  return target.column === undefined ? `${target.path}:${target.line}` : `${target.path}:${target.line}:${target.column}`
+  return target.column === undefined
+    ? `${target.path}:${target.line}`
+    : `${target.path}:${target.line}:${target.column}`
 }

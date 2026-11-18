@@ -33,10 +33,11 @@ describe('release documentation', () => {
     expect(page).toContain('Hobgoblin-&lt;version&gt;-linux-source.tar.gz')
   })
 
-  test('Pages highlights the v2.3.2 release', () => {
+  test('Pages highlights the v2.4.0 release', () => {
     const page = readText('docs/index.html')
 
-    expect(page).toContain('v2.3.2')
+    expect(page.match(/v2\.4\.0/g)).toHaveLength(5)
+    expect(page).toContain('folder-based subworkspace')
     expect(page).toContain('searchable branch merges')
     expect(page).toContain('concurrent batch Git actions')
     expect(page).toContain('immediate in-app feedback')
@@ -46,33 +47,33 @@ describe('release documentation', () => {
     expect(page).toContain('Ctrl+Alt+Up/Down')
   })
 
-  test('v2.3.2 release identity and English notes cover every published asset', () => {
-    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.3.2' })
-    expect(JSON.parse(readText('windows/package.json'))).toMatchObject({ version: '2.3.2' })
-    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 13')
-    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.3.2"')
+  test('v2.4.0 release identity and English notes cover every published asset', () => {
+    expect(JSON.parse(readText('package.json'))).toMatchObject({ version: '2.4.0' })
+    expect(JSON.parse(readText('windows/package.json'))).toMatchObject({ version: '2.4.0' })
+    expect(readText('android/app/build.gradle.kts')).toContain('versionCode = 14')
+    expect(readText('android/app/build.gradle.kts')).toContain('versionName = "2.4.0"')
 
-    const relativePath = 'docs/releases/v2.3.2.md'
+    const relativePath = 'docs/releases/v2.4.0.md'
     expect(existsSync(path.join(repoRoot, relativePath))).toBe(true)
     if (!existsSync(path.join(repoRoot, relativePath))) return
 
     const notes = readText(relativePath)
     for (const asset of [
-      'Hobgoblin-2.3.2-arm64.dmg',
-      'Hobgoblin-2.3.2-x64.dmg',
-      'Hobgoblin-2.3.2-arm64.exe',
-      'Hobgoblin-2.3.2-x64.exe',
-      'Hobgoblin-2.3.2-android.apk',
-      'Hobgoblin-2.3.2-linux-source.tar.gz',
+      'Hobgoblin-2.4.0-arm64.dmg',
+      'Hobgoblin-2.4.0-x64.dmg',
+      'Hobgoblin-2.4.0-arm64.exe',
+      'Hobgoblin-2.4.0-x64.exe',
+      'Hobgoblin-2.4.0-android.apk',
+      'Hobgoblin-2.4.0-linux-source.tar.gz',
     ]) {
       expect(notes).toContain(asset)
     }
-    expect(notes).toContain('compare/v2.3.1...v2.3.2')
+    expect(notes).toContain('compare/v2.3.2...v2.4.0')
   })
 
   test('assigns official Windows release artifacts to the primary application', () => {
     const context = readText('CONTEXT.md')
-    const releaseNotes = readText('docs/releases/v2.3.2.md')
+    const releaseNotes = readText('docs/releases/v2.4.0.md')
     const independentReadme = readText('windows/README.md')
 
     expect(context).toContain('**Official Windows release artifact**:')

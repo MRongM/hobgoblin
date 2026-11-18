@@ -92,12 +92,35 @@ export async function writeWorkspaceConfig(
     if (existingIndex >= 0) workspaces[existingIndex] = persisted
     else workspaces.push(persisted)
 
+    await writeJsonRegistryAtomically(dataFile, { version: 1, workspaces }, dependencies.randomId?.() ?? randomUUID())
+  })
+}
+
+/** Register a new subworkspace-only parent without replacing any existing membership. */
+export async function ensureEmptyWorkspaceConfig(
+  rootId: string,
+  dependencies: WorkspaceConfigSourceDependencies = {},
+): Promise<WorkspaceConfig> {
+  const normalizedRootId = workspaceRootId(rootId)
+  const dataFile = dependencies.dataFile ?? serverDataFile(registryFileName)
+  let config: WorkspaceConfig = { repo: [] }
+  await enqueueFileWrite(writeQueues, dataFile, async () => {
+    const snapshot = await readRegistry(dataFile)
+    if (snapshot.kind === 'invalid') throw new Error('workspace.config.read-failed')
+    const registry: WorkspaceConfigRegistry =
+      snapshot.kind === 'ready' ? snapshot.registry : { version: 1, workspaces: [] }
+    const existing = registry.workspaces.find((workspace) => workspace.rootId === normalizedRootId)
+    if (existing) {
+      config = { repo: [...existing.repo] }
+      return
+    }
     await writeJsonRegistryAtomically(
       dataFile,
-      { version: 1, workspaces },
+      { version: 1, workspaces: [...registry.workspaces, { rootId: normalizedRootId, repo: [] }] },
       dependencies.randomId?.() ?? randomUUID(),
     )
   })
+  return config
 }
 
 export async function inspectWorkspaceConfigCleanup(
@@ -209,7 +232,7 @@ function recoverWorkspaceConfigRegistry(value: unknown): WorkspaceConfigRegistry
     const normalizedRootId = workspaceRootId(workspace.rootId)
     if (!workspace.rootId || normalizedRootId !== workspace.rootId || seen.has(normalizedRootId)) continue
     try {
-      const config = normalizeWorkspaceConfig({ repo: workspace.repo })
+      const config = normalizePersistedWorkspaceConfig({ repo: workspace.repo })
       seen.add(normalizedRootId)
       workspaces.push({ rootId: normalizedRootId, repo: config.repo })
     } catch {}
@@ -238,11 +261,18 @@ function normalizeRegistry(value: unknown): WorkspaceConfigRegistry {
     if (workspace.rootId.length === 0 || normalizedRootId !== workspace.rootId || seen.has(normalizedRootId)) {
       throw new Error('workspace.config.read-failed')
     }
-    const config = normalizeWorkspaceConfig({ repo: workspace.repo })
+    const config = normalizePersistedWorkspaceConfig({ repo: workspace.repo })
     seen.add(normalizedRootId)
     workspaces.push({ rootId: normalizedRootId, repo: config.repo })
   }
   return { version: 1, workspaces }
+}
+
+function normalizePersistedWorkspaceConfig(value: unknown): WorkspaceConfig {
+  const record = asRecord(value)
+  return record && Array.isArray(record.repo) && record.repo.length === 0
+    ? { repo: [] }
+    : normalizeWorkspaceConfig(value)
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

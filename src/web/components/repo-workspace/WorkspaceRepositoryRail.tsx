@@ -1,20 +1,36 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { arrayMove } from '@dnd-kit/sortable'
-import { Eye, EyeOff, Folder, FolderPlus, FolderTree, LoaderCircle, RefreshCw, Terminal } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  FolderTree,
+  LoaderCircle,
+  RefreshCw,
+  Terminal,
+} from 'lucide-react'
 import type { BranchWorkspaceGitActionKind } from '#/shared/branch-workspace-git-actions.ts'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
+import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import { DEFAULT_WORKSPACE_REPOSITORY_LIST_HEIGHT } from '#/shared/workspace-layout.ts'
 import { Badge } from '#/web/components/ui/badge.tsx'
+import { BranchSyncDelta } from '#/web/components/repo-workspace/BranchSyncDelta.tsx'
 import { Button } from '#/web/components/ui/button.tsx'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '#/web/components/ui/context-menu.tsx'
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '#/web/components/ui/context-menu.tsx'
 import { ConfirmDialog } from '#/web/components/ConfirmDialog.tsx'
 import { BranchWorkspaceDialog } from '#/web/components/repo-workspace/BranchWorkspaceDialog.tsx'
+import { BranchWorkspaceRenameDialog } from '#/web/components/repo-workspace/BranchWorkspaceRenameDialog.tsx'
+import { BranchWorkspaceDeleteDialog } from '#/web/components/repo-workspace/BranchWorkspaceDeleteDialog.tsx'
+import { BranchWorkspaceFolderDialog } from '#/web/components/repo-workspace/BranchWorkspaceFolderDialog.tsx'
+import { BranchWorkspaceCloneDialog } from '#/web/components/repo-workspace/BranchWorkspaceCloneDialog.tsx'
+import { openRegisteredBranchWorkspace } from '#/web/branch-workspace-navigation-write-paths.ts'
+import { terminalDirectoryDragProps } from '#/web/components/terminal/terminal-directory-drag.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import type { WorkspaceListItemAction } from '#/web/components/repo-workspace/WorkspaceListItem.tsx'
+import { WorkspaceActionMenuItems } from '#/web/components/repo-workspace/WorkspaceActionMenuItems.tsx'
 import { BranchWorkspaceDependencyDialog } from '#/web/components/repo-workspace/BranchWorkspaceDependencyDialog.tsx'
 import {
   BranchWorkspaceGitActionPanel,
@@ -43,7 +59,8 @@ import {
 } from '#/web/components/terminal/terminal-session-store.ts'
 import { worktreeTerminalKey } from '#/web/components/terminal/terminal-session-keys.ts'
 import { useBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
-import { cleanupBranchWorkspaceRegistry } from '#/web/workspace-client.ts'
+import { projectDiscoveredBranchWorkspaceRepositories } from '#/web/branch-workspace-repository-projection.ts'
+import { cleanupBranchWorkspaceRegistry, unregisterBranchWorkspace } from '#/web/workspace-client.ts'
 import { useBranchWorkspaceActions } from '#/web/hooks/useBranchWorkspaceActions.ts'
 import { useBranchWorkspaceDependencyActions } from '#/web/hooks/useBranchWorkspaceDependencyActions.ts'
 import { useBranchWorkspaceGitActions } from '#/web/hooks/useBranchWorkspaceGitActions.ts'
@@ -52,10 +69,17 @@ import { lastPathSegment } from '#/web/lib/paths.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
-import { getBranchWorktreeState } from '#/web/stores/repos/worktree-state.ts'
-import { workspaceRepositoryListExpanded } from '#/web/stores/repos/workspace-projects.ts'
+import { getBranchWorktreeState, getWorktreeChangeCount } from '#/web/stores/repos/worktree-state.ts'
+import {
+  activeWorkspaceRootId,
+  projectRepositoryIds,
+  workspaceRepositoryListExpanded,
+} from '#/web/stores/repos/workspace-projects.ts'
 import { repoTerminalWorktreePaths } from '#/web/components/RepoTabs.tsx'
-import { resolveBranchWorkspaceMemberTarget } from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
+import {
+  branchWorkspaceMemberRepositoryId,
+  resolveBranchWorkspaceMemberTarget,
+} from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 import { WorkspaceRepositoryListPane } from '#/web/components/repo-workspace/WorkspaceRepositoryListPane.tsx'
 import { buildBranchWorkspaceBatchErrorAiCommand, prefillAiTerminalTargetCommand } from '#/web/ai-terminal-handoff.ts'
 import { fetchWorkspaceRepositories } from '#/web/workspace-repository-fetch.ts'
@@ -88,6 +112,8 @@ export function WorkspaceRepositoryRail({
   const terminalCommands = useContext(TerminalSessionContext)
   const workspace = useReposStore((state) => state.workspaceProjects[workspaceRootId])
   const repos = useReposStore((state) => state.repos)
+  const workspaceProjects = useReposStore((state) => state.workspaceProjects)
+  const repoOrder = useReposStore((state) => state.order)
   const activeContext = useReposStore(
     (state) => state.workspaceActiveContextByRoot[workspaceRootId] ?? { kind: 'overview' as const },
   )
@@ -123,6 +149,43 @@ export function WorkspaceRepositoryRail({
   const branchDependencyActions = useBranchWorkspaceDependencyActions(workspaceRootId)
   const branchGitActions = useBranchWorkspaceGitActions(workspaceRootId)
   const [branchDialogOpen, setBranchDialogOpen] = useState(false)
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [renameWorkspace, setRenameWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
+  const [cloneSource, setCloneSource] = useState<BranchWorkspaceSnapshot | null>(null)
+  const cloneTargets = useMemo(
+    () =>
+      [...new Set([...repoOrder, ...Object.keys(workspaceProjects)])].flatMap((rootId) => {
+        const root = repos[rootId]
+        if (
+          !root ||
+          root.isGitRepo !== false ||
+          isRemoteRepoId(rootId) ||
+          root.remote.target ||
+          root.availability.phase !== 'available'
+        )
+          return []
+        const project = workspaceProjects[rootId]
+        const repositories = [
+          ...new Set([
+            ...(project?.repositoryIds ?? []),
+            ...(project?.candidates.filter((candidate) => candidate.available).map((candidate) => candidate.id) ?? []),
+          ]),
+        ].flatMap((id) => {
+          if (isRemoteRepoId(id)) return []
+          const repository = repos[id]
+          const candidate = project?.candidates.find((entry) => entry.id === id)
+          if (
+            repository?.remote.target ||
+            repository?.isGitRepo === false ||
+            repository?.availability.phase === 'unavailable'
+          )
+            return []
+          return [{ id, name: repository?.name ?? candidate?.name ?? id }]
+        })
+        return [{ rootId, name: root.name, repositories }]
+      }),
+    [repoOrder, repos, workspaceProjects],
+  )
   const [branchDialogMode, setBranchDialogMode] = useState<'create' | 'extend' | 'reduce' | 'repair' | 'remove'>(
     'create',
   )
@@ -139,8 +202,13 @@ export function WorkspaceRepositoryRail({
   const [gitActionTargetId, setGitActionTargetId] = useState<string | null>(null)
   const [branchReloadPending, setBranchReloadPending] = useState(false)
   const branchReloadPendingRef = useRef(false)
+  const refreshingBranchChangesRef = useRef<Set<string>>(new Set())
+  const [refreshingBranchChanges, setRefreshingBranchChanges] = useState<ReadonlySet<string>>(() => new Set())
+  const refreshingRepositoryIdsRef = useRef<Set<string>>(new Set())
+  const [refreshingRepositoryIds, setRefreshingRepositoryIds] = useState<ReadonlySet<string>>(() => new Set())
   const [registryCleanupOpen, setRegistryCleanupOpen] = useState(false)
-  const autoRefreshedDriftIds = useRef<Set<string>>(new Set())
+  const [unregisteringBranchWorkspaceId, setUnregisteringBranchWorkspaceId] = useState<string | null>(null)
+  const [deleteWorkspace, setDeleteWorkspace] = useState<BranchWorkspaceSnapshot | null>(null)
   const dialogProgressWorkspace = branchActions.plan
     ? (branchItems.find((item) => item.id === branchActions.plan?.branchWorkspaceId) ?? null)
     : null
@@ -157,6 +225,12 @@ export function WorkspaceRepositoryRail({
   }
 
   const overviewRootPath = repoPlainWorkspacePath(repos[workspaceRootId]) ?? workspaceRootId
+  const directoryPath = parseRemoteRepoId(workspaceRootId)?.remotePath ?? overviewRootPath
+  const overviewDirectoryAction = useOpenDirectoryAction({
+    repoId: workspaceRootId,
+    path: directoryPath,
+    disabled: repos[workspaceRootId]?.availability.phase === 'unavailable',
+  })
   const overviewName = lastPathSegment(overviewRootPath) || repos[workspaceRootId]?.name || workspaceRootId
   const overviewTerminalWorktreeKey = worktreeTerminalKey(workspaceRootId, overviewRootPath)
   const overviewTerminalWorktreeKeys = useMemo(
@@ -202,87 +276,171 @@ export function WorkspaceRepositoryRail({
     () => new Map((workspace?.candidates ?? []).map((candidate) => [candidate.id, candidate.name])),
     [workspace?.candidates],
   )
-  const repositoryIdByName = useMemo(
-    () =>
-      new Map(
-        (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
-          const name = candidateNameById.get(repositoryId)
-          return name ? [[name, repositoryId] as const] : []
-        }),
-      ),
-    [candidateNameById, workspace?.repositoryIds],
-  )
   const branchWorkspaceChangeCountById = useMemo(
     () =>
       Object.fromEntries(
         branchItems.map((item) => [
           item.id,
           item.repositories.reduce((total, member) => {
-            const repositoryId = repositoryIdByName.get(member.repositoryName)
+            if (member.progress === 'removed') return total
+            const repositoryId = branchWorkspaceMemberRepositoryId(
+              member,
+              workspace?.repositoryIds ?? [],
+              workspace?.candidates ?? [],
+            )
             const repository = repositoryId ? repos[repositoryId] : undefined
-            const status =
+            const count =
               repository?.availability.phase === 'available'
-                ? repository.data.status.find((entry) => entry.path === member.worktreePath)
-                : undefined
-            return total + (status?.entries.length ?? 0)
+                ? getWorktreeChangeCount(repository, member.worktreePath)
+                : 0
+            return total + count
           }, 0),
         ]),
       ),
-    [branchItems, repos, repositoryIdByName],
+    [branchItems, repos, workspace?.repositoryIds, workspace?.candidates],
   )
-  const repositoryOptions = useMemo(
-    () =>
-      (workspace?.repositoryIds ?? []).flatMap((repositoryId) => {
-        const repo = repos[repositoryId]
-        if (!repo) return []
-        const defaultBranch =
-          repo.data.branches.find((branch) => branch.isDefault)?.name ||
-          repo.data.currentBranch ||
-          repo.data.branches[0]?.name ||
-          ''
-        return [
-          {
-            id: repositoryId,
-            name: candidateNameById.get(repositoryId) ?? repo.name,
-            available: repo.availability.phase === 'available',
-            branches: repo.data.branches.map((branch) => branch.name),
-            defaultBranch,
-            branchDetails: Object.fromEntries(
-              repo.data.branches.map((branch) => [
-                branch.name,
-                {
-                  ...(branch.tracking ? { tracking: branch.tracking } : {}),
-                  ...(branch.trackingGone ? { trackingGone: true } : {}),
-                },
-              ]),
-            ),
-            worktrees: Object.values(repo.data.worktreesByPath).flatMap((worktree) =>
-              worktree.isPrunable
-                ? []
-                : [
-                    {
-                      path: worktree.path,
-                      isMain: worktree.isMain,
-                      ...(worktree.branch ? { branch: worktree.branch } : {}),
-                      ...(worktree.head ? { head: worktree.head } : {}),
-                      ...(worktree.isDetached ? { isDetached: true } : {}),
-                    },
-                  ],
-            ),
-          },
-        ]
-      }),
-    [candidateNameById, repos, workspace?.repositoryIds],
-  )
+  const repositoryOptions = useMemo(() => {
+    const usedNames = new Set<string>()
+    return [
+      ...new Set([
+        ...(workspace?.repositoryIds ?? []),
+        ...(dialogWorkspace?.repositories.flatMap((member) => (member.repositoryId ? [member.repositoryId] : [])) ??
+          []),
+      ]),
+    ].flatMap((repositoryId) => {
+      const repo = repos[repositoryId]
+      if (!repo) return []
+      const baseName =
+        candidateNameById.get(repositoryId) ??
+        dialogWorkspace?.repositories.find((member) => member.repositoryId === repositoryId)?.repositoryName ??
+        repo.name
+      let name = baseName
+      for (let suffix = 2; usedNames.has(name); suffix++) name = `${baseName}-${suffix}`
+      usedNames.add(name)
+      const defaultBranch =
+        repo.data.branches.find((branch) => branch.isDefault)?.name ||
+        repo.data.currentBranch ||
+        repo.data.branches[0]?.name ||
+        ''
+      return [
+        {
+          id: repositoryId,
+          name,
+          available: repo.availability.phase === 'available',
+          branches: repo.data.branches.map((branch) => branch.name),
+          defaultBranch,
+          branchDetails: Object.fromEntries(
+            repo.data.branches.map((branch) => [
+              branch.name,
+              {
+                ...(branch.tracking ? { tracking: branch.tracking } : {}),
+                ...(branch.trackingGone ? { trackingGone: true } : {}),
+              },
+            ]),
+          ),
+          worktrees: Object.values(repo.data.worktreesByPath).flatMap((worktree) =>
+            worktree.isPrunable
+              ? []
+              : [
+                  {
+                    path: worktree.path,
+                    isMain: worktree.isMain,
+                    ...(worktree.branch ? { branch: worktree.branch } : {}),
+                    ...(worktree.head ? { head: worktree.head } : {}),
+                    ...(worktree.isDetached ? { isDetached: true } : {}),
+                  },
+                ],
+          ),
+        },
+      ]
+    })
+  }, [candidateNameById, repos, workspace?.repositoryIds, dialogWorkspace])
   const fetchAllRepositories = useCallback(
     async () => await fetchWorkspaceRepositories(workspaceRootId),
     [workspaceRootId],
   )
-  const refreshWorkspaceMemberCoreData = useCallback(() => {
+  const refreshWorkspaceRepositoryChanges = useCallback(async (repositoryId: string) => {
     const state = useReposStore.getState()
-    const memberIds = state.workspaceProjects[workspaceRootId]?.repositoryIds ?? []
-    return Promise.all(memberIds.map((memberId) => state.refreshCoreData(memberId)))
-  }, [workspaceRootId])
+    const repository = state.repos[repositoryId]
+    if (!repository || repository.availability.phase !== 'available' || repository.isGitRepo === false) return
+    const inFlight = refreshingRepositoryIdsRef.current
+    if (inFlight.has(repositoryId)) return
+    inFlight.add(repositoryId)
+    setRefreshingRepositoryIds(new Set(inFlight))
+    try {
+      await state.refreshCoreData(repositoryId, { token: repository.instanceToken })
+    } catch {
+      // The store normally projects refresh failures into the resource state;
+      // keep menu actions safe if a caller still rejects unexpectedly.
+    } finally {
+      inFlight.delete(repositoryId)
+      setRefreshingRepositoryIds(new Set(inFlight))
+    }
+  }, [])
+  const refreshBranchWorkspaceChanges = useCallback(
+    async (item: BranchWorkspaceSnapshot) => {
+      const inFlight = refreshingBranchChangesRef.current
+      if (inFlight.has(item.id)) return
+      inFlight.add(item.id)
+      setRefreshingBranchChanges(new Set(inFlight))
+      try {
+        const refreshed = await branchQuery.refresh().catch(() => null)
+        const observed = refreshed?.ok ? (refreshed.items.find((folder) => folder.id === item.id) ?? item) : item
+        if (refreshed?.ok) {
+          const projection = projectDiscoveredBranchWorkspaceRepositories(
+            useReposStore.getState(),
+            workspaceRootId,
+            refreshed.items,
+          )
+          if (projection.repos !== useReposStore.getState().repos)
+            useReposStore.setState({ repos: projection.repos, order: projection.order })
+        }
+        const state = useReposStore.getState()
+        const workspace = state.workspaceProjects[workspaceRootId]
+        const repositoryIds = Array.from(
+          new Set(
+            observed.repositories.flatMap((member) => {
+              if (member.progress === 'removed') return []
+              const repositoryId = branchWorkspaceMemberRepositoryId(
+                member,
+                workspace?.repositoryIds ?? [],
+                workspace?.candidates ?? [],
+              )
+              return repositoryId ? [repositoryId] : []
+            }),
+          ),
+        )
+        await Promise.allSettled(
+          repositoryIds.map(async (repositoryId) => {
+            const repository = useReposStore.getState().repos[repositoryId]
+            if (!repository || repository.availability.phase !== 'available' || repository.isGitRepo === false) return
+            await useReposStore.getState().refreshCoreData(repositoryId, { token: repository.instanceToken })
+          }),
+        )
+      } finally {
+        inFlight.delete(item.id)
+        setRefreshingBranchChanges(new Set(inFlight))
+      }
+    },
+    [workspaceRootId, branchQuery.refresh],
+  )
+  const refreshWorkspaceMemberSnapshots = useCallback(
+    (items: readonly BranchWorkspaceSnapshot[]) => {
+      const projection = projectDiscoveredBranchWorkspaceRepositories(useReposStore.getState(), workspaceRootId, items)
+      if (projection.repos !== useReposStore.getState().repos)
+        useReposStore.setState({ repos: projection.repos, order: projection.order })
+      const state = useReposStore.getState()
+      const memberIds = projectRepositoryIds(state, workspaceRootId, items)
+      return Promise.allSettled(
+        [...memberIds].map(async (memberId) => {
+          const repo = useReposStore.getState().repos[memberId]
+          if (!repo?.isGitRepo || repo.availability.phase !== 'available') return
+          await useReposStore.getState().refreshSnapshot(memberId, { token: repo.instanceToken })
+        }),
+      )
+    },
+    [workspaceRootId],
+  )
   useEffect(() => {
     if (activeContext.kind !== 'branch-workspace' || !activeContext.memberRepositoryName) return
     const branchWorkspace = branchItems.find((item) => item.id === activeContext.branchWorkspaceId)
@@ -294,26 +452,8 @@ export function WorkspaceRepositoryRail({
     activateBranchWorkspace(workspaceRootId, branchWorkspace.id)
   }, [activeContext, activateBranchWorkspace, branchItems, workspaceRootId])
 
-  useEffect(() => {
-    if (!branchQuery.data?.ok) return
-    const driftedIds = new Set(
-      branchItems.flatMap((item) =>
-        item.state.kind === 'needs-action' && item.state.action === 'repair' && item.state.reason === 'drift'
-          ? [item.id]
-          : [],
-      ),
-    )
-    const attemptedIds = autoRefreshedDriftIds.current
-    for (const id of attemptedIds) {
-      if (!driftedIds.has(id)) attemptedIds.delete(id)
-    }
-    const newIds = [...driftedIds].filter((id) => !attemptedIds.has(id))
-    if (newIds.length === 0) return
-    for (const id of newIds) attemptedIds.add(id)
-    void branchQuery.refresh().catch(() => undefined)
-  }, [branchItems, branchQuery.data, branchQuery.refresh])
-
   if (!workspace) return null
+  const branchReadError = branchQuery.data?.ok ? branchQuery.data.registryError : branchQuery.data?.message
   const resolveMemberTarget = (member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveBranchWorkspaceMemberTarget({
       member,
@@ -323,7 +463,20 @@ export function WorkspaceRepositoryRail({
     })
     if (!resolution.ok) return resolution
     const repo = repos[resolution.target.repositoryId]
-    const branch = repo?.data.branches.find((candidate) => candidate.name === resolution.target.checkedOutBranch)
+    const branch =
+      resolution.target.checkedOutBranch === null
+        ? {
+            name: 'HEAD',
+            isCurrent: false,
+            ahead: 0,
+            behind: 0,
+            lastCommitHash: resolution.target.head ?? '',
+            lastCommitMessage: '',
+            lastCommitDate: '',
+            lastCommitAuthor: '',
+            worktree: { path: member.worktreePath },
+          }
+        : repo?.data.branches.find((candidate) => candidate.name === resolution.target.checkedOutBranch)
     if (!repo || !branch) {
       return { ok: false as const, reason: 'workspace.branch-workspace.member-branch-missing' }
     }
@@ -366,7 +519,9 @@ export function WorkspaceRepositoryRail({
       activeContext.kind !== 'branch-workspace' ||
       activeContext.branchWorkspaceId !== item.id ||
       activeContext.memberRepositoryName !== member.repositoryName
-    selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
+    if (resolution.target.checkedOutBranch === null)
+      useReposStore.getState().selectDetachedWorktree(resolution.target.repositoryId, resolution.target.worktreePath)
+    else selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
     setDetailTab(resolution.target.repositoryId, 'terminal')
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
@@ -381,7 +536,9 @@ export function WorkspaceRepositoryRail({
   const openRepositoryMemberTerminal = (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => {
     const resolution = resolveMemberTarget(member)
     if (!resolution.ok) return
-    selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
+    if (resolution.target.checkedOutBranch === null)
+      useReposStore.getState().selectDetachedWorktree(resolution.target.repositoryId, resolution.target.worktreePath)
+    else selectBranch(resolution.target.repositoryId, resolution.target.checkedOutBranch)
     setDetailTab(resolution.target.repositoryId, 'terminal')
     onOpenDetailArea?.()
     activateBranchWorkspace(workspaceRootId, item.id, member.repositoryName)
@@ -395,17 +552,30 @@ export function WorkspaceRepositoryRail({
   const repositoryItems: WorkspaceRepositoryListItem[] = displayRepositoryIds.flatMap((repositoryId) => {
     const repo = repos[repositoryId]
     if (!repo) return []
+    const branch =
+      repo.availability.phase === 'available' && repo.isGitRepo !== false
+        ? repo.data.branches.find((branch) => branch.name === repo.data.currentBranch)
+        : undefined
     return [
       {
         id: repositoryId,
         name: candidateNameById.get(repositoryId) ?? repo.name,
         branch: repo.data.currentBranch,
+        ahead: branch?.ahead ?? 0,
+        behind: branch?.behind ?? 0,
         changeCount: repo.data.status.reduce((total, status) => total + status.entries.length, 0),
         terminalWorktreePaths: repoTerminalWorktreePaths(repo),
         unavailable: repo.availability.phase === 'unavailable',
       },
     ]
   })
+  const syncDelta = repositoryItems.reduce(
+    (total, repository) => ({
+      ahead: total.ahead + (repository.ahead ?? 0),
+      behind: total.behind + (repository.behind ?? 0),
+    }),
+    { ahead: 0, behind: 0 },
+  )
   const reorderReady = batchReady && !reorderPending
   const branchListVisible = currentRepoId === workspaceRootId || !repositoryListVisible
   const selectedBranchWorkspaceId = activeContext.kind === 'branch-workspace' ? activeContext.branchWorkspaceId : null
@@ -435,19 +605,50 @@ export function WorkspaceRepositoryRail({
     setGitActionOpen(true)
     void branchGitActions.requestPlan(kind, item.id)
   }
+  const finishWorkspaceFolderRemoval = async (item: BranchWorkspaceSnapshot) => {
+    const state = useReposStore.getState()
+    const context = state.workspaceActiveContextByRoot[workspaceRootId]
+    if (context?.kind === 'branch-workspace' && context.branchWorkspaceId === item.id) {
+      if (activeWorkspaceRootId(state) === workspaceRootId) state.activateWorkspaceOverview(workspaceRootId)
+      else
+        useReposStore.setState((current) => ({
+          workspaceActiveContextByRoot: {
+            ...current.workspaceActiveContextByRoot,
+            [workspaceRootId]: { kind: 'overview' as const },
+          },
+        }))
+    }
+    await branchQuery.refresh().catch(() => undefined)
+  }
+  const unregisterWorkspaceFolder = async (item: BranchWorkspaceSnapshot) => {
+    if (unregisteringBranchWorkspaceId !== null) return
+    setUnregisteringBranchWorkspaceId(item.id)
+    try {
+      const result = await unregisterBranchWorkspace(workspaceRootId, item.id)
+      if (!result.ok) {
+        toast.error(t(result.message ?? 'workspace.branch-workspace.unregister-failed'))
+        return
+      }
+      await finishWorkspaceFolderRemoval(item)
+    } catch {
+      toast.error(t('workspace.branch-workspace.unregister-failed'))
+    } finally {
+      setUnregisteringBranchWorkspaceId(null)
+    }
+  }
   const reloadBranchWorkspaces = async () => {
     if (branchReloadPendingRef.current) return
     branchReloadPendingRef.current = true
     setBranchReloadPending(true)
     try {
-      await branchQuery.refresh()
+      const refreshed = await branchQuery.refresh()
+      await refreshWorkspaceMemberSnapshots(refreshed?.ok ? refreshed.items : branchItems)
     } catch {
       // The current read error remains visible and retryable.
     } finally {
       branchReloadPendingRef.current = false
       setBranchReloadPending(false)
     }
-    void refreshWorkspaceMemberCoreData().catch(() => undefined)
   }
   const cleanupRegistry = async () => {
     const result = await cleanupBranchWorkspaceRegistry(workspaceRootId).catch(() => ({
@@ -525,25 +726,8 @@ export function WorkspaceRepositoryRail({
     setDialogWorkspace(item)
     setFixedReduceRepositoryName(reduceRepositoryName)
     setBranchDialogOpen(true)
-    if (requestPlan && item) {
-      void branchActions.requestPlan(
-        mode === 'repair'
-          ? { operation: 'repair', branchWorkspaceId: item.id }
-          : mode === 'reduce'
-            ? {
-                operation: 'reduce',
-                branchWorkspaceId: item.id,
-                repositories: item.repositories
-                  .filter((repository) => repository.progress !== 'complete')
-                  .map((repository) => repository.repositoryName),
-              }
-            : {
-                operation: 'remove',
-                branchWorkspaceId: item.id,
-                alsoDeleteBranch: false,
-                alsoDeleteUpstream: false,
-              },
-      )
+    if (requestPlan && item && mode === 'repair') {
+      void branchActions.requestPlan({ operation: 'repair', branchWorkspaceId: item.id })
     }
   }
   const openDependencyDialog = (mode: 'add' | 'remove', item: BranchWorkspaceSnapshot) => {
@@ -561,10 +745,21 @@ export function WorkspaceRepositoryRail({
         size="icon-sm"
         aria-label={t('workspace.branch-workspace.create')}
         title={t('workspace.branch-workspace.create')}
-        disabled={!batchReady || reorderPending}
+        disabled={scanning || reorderPending || branchActions.executing}
         onClick={() => openBranchDialog('create', null)}
       >
         <FolderPlus aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t('workspace.branch-workspace.folder-register.title')}
+        title={t('workspace.branch-workspace.folder-register.title')}
+        disabled={scanning || reorderPending || branchActions.executing}
+        onClick={() => setFolderDialogOpen(true)}
+      >
+        <FolderOpen aria-hidden="true" />
       </Button>
     </>
   )
@@ -631,8 +826,11 @@ export function WorkspaceRepositoryRail({
             onHeightChange={handleRepositoryListHeightChange}
           >
             <ManifestRow
+              directoryPath={repos[workspaceRootId]?.availability.phase === 'unavailable' ? null : directoryPath}
+              directoryAction={overviewDirectoryAction}
               active={activeContext.kind === 'overview'}
               name={overviewName}
+              syncDelta={syncDelta}
               terminalCount={overviewTerminalCount}
               hasTerminalBell={overviewHasTerminalBell}
               hasTerminalOutputActivity={overviewHasTerminalOutputActivity}
@@ -644,6 +842,8 @@ export function WorkspaceRepositoryRail({
               repositories={repositoryItems}
               currentRepoId={currentRepoId}
               disabled={!reorderReady}
+              refreshingRepositoryIds={refreshingRepositoryIds}
+              onRefreshRepository={refreshWorkspaceRepositoryChanges}
               onActivate={(repositoryId) => activateWorkspaceRepository(workspaceRootId, repositoryId)}
               onReorder={(fromId, toId) => void reorderRepositories(fromId, toId)}
               onToggleFileArea={onToggleFileArea}
@@ -668,11 +868,9 @@ export function WorkspaceRepositoryRail({
               className={cn('px-1.5 pb-1.5', fill && 'min-h-0 flex-1 overflow-y-auto')}
               data-testid="branch-workspace-scroll-body"
             >
-              {branchQuery.isPending ? (
-                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
-              ) : branchQuery.data && !branchQuery.data.ok ? (
+              {!branchQuery.isPending && branchReadError ? (
                 <div className="flex items-center gap-2 px-2 py-2 text-xs text-danger" role="alert">
-                  <span className="min-w-0 flex-1">{t(branchQuery.data.message)}</span>
+                  <span className="min-w-0 flex-1">{t(branchReadError)}</span>
                   <Button
                     type="button"
                     variant="outline"
@@ -688,7 +886,7 @@ export function WorkspaceRepositoryRail({
                     )}
                     {t('workspace.branch-workspace.reload')}
                   </Button>
-                  {branchQuery.data.message === 'workspace.branch-workspace.read-failed' ? (
+                  {branchReadError === 'workspace.branch-workspace.read-failed' ? (
                     <Button
                       type="button"
                       variant="destructive-soft"
@@ -700,7 +898,10 @@ export function WorkspaceRepositoryRail({
                     </Button>
                   ) : null}
                 </div>
-              ) : branchItems.length === 0 ? (
+              ) : null}
+              {branchQuery.isPending ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.loading')}</div>
+              ) : branchQuery.data && !branchQuery.data.ok ? null : branchItems.length === 0 ? (
                 <div className="px-2 py-2 text-xs text-muted-foreground">{t('workspace.branch-workspace.empty')}</div>
               ) : (
                 <BranchWorkspaceList
@@ -708,37 +909,30 @@ export function WorkspaceRepositoryRail({
                   items={branchItems}
                   activeId={selectedBranchWorkspaceId}
                   activeMemberRepositoryName={selectedBranchWorkspaceMemberName}
-                  disabled={branchActions.pending || branchDependencyActions.pending}
+                  disabled={
+                    branchActions.pending ||
+                    branchDependencyActions.pending ||
+                    unregisteringBranchWorkspaceId !== null ||
+                    deleteWorkspace !== null
+                  }
                   gitActionsDisabled={branchGitActions.pending}
                   onGitAction={openGitAction}
                   changeCountById={branchWorkspaceChangeCountById}
+                  refreshingChangeIds={refreshingBranchChanges}
+                  onRefreshChanges={refreshBranchWorkspaceChanges}
                   onActivate={(id) => activateBranchWorkspace(workspaceRootId, id)}
                   onToggleFileArea={onToggleFileArea ? () => onToggleFileArea() : undefined}
                   onOpenFileArea={onOpenFileArea}
                   onReorder={(orderedIds) => void branchActions.reorder(orderedIds)}
-                  onInspect={(item) =>
-                    openBranchDialog(
-                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete'
-                        ? 'remove'
-                        : item.state.kind === 'needs-action' && item.state.action === 'continue-reduce'
-                          ? 'reduce'
-                          : 'repair',
-                      item,
-                    )
-                  }
                   onExtend={(item) => openBranchDialog('extend', item)}
-                  onReduce={(item, resume = false) => openBranchDialog('reduce', item, resume)}
+                  onReduce={(item) => openBranchDialog('reduce', item)}
                   onReduceMember={(item, member) => openBranchDialog('reduce', item, false, member.repositoryName)}
+                  onClone={setCloneSource}
                   onAddDependencies={(item) => openDependencyDialog('add', item)}
                   onRemoveDependencies={(item) => openDependencyDialog('remove', item)}
-                  onRepair={(item) => openBranchDialog('repair', item, true)}
-                  onRemove={(item) =>
-                    openBranchDialog(
-                      'remove',
-                      item,
-                      item.state.kind === 'needs-action' && item.state.action === 'continue-delete',
-                    )
-                  }
+                  onRename={setRenameWorkspace}
+                  onRemove={setDeleteWorkspace}
+                  onUnregister={(item) => void unregisterWorkspaceFolder(item)}
                   getMemberPresentation={(_item, member) => getMemberPresentation(member)}
                   onSelectRepositoryMember={selectRepositoryMember}
                   onOpenRepositoryMemberTerminal={openRepositoryMemberTerminal}
@@ -764,10 +958,65 @@ export function WorkspaceRepositoryRail({
         )}
       </div>
       {gitActionPanelElement}
+      <BranchWorkspaceDeleteDialog
+        key={deleteWorkspace?.id ?? 'closed'}
+        rootId={workspaceRootId}
+        workspace={deleteWorkspace}
+        onOpenChange={(open) => {
+          if (!open) setDeleteWorkspace(null)
+        }}
+        onDeleted={async (item) => {
+          await finishWorkspaceFolderRemoval(item)
+          const state = useReposStore.getState()
+          const ids = new Set(
+            item.repositories.flatMap((member) => {
+              const id = branchWorkspaceMemberRepositoryId(member, workspace.repositoryIds, workspace.candidates)
+              return id ? [id] : []
+            }),
+          )
+          await Promise.allSettled(
+            [...ids].map(async (id) => {
+              const repo = useReposStore.getState().repos[id]
+              if (repo) await state.refreshSnapshot(id, { token: repo.instanceToken })
+            }),
+          )
+        }}
+      />
+      <BranchWorkspaceRenameDialog
+        rootId={workspaceRootId}
+        workspace={renameWorkspace}
+        onOpenChange={(open) => {
+          if (!open) setRenameWorkspace(null)
+        }}
+        onRenamed={async () => {
+          await reloadBranchWorkspaces()
+        }}
+      />
+      <BranchWorkspaceFolderDialog
+        open={folderDialogOpen}
+        rootId={workspaceRootId}
+        onOpenChange={setFolderDialogOpen}
+        onRegistered={openRegisteredBranchWorkspace}
+      />
+      <BranchWorkspaceCloneDialog
+        open={cloneSource !== null}
+        source={cloneSource}
+        targets={cloneTargets}
+        onOpenChange={(open) => {
+          if (!open) setCloneSource(null)
+        }}
+        onCloned={openRegisteredBranchWorkspace}
+      />
       <BranchWorkspaceDialog
         open={branchDialogOpen}
         mode={branchDialogMode}
         repositories={repositoryOptions}
+        defaultParentDirectory={
+          repos[workspaceRootId]?.remote.target?.remotePath ??
+          parseRemoteRepoId(workspaceRootId)?.remotePath ??
+          overviewRootPath
+        }
+        allowNativeDirectoryPicker={!isRemoteRepoId(workspaceRootId)}
         auxiliaryCandidates={auxiliaryCandidates}
         workspace={dialogWorkspace}
         progressWorkspace={dialogProgressWorkspace}
@@ -830,8 +1079,11 @@ export function WorkspaceRepositoryRail({
 }
 
 function ManifestRow({
+  directoryPath,
+  directoryAction,
   active,
   name,
+  syncDelta,
   terminalCount,
   hasTerminalBell,
   hasTerminalOutputActivity,
@@ -839,8 +1091,11 @@ function ManifestRow({
   onOpenFileArea,
   onToggleFileArea,
 }: {
+  directoryPath: string | null
+  directoryAction: WorkspaceListItemAction
   active: boolean
   name: string
+  syncDelta: { ahead: number; behind: number }
   terminalCount: number
   hasTerminalBell: boolean
   hasTerminalOutputActivity: boolean
@@ -849,11 +1104,22 @@ function ManifestRow({
   onToggleFileArea?: () => void
 }) {
   const t = useT()
+  const actions: WorkspaceListItemAction[] = [
+    {
+      id: 'fileArea',
+      label: t('file-area.open'),
+      disabled: !onOpenFileArea,
+      icon: <FolderTree aria-hidden="true" />,
+      onSelect: () => onOpenFileArea?.(),
+    },
+    directoryAction,
+  ]
   const row = (
     <button
       type="button"
       aria-current={active ? 'page' : undefined}
       title={name}
+      {...terminalDirectoryDragProps(directoryPath)}
       className={cn(
         'group relative flex h-7 w-full min-w-0 items-center gap-2 rounded-[var(--goblin-brand-radius-sm,var(--radius-sm))] px-2 text-left text-[13px] transition-colors',
         active ? 'bg-selected text-selected-foreground' : 'hover:bg-list-row-hover',
@@ -865,6 +1131,20 @@ function ManifestRow({
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span className="shrink-0 font-mono text-muted-foreground">./</span>
         <span className="min-w-0 truncate font-medium">{name}</span>
+        {syncDelta.ahead > 0 ? (
+          <BranchSyncDelta
+            direction="ahead"
+            count={syncDelta.ahead}
+            label={t('branch-status.sync.ahead', { n: syncDelta.ahead })}
+          />
+        ) : null}
+        {syncDelta.behind > 0 ? (
+          <BranchSyncDelta
+            direction="behind"
+            count={syncDelta.behind}
+            label={t('branch-status.sync.behind', { n: syncDelta.behind })}
+          />
+        ) : null}
         {terminalCount > 0 ? (
           <Badge
             data-testid="overview-terminal-count-badge"
@@ -889,10 +1169,7 @@ function ManifestRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem disabled={!onOpenFileArea} onSelect={() => onOpenFileArea?.()}>
-          <FolderTree aria-hidden="true" />
-          {t('file-area.open')}
-        </ContextMenuItem>
+        <WorkspaceActionMenuItems context groups={[actions]} />
       </ContextMenuContent>
     </ContextMenu>
   )

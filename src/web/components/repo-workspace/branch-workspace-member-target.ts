@@ -1,4 +1,4 @@
-import type { BranchWorkspaceRepositorySnapshot } from '#/shared/branch-workspaces.ts'
+import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import { sameLocalFilePath } from '#/shared/local-file-path-bridge.ts'
 import type { WorkspaceRepositoryCandidate } from '#/shared/workspace.ts'
 import type { RepoState } from '#/web/stores/repos/types.ts'
@@ -7,8 +7,24 @@ export interface BranchWorkspaceMemberTarget {
   repositoryId: string
   repositoryName: string
   targetBranch: string
-  checkedOutBranch: string
+  checkedOutBranch: string | null
+  head?: string
   worktreePath: string
+}
+
+/** The folder itself and independent primary repositories are not worktree-removal targets. */
+export function isRemovableBranchWorkspaceWorktree(
+  workspace: BranchWorkspaceSnapshot,
+  member: BranchWorkspaceRepositorySnapshot,
+): boolean {
+  return member.kind !== 'repository' && !sameLocalFilePath(member.worktreePath, workspace.path)
+}
+
+export function canAddBranchWorkspaceWorktree(workspace: BranchWorkspaceSnapshot): boolean {
+  return (
+    workspace.available &&
+    !workspace.repositories.some((member) => sameLocalFilePath(member.worktreePath, workspace.path))
+  )
 }
 
 export type BranchWorkspaceMemberResolution =
@@ -22,44 +38,63 @@ interface ResolveBranchWorkspaceMemberTargetInput {
   repos: Readonly<Record<string, RepoState | undefined>>
 }
 
+export function branchWorkspaceMemberRepositoryId(
+  member: BranchWorkspaceRepositorySnapshot,
+  repositoryIds: readonly string[],
+  candidates: readonly WorkspaceRepositoryCandidate[],
+): string | null {
+  return (
+    member.repositoryId ??
+    candidates.find((entry) => entry.name === member.repositoryName && repositoryIds.includes(entry.id))?.id ??
+    null
+  )
+}
+
 export function resolveBranchWorkspaceMemberTarget({
   member,
   repositoryIds,
   candidates,
   repos,
 }: ResolveBranchWorkspaceMemberTargetInput): BranchWorkspaceMemberResolution {
-  const discoveredRepositoryId = member.repositoryId
-  const candidate = discoveredRepositoryId
-    ? { id: discoveredRepositoryId, name: member.repositoryName }
-    : candidates.find((entry) => entry.name === member.repositoryName && repositoryIds.includes(entry.id))
-  if (!candidate) {
+  const repositoryId = branchWorkspaceMemberRepositoryId(member, repositoryIds, candidates)
+  if (!repositoryId) {
     return { ok: false, reason: 'workspace.branch-workspace.member-unconfigured' }
   }
 
-  const repository = repos[candidate.id]
+  const repository = repos[repositoryId]
   if (!repository || repository.availability.phase !== 'available') {
     return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
   }
   const branchAtMemberPath = repository.data.branches.find(
     (entry) => entry.worktree?.path && sameLocalFilePath(entry.worktree.path, member.worktreePath),
   )
-  if (branchAtMemberPath) {
-    const warning =
-      branchAtMemberPath.name !== member.targetBranch
-        ? 'workspace.branch-workspace.member-branch-drift'
-        : !member.ready
-          ? 'workspace.branch-workspace.member-not-ready'
-          : null
+  const worktree = Object.values(repository.data.worktreesByPath).find((entry) =>
+    sameLocalFilePath(entry.path, member.worktreePath),
+  )
+  if (worktree?.isPrunable) return { ok: false, reason: 'workspace.branch-workspace.member-unavailable' }
+  if (member.ready && (member.currentBranch === null || worktree?.isDetached)) {
     return {
       ok: true,
       target: {
-        repositoryId: candidate.id,
+        repositoryId,
+        repositoryName: member.repositoryName,
+        targetBranch: member.targetBranch,
+        checkedOutBranch: null,
+        worktreePath: member.worktreePath,
+        ...((member.head ?? worktree?.head) ? { head: member.head ?? worktree?.head } : {}),
+      },
+    }
+  }
+  if (branchAtMemberPath) {
+    return {
+      ok: true,
+      target: {
+        repositoryId,
         repositoryName: member.repositoryName,
         targetBranch: member.targetBranch,
         checkedOutBranch: branchAtMemberPath.name,
         worktreePath: member.worktreePath,
       },
-      ...(warning ? { warning } : {}),
     }
   }
   if (!member.ready) return { ok: false, reason: 'workspace.branch-workspace.member-not-ready' }
@@ -75,7 +110,7 @@ export function resolveBranchWorkspaceMemberTarget({
   return {
     ok: true,
     target: {
-      repositoryId: candidate.id,
+      repositoryId,
       repositoryName: member.repositoryName,
       targetBranch: member.targetBranch,
       checkedOutBranch: member.targetBranch,

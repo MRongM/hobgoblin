@@ -351,7 +351,10 @@ export function createRuntimeRepoLifecycleActions(
     },
 
     async rescanWorkspace(rootId: string): Promise<void> {
-      await reconcileWorkspaceProject(set, get, rootId, importWorkspaceProject, { pruneUnavailable: true })
+      await reconcileWorkspaceProject(set, get, rootId, importWorkspaceProject, {
+        pruneUnavailable: true,
+        refresh: 'snapshot',
+      })
     },
 
     async configureWorkspace(
@@ -481,7 +484,7 @@ export async function reconcileWorkspaceProject(
   get: ReposGet,
   rootId: string,
   readWorkspace: (rootPath: string) => Promise<WorkspaceDiscoveryResult> = importWorkspaceProject,
-  options: { pruneUnavailable?: boolean } = {},
+  options: { pruneUnavailable?: boolean; refresh?: 'core' | 'snapshot' } = {},
 ): Promise<void> {
   const root = get().repos[rootId]
   if (!root || root.isGitRepo !== false) return
@@ -536,7 +539,7 @@ export function applyWorkspaceDiscoveryResult(
   get: ReposGet,
   rootId: string,
   result: Extract<WorkspaceDiscoveryResult, { ok: true }>,
-  options: { pruneUnavailable?: boolean } = {},
+  options: { pruneUnavailable?: boolean; refresh?: 'core' | 'snapshot' } = {},
 ): void {
   const refreshes: InitialRepoRefresh[] = []
   set((state) => {
@@ -678,7 +681,10 @@ export function applyWorkspaceDiscoveryResult(
     return { repos, order, workspaceProjects }
   })
 
-  for (const refresh of refreshes) refreshInitialRepoState(get, refresh)
+  for (const refresh of refreshes) {
+    if (options.refresh === 'snapshot') void get().refreshSnapshot(refresh.id, { token: refresh.token })
+    else refreshInitialRepoState(get, refresh)
+  }
 }
 
 function workspaceChildRemoteTarget(

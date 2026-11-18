@@ -1644,6 +1644,48 @@ describe('ManagedTerminalSession', () => {
     session.dispose({ closeSession: false })
   })
 
+  test('forwards file-tree reveal activation and clears old callbacks across detach and reattach', async () => {
+    const firstReveal = vi.fn()
+    const nextReveal = vi.fn()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const session = new ManagedTerminalSession(descriptor, vi.fn())
+    hydrateManagedSession(session)
+    session.attach(host, { onRevealPath: firstReveal })
+    await flushTerminalStart()
+    await flushUntil(() => session.snapshot().phase === 'open')
+
+    const term = xtermMocks.terminals[0]!
+    term.bufferLines[0] = 'created src/app.ts:12:3'
+    let links: Array<{ activate: (event: MouseEvent, text: string) => void; text: string }> | undefined
+    const provideLinks = () =>
+      term.linkProviders[0]?.provideLinks(1, (provided: unknown[] | undefined) => {
+        links = provided as typeof links
+      })
+    provideLinks()
+    const link = links?.[0]
+    expect(link).toBeDefined()
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(firstReveal).toHaveBeenCalledExactlyOnceWith('src/app.ts')
+
+    session.detach(host, document.createElement('div'))
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(firstReveal).toHaveBeenCalledTimes(1)
+    provideLinks()
+    expect(links).toBeUndefined()
+
+    session.attach(host, { onRevealPath: nextReveal })
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(firstReveal).toHaveBeenCalledTimes(1)
+    expect(nextReveal).toHaveBeenCalledExactlyOnceWith('src/app.ts')
+
+    session.attach(host)
+    link!.activate(new MouseEvent('click', { detail: 1 }), link!.text)
+    expect(nextReveal).toHaveBeenCalledTimes(1)
+    session.detach(host, document.createElement('div'))
+    session.dispose({ closeSession: false })
+  })
+
   test('opens relative terminal path links in the editor on double click', async () => {
     const onRevealPath = vi.fn()
     const onOpenPathInEditor = vi.fn()

@@ -33,6 +33,10 @@ import type { TerminalWorkerMessage, TerminalWorkerRequest } from '#/server/term
 import { isValidTerminalAttachmentId } from '#/shared/terminal.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import { serverLogger } from '#/server/logger.ts'
+import type {
+  TerminalPathRelocationInput,
+  TerminalPathRelocationResult,
+} from '#/server/terminal/terminal-path-relocation.ts'
 
 interface PendingRequest<T> {
   resolve(value: T): void
@@ -176,6 +180,10 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
 
   closeSessions(sessionIds: string[]): Promise<TerminalCloseSessionsResult> {
     return this.request('close-sessions', 'server', { sessionIds })
+  }
+
+  relocatePaths(input: TerminalPathRelocationInput): Promise<TerminalPathRelocationResult> {
+    return this.request('relocate-paths', 'server', input)
   }
 
   notifyBell(clientId: string, input: TerminalNotifyBellInput): Promise<TerminalMutationResult> {

@@ -1,3 +1,4 @@
+import type { FileTreeRevealRequest } from '#/web/components/file-tree/model.ts'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronsLeft,
@@ -25,6 +26,7 @@ import { cn } from '#/web/lib/cn.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import { useDetachFileArea } from '#/web/hooks/useDetachFileArea.ts'
+import { useBranchWorkspaceStatusRefresh } from '#/web/hooks/useBranchWorkspaceStatusRefresh.ts'
 
 export type BranchWorkspaceFileAreaTab = 'status' | 'files' | 'changes' | 'history' | 'local' | 'remoteBranches'
 
@@ -43,7 +45,7 @@ export function BranchWorkspaceFileArea({
   activeTab: BranchWorkspaceFileAreaTab
   onTabChange: (tab: BranchWorkspaceFileAreaTab) => void
   onRevealPath?: (relativePath: string) => void
-  revealRequest?: { id: number; relativePath: string } | null
+  revealRequest?: FileTreeRevealRequest | null
   toolbarLeading?: ReactNode
   showToolbar?: boolean
 }) {
@@ -79,6 +81,7 @@ export function BranchWorkspaceFileArea({
     workspace.repositories.some((member) => member.repositoryName === requestedRepositoryName)
       ? requestedRepositoryName
       : firstRepositoryName
+  useBranchWorkspaceStatusRefresh(workspace, `${activeTab}\0${selectedAggregateRepositoryName ?? ''}`)
 
   useEffect(() => {
     if (

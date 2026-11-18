@@ -72,6 +72,7 @@ const openRepositoryTerminal = vi.fn(async (_target: { projectRoot: string; work
   message: '',
 }))
 const openInFinder = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
+const openDirectoryInFileManager = vi.fn(async (_path: string) => ({ ok: true as const, message: '' }))
 const readSystemClipboardFilePaths = vi.fn(async () => ['/tmp/report.pdf'])
 const chooseFileTreeDownloadDirectory = vi.fn(async () => '/Downloads')
 const chooseFileTreeUploadFiles = vi.fn(async () => [
@@ -92,6 +93,7 @@ const clipboardWriteText = vi.fn(async (_value: string) => undefined)
 const clipboardReadText = vi.fn(async () => 'replacement contents\n')
 
 vi.mock('#/web/repo-client.ts', () => ({
+  readRepositoryFileTreeTextFile: vi.fn(async () => ({ ok: true, content: 'document preview', byteLength: 16 })),
   getRepositoryFileTree: (...args: GetRepositoryFileTreeArgs) => getRepositoryFileTree(...args),
   createRepositoryFileTreeFile: (...args: unknown[]) => createRepositoryFileTreeFile(...args),
   createRepositoryFileTreeDirectory: (...args: unknown[]) => createRepositoryFileTreeDirectory(...args),
@@ -109,6 +111,9 @@ vi.mock('#/web/repo-client.ts', () => ({
 vi.mock('#/web/app-shell-client.ts', () => ({
   pathForDroppedFile: (file: File) => `/tmp/${file.name}`,
   openInFinder: (path: string) => openInFinder(path),
+  canRevealInFileManager: () => true,
+  canOpenDirectoryInFileManager: () => true,
+  openDirectoryInFileManager: (path: string) => openDirectoryInFileManager(path),
   readSystemClipboardFilePaths: () => readSystemClipboardFilePaths(),
   chooseFileTreeDownloadDirectory: () => chooseFileTreeDownloadDirectory(),
   chooseFileTreeUploadFiles: () => chooseFileTreeUploadFiles(),
@@ -164,6 +169,7 @@ beforeEach(() => {
   openRepositoryEditor.mockClear()
   openRepositoryTerminal.mockClear()
   openInFinder.mockClear()
+  openDirectoryInFileManager.mockClear()
   readSystemClipboardFilePaths.mockClear()
   readSystemClipboardFilePaths.mockResolvedValue(['/tmp/report.pdf'])
   chooseFileTreeDownloadDirectory.mockClear()
@@ -210,6 +216,73 @@ afterEach(() => {
 })
 
 describe('ProjectFileTree', () => {
+  test('keeps a narrow standalone preview inside its surface and restores file-row focus on close', async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 400 } as DOMRect)
+    try {
+      seedRepoWithSelectedBranch({ hasWorktree: true })
+      await render(<ProjectFileTree repoId="/repo" />)
+      vi.useFakeTimers()
+      const file = treeItemByText('README.md')
+      await act(async () => {
+        file.focus()
+        file.click()
+      })
+      await act(async () => vi.advanceTimersByTimeAsync(500))
+      const preview = container?.querySelector('[data-terminal-file-preview]')
+      expect(preview?.classList.contains('goblin-terminal-file-preview--compact')).toBe(true)
+      expect(preview?.closest('[data-file-preview-surface]')?.classList.contains('relative')).toBe(true)
+      const close = preview?.querySelector<HTMLButtonElement>('button')
+      expect(document.activeElement).toBe(close)
+      await act(async () => close?.click())
+      expect(document.activeElement).toBe(file)
+    } finally {
+      rect.mockRestore()
+    }
+  })
+
+  test('single-clicks toggle a document preview even without a terminal', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+    await render(<ProjectFileTree repoId="/repo" />)
+    vi.useFakeTimers()
+    const file = treeItemByText('README.md')
+    await act(async () => file.click())
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(container?.querySelector('[data-preview-source]')?.textContent).toBe('document preview')
+    await act(async () => file.click())
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(container?.querySelector('[data-terminal-file-preview]')).toBeNull()
+    expect(openRepositoryEditor).not.toHaveBeenCalled()
+  })
+
+  test('modified clicks and directory clicks preserve selection without previewing', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+    await render(<ProjectFileTree repoId="/repo" />)
+    vi.useFakeTimers()
+    await act(async () => {
+      treeItemByText('src').click()
+      treeItemByText('README.md').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }))
+    })
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(container?.querySelector('[data-terminal-file-preview]')).toBeNull()
+    expect(treeItemByText('README.md').getAttribute('aria-selected')).toBe('true')
+    expect(treeItemByText('src').getAttribute('aria-selected')).toBe('true')
+  })
+
+  test('double-click editor activation cancels the pending file-area preview', async () => {
+    seedRepoWithSelectedBranch({ hasWorktree: true })
+    await render(<ProjectFileTree repoId="/repo" />)
+    vi.useFakeTimers()
+    const file = treeItemByText('README.md')
+    await act(async () => {
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }))
+      file.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 2 }))
+      file.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, detail: 2 }))
+    })
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(container?.querySelector('[data-terminal-file-preview]')).toBeNull()
+    expect(openRepositoryEditor).toHaveBeenCalledWith('/repo/README.md')
+  })
+
   test('loads and renders the selected branch worktree root', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
 
@@ -375,7 +448,7 @@ describe('ProjectFileTree', () => {
       await Promise.resolve()
     })
 
-    expect(openInFinder).toHaveBeenCalledWith('/repo')
+    expect(openDirectoryInFileManager).toHaveBeenCalledWith('/repo')
   })
 
   test('hides the local open toolbar action for SSH repositories', async () => {
@@ -451,14 +524,36 @@ describe('ProjectFileTree', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('/repo/src\n/repo/README.md')
   })
 
-  test('reveals a requested changed file by expanding parents and selecting the file', async () => {
+  test('reveals a requested file by expanding parents and selecting it without previewing', async () => {
     seedRepoWithSelectedBranch({ hasWorktree: true })
+    vi.useFakeTimers()
 
-    await render(<ProjectFileTree repoId="/repo" revealRequest={{ id: 1, relativePath: 'src/app.ts' }} />)
+    await render(
+      <ProjectFileTree
+        repoId="/repo"
+        revealRequest={{ repoId: '/repo', worktreePath: '/repo', relativePath: 'src/app.ts' }}
+      />,
+    )
 
     expect(getRepositoryFileTree).toHaveBeenCalledWith('/repo', '/repo', '/repo/src', undefined)
     const row = treeItemByText('app.ts')
     expect(row.getAttribute('aria-selected')).toBe('true')
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(container?.querySelector('[data-terminal-file-preview]')).toBeNull()
+    await render(
+      <ProjectFileTree
+        repoId="/repo"
+        revealRequest={{ repoId: '/repo', worktreePath: '/repo', relativePath: 'README.md' }}
+      />,
+    )
+    expect(treeItemByText('README.md').getAttribute('aria-selected')).toBe('true')
+    await render(
+      <ProjectFileTree
+        repoId="/repo"
+        revealRequest={{ repoId: '/repo', worktreePath: '/other', relativePath: 'src/app.ts' }}
+      />,
+    )
+    expect(treeItemByText('README.md').getAttribute('aria-selected')).toBe('true')
   })
 
   test('renders the file tree toolbar buttons in order without a search entry', async () => {

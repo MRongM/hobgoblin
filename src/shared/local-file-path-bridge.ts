@@ -34,6 +34,11 @@ const WSL_UNC_RE = /^\\\\(wsl\.localhost|wsl\$)[\\/]([^\\/\0]+)(?:[\\/](.*))?$/i
 export function resolveLocalFilePath(input: string, context?: LocalFilePathContext): LocalFilePathResolution | null {
   if (hasUnsafeText(input)) return null
 
+  if (context?.kind === 'windows' && input.startsWith('//')) {
+    const uncPath = `\\\\${input.slice(2)}`
+    return resolveWslUnc(uncPath) ?? resolveWindowsUnc(uncPath)
+  }
+
   const wslRepo = resolveWslRepoId(input)
   if (wslRepo) return wslRepo
 
@@ -70,8 +75,13 @@ export function localFilePathIdentityKey(input: string, context?: LocalFilePathC
 }
 
 export function sameLocalFilePath(left: string, right: string, context?: LocalFilePathContext): boolean {
-  const leftIdentity = localFilePathIdentityKey(left, context)
-  const rightIdentity = localFilePathIdentityKey(right, context)
+  const comparisonContext =
+    context ??
+    (pathStyle(left) === 'windowsUncAbsolute' || pathStyle(right) === 'windowsUncAbsolute'
+      ? { kind: 'windows' as const }
+      : undefined)
+  const leftIdentity = localFilePathIdentityKey(left, comparisonContext)
+  const rightIdentity = localFilePathIdentityKey(right, comparisonContext)
   return leftIdentity !== null && leftIdentity === rightIdentity
 }
 

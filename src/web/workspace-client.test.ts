@@ -206,6 +206,21 @@ describe('workspace client', () => {
     expect(mocks.postServerJson).toHaveBeenNthCalledWith(3, '/api/workspace/branch-workspaces/git-actions/abort', {
       rootId: '/workspace',
     })
+    const controller = new AbortController()
+    await planBranchWorkspaceGitAction(
+      '/workspace',
+      { kind: 'batch-commit', branchWorkspaceId: 'ws-1' },
+      controller.signal,
+    )
+    expect(mocks.postServerJson).toHaveBeenNthCalledWith(
+      4,
+      '/api/workspace/branch-workspaces/git-actions/plan',
+      {
+        rootId: '/workspace',
+        request: { kind: 'batch-commit', branchWorkspaceId: 'ws-1' },
+      },
+      { signal: controller.signal },
+    )
   })
 
   test('posts branch workspace dependency read, plan, execute, and abort requests', async () => {

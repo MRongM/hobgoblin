@@ -17,6 +17,7 @@ const closeTerminalAndDismissDetailIfLast = vi.fn()
 const reorderSessions = vi.fn()
 const terminalTabsProps: Array<Record<string, unknown>> = []
 const terminalSlotProps: Array<Record<string, unknown>> = []
+vi.mock('#/web/components/terminal/TerminalStashMenu.tsx', () => ({ TerminalStashMenu: () => null }))
 const REMOTE_REPO_ID = 'ssh-config://prod/srv/plain'
 let compactUi = false
 let terminalSnapshot = {
@@ -123,6 +124,35 @@ afterEach(() => {
 })
 
 describe('PlainWorkspaceTerminalPanel', () => {
+  test.each(['/repo', REMOTE_REPO_ID])('forwards the exact plain workspace preview scope for %s', (repoId) => {
+    terminalSnapshot = { ...terminalSnapshot, creating: true }
+    if (repoId === REMOTE_REPO_ID) {
+      seedRepoState({
+        id: repoId,
+        isGitRepo: false,
+        branches: [],
+        selectedBranch: null,
+        remote: {
+          target: {
+            id: repoId,
+            alias: 'host',
+            host: 'example.test',
+            user: 'user',
+            port: 22,
+            remotePath: '/srv/plain',
+            displayName: 'host:plain',
+          },
+        },
+      })
+    }
+    render(<PlainWorkspaceTerminalPanel repoId={repoId} layout="left-right" />)
+
+    expect(terminalSlotProps.at(-1)).toEqual({
+      repoRoot: repoId,
+      worktreePath: repoId === REMOTE_REPO_ID ? '/srv/plain' : '/repo',
+    })
+  })
+
   test('mounts the terminal slot while the first terminal creation is pending', () => {
     terminalSnapshot = { ...terminalSnapshot, creating: true }
 

@@ -70,6 +70,25 @@ describe('repo-client', () => {
     setRendererBridgeForTests(null)
   })
 
+  test('requests an absolute file preview from the repository host and forwards cancellation', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const result = { ok: true, content: 'preview', byteLength: 7 }
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => result }))
+    vi.stubGlobal('fetch', fetchMock)
+    const signal = new AbortController().signal
+    const { readRepositoryFilePreview } = await import('#/web/repo-client.ts')
+
+    await expect(readRepositoryFilePreview('/repo', '/exports/report.md', 'text', signal)).resolves.toEqual(result)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-preview',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ repoId: '/repo', filePath: '/exports/report.md', kind: 'text' }),
+        signal,
+      }),
+    )
+  })
+
   test('serializes merge-out plan and execute requests with their abort signals', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi.fn(async () => ({
@@ -717,6 +736,67 @@ describe('repo-client', () => {
     )
   })
 
+  test('requests bounded text reads with cancellation through the authenticated server', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: true, content: 'hello', byteLength: 5 }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const signal = new AbortController().signal
+    const { readRepositoryFileTreeTextFile } = await import('#/web/repo-client.ts')
+    await expect(readRepositoryFileTreeTextFile('/repo', '/workspace', '/workspace/app.ts', signal)).resolves.toEqual({
+      ok: true,
+      content: 'hello',
+      byteLength: 5,
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-tree/read-text-file',
+      expect.objectContaining({
+        method: 'POST',
+        signal,
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({ repoId: '/repo', worktreePath: '/workspace', filePath: '/workspace/app.ts' }),
+      }),
+    )
+  })
+
+  test('passes binary cancellation and exact requested size to fetch', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: false, message: 'File is too large' }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    const signal = new AbortController().signal
+    const { readRepositoryFileTreeBinaryFile } = await import('#/web/repo-client.ts')
+    await expect(
+      readRepositoryFileTreeBinaryFile('/repo', '/workspace', '/workspace/photo.png', 20 * 1024 * 1024, signal),
+    ).resolves.toEqual({ ok: false, message: 'File is too large' })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:32100/api/repo/file-tree/read-binary-file',
+      expect.objectContaining({
+        method: 'POST',
+        signal,
+        headers: expect.objectContaining({ 'x-goblin-internal-secret': 'secret' }),
+        body: JSON.stringify({
+          repoId: '/repo',
+          worktreePath: '/workspace',
+          filePath: '/workspace/photo.png',
+          maxBytes: 20 * 1024 * 1024,
+        }),
+      }),
+    )
+  })
+
+  test('preserves a text read fetch abort rejection', async () => {
+    installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
+    const controller = new AbortController()
+    controller.abort()
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(controller.signal.reason))
+    const { readRepositoryFileTreeTextFile } = await import('#/web/repo-client.ts')
+    await expect(
+      readRepositoryFileTreeTextFile('/repo', '/workspace', '/workspace/app.ts', controller.signal),
+    ).rejects.toBe(controller.signal.reason)
+  })
+
   test('requests file tree binary read and replace through the embedded server', async () => {
     installWebBootstrap(webBootstrap({ initialServer: { url: 'http://127.0.0.1:32100/', secret: 'secret' } }))
     const fetchMock = vi
@@ -886,19 +966,11 @@ describe('repo-client', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true, message: 'aligned' }) })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { alignRepositoryWorktreeToRemote, getRepositoryRemoteAlignmentPreview } = await import(
-      '#/web/repo-client.ts'
-    )
+    const { alignRepositoryWorktreeToRemote, getRepositoryRemoteAlignmentPreview } =
+      await import('#/web/repo-client.ts')
     await expect(getRepositoryRemoteAlignmentPreview('/repo', 'feature/a', '/repo-feature')).resolves.toEqual(preview)
     await expect(
-      alignRepositoryWorktreeToRemote(
-        '/repo',
-        'feature/a',
-        '/repo-feature',
-        undefined,
-        undefined,
-        preview.token,
-      ),
+      alignRepositoryWorktreeToRemote('/repo', 'feature/a', '/repo-feature', undefined, undefined, preview.token),
     ).resolves.toEqual({
       ok: true,
       message: 'aligned',

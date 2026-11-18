@@ -3,10 +3,7 @@
 import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import {
-  BranchWorkspaceList,
-  branchWorkspaceFolderContext,
-} from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
+import { BranchWorkspaceList } from '#/web/components/repo-workspace/BranchWorkspaceList.tsx'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
 import {
   TerminalSessionContext,
@@ -94,21 +91,40 @@ afterEach(() => {
 })
 
 describe('BranchWorkspaceList', () => {
-  test('protects only member worktree roots in the branch workspace folder context', () => {
-    const item = workspace('ready')
-    item.repositories = [repositoryMember()]
-    item.auxiliaryEntries = [
-      {
-        name: 'README.md',
-        mode: 'copy',
-        sourcePath: '/workspace/README.md',
-        targetPath: '/workspace/goblin-feature-auth/README.md',
-        progress: 'complete',
-        ready: true,
-      },
-    ]
-
-    expect(branchWorkspaceFolderContext('/workspace', item).managedRootNames).toEqual(['api'])
+  test('offers whole-folder deletion instead of root-level worktree selection, including an empty folder', async () => {
+    const onRemove = vi.fn()
+    const onUnregister = vi.fn()
+    const item = { ...workspace('ready'), repositories: [] }
+    act(() =>
+      root.render(
+        withTerminalContexts(
+          <BranchWorkspaceList
+            rootId="/workspace"
+            items={[item]}
+            activeId={null}
+            onActivate={() => {}}
+            onReorder={() => {}}
+            onRemove={onRemove}
+            onUnregister={onUnregister}
+            onCancel={() => {}}
+          />,
+        ),
+      ),
+    )
+    await openMenuItems(container.querySelector('[data-branch-workspace-id]'))
+    await act(async () =>
+      document
+        .querySelector('[data-menu-category="manage"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' })),
+    )
+    const remove = document.querySelector<HTMLElement>('[data-action="workspace.branch-workspace.delete"]')
+    expect(remove).not.toBeNull()
+    expect(remove?.getAttribute('data-variant')).toBe('destructive')
+    expect(document.querySelector('[data-action="workspace.branch-workspace.remove-members"]')).toBeNull()
+    expect(document.querySelector('[data-action="workspace.branch-workspace.unregister"]')).not.toBeNull()
+    await act(async () => remove!.click())
+    expect(onRemove).toHaveBeenCalledWith(item)
+    expect(onUnregister).not.toHaveBeenCalled()
   })
 
   test('separates root selection, expansion, reordering, and more actions', async () => {
@@ -118,6 +134,7 @@ describe('BranchWorkspaceList', () => {
     const onReduce = vi.fn()
     const onAddDependencies = vi.fn()
     const onRemoveDependencies = vi.fn()
+    const onRefreshChanges = vi.fn()
     const item = { ...workspace('ready'), repositories: [repositoryMember()] }
     act(() =>
       root.render(
@@ -132,6 +149,7 @@ describe('BranchWorkspaceList', () => {
             onReduce={onReduce}
             onAddDependencies={onAddDependencies}
             onRemoveDependencies={onRemoveDependencies}
+            onRefreshChanges={onRefreshChanges}
             onReorder={() => {}}
             onInspect={() => {}}
             onRepair={() => {}}
@@ -142,8 +160,7 @@ describe('BranchWorkspaceList', () => {
       ),
     )
 
-    expect(container.textContent).toContain('feature/auth')
-    expect(container.textContent).not.toContain('goblin-feature-auth')
+    expect(container.textContent).toContain('goblin-feature-auth')
     const branchWorkspaceRow = container.querySelector<HTMLButtonElement>(
       '[data-testid="branch-workspace-root-branch-1"]',
     )
@@ -171,6 +188,7 @@ describe('BranchWorkspaceList', () => {
       'terminal.new-with-tmux',
       'terminal.restore-directory-tmux',
       'terminal.external',
+      'workspace.branch-workspace.refresh-changes',
       'workspace.branch-workspace.add-members',
       'workspace.branch-workspace.remove-members',
       'workspace.branch-workspace.dependency.add.action',
@@ -246,6 +264,14 @@ describe('BranchWorkspaceList', () => {
       await Promise.resolve()
     })
     expect(onGitAction).toHaveBeenLastCalledWith(item, 'batch-set-upstream')
+    const refreshChangesItem = (await openMenuItems(branchWorkspaceItem)).find(
+      (entry) => entry.textContent?.trim() === 'workspace.branch-workspace.refresh-changes',
+    )
+    await act(async () => {
+      refreshChangesItem?.click()
+      await Promise.resolve()
+    })
+    expect(onRefreshChanges).toHaveBeenCalledWith(item)
     expect(container.querySelector('[data-testid="branch-workspace-terminal-count-badge"]')?.textContent).toBe('2')
     expect(container.querySelector('[data-terminal-bell-dot]')).not.toBeNull()
     expect(container.querySelector('[data-terminal-output-activity-indicator="active"]')).not.toBeNull()
@@ -666,7 +692,7 @@ describe('BranchWorkspaceList', () => {
     const terminalBadge = container.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')
     const dirtyBadge = container.querySelector('[data-testid="branch-workspace-member-change-count-badge"]')
     expect(summary?.querySelector('[data-testid="branch-workspace-member-terminal-count-badge"]')).toBe(terminalBadge)
-    expect(terminalBadge?.previousElementSibling?.textContent).toBe('api')
+    expect(terminalBadge?.previousElementSibling?.textContent).toBe('feature/auth')
     expect(dirtyBadge?.previousElementSibling).toBe(terminalBadge)
   })
 
@@ -1004,38 +1030,6 @@ describe('BranchWorkspaceList', () => {
     expect(onReduceMember).toHaveBeenCalledWith(item, member)
   })
 
-  test('does not expose member removal for the final member', async () => {
-    const member = repositoryMember({ ready: false })
-    act(() =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[{ ...workspace('needs-repair'), repositories: [member] }]}
-            activeId="branch-1"
-            getMemberPresentation={() => ({ dirty: false, changeCount: null, navigable: false })}
-            onReduceMember={() => {}}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={() => {}}
-            onCancel={() => {}}
-          />,
-        ),
-      ),
-    )
-
-    act(() => container.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.expand"]')?.click())
-    const memberRow = container
-      .querySelector('[data-testid="branch-workspace-member-api"]')
-      ?.closest<HTMLElement>('[data-workspace-list-item]')
-    if (!memberRow) throw new Error('missing unavailable member row')
-    expect((await openMemberMenu(memberRow)).map((entry) => entry.textContent?.trim())).not.toContain(
-      'workspace.branch-workspace.remove-members',
-    )
-  })
-
   test.each(['reduce-incomplete', 'delete-incomplete'] as const)(
     'does not start a new member removal while %s recovery is pending',
     async (stateName) => {
@@ -1077,125 +1071,6 @@ describe('BranchWorkspaceList', () => {
       )
     },
   )
-
-  test.each([
-    ['active', ['workspace.branch-workspace.cancel'], ['tmux.cleanup.action']],
-    [
-      'creation-interrupted',
-      ['workspace.branch-workspace.retry'],
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete', 'tmux.cleanup.action'],
-    ],
-    [
-      'reduce-incomplete',
-      ['workspace.branch-workspace.continue-reduce'],
-      ['workspace.branch-workspace.inspect', 'workspace.branch-workspace.delete', 'tmux.cleanup.action'],
-    ],
-    [
-      'needs-repair',
-      ['workspace.branch-workspace.repair'],
-      [
-        'terminal.new-with-tmux',
-        'terminal.restore-directory-tmux',
-        'terminal.external',
-        'workspace.branch-workspace.inspect',
-        'workspace.branch-workspace.delete',
-        'tmux.cleanup.action',
-      ],
-    ],
-    [
-      'delete-incomplete',
-      ['workspace.branch-workspace.continue-delete'],
-      ['workspace.branch-workspace.inspect', 'tmux.cleanup.action'],
-    ],
-  ] as const)('exposes the exact %s state actions', async (stateName, directLabels, menuLabels) => {
-    const onRemove = vi.fn()
-    const onReduce = vi.fn()
-    const item = workspace(stateName)
-    act(() =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[item]}
-            activeId={null}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={onRemove}
-            onReduce={onReduce}
-            onCancel={() => {}}
-          />,
-        ),
-      ),
-    )
-    const row = container.querySelector(`[data-branch-workspace-state="${stateName}"]`)
-    const possibleDirectLabels = [
-      'workspace.branch-workspace.cancel',
-      'workspace.branch-workspace.retry',
-      'workspace.branch-workspace.repair',
-      'workspace.branch-workspace.continue-reduce',
-      'workspace.branch-workspace.continue-delete',
-    ]
-    expect(possibleDirectLabels.filter((label) => row?.querySelector(`[aria-label="${label}"]`))).toEqual(directLabels)
-    expect(await openMenuLabels(row)).toEqual(menuLabels)
-    if (stateName === 'active') {
-      const cleanupItem = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-        (entry) => entry.textContent?.trim() === 'tmux.cleanup.action',
-      )
-      expect(cleanupItem?.hasAttribute('data-disabled')).toBe(true)
-    }
-    if (stateName === 'reduce-incomplete') {
-      act(() =>
-        row?.querySelector<HTMLButtonElement>('[aria-label="workspace.branch-workspace.continue-reduce"]')?.click(),
-      )
-      expect(onReduce).toHaveBeenCalledWith(item, true)
-    }
-  })
-
-  test('keeps an available drifted branch workspace usable with a weak repair hint', async () => {
-    const item = workspace('needs-repair')
-    act(() =>
-      root.render(
-        withTerminalContexts(
-          <BranchWorkspaceList
-            rootId="/workspace"
-            items={[item]}
-            activeId={null}
-            onActivate={() => {}}
-            onReorder={() => {}}
-            onInspect={() => {}}
-            onRepair={() => {}}
-            onRemove={() => {}}
-            onExtend={() => {}}
-            onReduce={() => {}}
-            onAddDependencies={() => {}}
-            onRemoveDependencies={() => {}}
-            onCancel={() => {}}
-            onGitAction={() => {}}
-          />,
-        ),
-      ),
-    )
-
-    const row = container.querySelector('[data-branch-workspace-state="needs-repair"]')
-    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="editor"]')?.disabled).toBe(false)
-    expect(row?.querySelector<HTMLButtonElement>('[data-workspace-list-item-action="terminal"]')?.disabled).toBe(false)
-    expect(row?.querySelector('[data-workspace-list-item-drag-handle]')).not.toBeNull()
-    expect(row?.querySelector('[data-testid="branch-workspace-state-summary"]')?.className).toContain(
-      'text-muted-foreground',
-    )
-    expect(await openMenuLabels(row)).toEqual([
-      'terminal.new-with-tmux',
-      'terminal.restore-directory-tmux',
-      'terminal.external',
-      'workspace.branch-workspace.inspect',
-      'workspace.branch-workspace.delete',
-      'tmux.cleanup.action',
-    ])
-    if (!(row instanceof HTMLElement)) throw new Error('missing drifted branch workspace row')
-    expect((await openContextMenu(row)).slice(0, 3).every((item) => !item.hasAttribute('data-disabled'))).toBe(true)
-  })
 
   test('keeps disabled ready actions visible in the fixed dock and More menu', async () => {
     folderActionState.editorDisabled = true
@@ -1370,7 +1245,7 @@ describe('BranchWorkspaceList', () => {
     )
   })
 
-  test.each(['active', 'creation-interrupted', 'reduce-incomplete', 'delete-incomplete'] as const)(
+  test.each(['active', 'reduce-incomplete', 'delete-incomplete'] as const)(
     'keeps folder-open context actions disabled for a %s branch workspace',
     async (stateName) => {
       act(() =>
@@ -1407,10 +1282,6 @@ async function openMenuItems(row: Element | null): Promise<HTMLElement[]> {
     await Promise.resolve()
   })
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-}
-
-async function openMenuLabels(row: Element | null): Promise<string[]> {
-  return (await openMenuItems(row)).map((entry) => entry.textContent?.trim() ?? '')
 }
 
 async function openMemberMenu(row: Element): Promise<HTMLElement[]> {

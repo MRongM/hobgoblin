@@ -4,7 +4,7 @@ import {
   type WorkspaceRecoveryWriteDependencies,
 } from '#/server/modules/workspace-recovery-write-paths.ts'
 import type { BranchWorkspaceWriteService } from '#/server/modules/branch-workspace-write-paths.ts'
-import type { BranchWorkspaceManifest, BranchWorkspacePlan } from '#/shared/branch-workspaces.ts'
+import type { BranchWorkspaceManifest } from '#/shared/branch-workspaces.ts'
 import type { WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
 
 const ROOT = '/workspace'
@@ -19,29 +19,6 @@ function manifest(id: string, branch: string): BranchWorkspaceManifest {
     repositories: [],
     auxiliaryEntries: [],
   }
-}
-
-function branchPlan(
-  item: BranchWorkspaceManifest,
-  token: string,
-  approvals: BranchWorkspacePlan['requiredApprovals'] = [],
-) {
-  return {
-    token,
-    rootId: ROOT,
-    operation: 'remove' as const,
-    branchWorkspaceId: item.id,
-    branch: item.branch,
-    directoryName: item.directoryName,
-    path: item.path,
-    manifest: item,
-    repositories: [],
-    auxiliaryEntries: [],
-    requiredApprovals: approvals,
-    steps: [],
-    terminalSessionIds: [],
-    removalOptions: { alsoDeleteBranch: false, alsoDeleteUpstream: false },
-  } satisfies BranchWorkspacePlan
 }
 
 function discovery(): Extract<WorkspaceDiscoveryResult, { ok: true }> {
@@ -59,20 +36,11 @@ function discovery(): Extract<WorkspaceDiscoveryResult, { ok: true }> {
 }
 
 function fixture(items: BranchWorkspaceManifest[] = [manifest('one', 'feature/one')]) {
-  const ordinaryTokens = new Map(items.map((item) => [item.id, `sha256:${item.id.padEnd(64, '0').slice(0, 64)}`]))
-  const plan = vi.fn<BranchWorkspaceWriteService['plan']>(async (_rootId: string, request: unknown) => {
-    const id = (request as { branchWorkspaceId: string }).branchWorkspaceId
-    const item = items.find((candidate) => candidate.id === id)!
-    return { ok: true as const, plan: branchPlan(item, ordinaryTokens.get(id)!) }
-  })
-  const execute = vi.fn<BranchWorkspaceWriteService['execute']>(async (_rootId, input) => ({
-    ok: true as const,
-    branchWorkspaceId: items.find((item) => ordinaryTokens.get(item.id) === input.planToken)?.id ?? '',
-  }))
   const branchService = {
-    plan,
-    execute,
+    plan: vi.fn<BranchWorkspaceWriteService['plan']>(),
+    execute: vi.fn<BranchWorkspaceWriteService['execute']>(),
     abort: vi.fn(() => false),
+    isActive: vi.fn(() => false),
     reorder: vi.fn(async () => ({ ok: true as const })),
   } satisfies BranchWorkspaceWriteService
   const inspectConfigCleanup = vi.fn<NonNullable<WorkspaceRecoveryWriteDependencies['inspectConfigCleanup']>>(
@@ -117,7 +85,7 @@ function fixture(items: BranchWorkspaceManifest[] = [manifest('one', 'feature/on
 }
 
 describe('workspace recovery write service', () => {
-  test('composes cleanup disclosure, repository discovery, and per-workspace removal plans', async () => {
+  test('composes cleanup disclosure, repository discovery, and registration-only cleanup plans', async () => {
     const items = [manifest('one', 'feature/one'), manifest('two', 'feature/two')]
     const state = fixture(items)
     state.inspectConfigCleanup.mockResolvedValue({
@@ -125,15 +93,6 @@ describe('workspace recovery write service', () => {
       scope: 'registry-reset',
       fingerprint: 'sha256:config',
     })
-    state.branchService.plan.mockImplementation(async (_rootId, request) => {
-      const id = (request as { branchWorkspaceId: string }).branchWorkspaceId
-      if (id === 'two') return { ok: false, message: 'workspace.branch-workspace.protected-path' }
-      return {
-        ok: true,
-        plan: branchPlan(items[0]!, `sha256:${'1'.repeat(64)}`, ['discard-member-changes']),
-      }
-    })
-
     const result = await state.service.plan(ROOT)
 
     expect(result).toMatchObject({
@@ -144,18 +103,13 @@ describe('workspace recovery write service', () => {
         configuredRepositoryNames: ['api'],
         discoveredRepositoryNames: ['api', 'web'],
         branchWorkspaces: [
-          { id: 'one', mode: 'remove', requiredApprovals: ['discard-member-changes'] },
-          { id: 'two', mode: 'record-only', message: 'workspace.branch-workspace.protected-path' },
+          { id: 'one', mode: 'record-only', requiredApprovals: [] },
+          { id: 'two', mode: 'record-only', requiredApprovals: [] },
         ],
       },
     })
     if (result.ok) expect(result.plan.token).toMatch(/^sha256:[a-f0-9]{64}$/)
-    expect(state.branchService.plan).toHaveBeenNthCalledWith(1, ROOT, {
-      operation: 'remove',
-      branchWorkspaceId: 'one',
-      alsoDeleteBranch: false,
-      alsoDeleteUpstream: false,
-    })
+    expect(state.branchService.plan).not.toHaveBeenCalled()
   })
 
   test('rejects a stale configuration fingerprint before destructive work', async () => {
@@ -197,14 +151,12 @@ describe('workspace recovery write service', () => {
     expect(state.importWorkspace).not.toHaveBeenCalled()
   })
 
-  test('removes branch workspaces sequentially, then cleans configuration and imports again', async () => {
+  test('unregisters folders sequentially, then cleans configuration and imports again', async () => {
     const items = [manifest('one', 'feature/one'), manifest('two', 'feature/two')]
     const state = fixture(items)
     const events: string[] = []
-    state.branchService.execute.mockImplementation(async (_rootId, input) => {
-      const id = input.planToken.includes('one') ? 'one' : 'two'
-      events.push(`remove:${id}`)
-      return { ok: true, branchWorkspaceId: id }
+    state.discardRecords.mockImplementation(async (_rootId, ids) => {
+      events.push(...ids.map((id) => `unregister:${id}`))
     })
     state.cleanupConfig.mockImplementation(async () => {
       events.push('cleanup')
@@ -225,38 +177,20 @@ describe('workspace recovery write service', () => {
       ok: true,
       outcome: 'completed',
       branches: [
-        { id: 'one', outcome: 'removed' },
-        { id: 'two', outcome: 'removed' },
+        { id: 'one', outcome: 'record-removed' },
+        { id: 'two', outcome: 'record-removed' },
       ],
     })
-    expect(events).toEqual(['remove:one', 'remove:two', 'cleanup', 'import'])
+    expect(state.branchService.plan).not.toHaveBeenCalled()
+    expect(state.branchService.execute).not.toHaveBeenCalled()
+    expect(events).toEqual(['unregister:one', 'unregister:two', 'cleanup', 'import'])
     expect(state.importWorkspace).toHaveBeenCalledWith(ROOT, { sourceToken: 'workspace_recovery_1' })
     expect(state.publishInvalidation).toHaveBeenCalledWith(ROOT, 'workspace_recovery_1')
   })
 
-  test('uses record-only fallback when ordinary planning is unavailable', async () => {
-    const state = fixture()
-    state.branchService.plan.mockResolvedValue({ ok: false, message: 'workspace.branch-workspace.plan-failed' })
-    const planned = await state.service.plan(ROOT)
-    if (!planned.ok) throw new Error('expected plan')
-
-    const result = await state.service.execute(ROOT, { planToken: planned.plan.token })
-
-    expect(result).toMatchObject({
-      ok: true,
-      outcome: 'completed-with-residuals',
-      branches: [{ id: 'one', outcome: 'record-removed', message: 'workspace.branch-workspace.plan-failed' }],
-    })
-    expect(state.discardRecords).toHaveBeenCalledWith(ROOT, ['one'])
-    expect(state.branchService.execute).not.toHaveBeenCalled()
-  })
-
   test('does not discard records while another branch workspace operation is active', async () => {
     const state = fixture()
-    state.branchService.plan.mockResolvedValue({
-      ok: false,
-      message: 'workspace.branch-workspace.operation-in-progress',
-    })
+    state.branchService.isActive.mockReturnValue(true)
 
     await expect(state.service.plan(ROOT)).resolves.toEqual({
       ok: false,
@@ -265,71 +199,35 @@ describe('workspace recovery write service', () => {
     expect(state.discardRecords).not.toHaveBeenCalled()
   })
 
-  test('falls back to record removal after ordinary execution fails', async () => {
-    const state = fixture()
-    state.branchService.execute.mockResolvedValue({
-      ok: false,
-      message: 'workspace.branch-workspace.remove-failed',
-      branchWorkspaceId: 'one',
-    })
-    const planned = await state.service.plan(ROOT)
-    if (!planned.ok) throw new Error('expected plan')
-
-    const result = await state.service.execute(ROOT, { planToken: planned.plan.token })
-
-    expect(result).toMatchObject({
-      ok: true,
-      outcome: 'completed-with-residuals',
-      branches: [{ id: 'one', outcome: 'record-removed', message: 'workspace.branch-workspace.remove-failed' }],
-    })
-    expect(state.discardRecords).toHaveBeenCalledWith(ROOT, ['one'])
-  })
-
-  test('does not discard a record when the ordinary removal plan becomes stale', async () => {
-    const state = fixture()
-    state.branchService.execute.mockResolvedValue({
-      ok: false,
-      message: 'workspace.branch-workspace.plan-stale',
-      branchWorkspaceId: 'one',
-    })
-    const planned = await state.service.plan(ROOT)
-    if (!planned.ok) throw new Error('expected plan')
-
-    await expect(state.service.execute(ROOT, { planToken: planned.plan.token })).resolves.toEqual({
-      ok: false,
-      message: 'workspace.recovery.plan-stale',
-    })
-    expect(state.discardRecords).not.toHaveBeenCalled()
-    expect(state.cleanupConfig).not.toHaveBeenCalled()
-    expect(state.importWorkspace).not.toHaveBeenCalled()
-  })
-
-  test('cancellation stops before record fallback, configuration cleanup, and import', async () => {
-    const state = fixture()
-    let finish: ((value: { ok: false; message: string; branchWorkspaceId: string }) => void) | undefined
-    state.branchService.execute.mockReturnValue(
-      new Promise((resolve) => {
+  test('cancellation during unregistration preserves the remaining records and configuration', async () => {
+    const state = fixture([manifest('one', 'feature/one'), manifest('two', 'feature/two')])
+    let finish: (() => void) | undefined
+    state.discardRecords.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
         finish = resolve
       }),
     )
-    state.branchService.abort.mockReturnValue(true)
     const planned = await state.service.plan(ROOT)
     if (!planned.ok) throw new Error('expected plan')
 
     const executing = state.service.execute(ROOT, { planToken: planned.plan.token })
-    await vi.waitFor(() => expect(state.branchService.execute).toHaveBeenCalled())
+    await vi.waitFor(() => expect(state.discardRecords).toHaveBeenCalledWith(ROOT, ['one']))
+    await expect(state.service.plan(ROOT)).resolves.toEqual({
+      ok: false,
+      message: 'workspace.recovery.operation-in-progress',
+    })
     expect(state.service.abort(ROOT)).toBe(true)
-    finish?.({ ok: false, message: 'cancelled', branchWorkspaceId: 'one' })
+    finish?.()
 
     await expect(executing).resolves.toEqual({
       ok: false,
       message: 'workspace.recovery.cancelled',
       cancelled: true,
     })
-    expect(state.discardRecords).not.toHaveBeenCalled()
+    expect(state.discardRecords).toHaveBeenCalledTimes(1)
     expect(state.cleanupConfig).not.toHaveBeenCalled()
     expect(state.importWorkspace).not.toHaveBeenCalled()
-    expect(state.branchService.abort).toHaveBeenCalledWith(ROOT)
+    expect(state.branchService.abort).not.toHaveBeenCalled()
   })
 
   test('does not abort an unrelated branch workspace operation when recovery is inactive', () => {

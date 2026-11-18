@@ -1,4 +1,5 @@
 import type { WorkspaceConfig, WorkspaceDiscoveryResult } from '#/shared/workspace.ts'
+import type { BranchWorkspaceFolderRenameResult } from '#/shared/branch-workspace-folders.ts'
 import type {
   BranchWorkspaceExecuteInput,
   BranchWorkspaceExecuteResult,
@@ -70,6 +71,28 @@ export async function cleanupBranchWorkspaceRegistry(rootId: string): Promise<Br
   return await postServerJson('/api/workspace/branch-workspaces/cleanup', { rootId })
 }
 
+export async function registerBranchWorkspaceFolder(
+  rootId: string,
+  path: string,
+): Promise<BranchWorkspaceExecuteResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/register', { rootId, path })
+}
+
+export async function unregisterBranchWorkspace(
+  rootId: string,
+  branchWorkspaceId: string,
+): Promise<{ ok: boolean; message?: string }> {
+  return await postServerJson('/api/workspace/branch-workspaces/unregister', { rootId, branchWorkspaceId })
+}
+
+export async function renameBranchWorkspaceFolder(
+  rootId: string,
+  branchWorkspaceId: string,
+  directoryName: string,
+): Promise<BranchWorkspaceFolderRenameResult> {
+  return await postServerJson('/api/workspace/branch-workspaces/rename', { rootId, branchWorkspaceId, directoryName })
+}
+
 export async function planBranchWorkspace(
   rootId: string,
   request: BranchWorkspacePlanRequest,
@@ -134,8 +157,11 @@ export async function abortBranchWorkspaceDependencies(rootId: string): Promise<
 export async function planBranchWorkspaceGitAction(
   rootId: string,
   request: BranchWorkspaceGitActionPlanRequest,
+  signal?: AbortSignal,
 ): Promise<BranchWorkspaceGitActionPlanResult> {
-  return await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request })
+  return signal
+    ? await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request }, { signal })
+    : await postServerJson('/api/workspace/branch-workspaces/git-actions/plan', { rootId, request })
 }
 
 export async function executeBranchWorkspaceGitAction(

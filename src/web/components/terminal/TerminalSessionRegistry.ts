@@ -1,4 +1,6 @@
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
+import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
 import { createTerminalBellController } from '#/web/components/terminal/terminal-bell-controller.ts'
 import { terminalDescriptor } from '#/web/components/terminal/terminal-descriptor.ts'
@@ -512,6 +514,7 @@ export class TerminalSessionRegistry {
       const index = session.descriptor.index
       return {
         key: session.descriptor.key,
+        sessionId: session.currentSessionId(),
         worktreeTerminalKey,
         terminalId: session.descriptor.terminalId,
         index,
@@ -536,6 +539,7 @@ export class TerminalSessionRegistry {
   selectTerminal = (worktreeTerminalKey: string, key: string): void => {
     const session = this.sessions.get(key)
     if (!session || session.descriptor.worktreeTerminalKey !== worktreeTerminalKey) return
+    useTerminalStashStore.getState().restore(key)
     const wasSelected = this.selectedKeyByWorktree.get(worktreeTerminalKey) === key
     const hadBell = this.bellController.hasBell(key)
     if (wasSelected && !hadBell) return
@@ -591,6 +595,10 @@ export class TerminalSessionRegistry {
 
   scrollByTouch = (key: string, input: TerminalTouchScrollInput): void => {
     this.sessions.get(key)?.scrollByTouch(input)
+  }
+
+  filePathAtPoint = (key: string, point: TerminalMobileSelectionPoint): FilePathTarget | null => {
+    return this.sessions.get(key)?.filePathAtPoint(point) ?? null
   }
 
   beginMobileSelection = (key: string, point: TerminalMobileSelectionPoint): boolean => {
@@ -948,6 +956,7 @@ export class TerminalSessionRegistry {
   private removeSession(key: string, options: { dispose: boolean; closeSession?: boolean }): boolean {
     const session = this.sessions.get(key)
     if (!session) return false
+    useTerminalStashStore.getState().restore(key)
     const worktreeTerminalKey = session.descriptor.worktreeTerminalKey
     const orderedKeysBeforeRemoval = this.sortedSessionsForWorktree(worktreeTerminalKey).map(
       (item) => item.descriptor.key,

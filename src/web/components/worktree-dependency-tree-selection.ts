@@ -1,7 +1,4 @@
-import type {
-  WorktreeBootstrapSelection,
-  WorktreeBootstrapSelectionMode,
-} from '#/shared/worktree-bootstrap-summary.ts'
+import type { WorktreeBootstrapSelection, WorktreeBootstrapSelectionMode } from '#/shared/worktree-bootstrap-summary.ts'
 
 export function isWorktreeDependencyDescendant(path: string, ancestor: string): boolean {
   return path.startsWith(`${ancestor}/`)
@@ -28,7 +25,7 @@ export function selectWorktreeDependency(
   }
   return [
     ...selections.filter((selection) => !isWorktreeDependencyDescendant(selection.path, path)),
-    { path, mode: 'copy' },
+    { path, mode: 'symlink' },
   ]
 }
 

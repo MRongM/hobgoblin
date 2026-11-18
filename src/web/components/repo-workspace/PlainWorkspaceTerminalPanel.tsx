@@ -18,12 +18,14 @@ import type { RepoWorkspaceLayout } from '#/web/stores/repos/types.ts'
 import type { TerminalSessionBase } from '#/web/components/terminal/types.ts'
 import { useIsCompactUi } from '#/web/hooks/useResponsiveUiMode.tsx'
 import { cn } from '#/web/lib/cn.ts'
+import { TerminalStashMenu } from '#/web/components/terminal/TerminalStashMenu.tsx'
 
 interface PlainWorkspaceTerminalPanelProps {
   repoId: string
   layout: RepoWorkspaceLayout
   focusMode?: boolean
   compactFocusPresentation?: boolean
+  onRevealPath?: (relativePath: string) => void
   onShowCompactOverview?: () => void
   onExitTerminalFocus?: () => void
 }
@@ -42,6 +44,7 @@ export function PlainWorkspaceTerminalPanel({
   layout,
   focusMode = false,
   compactFocusPresentation = false,
+  onRevealPath,
   onShowCompactOverview,
   onExitTerminalFocus,
 }: PlainWorkspaceTerminalPanelProps) {
@@ -57,6 +60,7 @@ export function PlainWorkspaceTerminalPanel({
       toolbarTestId="plain-workspace-terminal-toolbar"
       focusMode={focusMode}
       compactFocusPresentation={compactFocusPresentation}
+      onRevealPath={onRevealPath}
       onShowCompactOverview={onShowCompactOverview}
       onExitTerminalFocus={onExitTerminalFocus}
     />
@@ -72,6 +76,7 @@ export function WorktreeTerminalPanel({
   toolbarTestId = 'worktree-terminal-toolbar',
   focusMode = false,
   compactFocusPresentation = false,
+  onRevealPath,
   onShowCompactOverview,
   onExitTerminalFocus,
 }: WorktreeTerminalPanelProps) {
@@ -185,10 +190,11 @@ export function WorktreeTerminalPanel({
             onReorder={handleReorderTerminals}
           />
         </div>
+        <TerminalStashMenu repoId={repoId} />
       </Toolbar>
       <div className="flex min-h-0 flex-1 flex-col">
         {snapshot.selectedDescriptor || snapshot.creating === true ? (
-          <TerminalSlot repoRoot={repoId} worktreePath={worktreePath} />
+          <TerminalSlot repoRoot={repoId} worktreePath={worktreePath} onRevealPath={onRevealPath} />
         ) : null}
       </div>
     </section>

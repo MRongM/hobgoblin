@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   openRepositoryEditor: vi.fn(),
   readRepositoryFileTreeBinaryFile: vi.fn(),
   readRepositoryFileTreeTextFile: vi.fn(),
+  readRepositoryFilePreview: vi.fn(),
   replaceRepositoryFileTreeBinaryFile: vi.fn(),
   replaceRepositoryFileTreeTextFile: vi.fn(),
   removeRepositoryWorktree: vi.fn(),
@@ -28,6 +29,10 @@ const mocks = vi.hoisted(() => ({
   executeRepositoryBranchMergeOut: vi.fn(),
   mergeRepositoryBranchSelection: vi.fn(),
   setRepositoryBranchUpstream: vi.fn(),
+}))
+
+vi.mock('#/server/modules/repo-file-preview-read.ts', () => ({
+  readRepositoryFilePreview: mocks.readRepositoryFilePreview,
 }))
 
 vi.mock('#/server/modules/repo-read-paths.ts', () => ({
@@ -1013,6 +1018,42 @@ describe('repo routes', () => {
       expect.any(AbortSignal),
     )
   })
+
+  test('routes an absolute file preview without accepting a caller-selected read root or size limit', async () => {
+    const result = { ok: true, content: 'preview', byteLength: 7 }
+    mocks.readRepositoryFilePreview.mockResolvedValue(result)
+    const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+    const response = await createRepoRoutes().request('http://localhost/file-preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoId: '/repo', filePath: '/exports/report.md', kind: 'text', maxBytes: 999999999 }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual(result)
+    expect(mocks.readRepositoryFilePreview).toHaveBeenCalledWith(
+      '/repo',
+      '/exports/report.md',
+      'text',
+      expect.any(AbortSignal),
+    )
+  })
+
+  test.each([null, {}, { repoId: '/repo', filePath: '/exports/report.md', kind: 'video' }])(
+    'rejects malformed file preview requests: %j',
+    async (body) => {
+      const { createRepoRoutes } = await import('#/server/routes/repo.ts')
+      const response = await createRepoRoutes().request('http://localhost/file-preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toEqual({ ok: false, message: 'error.invalid-arguments' })
+      expect(mocks.readRepositoryFilePreview).not.toHaveBeenCalled()
+    },
+  )
 
   test('routes file tree text file replace with parsed body values', async () => {
     const { createRepoRoutes } = await import('#/server/routes/repo.ts')

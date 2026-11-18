@@ -101,8 +101,13 @@ export function ProjectStatusPanel({ repoId, target }: ProjectStatusPanelProps) 
 
   if (!repo) return null
 
-  const selectedContext = target ? null : selectedRepoWorktree(repo)
-  if (selectedContext?.kind === 'detached') {
+  const selectedContext =
+    target?.branchName === null
+      ? { kind: 'detached', worktree: repo.data.worktreesByPath[target.worktreePath] }
+      : target
+        ? null
+        : selectedRepoWorktree(repo)
+  if (selectedContext?.kind === 'detached' && selectedContext.worktree) {
     const copyAllValue = detachedStatusClipboardText(selectedContext.worktree, repo.name, t)
     return (
       <section className="flex min-h-0 flex-1 flex-col bg-pane">

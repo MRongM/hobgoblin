@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 describe('useLatestPlanRequest', () => {
-  test('aborts an obsolete request and starts only the latest request after it settles', async () => {
+  test('starts the latest request without waiting for an aborted slow request', async () => {
     const first = deferred<boolean>()
     const second = deferred<boolean>()
     const requestPlan = vi
@@ -61,7 +61,7 @@ describe('useLatestPlanRequest', () => {
     render({ value: 'second' })
     await flushAsyncWork()
     expect(firstSignal?.aborted).toBe(true)
-    expect(requestPlan).toHaveBeenCalledTimes(1)
+    expect(requestPlan).toHaveBeenCalledTimes(2)
     expect(state!.status).toBe('planning')
     expect(state!.readyRequestKey).toBeNull()
 
@@ -80,6 +80,23 @@ describe('useLatestPlanRequest', () => {
     })
     expect(state!.status).toBe('ready')
     expect(state!.readyRequestKey).toBe(JSON.stringify({ value: 'second' }))
+  })
+
+  test('coalesces rapid selection changes into one latest request', async () => {
+    vi.useFakeTimers()
+    const requestPlan = vi.fn(async () => true)
+    const render = (value: string) =>
+      act(() =>
+        root.render(<Harness request={{ value }} debounceMs={200} requestPlan={requestPlan} onReady={() => {}} />),
+      )
+    render('api')
+    await act(async () => vi.advanceTimersByTime(100))
+    render('api,web')
+    await act(async () => vi.advanceTimersByTime(100))
+    render('web')
+    expect(requestPlan).not.toHaveBeenCalled()
+    await act(async () => vi.advanceTimersByTime(200))
+    expect(requestPlan).toHaveBeenCalledExactlyOnceWith({ value: 'web' }, expect.any(AbortSignal))
   })
 
   test('waits until the supplied planning boundary before starting text-input work', async () => {
@@ -138,12 +155,14 @@ function Harness({
   request,
   revision = 0,
   notBefore = 0,
+  debounceMs = 0,
   requestPlan,
   onReady,
 }: {
   request: Request | null
   revision?: number
   notBefore?: number
+  debounceMs?: number
   requestPlan: (request: Request, signal: AbortSignal) => Promise<boolean>
   onReady: (value: ReturnType<typeof useLatestPlanRequest<Request>>) => void
 }) {
@@ -153,6 +172,7 @@ function Harness({
     requestKey: request ? JSON.stringify(request) : null,
     revision,
     notBefore,
+    debounceMs,
     requestPlan,
   })
   useEffect(() => onReady(value), [onReady, value])

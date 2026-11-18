@@ -53,6 +53,7 @@ interface BranchWriteActions {
 interface BranchWriteActionOptions {
   canPush: boolean
   onPush: () => void
+  onCheckoutSuccess?: (branch: string) => void | Promise<void>
 }
 
 export function useBranchWriteActions(
@@ -99,6 +100,7 @@ export function useBranchWriteActions(
     })
     if (!result.ok) throw new Error(result.message)
     checkoutToDialog.close()
+    await options.onCheckoutSuccess?.(targetBranch)
   }
 
   async function handleMerge(source: RepositoryMergeBranchSelection): Promise<ExecResult> {

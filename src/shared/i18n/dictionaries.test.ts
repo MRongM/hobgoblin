@@ -12,6 +12,16 @@ function componentTags(value: string): string[] {
 }
 
 describe('i18n dictionaries', () => {
+  test('localizes folder and mixed-member configuration and independent deletion', () => {
+    expect(zh['workspace.branch-workspace.member-mode.repository']).toBe('原始仓库（独立克隆）')
+    expect(en['workspace.branch-workspace.folder']).toBe('Folder name')
+    for (const dict of Object.values(dicts)) {
+      expect(dict['workspace.branch-workspace.member-add-url']).not.toBe('workspace.branch-workspace.member-add-url')
+      expect(dict['workspace.branch-workspace.approval.delete-repository']).toBeTruthy()
+      expect(dict['workspace.branch-workspace.dialog.create.description']).not.toContain('common branch')
+    }
+  })
+
   test('does not contain empty or whitespace-only values', () => {
     for (const [lang, dict] of Object.entries(dicts)) {
       for (const [key, value] of Object.entries(dict)) {
@@ -50,7 +60,7 @@ describe('i18n dictionaries', () => {
 
   test('localizes the branch workspace operation console guidance', () => {
     expect(zh['workspace.branch-workspace.one-step.selection-description.create']).toBe(
-      '命名子工作区并选择要创建的成员工作树。',
+      '选择文件夹位置；仓库和工作树可稍后自行添加。',
     )
     expect(zh['workspace.branch-workspace.one-step.selection-description.remove']).toBe(
       '选择是否一并删除符合条件的本地和上游分支。',
@@ -359,7 +369,7 @@ describe('i18n dictionaries', () => {
     }
     expect(zh['workspace.recovery.action']).toBe('清理项目配置并重新导入')
     expect(zh['workspace.recovery.destructive-warning']).toContain('未提交改动')
-    expect(zh['workspace.recovery.destructive-warning']).toContain('仅移除应用记录')
+    expect(zh['workspace.recovery.destructive-warning']).toContain('保留目录、Git 分支')
     expect(zh['workspace.recovery.registry-reset-warning']).toContain('所有项目')
   })
 
@@ -449,7 +459,7 @@ describe('i18n dictionaries', () => {
   })
 
   test('uses concise branch workspace member badge copy in every locale', () => {
-    expect(en['workspace.branch-workspace.member-badge']).toBe('branch workspace')
+    expect(en['workspace.branch-workspace.member-badge']).toBe('subworkspace')
     expect(zh['workspace.branch-workspace.member-badge']).toBe('子工作区')
     expect(ja['workspace.branch-workspace.member-badge']).toBe('ブランチワークスペース')
     expect(ko['workspace.branch-workspace.member-badge']).toBe('브랜치 워크스페이스')
@@ -548,6 +558,28 @@ describe('i18n dictionaries', () => {
       for (const key of keys) expect(dict[key as keyof typeof dict], `${lang}.${key}`).toBeTruthy()
     }
     expect(zh['workspace.branch-workspace.reload']).toBe('重新加载子工作区')
+  })
+
+  test('localizes workspace repository change refresh in every locale', () => {
+    const key = 'workspace.repository.refresh-changes' as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en[key]).toBe('Refresh changes')
+    expect(zh[key]).toBe('刷新改动')
+    expect(ja[key]).toBe('変更を更新')
+    expect(ko[key]).toBe('변경 사항 새로 고침')
+  })
+
+  test('localizes branch workspace change refresh in every locale', () => {
+    const key = 'workspace.branch-workspace.refresh-changes' as const
+    for (const [lang, dict] of Object.entries(dicts)) {
+      expect(dict[key], `${lang}.${key}`).toBeTruthy()
+    }
+    expect(en[key]).toBe('Refresh changes')
+    expect(zh[key]).toBe('刷新改动')
+    expect(ja[key]).toBe('変更を更新')
+    expect(ko[key]).toBe('변경 사항 새로 고침')
   })
 
   test('localizes branch workspace fetch all feedback in every locale', () => {

@@ -40,7 +40,7 @@ afterEach(() => {
 })
 
 describe('WorkspaceItemContextMenu', () => {
-  test('renders the fixed action order and dispatches each open action', async () => {
+  test('groups actions by category and dispatches the selected action', async () => {
     const fileArea = vi.fn()
     const editor = vi.fn()
     const externalTerminal = vi.fn()
@@ -62,26 +62,21 @@ describe('WorkspaceItemContextMenu', () => {
       ],
     })
 
-    expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
-      'file-area.open',
-      'worktrees.open-in-editor-label',
-      'terminal.external',
-      'terminal.internal',
-      'terminal.new-with-tmux',
-      'terminal.restore-directory-tmux',
-      'action.create-worktree',
-      'action.refresh',
-      'terminal.close-all',
+    expect((await openContextMenu()).map((item) => item.dataset.menuCategory)).toEqual([
+      'open',
+      'git',
+      'terminals',
+      'manage',
     ])
 
-    await clickContextMenuItem('file-area.open')
-    await clickContextMenuItem('worktrees.open-in-editor-label')
-    await clickContextMenuItem('terminal.external')
-    await clickContextMenuItem('terminal.internal')
-    await clickContextMenuItem('terminal.new-with-tmux')
-    await clickContextMenuItem('terminal.restore-directory-tmux')
-    await clickContextMenuItem('action.create-worktree')
-    await clickContextMenuItem('action.refresh')
+    await clickContextMenuItem('open', 'file-area.open')
+    await clickContextMenuItem('open', 'worktrees.open-in-editor-label')
+    await clickContextMenuItem('terminals', 'terminal.external')
+    await clickContextMenuItem('terminals', 'terminal.internal')
+    await clickContextMenuItem('terminals', 'terminal.new-with-tmux')
+    await clickContextMenuItem('terminals', 'terminal.restore-directory-tmux')
+    await clickContextMenuItem('manage', 'action.create-worktree')
+    await clickContextMenuItem('git', 'action.refresh')
 
     expect(fileArea).toHaveBeenCalledTimes(1)
     expect(editor).toHaveBeenCalledTimes(1)
@@ -104,20 +99,21 @@ describe('WorkspaceItemContextMenu', () => {
       ],
     })
 
-    const items = await openContextMenu()
-
-    expect(itemByText(items, 'worktrees.open-in-editor-label').hasAttribute('data-disabled')).toBe(true)
-    expect(itemByText(items, 'terminal.external').hasAttribute('data-disabled')).toBe(true)
-    expect(itemByText(items, 'terminal.internal').hasAttribute('data-disabled')).toBe(true)
-    expect(itemByText(items, 'action.create-worktree').hasAttribute('data-disabled')).toBe(true)
-    expect(itemByText(items, 'action.refresh').hasAttribute('data-disabled')).toBe(true)
-    expect(itemByText(items, 'terminal.close-all').hasAttribute('data-disabled')).toBe(true)
+    expect(itemByText(await openCategory('open'), 'worktrees.open-in-editor-label').hasAttribute('data-disabled')).toBe(
+      true,
+    )
+    const terminals = await openCategory('terminals')
+    for (const label of ['terminal.external', 'terminal.internal', 'terminal.close-all']) {
+      expect(itemByText(terminals, label).hasAttribute('data-disabled')).toBe(true)
+    }
+    expect(itemByText(await openCategory('manage'), 'action.create-worktree').hasAttribute('data-disabled')).toBe(true)
+    expect(itemByText(await openCategory('git'), 'action.refresh').hasAttribute('data-disabled')).toBe(true)
   })
 
   test('keeps detached recovery visible but independently disabled', async () => {
     renderMenu({ restoreTmuxDisabled: true })
 
-    const items = await openContextMenu()
+    const items = await openCategory('terminals')
 
     expect(itemByText(items, 'terminal.new-with-tmux').hasAttribute('data-disabled')).toBe(false)
     expect(itemByText(items, 'terminal.restore-directory-tmux').hasAttribute('data-disabled')).toBe(true)
@@ -126,29 +122,22 @@ describe('WorkspaceItemContextMenu', () => {
   test('omits unavailable tmux actions instead of rendering disabled placeholders', async () => {
     renderMenu({ tmuxActionsVisible: false })
 
-    const labels = (await openContextMenu()).map((item) => item.textContent?.trim())
+    const labels = (await openCategory('terminals')).map((item) => item.textContent?.trim())
 
     expect(labels).not.toContain('terminal.new-with-tmux')
     expect(labels).not.toContain('terminal.restore-directory-tmux')
   })
 
-  test('replaces the generic internal terminal entry with explicit Windows shell actions', async () => {
+  test('offers explicit Windows shells alongside the default internal terminal', async () => {
     const powershell = vi.fn()
     const wsl = vi.fn()
     renderMenu({ powershell, wsl })
 
-    expect((await openContextMenu()).map((item) => item.textContent?.trim())).toEqual([
-      'worktrees.open-in-editor-label',
-      'terminal.external',
-      'terminal.internal-powershell',
-      'terminal.internal-wsl',
-      'terminal.new-with-tmux',
-      'terminal.restore-directory-tmux',
-      'terminal.close-all',
-    ])
+    const terminals = await openCategory('terminals')
+    expect(terminals.some((item) => item.textContent?.trim() === 'terminal.internal')).toBe(true)
 
-    await clickContextMenuItem('terminal.internal-powershell')
-    await clickContextMenuItem('terminal.internal-wsl')
+    await clickContextMenuItem('terminals', 'terminal.internal-powershell')
+    await clickContextMenuItem('terminals', 'terminal.internal-wsl')
 
     expect(powershell).toHaveBeenCalledTimes(1)
     expect(wsl).toHaveBeenCalledTimes(1)
@@ -167,7 +156,7 @@ describe('WorkspaceItemContextMenu', () => {
       closeTerminal,
     })
 
-    await clickContextMenuItem('terminal.close-all')
+    await clickContextMenuItem('terminals', 'terminal.close-all')
 
     expect(closeTerminal).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain('terminal.close-all-confirm-body:3')
@@ -306,8 +295,21 @@ async function openContextMenu(): Promise<HTMLElement[]> {
   return [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')]
 }
 
-async function clickContextMenuItem(text: string): Promise<void> {
-  const items = await openContextMenu()
+async function openCategory(category: string): Promise<HTMLElement[]> {
+  if (!document.querySelector('[data-menu-category]')) await openContextMenu()
+  const trigger = document.querySelector<HTMLElement>(`[data-menu-category="${category}"]`)
+  if (!trigger) throw new Error(`missing menu category: ${category}`)
+  await act(async () => {
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'ArrowRight' }))
+  })
+  const submenuId = trigger.getAttribute('aria-controls')
+  const submenu = submenuId && document.getElementById(submenuId)
+  if (!submenu) throw new Error(`missing submenu: ${category}`)
+  return [...submenu.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+}
+
+async function clickContextMenuItem(category: string, text: string): Promise<void> {
+  const items = await openCategory(category)
   await act(async () => {
     itemByText(items, text).click()
     await Promise.resolve()

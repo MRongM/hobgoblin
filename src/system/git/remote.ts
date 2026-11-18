@@ -10,6 +10,7 @@ import { getCurrentBranch } from '#/system/git/branches.ts'
 import { isGitHubHost, isGitLabHost, parseGitRemoteUrl, remoteUrlToHttps } from '#/system/git/remote-url.ts'
 import { isSafeBranchName } from '#/shared/refnames.ts'
 import { isSafeRemoteName } from '#/shared/worktree-create.ts'
+import { pushWithWorktreeUpdate, WORKTREE_UPDATE_RECEIVE_PACK } from '#/system/git/push-with-worktree-update.ts'
 
 export interface UpstreamParts {
   remote: string
@@ -341,10 +342,17 @@ export async function pushBranch(
   const target = await resolvePushTarget(cwd, branch, signal, createUpstreamRemote)
   if (signal?.aborted) return { ok: false, message: 'cancelled' }
   if ('ok' in target) return target
-  const args = target.setUpstream
-    ? ['push', '-u', '--', target.remote, `${branch}:${target.branch}`]
-    : ['push', '--', target.remote, `${branch}:${target.branch}`]
-  return gitResultWithOptions(cwd, gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal), ...args)
+  return await pushWithWorktreeUpdate(async (updateWorktree) => {
+    const args = [
+      'push',
+      ...(target.setUpstream ? ['-u'] : []),
+      ...(updateWorktree ? [`--receive-pack=${WORKTREE_UPDATE_RECEIVE_PACK}`] : []),
+      '--',
+      target.remote,
+      `${branch}:${target.branch}`,
+    ]
+    return await gitResultWithOptions(cwd, gitNetworkOptions(networkOptions, NETWORK_TIMEOUT_MS, signal), ...args)
+  }, signal)
 }
 
 export async function pushWorktreeHeadToRemoteBranch(

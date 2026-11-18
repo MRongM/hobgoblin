@@ -1,3 +1,4 @@
+import { isAbsoluteWorktreePath } from '#/shared/worktree-create.ts'
 import { normalizeRepoSessionEntry, type RepoSessionEntry } from '#/shared/remote-repo.ts'
 
 export const FILE_AREA_TAB_IDS = ['files', 'changes', 'status', 'history', 'local', 'remoteBranches', 'ports'] as const
@@ -17,6 +18,7 @@ export interface DetachedGitWorktreeFileAreaRequest extends DetachedFileAreaRequ
   kind: 'git-worktree'
   repo: RepoSessionEntry
   branch: string
+  worktreePath?: string
   tab: FileAreaTabId
 }
 
@@ -73,12 +75,22 @@ export function normalizeDetachedFileAreaWindowRequest(value: unknown): Detached
   }
   if (input.kind !== 'git-worktree') return null
   const repo = normalizeRepoSessionEntry(input.repo)
-  const branch = safeIdentifier(input.branch)
-  if (!repo || !branch || typeof input.tab !== 'string' || !fileAreaTabIds.has(input.tab)) return null
+  const worktreePath =
+    input.worktreePath === undefined
+      ? undefined
+      : typeof input.worktreePath === 'string' &&
+          isAbsoluteWorktreePath(input.worktreePath) &&
+          !/[\x00-\x1f\x7f]/.test(input.worktreePath)
+        ? input.worktreePath
+        : null
+  if (worktreePath === null) return null
+  const branch = worktreePath && input.branch === '' ? '' : safeIdentifier(input.branch)
+  if (!repo || branch === null || typeof input.tab !== 'string' || !fileAreaTabIds.has(input.tab)) return null
   return {
     kind: 'git-worktree',
     repo,
     branch,
+    ...(worktreePath ? { worktreePath } : {}),
     tab: input.tab as FileAreaTabId,
     ...(releasePoint ? { releasePoint } : {}),
   }

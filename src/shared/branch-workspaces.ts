@@ -5,6 +5,7 @@ import type {
 } from '#/shared/branch-workspace-git-actions.ts'
 import {
   normalizeWorktreeCreationBase,
+  normalizeCreateWorktreeInput,
   type CreateWorktreeMode,
   type WorktreeCreationBase,
 } from '#/shared/worktree-create.ts'
@@ -13,6 +14,22 @@ import {
   normalizeWorktreeBootstrapSelections,
   type WorktreeBootstrapDecision,
 } from '#/shared/worktree-bootstrap-summary.ts'
+
+/** Portable safe single directory name. Prefixes are only a legacy discovery convention. */
+export function isSafeBranchWorkspaceFolderName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    isWorkspaceRepositoryName(value) &&
+    value.length <= 255 &&
+    !/[\x00-\x1f\x7f<>:"|?*]/.test(value) &&
+    !/[. ]$/.test(value) &&
+    !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value) &&
+    value !== '.git'
+  )
+}
+
+export type BranchWorkspaceMemberKind = 'worktree' | 'repository'
+export type BranchWorkspaceMemberSource = { kind: 'repository'; repositoryId: string } | { kind: 'url'; url: string }
 
 export const BRANCH_WORKSPACE_DIRECTORY_PREFIX = 'hob-'
 export const BRANCH_WORKSPACE_DIRECTORY_PREFIXES = [BRANCH_WORKSPACE_DIRECTORY_PREFIX, 'hobgoblin-', 'goblin-'] as const
@@ -56,7 +73,14 @@ export interface BranchWorkspaceAuxiliaryCandidate {
 
 export interface BranchWorkspaceRepositoryMember {
   repositoryName: string
-  /** Runtime identity discovered from Git; omitted from persisted registry records. */
+  kind?: BranchWorkspaceMemberKind
+  source?: BranchWorkspaceMemberSource
+  memberId?: string
+  mode?: CreateWorktreeMode
+  /** Runtime only. Null denotes detached HEAD; persistence retains creation intent. */
+  currentBranch?: string | null
+  head?: string
+  /** Authoritative Git identity; complete members always own their target repository. */
   repositoryId?: string
   targetBranch: string
   creationBase: WorktreeCreationBase
@@ -83,7 +107,15 @@ export interface BranchWorkspaceOperationSnapshot {
   kind: BranchWorkspaceOperationKind
 }
 
+/** Canonical durable folder registration; membership is observed at runtime. */
+export interface BranchWorkspaceFolderRegistration {
+  id: string
+  path: string
+}
+
+/** Runtime compatibility projection used by optional Git helper plans. */
 export interface BranchWorkspaceManifest {
+  parentDirectory?: string
   id: string
   rootId: string
   branch: string
@@ -151,6 +183,7 @@ export type BranchWorkspaceState =
   | { kind: 'needs-action'; action: 'continue-delete' }
 
 export interface BranchWorkspaceSnapshot {
+  parentDirectory?: string
   id: string
   rootId: string
   branch: string
@@ -164,7 +197,20 @@ export interface BranchWorkspaceSnapshot {
   activeOperation?: BranchWorkspaceActiveOperation
 }
 
+export function isBranchWorkspaceRootUsable(workspace: BranchWorkspaceSnapshot): boolean {
+  return (
+    workspace.available &&
+    !workspace.activeOperation &&
+    (workspace.state.kind === 'ready' || workspace.state.action === 'repair')
+  )
+}
+
 export interface BranchWorkspaceRepositorySelection {
+  kind?: BranchWorkspaceMemberKind
+  source?: BranchWorkspaceMemberSource
+  memberId?: string
+  targetBranch?: string
+  mode?: CreateWorktreeMode
   repositoryName: string
   creationBase: WorktreeCreationBase
   syncBeforeCreate: boolean
@@ -179,6 +225,9 @@ export interface BranchWorkspaceAuxiliarySelection {
 export type BranchWorkspacePlanRequest =
   | {
       operation: 'create'
+      directoryName?: string
+      parentDirectory?: string
+      branchWorkspaceId?: string
       branch: string
       repositories: BranchWorkspaceRepositorySelection[]
       auxiliaryEntries: BranchWorkspaceAuxiliarySelection[]
@@ -197,6 +246,7 @@ export type BranchWorkspacePlanRequest =
     }
 
 export type BranchWorkspaceApproval =
+  | 'delete-repository'
   | 'outside-root-source'
   | 'worktree-bootstrap'
   | 'discard-member-changes'
@@ -206,6 +256,7 @@ export type BranchWorkspaceApproval =
 
 export function isBranchWorkspaceApproval(value: unknown): value is BranchWorkspaceApproval {
   return (
+    value === 'delete-repository' ||
     value === 'outside-root-source' ||
     value === 'worktree-bootstrap' ||
     value === 'discard-member-changes' ||
@@ -217,6 +268,7 @@ export function isBranchWorkspaceApproval(value: unknown): value is BranchWorksp
 
 export type BranchWorkspacePlanStepKind =
   | 'create-directory'
+  | 'clone-repository'
   | 'create-worktree'
   | 'symlink-entry'
   | 'copy-entry'
@@ -235,8 +287,12 @@ export interface BranchWorkspacePlanStep {
 }
 
 export interface BranchWorkspaceRepositoryPlan {
+  kind?: BranchWorkspaceMemberKind
+  source?: BranchWorkspaceMemberSource
+  memberId?: string
   repositoryName: string
   repoId: string
+  checkoutDefaultBranch?: boolean
   targetBranch: string
   checkedOutBranch?: string
   creationBase: WorktreeCreationBase
@@ -247,13 +303,17 @@ export interface BranchWorkspaceRepositoryPlan {
   worktreeBootstrap: WorktreeBootstrapDecision
   confirmationRequired: boolean
   satisfied: boolean
-  action?: 'create-worktree' | 'remove-worktree' | 'remove-entry' | 'delete-branch' | 'satisfied'
+  action?: 'clone-repository' | 'create-worktree' | 'remove-worktree' | 'remove-entry' | 'delete-branch' | 'satisfied'
   pruneBeforeCreate?: boolean
   worktreePresent?: boolean
   deleteBranch?: boolean
   deleteUpstream?: boolean
   upstream?: string
   dirty?: boolean
+  localOnlyCommits?: number
+  repositoryFingerprint?: string
+  /** Identity of a selected directory link, rechecked before unlinking it. */
+  entryFingerprint?: string
 }
 
 export interface BranchWorkspaceAuxiliaryPlan {
@@ -269,6 +329,7 @@ export interface BranchWorkspaceAuxiliaryPlan {
 }
 
 export interface BranchWorkspacePlan {
+  parentDirectory?: string
   token: string
   rootId: string
   operation: BranchWorkspaceOperationKind
@@ -342,6 +403,7 @@ export type BranchWorkspaceReadResult =
       rootId: string
       items: BranchWorkspaceSnapshot[]
       auxiliaryCandidates: BranchWorkspaceAuxiliaryCandidate[]
+      registryError?: string
     }
   | { ok: false; message: string }
 
@@ -391,20 +453,65 @@ export function normalizeBranchWorkspacePlanRequest(value: unknown): BranchWorks
 }
 
 function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspacePlanRequestResult {
-  const branch = normalizedText(request.branch)
-  if (!branch || !Array.isArray(request.repositories) || request.repositories.length === 0) return invalidRequest()
+  const directoryName = request.directoryName === undefined ? undefined : request.directoryName
+  if (directoryName !== undefined && !isSafeBranchWorkspaceFolderName(directoryName)) return invalidRequest()
+  const parentDirectory = request.parentDirectory === undefined ? undefined : normalizedText(request.parentDirectory)
+  if (request.parentDirectory !== undefined && (!directoryName || !parentDirectory)) return invalidRequest()
+  const branch = directoryName === undefined ? normalizedText(request.branch) : ''
+  if (
+    (directoryName === undefined && !branch) ||
+    !Array.isArray(request.repositories) ||
+    (directoryName === undefined && request.repositories.length === 0)
+  )
+    return invalidRequest()
   if (!Array.isArray(request.auxiliaryEntries)) return invalidRequest()
 
+  if (request.branchWorkspaceId !== undefined && !normalizedText(request.branchWorkspaceId)) return invalidRequest()
   const repositories: BranchWorkspaceRepositorySelection[] = []
+  const memberIds = new Set<string>()
   const repositoryNames = new Set<string>()
   for (const value of request.repositories) {
     const repository = asRecord(value)
     const repositoryName = normalizedText(repository?.repositoryName)
     const hasCreationBase = repository ? 'creationBase' in repository : false
+    const syncBeforeCreate = repository?.syncBeforeCreate ?? false
+    const kind = repository?.kind
+    if (kind !== undefined && kind !== 'worktree' && kind !== 'repository') return invalidRequest()
+    const source =
+      repository?.source === undefined ? undefined : normalizeBranchWorkspaceMemberSource(repository.source)
+    if (repository?.source !== undefined && !source) return invalidRequest()
+    if (source?.kind === 'url' && kind !== 'repository') return invalidRequest()
+    const targetBranch = repository?.targetBranch === undefined ? undefined : normalizedText(repository.targetBranch)
+    if (repository?.targetBranch !== undefined && !targetBranch) return invalidRequest()
+    const memberId = repository?.memberId === undefined ? undefined : normalizedText(repository.memberId)
+    if (repository?.memberId !== undefined && !memberId) return invalidRequest()
+    const mode =
+      repository?.mode === undefined
+        ? undefined
+        : normalizeCreateWorktreeInput({ worktreePath: '/member', mode: repository.mode })?.mode
+    if (repository?.mode !== undefined && !mode) return invalidRequest()
+    const modeTarget =
+      mode?.kind === 'newBranch'
+        ? mode.newBranch
+        : mode?.kind === 'existingBranch'
+          ? mode.branch
+          : mode?.kind === 'trackRemoteBranch'
+            ? mode.localBranch
+            : undefined
+    if (targetBranch && mode && targetBranch !== modeTarget) return invalidRequest()
+    if (memberId && memberIds.has(memberId)) return invalidRequest()
+    if (memberId) memberIds.add(memberId)
+    if (syncBeforeCreate && mode && mode.kind !== 'newBranch' && mode.kind !== 'existingBranch') return invalidRequest()
     const creationBase = hasCreationBase
       ? normalizeWorktreeCreationBase(repository?.creationBase)
-      : normalizeWorktreeCreationBase({ kind: 'localBranch', branch: repository?.baseBranch })
-    const syncBeforeCreate = repository?.syncBeforeCreate ?? false
+      : normalizeWorktreeCreationBase(
+          mode?.kind === 'newBranch'
+            ? mode.creationBase
+            : {
+                kind: 'localBranch',
+                branch: repository?.baseBranch ?? (source?.kind === 'url' || mode ? 'main' : undefined),
+              },
+        )
     const hasWorktreeBootstrap = repository ? 'worktreeBootstrap' in repository : false
     const worktreeBootstrap = hasWorktreeBootstrap
       ? normalizeRepositoryWorktreeBootstrap(repository?.worktreeBootstrap)
@@ -421,6 +528,11 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
     repositoryNames.add(repositoryName)
     repositories.push({
       repositoryName,
+      ...(kind ? { kind } : {}),
+      ...(source ? { source } : {}),
+      ...(targetBranch ? { targetBranch } : {}),
+      ...(memberId ? { memberId } : {}),
+      ...(mode ? { mode } : {}),
       creationBase,
       syncBeforeCreate,
       ...(worktreeBootstrap ? { worktreeBootstrap } : {}),
@@ -447,8 +559,36 @@ function normalizeCreateRequest(request: Record<string, unknown>): BranchWorkspa
 
   return {
     ok: true,
-    request: { operation: 'create', branch, repositories, auxiliaryEntries },
+    request: {
+      operation: 'create',
+      branch: branch!,
+      ...(directoryName !== undefined ? { directoryName } : {}),
+      ...(parentDirectory ? { parentDirectory } : {}),
+      ...(normalizedText(request.branchWorkspaceId)
+        ? { branchWorkspaceId: normalizedText(request.branchWorkspaceId)! }
+        : {}),
+      repositories,
+      auxiliaryEntries,
+    },
   }
+}
+
+export function normalizeBranchWorkspaceMemberSource(value: unknown): BranchWorkspaceMemberSource | null {
+  const source = asRecord(value)
+  if (source?.kind === 'repository') {
+    const repositoryId = normalizedText(source.repositoryId)
+    return repositoryId ? { kind: 'repository', repositoryId } : null
+  }
+  if (source?.kind === 'url') {
+    const url = normalizedText(source.url)
+    return url &&
+      url.length <= 4096 &&
+      !url.startsWith('-') &&
+      (/^(?:https?|ssh|git|file):\/\/\S+$/i.test(url) || /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+:[^\s]+$/.test(url))
+      ? { kind: 'url', url }
+      : null
+  }
+  return null
 }
 
 function normalizeRepositoryWorktreeBootstrap(value: unknown): WorktreeBootstrapDecision {

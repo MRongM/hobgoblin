@@ -21,6 +21,26 @@ describe('local file path bridge', () => {
     expect(sameLocalFilePath('\\\\SERVER\\SHARE\\Repo', '\\\\server\\share\\repo')).toBe(true)
   })
 
+  test('matches Git forward-slash UNC spelling against an explicit Windows UNC path', () => {
+    expect(sameLocalFilePath('\\\\SERVER\\SHARE\\Repo', '//server/share/repo')).toBe(true)
+    expect(resolveLocalFilePath('//server/share/Repo', { kind: 'windows' })).toMatchObject({
+      execution: 'windows',
+      projectPath: '\\\\server\\share\\Repo',
+    })
+    expect(sameLocalFilePath('//SERVER/share/Repo', '//server/share/repo')).toBe(false)
+    expect(resolveLocalFilePath('//server/share/Repo', { kind: 'posix' })).toMatchObject({
+      execution: 'posix',
+      posixPath: '/server/share/Repo',
+    })
+  })
+
+  test('preserves WSL identity for forward-slash UNC paths in a Windows context', () => {
+    expect(resolveLocalFilePath('//wsl.localhost/Ubuntu/home/dev/repo', { kind: 'windows' })).toMatchObject({
+      execution: 'wsl',
+      projectPath: 'wsl://Ubuntu/home/dev/repo',
+    })
+  })
+
   test('unifies WSL locators and both WSL UNC hosts', () => {
     const locator = 'wsl://Ubuntu/home/dev/repo'
     expect(sameLocalFilePath(locator, '\\\\wsl.localhost\\ubuntu\\home\\dev\\repo')).toBe(true)

@@ -4,7 +4,11 @@ import {
   ArrowUp,
   ClipboardCopy,
   ExternalLink,
+  FilePlus2,
+  FileMinus2,
   FolderPlus,
+  FolderMinus,
+  FolderGit2,
   FolderTree,
   GitBranch,
   GitCompareArrows,
@@ -15,7 +19,6 @@ import {
   SendHorizontal,
   Tag,
   Terminal,
-  Trash2,
   X,
 } from 'lucide-react'
 import type { BranchWorkspaceRepositorySnapshot, BranchWorkspaceSnapshot } from '#/shared/branch-workspaces.ts'
@@ -47,6 +50,14 @@ import { useT } from '#/web/stores/i18n.ts'
 import { useAssociatedTmuxCleanup } from '#/web/hooks/useAssociatedTmuxCleanup.tsx'
 import { supportsWindowsInternalTerminalShellMenu } from '#/web/windows-internal-terminal-shell-menu.ts'
 import { supportsTmuxMenu } from '#/web/tmux-menu.ts'
+import { useReposStore } from '#/web/stores/repos/store.ts'
+import { mainWindowQueryClient } from '#/web/main-window-queries.ts'
+import { refreshBranchWorkspaceQuery } from '#/web/branch-workspace-queries.ts'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import {
+  canAddBranchWorkspaceWorktree,
+  isRemovableBranchWorkspaceWorktree,
+} from '#/web/components/repo-workspace/branch-workspace-member-target.ts'
 
 export interface BranchWorkspaceMemberActionTarget {
   repo: BranchActionRepo
@@ -75,6 +86,7 @@ interface BranchWorkspaceMemberRowProps {
   onOpenFileArea?: () => void
   onOpenInternalTerminal?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
   onRemoveMember?: (item: BranchWorkspaceSnapshot, member: BranchWorkspaceRepositorySnapshot) => void
+  onAddWorktree?: (item: BranchWorkspaceSnapshot) => void
 }
 
 export function BranchWorkspaceMemberRow(props: BranchWorkspaceMemberRowProps) {
@@ -95,6 +107,21 @@ function ResolvedBranchWorkspaceMemberRow({
   const actions = useBranchActionItems(actionTarget.repo, actionTarget.branch, {
     onNavigateToInternalTerminal: () => onOpenInternalTerminal?.(item, member),
     windowsInternalTerminalShellMenu: supportsWindowsInternalTerminalShellMenu(actionTarget.repo.id),
+    onCheckoutSuccess: async (branch) => {
+      await Promise.all([
+        useReposStore.getState().refreshCoreData(actionTarget.repo.id),
+        refreshBranchWorkspaceQuery(mainWindowQueryClient, item.rootId).catch(() => undefined),
+      ])
+      const state = useReposStore.getState()
+      const context = state.workspaceActiveContextByRoot[item.rootId]
+      if (
+        context?.kind === 'branch-workspace' &&
+        context.branchWorkspaceId === item.id &&
+        context.memberRepositoryName === member.repositoryName
+      ) {
+        state.selectBranch(actionTarget.repo.id, branch)
+      }
+    },
   })
   return (
     <BranchWorkspaceMemberRowFrame
@@ -102,17 +129,30 @@ function ResolvedBranchWorkspaceMemberRow({
       item={item}
       member={member}
       onOpenInternalTerminal={onOpenInternalTerminal}
-      actions={actions}
+      actions={member.currentBranch === null ? detachedMemberActions(actions) : actions}
     />
   )
 }
 
 function DisabledBranchWorkspaceMemberRow(props: BranchWorkspaceMemberRowProps) {
   const t = useT()
+  const directoryAction = useOpenDirectoryAction({
+    repoId: props.item.rootId,
+    path: props.member.worktreePath,
+    disabled: true,
+  })
+  const groups = disabledMemberActionGroups(t, supportsTmuxMenu(props.item.rootId))
   return (
     <BranchWorkspaceMemberRowFrame
       {...props}
-      actions={disabledMemberActionGroups(t, supportsTmuxMenu(props.item.rootId))}
+      actions={{
+        ...groups,
+        externalItems: [
+          groups.externalItems[0]!,
+          { ...directoryAction, id: 'openDirectory', visible: true, menuOnly: true },
+          ...groups.externalItems.slice(1),
+        ],
+      }}
     />
   )
 }
@@ -128,6 +168,7 @@ function BranchWorkspaceMemberRowFrame({
   onToggleFileArea,
   onOpenFileArea,
   onOpenInternalTerminal,
+  onAddWorktree,
   onRemoveMember,
 }: BranchWorkspaceMemberRowProps & { actions: BranchActionItemGroups }) {
   const t = useT()
@@ -145,9 +186,10 @@ function BranchWorkspaceMemberRowFrame({
       : t('branch-status.worktree-dirty', { n: presentation.changeCount })
     : null
   const unavailableLabel = presentation.reason ? t(presentation.reason) : null
-  const warningLabel = presentation.warning ? t(presentation.warning) : null
   const branch = presentation.actionTarget?.branch
-  const commitHashTag = formatShortCommitHashTag(branch?.lastCommitHash ?? '')
+  const commitHashTag = formatShortCommitHashTag(branch?.lastCommitHash || member.head || '')
+  const currentBranch =
+    member.currentBranch !== undefined ? member.currentBranch : (branch?.name ?? member.targetBranch)
   const forceDisabled = disabled || !presentation.navigable
   const tmuxCleanup = useAssociatedTmuxCleanup({
     projectRoot: presentation.repositoryId,
@@ -156,21 +198,69 @@ function BranchWorkspaceMemberRowFrame({
       disabled ||
       (presentation.actionTarget ? presentation.actionTarget.repo.operations.branchAction.phase !== 'idle' : false),
   })
-  const removeMemberAction: WorkspaceListItemAction | undefined = onRemoveMember
-    ? {
-        id: 'removeBranchWorkspaceMember',
-        label: t('workspace.branch-workspace.remove-members'),
-        icon: <Trash2 aria-hidden="true" />,
-        disabled,
-        destructive: true,
-        onSelect: () => onRemoveMember(item, member),
-      }
-    : undefined
   const actionProjection = projectWorktreeListItemActions(actions, {
     policy: 'branch-workspace-member',
     hasWorktree: true,
     forceDisabled,
   })
+  // A member's add action targets this folder rather than the repository's default worktree location.
+  const folderMemberActions: WorkspaceListItemAction[] = [
+    ...(onAddWorktree
+      ? [
+          {
+            id: 'addWorkspaceWorktree',
+            category: 'manage' as const,
+            label: t('workspace.branch-workspace.member.add-worktree'),
+            icon: <FolderPlus aria-hidden="true" />,
+            disabled: disabled || !canAddBranchWorkspaceWorktree(item),
+            onSelect: () => onAddWorktree(item),
+          },
+        ]
+      : []),
+    ...(onRemoveMember && isRemovableBranchWorkspaceWorktree(item, member)
+      ? [
+          {
+            id: 'removeWorkspaceWorktree',
+            category: 'manage' as const,
+            label: t('workspace.branch-workspace.member.remove-worktree'),
+            icon: <FolderMinus aria-hidden="true" />,
+            disabled: disabled || !item.available,
+            destructive: true,
+            onSelect: () => onRemoveMember(item, member),
+          },
+        ]
+      : []),
+  ]
+  const fileAreaAction: WorkspaceListItemAction | undefined = onOpenFileArea
+    ? {
+        id: 'fileArea',
+        label: t('file-area.open'),
+        disabled: forceDisabled || !onSelectRepositoryMember,
+        icon: <FolderTree aria-hidden="true" />,
+        onSelect: () => {
+          onSelectRepositoryMember?.(item, member)
+          onOpenFileArea()
+        },
+      }
+    : undefined
+  const memberTerminalIds = new Set([
+    'terminal',
+    'terminalPowerShell',
+    'terminalWsl',
+    'terminalTmux',
+    'restoreTmuxTerminals',
+  ])
+  const scopedActions = (items: WorkspaceListItemAction[]) =>
+    items
+      .filter((action) => !onAddWorktree || action.id !== 'createWorktree')
+      .map((action) =>
+        memberTerminalIds.has(action.id) ? { ...action, disabled: action.disabled || !onOpenInternalTerminal } : action,
+      )
+  const memberMenuGroups = [
+    ...(fileAreaAction ? [[fileAreaAction]] : []),
+    ...actionProjection.menuGroups.map(scopedActions),
+    folderMemberActions,
+  ]
   const internalTerminalAction = actionProjection.internalTerminal
     ? {
         ...actionProjection.internalTerminal,
@@ -208,8 +298,15 @@ function BranchWorkspaceMemberRowFrame({
     : undefined
   const row = (
     <WorkspaceListItemFrame
+      terminalDirectoryPath={member.worktreePath}
       size="member"
-      leadingIcon={<FolderTree className="size-3.5" aria-hidden="true" />}
+      leadingIcon={
+        member.kind === 'repository' ? (
+          <FolderGit2 className="size-3.5" aria-hidden="true" />
+        ) : (
+          <FolderTree className="size-3.5" aria-hidden="true" />
+        )
+      }
       selected={selected}
       unavailable={!presentation.navigable}
       className={cn(
@@ -219,9 +316,9 @@ function BranchWorkspaceMemberRowFrame({
         'data-testid': `branch-workspace-member-${member.repositoryName}`,
         disabled: disabled || !presentation.navigable,
         'aria-current': selected ? 'page' : undefined,
-        'aria-label': [member.repositoryName, dirtyLabel, warningLabel, unavailableLabel].filter(Boolean).join('. '),
+        'aria-label': [member.repositoryName, dirtyLabel, unavailableLabel].filter(Boolean).join('. '),
         title: presentation.navigable
-          ? (warningLabel ?? t('workspace.branch-workspace.member.open-worktree'))
+          ? t('workspace.branch-workspace.member.open-worktree')
           : (unavailableLabel ?? undefined),
         className: presentation.navigable && !disabled ? undefined : 'cursor-default',
         onClick: () => onSelectRepositoryMember?.(item, member),
@@ -234,15 +331,7 @@ function BranchWorkspaceMemberRowFrame({
           moreMenu={
             <WorkspaceListItemMenu
               label={t('action.menu')}
-              groups={
-                tmuxCleanup.visible
-                  ? [
-                      ...actionProjection.menuGroups,
-                      ...(removeMemberAction ? [[removeMemberAction]] : []),
-                      [tmuxCleanup.action],
-                    ]
-                  : [...actionProjection.menuGroups, ...(removeMemberAction ? [[removeMemberAction]] : [])]
-              }
+              groups={tmuxCleanup.visible ? [...memberMenuGroups, [tmuxCleanup.action]] : memberMenuGroups}
             />
           }
         />
@@ -261,6 +350,19 @@ function BranchWorkspaceMemberRowFrame({
     >
       <span data-branch-workspace-member-summary className="inline-flex min-w-0 flex-1 items-center gap-1.5">
         <span className="min-w-0 truncate">{member.repositoryName}</span>
+        <span data-testid="branch-workspace-member-kind" className="sr-only">
+          {t(
+            member.kind === 'repository'
+              ? 'workspace.branch-workspace.member-mode.repository'
+              : 'workspace.branch-workspace.member-mode.worktree',
+          )}
+        </span>
+        <span
+          data-testid="branch-workspace-member-current-branch"
+          className="min-w-0 truncate font-mono text-[10px] text-muted-foreground"
+        >
+          {currentBranch === null ? t('branches.detached') : currentBranch}
+        </span>
         {commitHashTag ? (
           <span
             data-testid="branch-workspace-member-hash-tag"
@@ -314,35 +416,17 @@ function BranchWorkspaceMemberRowFrame({
           />
         ) : null}
       </span>
-      {warningLabel ? (
-        <span
-          data-testid="branch-workspace-member-repair-hint"
-          title={warningLabel}
-          className="ml-auto shrink-0 text-[9px] text-muted-foreground"
-        >
-          {t('workspace.branch-workspace.lifecycle.needs-repair')}
-        </span>
-      ) : null}
       {hasTerminalBell ? <TerminalBellDot label={t('terminal.bell-unread')} /> : null}
     </WorkspaceListItemFrame>
   )
 
   return (
     <WorkspaceItemContextMenu
-      fileArea={
-        onOpenFileArea
-          ? {
-              disabled: forceDisabled || !onSelectRepositoryMember,
-              icon: <FolderTree aria-hidden="true" />,
-              onSelect: () => {
-                onSelectRepositoryMember?.(item, member)
-                onOpenFileArea()
-              },
-            }
-          : undefined
-      }
-      actions={actionProjection.contextMenu.actions}
+      fileArea={fileAreaAction}
+      actions={[...scopedActions(actionProjection.contextMenu.actions), ...folderMemberActions]}
       editor={actionProjection.contextMenu.editor}
+      directory={actionProjection.contextMenu.directory}
+      remote={actionProjection.contextMenu.remote}
       externalTerminal={actionProjection.contextMenu.externalTerminal}
       internalTerminal={internalTerminalContextAction}
       windowsInternalTerminals={windowsInternalTerminalContextActions}
@@ -380,12 +464,15 @@ function disabledMemberActionGroups(t: ReturnType<typeof useT>, tmuxMenuVisible:
       disabledAction('remote', 'action.remote', <ExternalLink aria-hidden="true" />),
     ],
     mainItems: [
+      disabledAction('addDependencies', 'worktree-dependencies.add.action', <FilePlus2 aria-hidden="true" />),
+      disabledAction('removeDependencies', 'worktree-dependencies.remove.action', <FileMinus2 aria-hidden="true" />),
       disabledAction('pull', 'action.pull', <ArrowDown aria-hidden="true" />),
       disabledAction('push', 'action.push', <ArrowUp aria-hidden="true" />),
       disabledAction('createWorktree', 'action.create-worktree', <FolderPlus aria-hidden="true" />),
       disabledAction('sync', 'action.refresh', <RefreshCw aria-hidden="true" />),
       disabledAction('createBranch', 'action.create-branch', <GitBranch aria-hidden="true" />),
       disabledAction('pullRemoteBranch', 'action.pull-remote-branch', <RadioTower aria-hidden="true" />),
+      disabledAction('checkoutTo', 'action.checkout-to', <GitBranch aria-hidden="true" />),
       disabledAction('merge', 'action.merge-in', <GitMerge aria-hidden="true" />),
       disabledAction('mergeOut', 'action.merge-out', <GitMerge aria-hidden="true" />),
       disabledAction('commit', 'action.commit', <SendHorizontal aria-hidden="true" />),
@@ -415,9 +502,12 @@ function createDisabledAction(
     | 'pull'
     | 'push'
     | 'createWorktree'
+    | 'addDependencies'
+    | 'removeDependencies'
     | 'sync'
     | 'createBranch'
     | 'pullRemoteBranch'
+    | 'checkoutTo'
     | 'merge'
     | 'mergeOut'
     | 'commit'
@@ -438,5 +528,28 @@ function createDisabledAction(
     icon,
     onSelect: () => {},
     ...options,
+  }
+}
+
+function detachedMemberActions(actions: BranchActionItemGroups): BranchActionItemGroups {
+  const branchActions = new Set([
+    'pull',
+    'push',
+    'upstream',
+    'merge',
+    'mergeOut',
+    'createBranch',
+    'createWorktree',
+    'alignRemote',
+    'resetHard',
+    'remote',
+  ])
+  const project = (items: BranchActionItemGroups['mainItems']) =>
+    items.map((item) => (branchActions.has(item.id) ? { ...item, disabled: true } : item))
+  return {
+    ...actions,
+    mainItems: project(actions.mainItems),
+    externalItems: project(actions.externalItems),
+    destructiveItems: project(actions.destructiveItems),
   }
 }

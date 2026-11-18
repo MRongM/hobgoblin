@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type {
   BranchWorkspaceDependencyApproval,
@@ -28,6 +28,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const [planning, setPlanning] = useState(false)
   const [executing, setExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const viewGeneration = useRef(0)
 
   const invalidate = useCallback(async () => {
     if (!rootId) return
@@ -37,6 +38,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const read = useCallback(
     async (nextBranchWorkspaceId: string): Promise<BranchWorkspaceDependencyReadResult> => {
       if (!rootId) return { ok: false, message: 'workspace.branch-workspace.dependency.read-failed' }
+      const generation = ++viewGeneration.current
       setReading(true)
       setError(null)
       setPlan(null)
@@ -47,6 +49,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
         ok: false as const,
         message: 'workspace.branch-workspace.dependency.read-failed',
       }))
+      if (generation !== viewGeneration.current) return response
       setReading(false)
       if (!response.ok) {
         setCandidates([])
@@ -62,6 +65,8 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   const requestPlan = useCallback(
     async (request: BranchWorkspaceDependencyPlanRequest, signal?: AbortSignal) => {
       if (!rootId) return false
+      if (signal?.aborted) return false
+      const generation = ++viewGeneration.current
       setPlanning(true)
       setError(null)
       setResult(null)
@@ -76,6 +81,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
               message: 'workspace.branch-workspace.dependency.plan-failed',
             },
       )
+      if (generation !== viewGeneration.current) return false
       setPlanning(false)
       if (!response || signal?.aborted) return false
       if (!response.ok) {
@@ -120,6 +126,7 @@ export function useBranchWorkspaceDependencyActions(rootId: string | null) {
   }, [rootId])
 
   const reset = useCallback(() => {
+    viewGeneration.current += 1
     setBranchWorkspaceId(null)
     setCandidates([])
     setRequest(null)

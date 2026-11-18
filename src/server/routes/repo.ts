@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
+import { createWorktreeDependencyRoutes } from '#/server/routes/worktree-dependencies.ts'
 import { getBackgroundSyncRepos, setBackgroundSyncRepos } from '#/server/modules/background-sync.ts'
 import { exportRepositoryFilesToLocalDirectory } from '#/server/modules/repo-file-export.ts'
+import { readRepositoryFilePreview } from '#/server/modules/repo-file-preview-read.ts'
 import { transferRepositoryFiles } from '#/server/modules/repo-file-transfer.ts'
 import {
   generateRepositoryCommitMessage,
@@ -77,6 +79,7 @@ import { normalizeWorktreeBranchSwitchTarget } from '#/shared/worktree-branch-sw
 
 export function createRepoRoutes() {
   const app = new Hono()
+  app.route('/worktree-dependencies', createWorktreeDependencyRoutes())
   async function jsonOr<T>(run: () => Promise<T>, fallback: T, label: string) {
     try {
       return await run()
@@ -254,6 +257,23 @@ export function createRepoRoutes() {
         () => createRepositoryFileTreeFile(repoId, worktreePath, parentDirPath, name, c.req.raw.signal, sourceToken),
         { ok: false, message: 'error.failed-read-repo' },
         'file-tree-create-file',
+      ),
+    )
+  })
+  app.post('/file-preview', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    if (
+      typeof body?.repoId !== 'string' ||
+      typeof body?.filePath !== 'string' ||
+      (body?.kind !== 'text' && body?.kind !== 'image')
+    ) {
+      return c.json({ ok: false, message: 'error.invalid-arguments' })
+    }
+    return c.json(
+      await jsonOr(
+        () => readRepositoryFilePreview(body.repoId, body.filePath, body.kind, c.req.raw.signal),
+        { ok: false, message: 'error.failed-read-repo' },
+        'file-preview-read',
       ),
     )
   })

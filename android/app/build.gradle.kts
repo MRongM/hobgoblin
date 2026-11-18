@@ -11,8 +11,8 @@ android {
         applicationId = "com.mrongm.hobgoblin"
         minSdk = 26
         targetSdk = 37
-        versionCode = 13
-        versionName = "2.3.2"
+        versionCode = 14
+        versionName = "2.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

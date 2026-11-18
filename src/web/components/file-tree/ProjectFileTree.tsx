@@ -69,6 +69,7 @@ import { useReposStore } from '#/web/stores/repos/store.ts'
 import { repoPlainWorkspacePath } from '#/web/stores/repos/capabilities.ts'
 import { useT } from '#/web/stores/i18n.ts'
 import {
+  type FileTreeRevealRequest,
   buildFileTreeStatusIndex,
   buildGoblinFilePathDragPayload,
   mergeDirectoryEntries,
@@ -94,6 +95,7 @@ import {
   chooseFileTreeDownloadDirectory,
   chooseFileTreeUploadFiles,
   hasNativeFilePicker,
+  canRevealInFileManager,
   openInFinder,
   readFileTreeClipboardFile,
   readSystemClipboardFilePaths,
@@ -104,6 +106,10 @@ import { useRuntimeFontSettings } from '#/web/runtime-settings-fonts.ts'
 import { useRuntimeChromeSettings } from '#/web/runtime-settings-chrome.ts'
 import { fileTreeClipboardMaxBytes as fileTreeClipboardMaxBytesFromMb } from '#/shared/file-tree-clipboard.ts'
 import { selectedRepoWorktree } from '#/web/stores/repos/worktree-selection.ts'
+import { FilePreviewProvider, useFilePreview } from '#/web/components/terminal/file-preview-context.tsx'
+import { useOpenDirectoryAction } from '#/web/hooks/useOpenDirectoryAction.tsx'
+import { resolveFileManagerTarget } from '#/web/file-manager-target.ts'
+import { getInitialBootstrap } from '#/web/bootstrap.ts'
 
 const ROOT_DIR = ''
 
@@ -168,36 +174,44 @@ type FileTreeUndoAction =
       previousBytesBase64: string
     }
 
-export interface FileTreeRevealRequest {
-  id: number
-  relativePath: string
-}
-
 type FileTreeToolbarHeight = 'compact' | 'detail'
 
-export function ProjectFileTree({
-  repoId,
-  folderContext,
-  revealRequest,
-  toolbarHeight = 'compact',
-  toolbarLeading,
-}: {
+export function ProjectFileTree(props: ProjectFileTreeProps) {
+  const view = useProjectFileTreeView(props.repoId, props.folderContext)
+  return (
+    <FilePreviewProvider scopeKey={JSON.stringify([props.repoId, view.worktreePath])}>
+      <ProjectFileTreeContent {...props} />
+    </FilePreviewProvider>
+  )
+}
+
+interface ProjectFileTreeProps {
   repoId: string
   folderContext?: ProjectFileTreeContext
   revealRequest?: FileTreeRevealRequest | null
   toolbarHeight?: FileTreeToolbarHeight
   toolbarLeading?: ReactNode
-}) {
+}
+
+function ProjectFileTreeContent({
+  repoId,
+  folderContext,
+  revealRequest,
+  toolbarHeight = 'compact',
+  toolbarLeading,
+}: ProjectFileTreeProps) {
   const t = useT()
+  const preview = useFilePreview()
   const { fileTreeClipboardMaxBytesMb } = useRuntimeFileAreaSettings()
   const { appFontSize } = useRuntimeFontSettings()
   const fileTreeClipboardMaxBytes = fileTreeClipboardMaxBytesFromMb(fileTreeClipboardMaxBytesMb)
   const view = useProjectFileTreeView(repoId, folderContext)
   const worktreePath = view.worktreePath
+  const cancelPendingPreview = preview?.cancelPendingPreview
+  useEffect(() => cancelPendingPreview, [cancelPendingPreview, repoId, worktreePath])
   const activeWorktreeRef = useRef<string | null>(worktreePath)
   const directoriesRef = useRef<Record<string, DirectoryState>>({})
   const latestDirectoryRequestTokensRef = useRef(new Map<string, symbol>())
-  const revealRequestRef = useRef<number | null>(null)
   const undoStackRef = useRef<FileTreeUndoAction[]>([])
   const undoPendingRef = useRef(false)
   const [directories, setDirectories] = useState<Record<string, DirectoryState>>({})
@@ -245,7 +259,21 @@ export function ProjectFileTree({
         directoriesRef.current = next
         return next
       })
-      const result = await getRepositoryFileTree(repoId, worktreePath, absolutePath, signal)
+      let result: RepoFileTreeResult
+      try {
+        result = await getRepositoryFileTree(repoId, worktreePath, absolutePath, signal)
+      } catch (error) {
+        if (
+          signal?.aborted ||
+          activeWorktreeRef.current !== worktreePath ||
+          latestDirectoryRequestTokensRef.current.get(relativePath) !== requestToken
+        )
+          return null
+        result = {
+          ok: false,
+          message: error instanceof Error && error.message ? error.message : 'error.failed-read-repo',
+        }
+      }
       if (
         signal?.aborted ||
         activeWorktreeRef.current !== worktreePath ||
@@ -271,7 +299,6 @@ export function ProjectFileTree({
   useEffect(() => {
     latestDirectoryRequestTokensRef.current.clear()
     directoriesRef.current = {}
-    revealRequestRef.current = null
     undoStackRef.current = []
     undoPendingRef.current = false
     setDirectories({})
@@ -327,7 +354,7 @@ export function ProjectFileTree({
   const canUploadFiles = hasNativeFilePicker()
 
   const revealRelativePath = useCallback(
-    async (relativePath: string, options: { requestId?: number; cancelled?: () => boolean } = {}): Promise<void> => {
+    async (relativePath: string, cancelled: () => boolean): Promise<void> => {
       if (!worktreePath) return
       const activeWorktreePath = worktreePath
 
@@ -343,7 +370,7 @@ export function ProjectFileTree({
       if (!entries) return
 
       for (const directoryRelativePath of parentRelativePaths(relativePath)) {
-        if (options.cancelled?.()) return
+        if (cancelled()) return
         const entry = findEntry(entries, directoryRelativePath)
         if (!entry) return
         setExpandedDirs((current) => new Set(current).add(entry.relativePath))
@@ -353,8 +380,7 @@ export function ProjectFileTree({
 
       const finalEntry = findEntry(entries, relativePath)
       const targetId = finalEntry ? finalEntry.relativePath : `virtual:${relativePath}`
-      if (options.cancelled?.()) return
-      if (options.requestId !== undefined) revealRequestRef.current = options.requestId
+      if (cancelled()) return
       setSelection({ selected: new Set([targetId]), anchor: targetId })
       setFocusedNodeId(targetId)
       scheduleFileTreeNodeScroll(targetId)
@@ -363,18 +389,16 @@ export function ProjectFileTree({
   )
 
   useEffect(() => {
-    if (!worktreePath || !revealRequest) return
-    const request = revealRequest
-    if (revealRequestRef.current === request.id) return
-    revealRequestRef.current = request.id
+    if (!revealRequest || revealRequest.repoId !== repoId || revealRequest.worktreePath !== worktreePath) return
     let cancelled = false
-    void revealRelativePath(request.relativePath, { requestId: request.id, cancelled: () => cancelled })
+    void revealRelativePath(revealRequest.relativePath, () => cancelled)
     return () => {
       cancelled = true
     }
-  }, [revealRelativePath, revealRequest, worktreePath])
+  }, [repoId, revealRelativePath, revealRequest, worktreePath])
 
-  const canOpenLocally = !!worktreePath && !isRemoteRepoId(repoId)
+  const openDirectoryAction = useOpenDirectoryAction({ repoId, path: worktreePath, disabled: !view.exists })
+  const canOpenLocally = !openDirectoryAction.disabled
 
   const toggleDirectory = useCallback(
     (node: FileTreeNode) => {
@@ -403,8 +427,20 @@ export function ProjectFileTree({
           shiftKey: event.shiftKey,
         }),
       )
+      preview?.cancelPendingPreview()
+      if (
+        worktreePath &&
+        isEditorOpenableFileNode(node) &&
+        event.detail < 2 &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        preview?.requestPreview(repoId, worktreePath, { path: node.absolutePath })
+      }
     },
-    [visibleIds],
+    [visibleIds, preview, repoId, worktreePath],
   )
 
   const handleDragStart = useCallback(
@@ -1174,11 +1210,7 @@ export function ProjectFileTree({
     },
     [repoId],
   )
-  const openWorktreeLocally = useCallback(async () => {
-    if (!canOpenLocally || !worktreePath) return
-    const result = await openInFinder(worktreePath)
-    if (!result.ok) toast.error(result.message)
-  }, [canOpenLocally, worktreePath])
+  const openWorktreeLocally = openDirectoryAction.onSelect
 
   if (!view.exists) return null
   const fileTreeStyle = {
@@ -1256,7 +1288,10 @@ export function ProjectFileTree({
                     onDownload={runDownload}
                     canUploadFiles={canUploadFiles}
                     onUpload={runUploadForNode}
-                    onOpenInEditor={(node) => void runOpenNodeInEditor(node)}
+                    onOpenInEditor={(node) => {
+                      preview?.cancelPendingPreview()
+                      void runOpenNodeInEditor(node)
+                    }}
                     isProtectedRoot={isProtectedRoot}
                     onKeyDown={handleKeyDown}
                     onFocus={setFocusedNodeId}
@@ -1656,7 +1691,14 @@ function FileTreeContextMenu({
   const t = useT()
   const realNode = isWritableNode(node)
   const mutableNode = realNode && !protectedRoot
-  const canRevealInFinder = realNode && !isRemoteRepoId(repoId)
+  const directoryNode = isExpandableNode(node)
+  const directoryAction = useOpenDirectoryAction({
+    repoId,
+    path: directoryNode ? node.absolutePath : null,
+    disabled: !realNode,
+  })
+  const revealTarget = resolveFileManagerTarget(repoId, node.absolutePath, getInitialBootstrap().hostPlatform)
+  const canReveal = realNode && !directoryNode && canRevealInFileManager() && revealTarget.ok
   const downloadTargets = exportableFileNodes(targets)
   return (
     <ContextMenuContent>
@@ -1698,8 +1740,26 @@ function FileTreeContextMenu({
         <Terminal className="size-3.5" />
         {t('file-tree.open-terminal')}
       </ContextMenuItem>
-      {canRevealInFinder ? (
-        <ContextMenuItem onSelect={() => void openInFinder(node.absolutePath)}>
+      {directoryNode ? (
+        <ContextMenuItem
+          disabled={directoryAction.disabled}
+          title={directoryAction.title}
+          onSelect={() => void directoryAction.onSelect()}
+        >
+          <FolderOpen className="size-3.5" />
+          {directoryAction.label}
+        </ContextMenuItem>
+      ) : canReveal ? (
+        <ContextMenuItem
+          onSelect={() => {
+            if (!revealTarget.ok) return
+            void openInFinder(revealTarget.path)
+              .then((result) => {
+                if (!result.ok) toast.error(t(result.message))
+              })
+              .catch(() => toast.error(t('directory-open.failed')))
+          }}
+        >
           <FolderOpen className="size-3.5" />
           {t('worktrees.reveal-title')}
         </ContextMenuItem>

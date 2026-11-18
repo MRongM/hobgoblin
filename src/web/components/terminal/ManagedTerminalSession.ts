@@ -1,3 +1,4 @@
+import type { FilePathTarget } from '#/shared/file-path-target.ts'
 import type { ISearchResultChangeEvent } from '@xterm/addon-search'
 import type { Terminal as XTermTerminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
@@ -114,6 +115,7 @@ export class ManagedTerminalSession {
 
   attach(host: HTMLElement, handlers?: TerminalSessionAttachHandlers): void {
     if (this.disposed) return
+    this.view.setHoverPathHandler(handlers?.onHoverPath ?? null)
     this.view.setRevealPathHandler(handlers?.onRevealPath ?? null)
     this.view.setOpenPathInEditorHandler(handlers?.onOpenPathInEditor ?? null)
     this.view.setMobileScrollScrubber(handlers?.mobileScrollScrubber ?? null)
@@ -127,6 +129,7 @@ export class ManagedTerminalSession {
 
   detach(host: HTMLElement, parkingRoot: HTMLElement): void {
     this.clearTerminalFocusIfOwned()
+    this.view.setHoverPathHandler(null)
     this.view.setRevealPathHandler(null)
     this.view.setOpenPathInEditorHandler(null)
     this.view.setMobileScrollScrubber(null)
@@ -178,6 +181,10 @@ export class ManagedTerminalSession {
 
   scrollByTouch(input: TerminalTouchScrollInput): void {
     this.view.scrollByTouch(input)
+  }
+
+  filePathAtPoint(point: TerminalMobileSelectionPoint): FilePathTarget | null {
+    return this.view.filePathAtPoint(point)
   }
 
   beginMobileSelection(point: TerminalMobileSelectionPoint): boolean {

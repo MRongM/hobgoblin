@@ -86,6 +86,81 @@ afterEach(() => {
 })
 
 describe('useBranchWorkspaceGitActions', () => {
+  test('cancels plans on replacement, reset, or close without letting late replies change state', async () => {
+    let resolveOld!: (value: unknown) => void
+    mocks.plan.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve
+        }),
+    )
+    mocks.plan.mockResolvedValueOnce({ ok: true, plan: discardPlan })
+    let state: ReturnType<typeof useBranchWorkspaceGitActions> | null = null
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Harness onReady={(value) => (state = value)} />
+        </QueryClientProvider>,
+      ),
+    )
+    let first!: Promise<boolean>
+    act(() => {
+      first = state!.requestPlan('batch-commit', 'ws-1')
+    })
+    const oldSignal = mocks.plan.mock.calls[0]?.[2] as AbortSignal
+    await act(async () => {
+      await state!.requestPlan('batch-discard', 'ws-1')
+    })
+    expect(oldSignal.aborted).toBe(true)
+    await act(async () => {
+      resolveOld({ ok: true, plan })
+      await first
+    })
+    expect(state!.plan).toEqual(discardPlan)
+    expect(state!.pending).toBe(false)
+
+    mocks.plan.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve
+        }),
+    )
+    act(() => {
+      first = state!.requestPlan('batch-commit', 'ws-1')
+    })
+    const resetSignal = mocks.plan.mock.calls.at(-1)?.[2] as AbortSignal
+    act(() => state!.reset())
+    expect(resetSignal.aborted).toBe(true)
+    await act(async () => {
+      resolveOld({ ok: true, plan })
+      await first
+    })
+    expect(state!.plan).toBeNull()
+    expect(state!.error).toBeNull()
+
+    mocks.plan.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve
+        }),
+    )
+    act(() => {
+      first = state!.requestPlan('batch-commit', 'ws-1')
+    })
+    const cancelSignal = mocks.plan.mock.calls.at(-1)?.[2] as AbortSignal
+    mocks.abort.mockResolvedValue({ ok: false })
+    await act(async () => {
+      await state!.cancel()
+    })
+    expect(cancelSignal.aborted).toBe(true)
+    expect(state!.pending).toBe(false)
+    await act(async () => {
+      resolveOld({ ok: true, plan })
+      await first
+    })
+    expect(state!.plan).toBeNull()
+  })
+
   test('plans and executes a batch commit while retaining result state', async () => {
     mocks.plan.mockResolvedValue({ ok: true, plan })
     mocks.execute.mockResolvedValue({
