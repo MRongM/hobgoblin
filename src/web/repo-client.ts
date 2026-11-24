@@ -30,9 +30,10 @@ import type { WorktreeBootstrapDecision } from '#/shared/worktree-bootstrap-summ
 import type { RepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 import type { WorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
 import type { RepositoryRemoteAlignmentPreviewResult } from '#/shared/repository-remote-alignment.ts'
+import { REPO_RPC_UNAVAILABLE, type RepoRefreshStatus } from '#/shared/remote-repo-rpc.ts'
 
-export async function probeRepository(cwd: string): Promise<ProbeResult> {
-  return await postServerJson('/api/repo/probe', { cwd })
+export async function probeRepository(cwd: string, forRefresh?: boolean): Promise<ProbeResult> {
+  return await readRepository('/api/repo/probe', forRefresh ? { cwd, forRefresh } : { cwd })
 }
 
 export async function cloneRepository(input: {
@@ -52,12 +53,27 @@ export async function abortCloneOperation(operationId: string): Promise<boolean>
   return await postServerJson('/api/repo/abort-clone', { operationId })
 }
 
-export async function getRepositorySnapshot(cwd: string, signal?: AbortSignal): Promise<RepoSnapshot | null> {
-  return await postServerJson('/api/repo/snapshot', { cwd }, { signal })
+export async function getRepositorySnapshot(
+  cwd: string,
+  signal?: AbortSignal,
+  includeStatus?: boolean,
+): Promise<RepoSnapshot | null> {
+  return await readRepository('/api/repo/snapshot', includeStatus ? { cwd, includeStatus } : { cwd }, signal)
 }
 
-export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<WorktreeStatus[]> {
-  return await postServerJson('/api/repo/status', { cwd }, { signal })
+export async function getRepositoryStatus(cwd: string, signal?: AbortSignal): Promise<RepoRefreshStatus> {
+  const result = await readRepository<WorktreeStatus[] | RepoRefreshStatus>('/api/repo/status', { cwd }, signal)
+  return Array.isArray(result) ? { status: result } : result
+}
+
+async function readRepository<T>(
+  path: string,
+  input: { cwd: string; includeStatus?: boolean; forRefresh?: boolean },
+  signal?: AbortSignal,
+): Promise<T> {
+  const result = await postServerJson<typeof input, T | { rpcError: true }>(path, input, { signal })
+  if (result && typeof result === 'object' && 'rpcError' in result) throw new Error(REPO_RPC_UNAVAILABLE)
+  return result as T
 }
 
 export async function getRepositoryHistory(

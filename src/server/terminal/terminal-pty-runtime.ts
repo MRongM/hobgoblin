@@ -5,12 +5,17 @@ import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type { TerminalWindowsPty } from '#/shared/terminal.ts'
 
+interface TerminalPtyExit {
+  exitCode: number
+  signal?: number
+}
+
 export interface TerminalPtyRuntime {
   write(data: string): void
   resize(cols: number, rows: number): void
   kill(): void
   onData(listener: (data: string) => void): { dispose(): void }
-  onExit(listener: () => void): { dispose(): void }
+  onExit(listener: (event: TerminalPtyExit) => void): { dispose(): void }
   processName(): string
 }
 
@@ -148,7 +153,7 @@ class NodePtyTerminalRuntime implements TerminalPtyRuntime {
     return this.term.onData(listener)
   }
 
-  onExit(listener: () => void): { dispose(): void } {
+  onExit(listener: (event: TerminalPtyExit) => void): { dispose(): void } {
     return this.term.onExit(listener)
   }
 

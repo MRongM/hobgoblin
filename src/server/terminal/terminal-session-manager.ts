@@ -45,6 +45,7 @@ import {
   type TerminalRenderState,
 } from '#/server/terminal/terminal-render-state.ts'
 import { spawnTerminalPtyRuntime, type TerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
+import { serverLogger } from '#/server/logger.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type {
   TerminalPathRelocationResult,
@@ -54,6 +55,7 @@ import type {
 
 const MAX_TERMINAL_WRITE_CHARS = 1024 * 1024
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{16,64}$/
+const terminalLogger = serverLogger.child({ module: 'terminal-session' })
 
 export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   ownerId: TOwner
@@ -643,8 +645,17 @@ export class TerminalSessionManager<TOwner extends string | number> {
         this.sink.onOutput(session.ownerId, { sessionId: session.id, data, seq, processName })
       }),
     )
+    const sshStartedAt = session.command === 'ssh' ? performance.now() : null
+    if (sshStartedAt !== null) terminalLogger.debug('SSH terminal started')
     session.disposables.push(
-      session.pty.onExit(() => {
+      session.pty.onExit((event) => {
+        if (sshStartedAt !== null) {
+          const exitCode = event?.exitCode ?? null
+          terminalLogger[exitCode === 255 ? 'warn' : 'debug'](
+            { exitCode, signal: event?.signal ?? null, durationMs: Math.round(performance.now() - sshStartedAt) },
+            'SSH terminal exited',
+          )
+        }
         session.pty = null
         this.sink.onExit(session.ownerId, { sessionId: session.id })
         this.closeSession(session.id)

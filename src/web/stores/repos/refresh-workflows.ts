@@ -19,7 +19,8 @@ export async function runSnapshotSuccessWorkflow(
 }
 
 export async function runCoreDataRefreshWorkflow(get: ReposGet, options: { id: string; token: number }): Promise<void> {
-  await get().refreshSnapshot(options.id, { token: options.token })
+  const result = await get().refreshSnapshot(options.id, { token: options.token, includeStatus: true })
+  if (result === 'status-included' || result === 'rpc-unavailable') return
   const after = get().repos[options.id]
   if (!after || after.instanceToken !== options.token) return
   if (after.availability.phase === 'unavailable') return

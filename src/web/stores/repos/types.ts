@@ -274,7 +274,10 @@ export interface RuntimeCoherentRepoProjectionActions {
   ) => void
   selectBranch: (id: string, branch: string) => void
   selectDetachedWorktree: (id: string, worktreePath: string) => void
-  refreshSnapshot: (id: string, options?: { token?: number }) => Promise<void>
+  refreshSnapshot: (
+    id: string,
+    options?: { token?: number; includeStatus?: boolean },
+  ) => Promise<'snapshot-only' | 'status-included' | 'rpc-unavailable' | void>
   refreshStatus: (id: string, options?: { token?: number }) => Promise<void>
   refreshCoreData: (id: string, options?: { token?: number }) => Promise<void>
   syncAndRefresh: (id: string, options?: { token?: number }) => Promise<ExecResult | null>

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ExternalAppsSnapshot, LanInfo, SettingsSnapshot } from '#/shared/rpc.ts'
 import { getExternalAppsSnapshot, getLanInfo, getSettingsSnapshot } from '#/web/settings-client.ts'
+import { getRepoRpcSettings } from '#/web/remote-client.ts'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { subscribeSettingsInvalidation } from '#/web/settings-invalidation-ingress.ts'
 import { DEFAULT_COLOR_THEME } from '#/shared/color-theme.ts'
@@ -130,6 +131,12 @@ export function useLanInfoQuery() {
   return useQuery(lanInfoQueryOptions())
 }
 
+export const repoRpcSettingsQueryKey = () => ['settings', 'repo-rpc'] as const
+
+export function useRepoRpcSettingsQuery() {
+  return useQuery({ queryKey: repoRpcSettingsQueryKey(), queryFn: ({ signal }) => getRepoRpcSettings(signal) })
+}
+
 export function useSettingsQueryInvalidationSync() {
   const queryClient = useQueryClient()
   useEffect(
@@ -140,6 +147,9 @@ export function useSettingsQueryInvalidationSync() {
         }
         if (event.scopes.includes('external-apps')) {
           void queryClient.invalidateQueries({ queryKey: externalAppsQueryKey(), exact: true })
+        }
+        if (event.scopes.includes('repo-rpc-settings')) {
+          void queryClient.invalidateQueries({ queryKey: repoRpcSettingsQueryKey(), exact: true })
         }
       }),
     [queryClient],

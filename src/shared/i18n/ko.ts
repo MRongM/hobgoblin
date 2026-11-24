@@ -1848,6 +1848,25 @@ export const ko: Record<DictKey, string> = {
   'settings.fetch.5m': '5 분',
   'settings.fetch.15m': '15 분',
   'settings.ssh.title': 'SSH',
+  'error.remote-rpc-partial-status':
+    '일부 worktree의 변경 상세 정보를 읽을 수 없습니다. 이전에 읽은 결과를 유지합니다.',
+  'error.remote-rpc-settings-changed':
+    '다른 창에서 연결 설정이 변경되었습니다. 최신 설정을 확인한 다음 다시 시도하세요.',
+  'settings.ssh.rpc.title': '저장소 동기화 프로토콜',
+  'settings.ssh.rpc.hint':
+    'SSH 호스트별로 브랜치, worktree, 상태를 읽는 방법을 선택합니다. 연결을 설정하기 전에 원격 호스트에서 저장소 RPC 프로세스를 시작하세요.',
+  'settings.ssh.rpc.alias': 'SSH Host 별칭',
+  'settings.ssh.rpc.mode': '동기화 프로토콜',
+  'settings.ssh.rpc.endpoint': 'RPC 주소',
+  'settings.ssh.rpc.token': '액세스 토큰',
+  'settings.ssh.rpc.token-saved': '비워 두면 이 주소와 인증서에 저장된 토큰을 사용합니다.',
+  'settings.ssh.rpc.ca': '사용자 지정 CA 인증서(선택, PEM)',
+  'settings.ssh.rpc.verify': '확인하고 저장',
+  'settings.ssh.rpc.save': '저장',
+  'settings.ssh.rpc.saved': '저장됨',
+  'settings.ssh.rpc.load-failed': '저장소 동기화 설정을 불러오거나 저장할 수 없습니다.',
+  'error.remote-rpc-unavailable':
+    '저장소 RPC에 실패했습니다. 원격 프로세스, 주소, TLS 인증서 및 액세스 토큰을 확인하세요.',
   'settings.ssh.body': '~/.ssh/config 의 Host 별칭으로 원격 리포지토리를 엽니다.',
   'settings.ssh.config-file-label': '구성 파일',
   'settings.ssh.config-file-hint': 'Hobgoblin 은 여기서 SSH 별칭을 읽습니다.',

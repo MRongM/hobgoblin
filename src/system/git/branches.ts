@@ -133,7 +133,7 @@ export function markDefaultBranch(branches: BranchSnapshotInfo[], defaultBranch:
 export async function getBranches(
   cwd: string,
   worktrees?: WorktreeInfo[],
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; throwOnError?: boolean },
 ): Promise<BranchSnapshotInfo[]> {
   try {
     const format = [
@@ -155,7 +155,8 @@ export async function getBranches(
     if (options?.signal?.aborted) return []
     const branches = markBranchCreatedFrom(parseBranches(output, currentBranch, worktrees), createdFromByBranch)
     return prioritizeDefaultBranch(markDefaultBranch(branches, defaultBranch), defaultBranch)
-  } catch {
+  } catch (error) {
+    if (options?.throwOnError && !options.signal?.aborted) throw error
     return []
   }
 }

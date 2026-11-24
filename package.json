@@ -15,6 +15,7 @@
     "build": "bun scripts/build.ts",
     "build:web": "vite build",
     "start:server": "node scripts/start-server.ts",
+    "start:repo-rpc": "node scripts/start-remote-repo-rpc.ts",
     "build:electron": "electron-builder",
     "install:app": "bun install.ts",
     "check:architecture": "bun scripts/check-architecture.ts",

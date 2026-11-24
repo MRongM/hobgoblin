@@ -164,6 +164,10 @@ bun install
 bun run dev
 ```
 
+## SSH 远程仓库的 HTTP/2 同步
+
+桌面版可在 SSH 设置里为每个 Host 别名选择同步协议，通过 HTTP/2 批量读取分支、worktree 和改动状态。参见[仓库 RPC 配置](docs/remote-repo-rpc.md)。
+
 ## Web 浏览器 / Server Mode
 
 构建 Web UI 并启动 server mode，然后在 Web 浏览器中打开 Hobgoblin：

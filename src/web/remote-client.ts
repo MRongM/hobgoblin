@@ -3,6 +3,7 @@ import type { RemoteRepoTarget } from '#/shared/remote-repo.ts'
 import type { EditorOpenTarget } from '#/shared/file-path-target.ts'
 import type { RemoteDiagnosticsResult, RemotePathSuggestionsInput, SshConfigHostsResult } from '#/shared/remote-repo.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
+import type { RepoRpcSettings, RepoRpcSettingsInput } from '#/shared/remote-repo-rpc.ts'
 
 export async function resolveRemoteRepositoryTarget(ref: {
   alias: string
@@ -18,6 +19,16 @@ export async function resolveRemoteRepositoryTarget(ref: {
 
 export async function getRemoteSshHosts(): Promise<SshConfigHostsResult> {
   return await fetchServerJson<SshConfigHostsResult>('/api/remote/ssh-hosts')
+}
+
+export async function getRepoRpcSettings(signal?: AbortSignal): Promise<RepoRpcSettings[]> {
+  return await fetchServerJson('/api/remote/repo-rpc-settings', { signal })
+}
+
+export async function setRepoRpcSettings(
+  input: RepoRpcSettingsInput,
+): Promise<{ ok: true; settings: RepoRpcSettings[] } | { ok: false; message: string }> {
+  return await postServerJson('/api/remote/repo-rpc-settings', input)
 }
 
 export async function getWindowsWslDistributions(): Promise<string[]> {

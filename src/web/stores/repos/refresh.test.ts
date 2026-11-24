@@ -430,6 +430,62 @@ describe('remote fetch timestamps', () => {
 })
 
 describe('core refresh request ordering', () => {
+  test('applies combined RPC status without a second repository request', async () => {
+    const token = seedRepo([branch('old')])
+    const status = { path: REPO_ID, branch: 'main', head: 'abc', isMain: true, entries: [] }
+    rpcHandlers['repo.snapshot'] = async () => ({ branches: [branch('main')], current: 'main', status: [status] })
+    rpcHandlers['repo.status'] = vi.fn(async () => [])
+
+    await useReposStore.getState().refreshCoreData(REPO_ID, { token })
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo?.data.currentBranch).toBe('main')
+    expect(repo?.data.status).toEqual([status])
+    expect(repo?.data.statusLoaded).toBe(true)
+    expect(rpcHandlers['repo.status']).not.toHaveBeenCalled()
+  })
+
+  test('retains the prior status when the configured RPC connection fails', async () => {
+    const token = seedRepo([branch('main')])
+    const status = { path: REPO_ID, branch: 'main', head: 'abc', isMain: true, entries: [] }
+    rpcHandlers['repo.status'] = async () => [status]
+    await useReposStore.getState().refreshStatus(REPO_ID, { token })
+    rpcHandlers['repo.snapshot'] = async () => ({ rpcError: true })
+    rpcHandlers['repo.status'] = vi.fn(async () => [])
+
+    await useReposStore.getState().refreshCoreData(REPO_ID, { token })
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo?.data.status).toEqual([status])
+    expect(repo?.resources.status).toMatchObject({ error: 'error.remote-rpc-unavailable', stale: true })
+    expect(rpcHandlers['repo.status']).not.toHaveBeenCalled()
+  })
+
+  test('updates healthy worktrees and retains prior details for unavailable worktrees in a partial RPC refresh', async () => {
+    const token = seedRepo([branch('main')])
+    const stale = {
+      path: '/workspace/linked',
+      branch: 'linked',
+      isMain: false,
+      entries: [{ x: '?', y: '?', path: 'last-known.txt' }],
+    }
+    const main = { path: REPO_ID, branch: 'main', isMain: true, entries: [] }
+    rpcHandlers['repo.status'] = async () => [stale]
+    await useReposStore.getState().refreshStatus(REPO_ID, { token })
+    rpcHandlers['repo.snapshot'] = async () => ({
+      branches: [branch('main')],
+      current: 'main',
+      status: [main],
+      stalePaths: [stale.path],
+    })
+
+    await useReposStore.getState().refreshCoreData(REPO_ID, { token })
+
+    const repo = useReposStore.getState().repos[REPO_ID]
+    expect(repo?.data.status).toEqual([main, stale])
+    expect(repo?.resources.status).toMatchObject({ error: 'error.remote-rpc-partial-status', stale: true })
+  })
+
   test('refreshCoreData refreshes snapshot and status', async () => {
     const token = seedRepo([branch('old')])
     const calls: string[] = []

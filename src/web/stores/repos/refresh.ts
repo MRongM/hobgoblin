@@ -14,10 +14,21 @@ import {
 } from '#/web/stores/repos/refresh-state.ts'
 import { createRefreshSyncHelpers } from '#/web/stores/repos/refresh-sync.ts'
 import { runWithRepoInvalidationSource } from '#/web/stores/repos/invalidation-sources.ts'
-import { finishResourceError, startResource } from '#/web/stores/repos/resources.ts'
+import { finishResourceError, finishResourceSuccess, startResource } from '#/web/stores/repos/resources.ts'
 import { getRepositorySnapshot, getRepositoryStatus } from '#/web/repo-client.ts'
 import type { RepoSnapshot } from '#/shared/rpc.ts'
-import type { ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
+import { REPO_RPC_UNAVAILABLE, type RepoRefreshStatus } from '#/shared/remote-repo-rpc.ts'
+import type { RepoState, ReposGet, ReposSet } from '#/web/stores/repos/types.ts'
+
+function applyWorktreeStatus(repo: RepoState, { status, stalePaths }: RepoRefreshStatus): void {
+  const missing = new Set(stalePaths)
+  repo.data.status = [...status, ...repo.data.status.filter((entry) => missing.has(entry.path))]
+  repo.data.statusLoaded = true
+  repo.data.worktreesByPath = applyStatusToWorktreeStates(repo.data.worktreesByPath, repo.data.status)
+  reconcileRepoWorktreeSelectionAfterStatus(repo)
+  finishResourceSuccess(repo.resources.status)
+  if (missing.size) finishResourceError(repo.resources.status, 'error.remote-rpc-partial-status')
+}
 
 export function createRefreshActions(set: ReposSet, get: ReposGet) {
   const { runManualSyncPipeline } = createRefreshSyncHelpers(set, get)
@@ -27,9 +38,13 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
     token: number,
     snap: RepoSnapshot,
     isSnapshotCurrent: () => boolean,
+    canApplyStatus: (repo: RepoState) => boolean,
   ): Promise<void> {
     updateIfFresh(set, id, token, (r) => {
       applySnapshotToRepoProjection(r, snap)
+      if (snap.status && canApplyStatus(r)) {
+        applyWorktreeStatus(r, { status: snap.status, stalePaths: snap.stalePaths })
+      }
     })
     await runSnapshotSuccessWorkflow(set, get, {
       id,
@@ -39,15 +54,19 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
   }
 
   return {
-    async refreshSnapshot(id: string, options?: { token?: number }) {
+    async refreshSnapshot(id: string, options?: { token?: number; includeStatus?: boolean }) {
       const resolved = resolveActionToken(get, id, options?.token)
       if (!resolved) return
       const { repo: repoBefore, token } = resolved
       if (!repoSupportsGitData(repoBefore)) return
+      const statusOp = repoBefore.operations.status
+      const canApplyStatus = (repo: RepoState) =>
+        statusOp.phase === 'idle' && repo.operations.status.operationId === statusOp.operationId
+      let rpcFailed = false
       updateIfFresh(set, id, token, (r) => {
         startResource(r.resources.snapshot, { hasData: r.data.branches.length > 0 })
       })
-      await runLatestOperation({
+      const result = await runLatestOperation({
         set,
         get,
         id,
@@ -56,7 +75,7 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
         operationKey: 'snapshot',
         priority: 50,
         targets: [{ key: 'snapshot', reason: 'snapshot' }],
-        task: (signal) => getRepositorySnapshot(id, signal),
+        task: (signal) => getRepositorySnapshot(id, signal, options?.includeStatus),
         errorFromResult: (snap) => (snap ? null : 'error.failed-read-repo'),
         onResult: async (snap, ctx) => {
           if (!snap) {
@@ -66,16 +85,21 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
             })
             return
           }
-          await runSnapshotSuccessFlow(id, token, snap, ctx.isCurrent)
+          await runSnapshotSuccessFlow(id, token, snap, ctx.isCurrent, canApplyStatus)
         },
         onError: (message) => {
+          rpcFailed = message === REPO_RPC_UNAVAILABLE
           updateIfFresh(set, id, token, (r) => {
             if (isRepoUnavailableReason(message)) markRepoUnavailable(r, message)
             finishResourceError(r.resources.snapshot, message)
+            if (rpcFailed && options?.includeStatus && canApplyStatus(r))
+              finishResourceError(r.resources.status, message)
             r.events = appendRepoEvent(r.events, errorEvent(message))
           })
         },
       })
+      if (rpcFailed) return 'rpc-unavailable'
+      return result?.status !== undefined ? 'status-included' : 'snapshot-only'
     },
 
     async refreshStatus(id: string, options?: { token?: number }) {
@@ -95,11 +119,9 @@ export function createRefreshActions(set: ReposSet, get: ReposGet) {
         selectResource: (r) => r.resources.status,
         start: (r) => ({ hasData: r.data.statusLoaded || r.data.status.length > 0 }),
         task: (signal) => getRepositoryStatus(id, signal),
-        applyResult: (r, status) => {
-          r.data.status = status
-          r.data.statusLoaded = true
-          r.data.worktreesByPath = applyStatusToWorktreeStates(r.data.worktreesByPath, status)
-          reconcileRepoWorktreeSelectionAfterStatus(r)
+        applyResult: (repo, result) => {
+          applyWorktreeStatus(repo, result)
+          return false
         },
         onSuccess: (_status, ctx) => {
           const repoAfterStatus = get().repos[id]

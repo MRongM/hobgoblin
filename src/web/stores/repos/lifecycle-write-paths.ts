@@ -23,6 +23,7 @@ import type { ExecResult } from '#/web/types.ts'
 import type { WorkspaceConfig, WorkspaceDiscoveryResult, WorkspaceRepositoryEntry } from '#/shared/workspace.ts'
 import { nextActiveRepoIdAfterWorkspaceClose } from '#/web/open-workspace-state.ts'
 import { activeProjectId } from '#/web/stores/repos/workspace-projects.ts'
+import { REPO_RPC_UNAVAILABLE } from '#/shared/remote-repo-rpc.ts'
 import {
   isRemoteRepoId,
   localRepoSessionEntry,
@@ -86,12 +87,13 @@ export async function resolveRepoPath(
   input: string | RepoSessionEntry,
   onError?: (err: unknown) => void,
   fallbackError = 'error.failed-read-repo',
+  forRefresh = false,
 ): Promise<ProbeResult> {
   const entry = sessionEntryFromInput(input)
   try {
     let target: RemoteRepoTarget | undefined
     if (entry.kind === 'remote') target = await resolveRemoteRepositoryTarget(entry.ref)
-    const probe = await probeRepository(entry.id)
+    const probe = await probeRepository(entry.id, entry.kind === 'remote' && forRefresh)
     if (!probe?.ok || !probe.root) {
       return {
         input: entry.id,
@@ -229,13 +231,14 @@ export async function reprobeWorkspaceCapability(
   const current = get().repos[id]
   if (!current || current.instanceToken !== token) return { kind: 'stale' }
 
-  const resolved = await resolveRepoPath(sessionEntryForReprobe(current), undefined, 'error.not-git-repo')
+  const resolved = await resolveRepoPath(sessionEntryForReprobe(current), undefined, 'error.not-git-repo', true)
 
   const fresh = get().repos[id]
   if (!fresh || fresh.instanceToken !== token) return { kind: 'stale' }
 
   if (!resolved.repo) {
     const message = resolved.reason ?? 'error.failed-read-repo'
+    if (message === REPO_RPC_UNAVAILABLE) return { kind: 'unavailable', id, token, message }
     let nextToken = token
     set((s) => {
       const repo = s.repos[id]

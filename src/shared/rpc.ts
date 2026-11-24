@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import type { BranchSnapshotInfo, ExecResult, RepoRemoteInfo } from '#/shared/git-types.ts'
+import type { BranchSnapshotInfo, ExecResult, RepoRemoteInfo, WorktreeStatus } from '#/shared/git-types.ts'
 import type { WorkspaceDetailPaneSizes, WorkspaceLayout } from '#/shared/workspace-layout.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
 import type {
@@ -171,6 +171,8 @@ export interface RepoSnapshot {
   branches: BranchSnapshotInfo[]
   current: string
   remote?: RepoRemoteInfo
+  status?: WorktreeStatus[]
+  stalePaths?: string[]
 }
 
 export interface ProbeResult {

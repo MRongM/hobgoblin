@@ -11,10 +11,29 @@ import { routeEditorTarget } from '#/server/routes/editor-target.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { listWindowsWslDistributions } from '#/system/wsl/distributions.ts'
+import { listRepoRpcSettings, saveRepoRpcSettings } from '#/server/modules/remote-repo-rpc-settings-source.ts'
+import { REPO_RPC_UNAVAILABLE, RepoRpcError } from '#/shared/remote-repo-rpc.ts'
+import { publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
 
 export function createRemoteRoutes() {
   const app = new Hono()
   app.get('/ssh-hosts', async (c) => c.json(await getServerSshHosts()))
+  app.get('/repo-rpc-settings', async (c) => c.json(await listRepoRpcSettings()))
+  app.post('/repo-rpc-settings', async (c) => {
+    try {
+      const settings = await saveRepoRpcSettings(await c.req.json(), c.req.raw.signal)
+      publishSettingsInvalidation(['repo-rpc-settings'])
+      return c.json({ ok: true, settings })
+    } catch (error) {
+      const message =
+        error instanceof RepoRpcError
+          ? REPO_RPC_UNAVAILABLE
+          : error instanceof Error && error.message === 'error.remote-rpc-settings-changed'
+            ? error.message
+            : 'error.invalid-arguments'
+      return c.json({ ok: false, message })
+    }
+  })
   app.get('/wsl-distributions', async (c) => c.json(await listWindowsWslDistributions(c.req.raw.signal)))
   app.post('/resolve-target', async (c) => {
     const body = await c.req.json().catch(() => null)

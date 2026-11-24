@@ -159,6 +159,8 @@ const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
   const url = new URL(typeof input === 'string' ? input : input.toString())
   let result: unknown = null
   if (url.pathname === '/api/settings') result = defaultRpcResult('settings.get')
+  else if (url.pathname === '/api/remote/ssh-hosts') result = { hosts: [{ alias: 'dev' }], hasInclude: false }
+  else if (url.pathname === '/api/remote/repo-rpc-settings') result = []
   else if (url.pathname === '/api/settings/prefs') {
     const body = JSON.parse(String(init?.body ?? '{}')) as { settings?: Record<string, unknown> }
     result = {
@@ -591,6 +593,9 @@ describe('SettingsSurface', () => {
     expect(document.body.textContent).toContain('settings.ssh.title')
     expect(document.body.textContent).toContain('settings.ssh.body')
     expect(document.body.textContent).toContain('settings.ssh.example')
+    expect(document.body.textContent).toContain('settings.ssh.rpc.title')
+    expect(document.getElementById('settings-ssh-rpc-mode')?.textContent).toBe('SSH')
+    expect(document.getElementById('settings-ssh-rpc-endpoint')).toBeNull()
   })
 
   test('renders the proxy settings page', async () => {

@@ -13,8 +13,6 @@ import {
   getRepositoryLocalTags,
   getRepositoryPatch,
   searchRepositoryFileTree,
-  getRepositorySnapshot,
-  getRepositoryStatus,
   probeRepository,
   readRepositoryFileTreeTextFile,
   readRepositoryFileTreeBinaryFile,
@@ -76,6 +74,12 @@ import {
 } from '#/shared/file-tree.ts'
 import { normalizeRepositoryMergeBranchSelection } from '#/shared/repository-merge-branch.ts'
 import { normalizeWorktreeBranchSwitchTarget } from '#/shared/worktree-branch-switch.ts'
+import { RepoRpcError } from '#/shared/remote-repo-rpc.ts'
+import {
+  getRefreshRepositorySnapshot,
+  getRefreshRepositoryStatus,
+  probeRefreshRepository,
+} from '#/server/modules/repo-refresh-read.ts'
 
 export function createRepoRoutes() {
   const app = new Hono()
@@ -87,6 +91,20 @@ export function createRepoRoutes() {
       console.warn(`[server][repo] ${label} failed`, err)
       return fallback
     }
+  }
+  async function readRepoOr<T>(run: () => Promise<T>, fallback: T, label: string) {
+    return await jsonOr(
+      async () => {
+        try {
+          return await run()
+        } catch (error) {
+          if (error instanceof RepoRpcError) return { rpcError: true as const, reason: error.reason }
+          throw error
+        }
+      },
+      fallback,
+      label,
+    )
   }
   function boundedInt(value: unknown, fallback: number, min: number, max: number): number {
     const parsed = typeof value === 'number' ? Math.floor(value) : Number.NaN
@@ -109,17 +127,29 @@ export function createRepoRoutes() {
   app.post('/probe', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
-    return c.json(await jsonOr(() => probeRepository(cwd), { ok: false, message: 'error.failed-read-repo' }, 'probe'))
+    return c.json(
+      await readRepoOr(
+        () => (body?.forRefresh === true ? probeRefreshRepository(cwd, c.req.raw.signal) : probeRepository(cwd)),
+        { ok: false, message: 'error.failed-read-repo' },
+        'probe',
+      ),
+    )
   })
   app.post('/snapshot', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
-    return c.json(await jsonOr(() => getRepositorySnapshot(cwd, c.req.raw.signal), null, 'snapshot'))
+    return c.json(
+      await readRepoOr(
+        () => getRefreshRepositorySnapshot(cwd, body?.includeStatus === true, c.req.raw.signal),
+        null,
+        'snapshot',
+      ),
+    )
   })
   app.post('/status', async (c) => {
     const body = await c.req.json().catch(() => null)
     const cwd = typeof body?.cwd === 'string' ? body.cwd : ''
-    return c.json(await jsonOr(() => getRepositoryStatus(cwd, c.req.raw.signal), [], 'status'))
+    return c.json(await readRepoOr(() => getRefreshRepositoryStatus(cwd, c.req.raw.signal), [], 'status'))
   })
   app.post('/history', async (c) => {
     const body = await c.req.json().catch(() => null)

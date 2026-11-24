@@ -164,6 +164,10 @@ bun install
 bun run dev
 ```
 
+## HTTP/2 for SSH repository sync
+
+Use [repository RPC](docs/remote-repo-rpc.md) to read branches, worktrees, and status over HTTP/2. The desktop SSH settings let you choose the sync protocol for each SSH host alias.
+
 ## Web Browser / Server Mode
 
 Build the web UI and start server mode, then open Hobgoblin from a web browser:
