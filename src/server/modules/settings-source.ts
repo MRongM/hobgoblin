@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import {
   MAX_IPC_PATH_LENGTH,
   isValidAbsolutePath,
@@ -160,6 +161,8 @@ export type ServerSettingsPrefsPatch = Partial<SettingsPrefs>
 let cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 let settingsPromise: Promise<ServerSettingsData> | null = null
 let settingsWriteQueue: Promise<void> = Promise.resolve()
+let pendingSessionWrite: { file: string; snapshot: ServerSettingsData; result: Promise<SessionState> } | null = null
+let persistedSession: { file: string; session: SessionState } | null = null
 const listeners = new Set<FetchIntervalListener>()
 const MAX_TERMINAL_CUSTOM_BUTTONS = 20
 const MAX_WEB_ACCESS_USERNAME_LENGTH = 128
@@ -791,14 +794,38 @@ async function readServerSettingsFile(): Promise<ServerSettingsData | null> {
   }
 }
 
-function writeServerSettingsFile(data: ServerSettingsData): Promise<void> {
+function writeServerSettingsFile(
+  data: ServerSettingsData,
+  kind: 'settings' | 'session' = 'settings',
+): Promise<SessionState> {
   const file = serverDataFile('server-settings.json')
-  const contents = JSON.stringify(data, null, 2)
+  if (kind === 'session' && pendingSessionWrite?.file === file) {
+    pendingSessionWrite.snapshot.session = data.session
+    return pendingSessionWrite.result
+  }
+
+  const snapshot = { ...data }
+  const contents = kind === 'settings' ? JSON.stringify(data, null, 2) : undefined
   const write = settingsWriteQueue.then(async () => {
+    if (pendingSessionWrite?.snapshot === snapshot) pendingSessionWrite = null
+    const { session } = snapshot
+    if (kind === 'session' && persistedSession?.file === file && isDeepStrictEqual(persistedSession.session, session)) {
+      return session
+    }
+
+    // A failed write may leave the file incomplete. Only successful writes are safe to compare against.
+    persistedSession = null
     await mkdir(path.dirname(file), { recursive: true })
-    await writeFile(file, contents, 'utf-8')
+    await writeFile(file, contents ?? JSON.stringify(snapshot, null, 2), 'utf-8')
+    persistedSession = { file, session }
+    return session
   })
-  settingsWriteQueue = write.catch(() => undefined)
+  // A preference write marks a boundary between batches of consecutive session snapshots.
+  pendingSessionWrite = kind === 'session' ? { file, snapshot, result: write } : null
+  settingsWriteQueue = write.then(
+    () => undefined,
+    () => undefined,
+  )
   return write
 }
 
@@ -1174,10 +1201,8 @@ export async function getServerSessionState(): Promise<SessionState> {
 
 export async function setServerSessionState(session: SessionState): Promise<SessionState> {
   const data = await loadServerSettings()
-  const next = normalizeSession(session)
-  data.session = next
-  await writeServerSettingsFile(data)
-  return next
+  data.session = normalizeSession(session)
+  return await writeServerSettingsFile(data, 'session')
 }
 
 export async function getServerRecentRepos(): Promise<RepoSessionEntry[]> {
@@ -1235,6 +1260,8 @@ export async function clearServerRecentRepos(): Promise<void> {
 export function resetServerSettingsSourceForTests(): void {
   settingsPromise = null
   settingsWriteQueue = Promise.resolve()
+  pendingSessionWrite = null
+  persistedSession = null
   listeners.clear()
   cachedFetchIntervalSec = DEFAULT_FETCH_INTERVAL_SEC
 }

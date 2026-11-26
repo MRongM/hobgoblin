@@ -20,6 +20,7 @@ import {
   takeoverServerTerminal,
   unregisterTerminalSocket,
   submitServerTelegramTerminalInput,
+  handleServerTerminalOpenApiControl,
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
 import type { ServerTerminalSocket } from '#/server/terminal/terminal-host.ts'
@@ -55,6 +56,10 @@ export interface TerminalFacade {
     clientId: string,
     input: TerminalWorkerRequestInputs['takeover'],
   ): MaybePromise<TerminalWorkerResponseOutputs['takeover']>
+  openApiControl?(
+    clientId: string,
+    input: TerminalWorkerRequestInputs['open-api-control'],
+  ): MaybePromise<TerminalWorkerResponseOutputs['open-api-control']>
   close(
     clientId: string,
     input: TerminalWorkerRequestInputs['close'],
@@ -112,6 +117,7 @@ export function createTerminalFacade(): TerminalFacade {
     write: writeServerTerminal,
     resize: resizeServerTerminal,
     takeover: takeoverServerTerminal,
+    openApiControl: handleServerTerminalOpenApiControl,
     close: closeServerTerminal,
     closeSessions(input) {
       return closeServerTerminalSessions(input.sessionIds)

@@ -7,6 +7,11 @@ import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createInternalAuthMiddleware } from '#/server/common/auth.ts'
 import { createWebAccessAuth } from '#/server/modules/web-access-auth.ts'
+import { CONVERSATION_OPEN_API_PREFIX } from '#/server/routes/conversation-open-api-document.ts'
+import {
+  createConversationOpenApiRoutes,
+  type ConversationOpenApiOptions,
+} from '#/server/routes/conversation-open-api.ts'
 import { createHealthRoutes } from '#/server/routes/health.ts'
 import { createPortForwardingRoutes } from '#/server/routes/port-forwarding.ts'
 import { createRemoteRoutes } from '#/server/routes/remote.ts'
@@ -33,6 +38,7 @@ export interface ServerAppOptions {
   startedAt: number
   internalSecret: string
   terminalHost: ServerTerminalHost
+  conversationOpenApi?: ConversationOpenApiOptions
   settingsState?: ReturnType<typeof createServerSettingsState>
   onTelegramRuntimeConfigChanged?: () => void | Promise<void>
 }
@@ -122,11 +128,46 @@ export function createApp(options: ServerAppOptions): Hono {
   const capabilityMiddleware = createInternalAuthMiddleware(options.internalSecret, {
     validateWebSession: webAccessAuth.validateToken,
   })
+  const administrationMiddleware = createInternalAuthMiddleware(options.internalSecret, {
+    validateWebSession: webAccessAuth.validateAuthenticatedToken,
+  })
   const app = new Hono()
+  const omitInternalSecret = (text: string) =>
+    options.internalSecret ? text.replaceAll(options.internalSecret, '…') : text
+  const publicTerminal = (session: Awaited<ReturnType<ServerTerminalHost['listSessions']>>[number]) => ({
+    ...session,
+    processName: omitInternalSecret(session.processName),
+    canonicalTitle: session.canonicalTitle && omitInternalSecret(session.canonicalTitle),
+  })
   app.use('/api/*', async (c, next) => {
     c.header('Cache-Control', 'no-store')
     await next()
   })
+  app.route(
+    CONVERSATION_OPEN_API_PREFIX,
+    createConversationOpenApiRoutes(
+      options.conversationOpenApi,
+      options.terminalHost.openApiControl?.bind(options.terminalHost, terminalClientId),
+      {
+        async list(repoId) {
+          const sessions = await options.terminalHost.listSessions?.(terminalClientId, repoId)
+          return (sessions ?? []).map(publicTerminal)
+        },
+        async excerpt(input) {
+          const excerpt = await options.terminalHost.getOutputExcerpt?.(input)
+          return excerpt ? { ...excerpt, output: omitInternalSecret(excerpt.output) } : null
+        },
+        async create(input) {
+          const result = await options.terminalHost.create?.(terminalClientId, input)
+          if (!result?.ok) return null
+          const session = result.sessions.find((entry) => entry.sessionId === result.sessionId)
+          return session?.phase === 'open' ? publicTerminal(session) : null
+        },
+        close: options.terminalHost.close?.bind(options.terminalHost, terminalClientId),
+      },
+    ),
+  )
+  app.all('/api/open/*', (c) => c.json({ error: { code: 'not_found', message: 'OpenAPI route not found' } }, 404))
   app.use(
     '/api/*',
     cors({
@@ -139,6 +180,8 @@ export function createApp(options: ServerAppOptions): Hono {
     '/api',
     createHealthRoutes({ version: options.version, startedAt: options.startedAt, terminalHost: options.terminalHost }),
   )
+  app.use('/api/settings/open-api-key', administrationMiddleware)
+  app.post('/api/settings/web-access', administrationMiddleware)
   app.use('/api/settings/*', capabilityMiddleware)
   app.use('/api/telegram-notifications/*', capabilityMiddleware)
   app.use('/api/tmux-cleanup/*', capabilityMiddleware)
@@ -150,6 +193,7 @@ export function createApp(options: ServerAppOptions): Hono {
     '/api/settings',
     createSettingsRoutes(settingsState, {
       revokeAllWebSessions: webAccessAuth.revokeAll,
+      openApiKeys: options.conversationOpenApi?.keys,
       onTelegramRuntimeConfigChanged: options.onTelegramRuntimeConfigChanged,
       onWindowsInternalTerminalShellChanged(preference) {
         options.terminalHost.setWindowsInternalTerminalShellPreference?.(preference)

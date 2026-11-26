@@ -50,7 +50,9 @@ describe('terminal session manager administrative close', () => {
     await expect(manager.listSessions('/workspace')).resolves.toEqual([
       expect.objectContaining({ hasUserInput: false }),
     ])
-    expect(manager.writeSession('client_a', created.sessionId, '\x1b[1;1R', 'attachment_local', false)).toBe(true)
+    expect(
+      manager.writeSession('client_a', created.sessionId, '\x1b[1;1R', 'attachment_local', { userIntent: false }),
+    ).toBe(true)
     await expect(manager.listSessions('/workspace')).resolves.toEqual([
       expect.objectContaining({ hasUserInput: false }),
     ])

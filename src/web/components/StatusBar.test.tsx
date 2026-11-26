@@ -192,32 +192,19 @@ describe('StatusBar file area control', () => {
     expect(container?.querySelector('button[aria-label^="file-area."]')).toBeNull()
   })
 
-  test('hosts browser and LAN QR actions for the selected worktree terminal', async () => {
+  test('shows only the browser action for the selected worktree terminal', async () => {
     act(() => root!.render(<StatusBar repoId={REPO_ID} />))
 
     const browser = container?.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')
     const qr = container?.querySelector<HTMLButtonElement>('button[aria-label="terminal.lan-qr"]')
     expect(browser).not.toBeNull()
-    expect(qr).not.toBeNull()
+    expect(qr).toBeNull()
 
     act(() => browser?.click())
     await flush()
 
     expect(openExternalUrlMock).toHaveBeenCalledWith(
       buildTerminalDeepLinkUrl('http://127.0.0.1:32215', {
-        repoId: REPO_ID,
-        worktreePath: WORKTREE_PATH,
-        branch: 'main',
-        terminalId: 'terminal-1',
-      }),
-    )
-
-    act(() => qr?.click())
-    await flush()
-
-    expect(document.body.textContent).toContain('terminal.lan-qr-title')
-    expect(document.body.querySelector('[data-testid="terminal-lan-qr-url"]')?.textContent).toBe(
-      buildTerminalDeepLinkUrl('http://192.0.2.10:32215', {
         repoId: REPO_ID,
         worktreePath: WORKTREE_PATH,
         branch: 'main',
@@ -268,7 +255,7 @@ describe('StatusBar file area control', () => {
     const browser = container?.querySelector<HTMLButtonElement>('button[aria-label="terminal.open-in-browser"]')
     const qr = container?.querySelector<HTMLButtonElement>('button[aria-label="terminal.lan-qr"]')
     expect(browser).not.toBeNull()
-    expect(qr).not.toBeNull()
+    expect(qr).toBeNull()
 
     act(() => browser?.click())
     await flush()

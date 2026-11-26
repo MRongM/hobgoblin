@@ -161,7 +161,7 @@ function mapGenerationError(err: unknown, signal?: AbortSignal): CommitMessageGe
   return { ok: false, message: err instanceof Error && err.message ? err.message : 'error.commit-message-failed' }
 }
 
-async function resolveProviderExecutable(
+export async function resolveProviderExecutable(
   provider: CommitMessageProvider,
   signal?: AbortSignal,
   options?: { skipDirect?: boolean },
@@ -258,7 +258,7 @@ function normalizeExecutablePath(output: string): string | null {
   return executable
 }
 
-function envForExecutable(executable: string): { PATH: string } | undefined {
+export function envForExecutable(executable: string): { PATH: string } | undefined {
   if (!path.isAbsolute(executable)) return undefined
   const executableDir = path.dirname(executable)
   const currentPath = process.env.PATH ?? ''

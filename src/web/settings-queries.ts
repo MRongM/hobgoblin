@@ -1,11 +1,16 @@
 import { useEffect } from 'react'
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ExternalAppsSnapshot, LanInfo, SettingsSnapshot } from '#/shared/rpc.ts'
-import { getExternalAppsSnapshot, getLanInfo, getSettingsSnapshot } from '#/web/settings-client.ts'
+import { getExternalAppsSnapshot, getLanInfo, getOpenApiKeyStatus, getSettingsSnapshot } from '#/web/settings-client.ts'
 import { getInitialBootstrap } from '#/web/bootstrap.ts'
 import { subscribeSettingsInvalidation } from '#/web/settings-invalidation-ingress.ts'
 import { DEFAULT_COLOR_THEME } from '#/shared/color-theme.ts'
-import { externalAppsQueryKey, lanInfoQueryKey, settingsSnapshotQueryKey } from '#/web/settings-query-cache.ts'
+import {
+  externalAppsQueryKey,
+  lanInfoQueryKey,
+  openApiKeyStatusQueryKey,
+  settingsSnapshotQueryKey,
+} from '#/web/settings-query-cache.ts'
 import {
   DEFAULT_DETAIL_COLLAPSED,
   DEFAULT_DETAIL_PANE_SIZES,
@@ -130,6 +135,10 @@ export function useLanInfoQuery() {
   return useQuery(lanInfoQueryOptions())
 }
 
+export function useOpenApiKeyStatusQuery() {
+  return useQuery({ queryKey: openApiKeyStatusQueryKey(), queryFn: getOpenApiKeyStatus })
+}
+
 export function useSettingsQueryInvalidationSync() {
   const queryClient = useQueryClient()
   useEffect(
@@ -140,6 +149,9 @@ export function useSettingsQueryInvalidationSync() {
         }
         if (event.scopes.includes('external-apps')) {
           void queryClient.invalidateQueries({ queryKey: externalAppsQueryKey(), exact: true })
+        }
+        if (event.scopes.includes('open-api-keys')) {
+          void queryClient.invalidateQueries({ queryKey: openApiKeyStatusQueryKey(), exact: true })
         }
       }),
     [queryClient],

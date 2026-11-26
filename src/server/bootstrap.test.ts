@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const closeHttpServer = vi.fn()
@@ -57,14 +57,45 @@ describe('bootstrap server shutdown', () => {
     mocks.websocketClients.clear()
   })
 
+  afterEach(() => vi.unstubAllEnvs())
+
+  test('scopes OpenAPI credentials to the server and removes them from the child environment', async () => {
+    vi.stubEnv('GOBLIN_SERVER_INTERNAL_SECRET', 'example-legacy-secret')
+    vi.stubEnv('GOBLIN_OPEN_API_TOKEN', 'example-open-api-token')
+    vi.stubEnv('GOBLIN_OPEN_API_CONTROL_TOKEN', 'example-terminal-control-token')
+    vi.stubEnv('GOBLIN_SERVER_PORT', '32200')
+    const { bootstrapServer } = await import('#/server/bootstrap.ts')
+
+    bootstrapServer({
+      terminalWorkerEntry: '/tmp/terminal-worker.ts',
+      internalSecret: 'example-internal-secret',
+    })
+
+    expect(mocks.createServerRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        openApiToken: 'example-open-api-token',
+        openApiControlToken: 'example-terminal-control-token',
+        internalSecret: 'example-internal-secret',
+      }),
+    )
+    expect(process.env.GOBLIN_OPEN_API_TOKEN).toBeUndefined()
+    expect(process.env.GOBLIN_OPEN_API_CONTROL_TOKEN).toBeUndefined()
+    expect(process.env.GOBLIN_SERVER_INTERNAL_SECRET).toBeUndefined()
+  })
+
   test('gracefully shuts down realtime clients and forces lingering sockets closed without owning process exit', async () => {
     vi.useFakeTimers()
     const socket = { once: vi.fn(), destroy: vi.fn() }
     const client = { close: vi.fn(), terminate: vi.fn() }
     mocks.websocketClients.add(client)
-    mocks.serverOn.mockImplementation((event: string, handler: (value: { once: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }) => void) => {
-      if (event === 'connection') handler(socket)
-    })
+    mocks.serverOn.mockImplementation(
+      (
+        event: string,
+        handler: (value: { once: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }) => void,
+      ) => {
+        if (event === 'connection') handler(socket)
+      },
+    )
     mocks.closeHttpServer.mockImplementation(() => {})
     mocks.websocketClose.mockImplementation(() => {})
     const exit = vi.fn()

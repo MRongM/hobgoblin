@@ -9,6 +9,7 @@ import {
   type ExistingTmuxSessionKind,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
+import type { TerminalAgentProvider } from '#/shared/terminal.ts'
 
 export interface LocalTerminalInvocation {
   command: string
@@ -25,6 +26,7 @@ export interface LocalTerminalInvocationOptions {
   existingTmuxServerName?: string
   platform?: NodeJS.Platform
   fallbackShell?: string
+  agentProvider?: TerminalAgentProvider
 }
 
 export function buildManagedLocalTerminalInvocation(
@@ -64,7 +66,7 @@ export function buildManagedLocalTerminalInvocation(
   const tmuxInvocation = existingSessionName
     ? existingTmuxInvocation
     : descriptor
-      ? buildTmuxAttachShellCommand(descriptor)
+      ? buildTmuxAttachShellCommand(descriptor, options.agentProvider)
       : null
   if (!descriptor || !tmuxInvocation) return null
   const fallbackShell =

@@ -29,7 +29,12 @@ import type {
   ServerTerminalHost,
   ServerTerminalSocket,
 } from '#/server/terminal/terminal-host.ts'
-import type { TerminalWorkerMessage, TerminalWorkerRequest } from '#/server/terminal/terminal-worker-protocol.ts'
+import type {
+  TerminalWorkerMessage,
+  TerminalWorkerRequest,
+  TerminalWorkerRequestInputs,
+  TerminalWorkerResponseOutputs,
+} from '#/server/terminal/terminal-worker-protocol.ts'
 import { isValidTerminalAttachmentId } from '#/shared/terminal.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import { serverLogger } from '#/server/logger.ts'
@@ -44,9 +49,7 @@ interface PendingRequest<T> {
 }
 
 type WorkerTimerHandle = ReturnType<typeof setTimeout> | number
-type TerminalWorkerChildProcess = ChildProcess & {
-  send?(message: TerminalWorkerRequest): boolean
-}
+type TerminalWorkerChildProcess = ChildProcess
 
 export interface WorkerBackedTerminalHostOptions {
   workerEntry?: string
@@ -72,6 +75,9 @@ function defaultSpawnWorker(workerEntry: string): TerminalWorkerChildProcess {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
+      GOBLIN_SERVER_INTERNAL_SECRET: undefined,
+      GOBLIN_OPEN_API_TOKEN: undefined,
+      GOBLIN_OPEN_API_CONTROL_TOKEN: undefined,
     },
     stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
   })
@@ -174,6 +180,13 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     return this.request('takeover', clientId, input)
   }
 
+  openApiControl(
+    clientId: string,
+    input: TerminalWorkerRequestInputs['open-api-control'],
+  ): Promise<TerminalWorkerResponseOutputs['open-api-control']> {
+    return this.request('open-api-control', clientId, input)
+  }
+
   close(clientId: string, input: TerminalSessionInput): Promise<TerminalCloseResult> {
     return this.request('close', clientId, input)
   }
@@ -258,8 +271,8 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     const requestId = crypto.randomUUID()
     return awaitable<T>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject })
-      const sent = worker.send?.({ type: 'request', requestId, action, clientId, input }) ?? false
-      if (!sent) {
+      const sendFailed = () => {
+        if (!this.pending.has(requestId)) return
         this.pending.delete(requestId)
         this.lastWorkerFailure = {
           kind: 'send-failed',
@@ -278,6 +291,15 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
           'failed to send terminal worker request',
         )
         reject(new Error(this.unavailableMessage()))
+      }
+      if (!worker.send || worker.connected === false) return sendFailed()
+      try {
+        // A false return signals IPC backpressure. Only the callback reports a send error.
+        worker.send({ type: 'request', requestId, action, clientId, input }, (error) => {
+          if (error) sendFailed()
+        })
+      } catch {
+        sendFailed()
       }
     })
   }

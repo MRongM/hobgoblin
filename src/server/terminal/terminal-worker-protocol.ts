@@ -26,6 +26,10 @@ import type {
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type {
+  TerminalOpenApiControlInput,
+  TerminalOpenApiControlResult,
+} from '#/server/terminal/terminal-open-api-control.ts'
+import type {
   TerminalPathRelocationInput,
   TerminalPathRelocationResult,
 } from '#/server/terminal/terminal-path-relocation.ts'
@@ -36,6 +40,7 @@ export interface TerminalWorkerRequestInputs {
   write: TerminalWriteInput
   resize: TerminalResizeInput
   takeover: TerminalTakeoverInput
+  'open-api-control': TerminalOpenApiControlInput
   close: TerminalSessionInput
   'close-sessions': TerminalCloseSessionsInput
   'relocate-paths': TerminalPathRelocationInput
@@ -56,6 +61,7 @@ export interface TerminalWorkerResponseOutputs {
   write: TerminalMutationResult
   resize: TerminalMutationResult
   takeover: TerminalTakeoverResult
+  'open-api-control': TerminalOpenApiControlResult
   close: TerminalCloseResult
   'close-sessions': TerminalCloseSessionsResult
   'relocate-paths': TerminalPathRelocationResult

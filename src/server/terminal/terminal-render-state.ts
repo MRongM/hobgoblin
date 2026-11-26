@@ -31,6 +31,7 @@ export interface HeadlessTerminalLike {
   write(data: string | Uint8Array, callback?: () => void): void
   resize(cols: number, rows: number): void
   loadAddon(addon: XTermSerializeAddon): void
+  onData(listener: (data: string) => void): { dispose(): void }
   onTitleChange(listener: (title: string) => void): { dispose(): void }
   dispose(): void
 }

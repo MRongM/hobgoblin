@@ -11,8 +11,9 @@ import {
 } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { PassThrough } from 'node:stream'
 import { execa } from 'execa'
-import { afterEach, describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { buildRemoteCommandInvocation, buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import { normalizeRemoteTarget } from '#/shared/remote-repo.ts'
 
@@ -40,6 +41,85 @@ function testPosix(name: string, fn: () => Promise<void> | void): void {
 }
 
 describe('remote command scripts', () => {
+  test.each([false, true])('starts an interactive agent through SSH and WSL with tmux=%s', (useTmux) => {
+    const target = normalizeRemoteTarget({
+      transport: 'wsl',
+      alias: 'Ubuntu',
+      host: 'Ubuntu',
+      user: 'wsl',
+      port: 22,
+      remotePath: '/workspace',
+      wslExecutable: 'C:\\Windows\\System32\\wsl.exe',
+    })!
+    const options = { terminalNumber: 1, cols: 80, rows: 24, useTmux, agentProvider: 'codex' as const }
+    const ssh = buildRemoteTerminalInvocation(TARGET, '/srv/repo', options)
+    const wsl = buildRemoteTerminalInvocation(target, '/workspace', options)
+    expect(ssh.args).toContain('BatchMode=yes')
+    expect(ssh.args).toContain('StrictHostKeyChecking=yes')
+    expect(wsl.args.slice(0, 5)).toEqual(['--distribution', 'Ubuntu', '--exec', 'sh', '-lc'])
+    for (const invocation of [ssh, wsl]) {
+      expect(invocation.script).toContain('exec codex')
+      expect(invocation.script).toContain('unset GOBLIN_SERVER_INTERNAL_SECRET')
+      expect(invocation.script.includes('new-session')).toBe(useTmux)
+      expect(invocation.script).not.toContain('has-session')
+      expect(Boolean(invocation.tmuxSessionName)).toBe(useTmux)
+    }
+  })
+  testPosix('runs an agent with a complete multibyte prompt and stops it when the transport closes', async () => {
+    const directory = path.join(os.tmpdir(), `hobgoblin-agent-command-${Date.now()}-${process.pid}`)
+    tempDirs.push(directory)
+    mkdirSync(directory)
+    writeFileSync(
+      path.join(directory, 'codex'),
+      [
+        '#!/bin/sh',
+        'cat',
+        '[ -z "${GOBLIN_SERVER_INTERNAL_SECRET-}" ] || exit 9',
+        '[ "$1" = "wait" ] || exit 0',
+        "trap 'printf stopped > stopped; exit 0' TERM",
+        'touch started',
+        'while :; do sleep 0.05; done',
+      ].join('\n'),
+      { mode: 0o700 },
+    )
+    const prompt = '你好，终端\n'
+    const environment = {
+      PATH: `${directory}:${process.env.PATH ?? ''}`,
+      GOBLIN_SERVER_INTERNAL_SECRET: 'example-internal-secret',
+    }
+    const run = (args: string[], input: PassThrough) =>
+      execa(
+        'sh',
+        [
+          '-c',
+          buildRemoteCommandInvocation(TARGET, {
+            type: 'agentCli',
+            path: directory,
+            command: 'codex',
+            args,
+            inputBytes: Buffer.byteLength(prompt),
+          }).script,
+        ],
+        { input, env: environment, timeout: 4_000, reject: false, stripFinalNewline: false },
+      )
+
+    const complete = new PassThrough()
+    const running = new PassThrough()
+    try {
+      complete.write(prompt)
+      await expect(run([], complete)).resolves.toMatchObject({ exitCode: 0, stdout: prompt })
+      running.write(prompt)
+      const child = run(['wait'], running)
+      await vi.waitFor(() => expect(existsSync(path.join(directory, 'started'))).toBe(true))
+      running.end()
+      await expect(child).resolves.toMatchObject({ exitCode: 0, stdout: prompt })
+      expect(readFileSync(path.join(directory, 'stopped'), 'utf8')).toBe('stopped')
+    } finally {
+      complete.destroy()
+      running.destroy()
+    }
+  })
+
   test('runs repository commands and internal terminals inside the selected WSL distribution', () => {
     const target = normalizeRemoteTarget({
       transport: 'wsl',
@@ -1091,13 +1171,7 @@ describe('remote command scripts', () => {
     ).stdout.trim()
     await execa('git', ['-C', dir, 'update-ref', 'refs/remotes/origin/feature/test', remoteHead])
     await execa('git', ['-C', dir, 'config', 'remote.origin.url', path.join(dir, 'unused-remote')])
-    await execa('git', [
-      '-C',
-      dir,
-      'config',
-      'remote.origin.fetch',
-      '+refs/heads/*:refs/remotes/origin/*',
-    ])
+    await execa('git', ['-C', dir, 'config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'])
     await execa('git', ['-C', dir, 'config', 'branch.feature/test.remote', 'origin'])
     await execa('git', ['-C', dir, 'config', 'branch.feature/test.merge', 'refs/heads/feature/test'])
     writeFileSync(path.join(dir, 'tracked.txt'), 'confirmed change\n')

@@ -9,6 +9,8 @@ import {
   type ExistingTmuxSessionKind,
   type TmuxSessionDescriptor,
 } from '#/system/tmux-session.ts'
+import type { TerminalAgentProvider } from '#/shared/terminal.ts'
+import { buildTerminalAgentLoginCommand } from '#/system/terminal-agent.ts'
 
 export interface ManagedRemoteTerminalTarget extends TmuxSessionDescriptor {
   alias: string
@@ -30,6 +32,7 @@ export interface RemoteTerminalInvocationOptions {
   existingTmuxSessionKind?: ExistingTmuxSessionKind
   existingTmuxSessionName?: string
   existingTmuxServerName?: string
+  agentProvider?: TerminalAgentProvider
 }
 
 export function buildManagedRemoteTerminalInvocation(
@@ -70,14 +73,14 @@ export function buildManagedRemoteTerminalInvocation(
     options.useTmux === true
       ? existingSessionName
         ? existingTmuxInvocation
-        : buildTmuxAttachShellCommand(descriptor)
+        : buildTmuxAttachShellCommand(descriptor, options.agentProvider)
       : null
   if (options.useTmux === true && !tmuxInvocation) return null
   const script = tmuxInvocation
     ? existingSessionKind
       ? requireTmuxAttachShellScript(tmuxInvocation.command)
       : buildTmuxRemoteLoginShellScript(descriptor, tmuxInvocation.command)
-    : buildPlainRemoteLoginShellScript(descriptor.workingDirectory)
+    : buildPlainRemoteLoginShellScript(descriptor.workingDirectory, options.agentProvider)
   return buildSshInvocation(target.alias, script, tmuxInvocation?.sessionName ?? null, options)
 }
 
@@ -88,8 +91,11 @@ export function buildExternalRemoteTerminalInvocation(
   return buildManagedRemoteTerminalInvocation(target, options)
 }
 
-function buildPlainRemoteLoginShellScript(worktreePath: string): string {
-  return [`cd ${shellQuote(worktreePath)} || exit`, 'exec "${SHELL:-/bin/sh}" -l'].join('\n')
+function buildPlainRemoteLoginShellScript(worktreePath: string, provider?: TerminalAgentProvider): string {
+  return [
+    `cd ${shellQuote(worktreePath)} || exit`,
+    provider ? buildTerminalAgentLoginCommand(provider) : 'exec "${SHELL:-/bin/sh}" -l',
+  ].join('\n')
 }
 
 function buildTmuxRemoteLoginShellScript(target: TmuxSessionDescriptor, tmuxCommand: string): string {

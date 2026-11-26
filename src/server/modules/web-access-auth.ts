@@ -38,6 +38,7 @@ export interface WebAccessAuth {
   createPageCapability(cookieToken?: string | null): Promise<string | null>
   authenticate(username: string, password: string): Promise<string | null>
   validateToken(token: string): Promise<boolean>
+  validateAuthenticatedToken(token: string): Promise<boolean>
   revokeToken(token: string): void
   revokeAll(): void
 }
@@ -103,7 +104,7 @@ export function createWebAccessAuth(options: WebAccessAuthOptions): WebAccessAut
     return token
   }
 
-  async function validateToken(token: string): Promise<boolean> {
+  async function validateToken(token: string, requireAuthentication = false): Promise<boolean> {
     const session = sessions.get(token)
     if (!session) return false
     if (session.expiresAt <= now()) {
@@ -111,7 +112,7 @@ export function createWebAccessAuth(options: WebAccessAuthOptions): WebAccessAut
       return false
     }
     const credentials = await options.readCredentials()
-    if (session.kind === 'anonymous') return !credentials.enabled
+    if (session.kind === 'anonymous') return !requireAuthentication && !credentials.enabled
     return credentials.enabled && session.credentialsKey === credentialsKey(credentials)
   }
 
@@ -139,6 +140,7 @@ export function createWebAccessAuth(options: WebAccessAuthOptions): WebAccessAut
     },
 
     validateToken,
+    validateAuthenticatedToken: (token) => validateToken(token, true),
 
     revokeToken(token): void {
       sessions.delete(token)

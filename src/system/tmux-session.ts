@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
+import type { TerminalAgentProvider } from '#/shared/terminal.ts'
+import { buildTerminalAgentLoginCommand } from '#/system/terminal-agent.ts'
 
 const TMUX_SESSION_PROTOCOL = 'hobgoblin-terminal-session-v1'
 const TMUX_SESSION_PREFIX = 'hobgoblin-v1-'
@@ -64,6 +66,7 @@ export function buildTmuxSessionName(input: TmuxSessionDescriptor): string | nul
 
 export function buildTmuxAttachShellCommand(
   input: TmuxSessionDescriptor,
+  agentProvider?: TerminalAgentProvider,
 ): { sessionName: string; command: string } | null {
   const descriptor = normalizeTmuxSessionDescriptor(input)
   const sessionName = descriptor ? buildTmuxSessionName(descriptor) : null
@@ -78,7 +81,9 @@ export function buildTmuxAttachShellCommand(
     sessionName,
     sessionTarget,
     paneTarget,
+    agentProvider,
   )
+  if (agentProvider) return { sessionName, command: projectCreateCommand }
   const projectAttachCommand = buildConfigureAndAttachCommand(projectTmux, descriptor, sessionTarget, paneTarget)
   const legacyAttachCommand = buildConfigureAndAttachCommand('tmux', descriptor, sessionTarget, paneTarget)
   return {
@@ -149,9 +154,11 @@ function buildCreateAndAttachCommand(
   sessionName: string,
   sessionTarget: string,
   paneTarget: string,
+  agentProvider?: TerminalAgentProvider,
 ): string {
+  const command = agentProvider ? ` sh -c ${shellQuote(buildTerminalAgentLoginCommand(agentProvider))}` : ''
   return [
-    `${tmuxCommand} new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}`,
+    `${tmuxCommand} new-session -d -s ${shellQuote(sessionName)} -c ${shellQuote(descriptor.workingDirectory)}${command}`,
     buildConfigureAndAttachCommand(tmuxCommand, descriptor, sessionTarget, paneTarget),
   ].join(' &&\n')
 }

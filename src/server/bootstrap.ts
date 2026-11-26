@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import type { Socket } from 'node:net'
 import { serve, type ServerType } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
@@ -39,6 +40,7 @@ export interface BootstrappedServer {
 export interface BootstrapServerOptions {
   terminalWorkerDir?: string
   terminalWorkerEntry?: string
+  internalSecret?: string
   exit?: (code: number) => void
 }
 
@@ -53,10 +55,19 @@ export function bootstrapServer(options: BootstrapServerOptions = {}): Bootstrap
     options.terminalWorkerEntry ??
     (options.terminalWorkerDir ? resolveTerminalWorkerEntry(options.terminalWorkerDir) : null)
   if (!terminalWorkerEntry) throw new Error('terminal worker entry or dir is required')
+  const internalSecret = options.internalSecret ?? randomBytes(32).toString('hex')
+  const openApiToken = process.env.GOBLIN_OPEN_API_TOKEN?.trim()
+  const openApiControlToken = process.env.GOBLIN_OPEN_API_CONTROL_TOKEN?.trim()
+  // Keep OpenAPI credentials out of child environments such as the terminal worker.
+  delete process.env.GOBLIN_SERVER_INTERNAL_SECRET
+  delete process.env.GOBLIN_OPEN_API_TOKEN
+  delete process.env.GOBLIN_OPEN_API_CONTROL_TOKEN
   const runtime = createServerRuntime({
     version: process.env.npm_package_version?.trim() || '0.1.0',
     startedAt,
-    internalSecret: process.env.GOBLIN_SERVER_INTERNAL_SECRET?.trim() || '',
+    internalSecret,
+    openApiToken,
+    openApiControlToken,
     terminalWorkerEntry,
   })
   const websocket = new WebSocketServer({ noServer: true })

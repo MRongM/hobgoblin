@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { defaultSessionState } from '#/shared/settings-defaults.ts'
 
 const fsPromisesMocks = vi.hoisted(() => ({
   mkdir: vi.fn(async () => undefined),
@@ -90,4 +91,59 @@ test('serializes settings writes so the last accepted Windows shell preference w
   expect(JSON.parse(readFileSync(settingsFile, 'utf-8'))).toMatchObject({
     windowsInternalTerminalShell: 'cmd',
   })
+})
+
+async function loadSettingsWithRecordedWrites() {
+  temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), 'gbl-session-save-'))
+  previousDataDirectory = process.env.GOBLIN_SERVER_DATA_DIR
+  process.env.GOBLIN_SERVER_DATA_DIR = temporaryDirectory
+  fsPromisesMocks.writeFile.mockImplementation(async (file: string, contents: string) => {
+    writeFileSync(file, contents, 'utf-8')
+  })
+  const settings = await import('#/server/modules/settings-source.ts')
+  await settings.getServerSessionState()
+  fsPromisesMocks.writeFile.mockClear()
+  return { settings, file: path.join(temporaryDirectory, 'server-settings.json') }
+}
+
+test('coalesces consecutive session updates waiting on a file write', async () => {
+  const { settings, file } = await loadSettingsWithRecordedWrites()
+  const firstWriteStarted = Promise.withResolvers<void>()
+  const finishFirstWrite = Promise.withResolvers<void>()
+  fsPromisesMocks.writeFile.mockImplementationOnce(async (file: string, contents: string) => {
+    firstWriteStarted.resolve()
+    await finishFirstWrite.promise
+    writeFileSync(file, contents, 'utf-8')
+  })
+  const resize = (width: number) =>
+    settings.setServerSessionState({ ...defaultSessionState(), fileTreePaneSizes: { 'left-right': width } })
+
+  const first = resize(32)
+  await firstWriteStarted.promise
+  const middle = resize(34)
+  const latest = resize(36)
+  await vi.waitFor(async () =>
+    expect((await settings.getServerSessionState()).fileTreePaneSizes).toEqual({ 'left-right': 36 }),
+  )
+  finishFirstWrite.resolve()
+
+  const [, savedMiddle, savedLatest] = await Promise.all([first, middle, latest])
+  expect(fsPromisesMocks.writeFile).toHaveBeenCalledTimes(2)
+  expect(savedMiddle).toEqual(savedLatest)
+  expect(JSON.parse(readFileSync(file, 'utf-8'))).toMatchObject({ session: savedLatest })
+})
+
+test('skips identical session saves after a successful write and retries a failed save', async () => {
+  const { settings, file } = await loadSettingsWithRecordedWrites()
+  const initial = await settings.getServerSessionState()
+  await settings.setServerSessionState(initial)
+  expect(fsPromisesMocks.writeFile).not.toHaveBeenCalled()
+
+  const changed = { ...initial, fileTreePaneSizes: { 'left-right': 32 } }
+  fsPromisesMocks.writeFile.mockRejectedValueOnce(new Error('write failed'))
+  await expect(settings.setServerSessionState(changed)).rejects.toThrow('write failed')
+  const saved = await settings.setServerSessionState(changed)
+  await expect(settings.setServerSessionState(changed)).resolves.toEqual(saved)
+  expect(fsPromisesMocks.writeFile).toHaveBeenCalledTimes(2)
+  expect(JSON.parse(readFileSync(file, 'utf-8'))).toMatchObject({ session: saved })
 })

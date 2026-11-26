@@ -20,6 +20,10 @@ export function lanInfoQueryKey() {
   return ['settings', 'lan'] as const
 }
 
+export function openApiKeyStatusQueryKey() {
+  return ['settings', 'open-api-key'] as const
+}
+
 export function updateSettingsSnapshotCache(
   queryClient: QueryClient,
   update: (current: SettingsSnapshot) => SettingsSnapshot,
@@ -39,20 +43,14 @@ export function updateRuntimeSettingsSnapshotCache(
   }))
 }
 
-export function updateRuntimeRecentReposStateCache(
-  queryClient: QueryClient,
-  next: RuntimeRecentReposState,
-): void {
+export function updateRuntimeRecentReposStateCache(queryClient: QueryClient, next: RuntimeRecentReposState): void {
   updateSettingsSnapshotCache(queryClient, (current) => ({
     ...current,
     recentRepos: next.recentRepos,
   }))
 }
 
-export function updateRestorableSessionStateCache(
-  queryClient: QueryClient,
-  session: SessionState,
-): void {
+export function updateRestorableSessionStateCache(queryClient: QueryClient, session: SessionState): void {
   updateSettingsSnapshotCache(queryClient, (current) => ({
     ...current,
     session,

@@ -3,7 +3,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { resolveWindowsTerminalShellCandidates } from '#/server/terminal/windows-terminal-shell.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
-import type { TerminalWindowsPty } from '#/shared/terminal.ts'
+import type { TerminalAgentProvider, TerminalWindowsPty } from '#/shared/terminal.ts'
+import { buildTerminalAgentLoginCommand } from '#/system/terminal-agent.ts'
 
 export interface TerminalPtyRuntime {
   write(data: string): void
@@ -21,6 +22,7 @@ export interface SpawnTerminalPtyRuntimeInput {
   cols: number
   rows: number
   windowsInternalTerminalShell?: WindowsInternalTerminalShellPref
+  agentProvider?: TerminalAgentProvider
 }
 
 export type SpawnTerminalPtyRuntimeResult =
@@ -32,7 +34,10 @@ const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
 export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): SpawnTerminalPtyRuntimeResult {
   try {
     const candidates = resolveTerminalPtySpawnCandidates(input)
-    const env = { ...process.env, TERM: 'xterm-256color' }
+    const env: NodeJS.ProcessEnv = { ...process.env, TERM: 'xterm-256color' }
+    for (const key of Object.keys(env)) {
+      if (/^GOBLIN_(SERVER_INTERNAL_SECRET|OPEN_API_(CONTROL_)?TOKEN)$/i.test(key)) delete env[key]
+    }
     let lastError: unknown
 
     for (const candidate of candidates) {
@@ -88,13 +93,24 @@ function resolveTerminalPtySpawnCandidates(
       ...(input.windowsInternalTerminalShell
         ? { preference: normalizeWindowsInternalTerminalShellPref(input.windowsInternalTerminalShell) }
         : {}),
-    }).map((candidate) => ({
-      command: candidate.command,
-      args: input.args ?? candidate.args,
-    }))
+    }).map((candidate) => {
+      const args = input.agentProvider
+        ? candidate.kind === 'wsl'
+          ? [...candidate.args, '--exec', 'sh', '-lc', buildTerminalAgentLoginCommand(input.agentProvider)]
+          : candidate.kind === 'cmd'
+            ? ['/d', '/c', input.agentProvider]
+            : [...candidate.args, '-Command', input.agentProvider]
+        : (input.args ?? candidate.args)
+      return { command: candidate.command, args }
+    })
   }
 
-  return [{ command: process.env.SHELL || '/bin/zsh', args: input.args ?? ['-l'] }]
+  return [
+    {
+      command: process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh'),
+      args: input.agentProvider ? ['-lic', `exec ${input.agentProvider}`] : (input.args ?? ['-l']),
+    },
+  ]
 }
 
 function windowsInternalTerminalShellUnavailableMessage(

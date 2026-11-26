@@ -93,6 +93,9 @@ export class TerminalWorkerRuntime {
         return await this.options.service.resize(message.clientId, message.input)
       case 'takeover':
         return await this.options.service.takeover(message.clientId, message.input)
+      case 'open-api-control':
+        if (!this.options.service.openApiControl) throw new Error('error.unavailable')
+        return await this.options.service.openApiControl(message.clientId, message.input)
       case 'close':
         return await this.options.service.close(message.clientId, message.input)
       case 'close-sessions':

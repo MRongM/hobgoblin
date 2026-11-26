@@ -6,6 +6,7 @@ import { GeneralSettings } from '#/web/components/settings/pages/GeneralSettings
 import { KeyboardShortcutSettings } from '#/web/components/settings/pages/KeyboardShortcutSettings.tsx'
 import { LanSettings } from '#/web/components/settings/pages/LanSettings.tsx'
 import { NotificationSettings } from '#/web/components/settings/pages/NotificationSettings.tsx'
+import { OpenApiKeySettings } from '#/web/components/settings/pages/OpenApiKeySettings.tsx'
 import { ProxySettings } from '#/web/components/settings/pages/ProxySettings.tsx'
 import { SshRemoteSettings } from '#/web/components/settings/pages/SshRemoteSettings.tsx'
 import { SecuritySettings } from '#/web/components/settings/pages/SecuritySettings.tsx'
@@ -46,6 +47,7 @@ export function SettingsSurface({ page, onPageChange, topInset = 0, autoFocusSel
           <>
             {electron && <LanSettings />}
             <SecuritySettings />
+            <OpenApiKeySettings />
           </>
         )}
         {page === 'about' && <AboutSettings />}

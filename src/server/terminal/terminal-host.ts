@@ -24,6 +24,10 @@ import type {
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type {
+  TerminalOpenApiControlInput,
+  TerminalOpenApiControlResult,
+} from '#/server/terminal/terminal-open-api-control.ts'
+import type {
   TerminalPathRelocationInput,
   TerminalPathRelocationResult,
 } from '#/server/terminal/terminal-path-relocation.ts'
@@ -72,6 +76,7 @@ export interface ServerTerminalHost {
   write(clientId: string, input: TerminalWriteInput): MaybePromise<TerminalMutationResult>
   resize(clientId: string, input: TerminalResizeInput): MaybePromise<TerminalMutationResult>
   takeover(clientId: string, input: TerminalTakeoverInput): MaybePromise<TerminalTakeoverResult>
+  openApiControl?(clientId: string, input: TerminalOpenApiControlInput): MaybePromise<TerminalOpenApiControlResult>
   close(clientId: string, input: TerminalSessionInput): MaybePromise<TerminalCloseResult>
   closeSessions(sessionIds: string[]): MaybePromise<TerminalCloseSessionsResult>
   relocatePaths?(input: TerminalPathRelocationInput): MaybePromise<TerminalPathRelocationResult>

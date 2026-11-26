@@ -27,6 +27,7 @@ test('creates anonymous page capabilities only while protection is disabled', as
   expect(token).toBe('anonymous-token')
   await expect(auth.protectionEnabled()).resolves.toBe(false)
   await expect(auth.validateToken(token!)).resolves.toBe(true)
+  await expect(auth.validateAuthenticatedToken(token!)).resolves.toBe(false)
 
   credentials = { enabled: true, username: 'operator', passwordHash: await hashWebAccessPassword('test-password') }
   await expect(auth.protectionEnabled()).resolves.toBe(true)
@@ -47,6 +48,7 @@ test('authenticates protected access and rejects wrong credentials with the same
   expect(token).toBe('authenticated-token')
   await expect(auth.createPageCapability(token)).resolves.toBe(token)
   await expect(auth.validateToken(token!)).resolves.toBe(true)
+  await expect(auth.validateAuthenticatedToken(token!)).resolves.toBe(true)
 })
 
 test('expires sessions after seven days and revokes all sessions immediately', async () => {
@@ -63,6 +65,7 @@ test('expires sessions after seven days and revokes all sessions immediately', a
   await expect(auth.validateToken(first!)).resolves.toBe(true)
   now += 1
   await expect(auth.validateToken(first!)).resolves.toBe(false)
+  await expect(auth.validateAuthenticatedToken(first!)).resolves.toBe(false)
 
   const second = await auth.authenticate('operator', 'test-password')
   auth.revokeToken(second!)

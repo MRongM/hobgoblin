@@ -1,6 +1,9 @@
 import * as v from 'valibot'
 
 export const TERMINAL_SCROLLBACK_LINES = 20_000
+export const TERMINAL_OUTPUT_EXCERPT_MAX_CHARACTERS = 8_192
+export const TERMINAL_AGENT_PROVIDERS = ['codex', 'claude'] as const
+export type TerminalAgentProvider = (typeof TERMINAL_AGENT_PROVIDERS)[number]
 
 export interface TerminalOutputExcerptInput {
   sessionId: string
@@ -90,6 +93,7 @@ export interface TerminalCreateInput {
   cols?: number
   rows?: number
   attachmentId?: string
+  agentProvider?: TerminalAgentProvider
 }
 
 export interface TerminalOpenTmuxSessionsInput {
@@ -185,6 +189,7 @@ export type TerminalTakeoverInput = TerminalResizeInput
 
 export interface TerminalSessionInput {
   sessionId: string
+  expectedRepoId?: string
   closeTmuxSession?: boolean
 }
 
@@ -223,6 +228,7 @@ export interface TerminalSessionSummary {
   cwd: string
   controller: TerminalController | null
   processName: string
+  agentProvider?: TerminalAgentProvider
   /** Server-canonical terminal title from the headless session model. */
   canonicalTitle: string | null
   cols: number
@@ -358,7 +364,7 @@ export type TerminalSocketServerMessage = TerminalRealtimeMessage | TerminalSock
 export type TerminalClientMessage = TerminalSocketRequestMessage
 
 const MAX_TERMINAL_WRITE_CHARS = 1024 * 1024
-const TERMINAL_SESSION_ID_RE = /^[A-Za-z0-9_-]{16,64}$/
+export const TERMINAL_SESSION_ID_RE = /^[A-Za-z0-9_-]{16,64}$/
 const TERMINAL_ATTACHMENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_REQUEST_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_SOCKET_ACTIONS = [
@@ -384,7 +390,7 @@ const TERMINAL_CONNECTED_CONTROLLER_STATUS_VALUES = ['connected'] as const satis
   TerminalControllerStatus,
   'none'
 >[]
-const TerminalSessionIdSchema = v.pipe(v.string(), v.regex(TERMINAL_SESSION_ID_RE))
+export const TerminalSessionIdSchema = v.pipe(v.string(), v.regex(TERMINAL_SESSION_ID_RE))
 const TerminalAttachmentIdSchema = v.pipe(v.string(), v.regex(TERMINAL_ATTACHMENT_ID_RE))
 const TerminalRequestIdSchema = v.pipe(v.string(), v.regex(TERMINAL_REQUEST_ID_RE))
 const TerminalColsSchema = v.pipe(

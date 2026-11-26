@@ -8,3 +8,4 @@ Use these docs for app-level product and architecture decisions:
 - `state-sync.md`: state ownership and sync model
 - `renderer-model.md`: renderer model
 - `realtime.md`: realtime rules
+- `conversation-open-api.md`: external conversation and message API

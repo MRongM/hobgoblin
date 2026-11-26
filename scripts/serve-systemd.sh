@@ -7,11 +7,10 @@
 #   ./scripts/serve-systemd.sh status | logs | uninstall
 #
 # install: builds the web UI, writes /etc/systemd/system/hobgoblin.service +
-#          /etc/hobgoblin/server.env (secret generated once, preserved forever),
+#          /etc/hobgoblin/server.env and a separate private startup credential,
 #          then enables and starts the service.
 # update:  git pull --ff-only (unless --no-pull), bun install, rebuild web UI,
-#          rewrite the unit for this checkout, and restart the service. Never
-#          touches the env file.
+#          rewrite the unit for this checkout, and restart the service.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,6 +18,8 @@ SERVICE_NAME="hobgoblin"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 ENV_DIR="/etc/hobgoblin"
 ENV_FILE="${ENV_DIR}/server.env"
+SECRET_FILE="${ENV_DIR}/server.secret"
+SERVICE_USER="${SUDO_USER:-$(id -un)}"
 MIN_NODE_MAJOR=24
 
 SUDO=""
@@ -49,24 +50,44 @@ build() {
   [[ -f "${REPO_ROOT}/dist/web/index.html" ]] || fail "web build artifact missing: dist/web/index.html"
 }
 
+require_service_user() {
+  local uid
+  if ! uid="$(id -u "${SERVICE_USER}")" || [[ "${uid}" == "0" ]]; then
+    fail "run this script as the non-root service user"
+  fi
+}
+
+write_private_file() {
+  ${SUDO} sh -c '
+    umask 077
+    temporary=$(mktemp "$1.XXXXXX") || exit 1
+    trap "rm -f -- \"\$temporary\"" EXIT
+    cat > "$temporary" && mv -f -- "$temporary" "$1"
+  ' sh "$1"
+}
+
+prepare_startup_credential() {
+  ${SUDO} install -d -o root -g root -m 0755 "${ENV_DIR}"
+  if ! ${SUDO} test -s "${SECRET_FILE}"; then
+    # Rotate legacy credentials that were previously present in process metadata.
+    "${NODE_BIN}" -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))' |
+      write_private_file "${SECRET_FILE}"
+    ${SUDO} test -s "${SECRET_FILE}" || fail "unable to create the server startup credential"
+  fi
+  ${SUDO} chown root:root "${SECRET_FILE}"
+  ${SUDO} chmod 600 "${SECRET_FILE}"
+  if ${SUDO} test -f "${ENV_FILE}" && ${SUDO} grep -q '^GOBLIN_SERVER_INTERNAL_SECRET=' "${ENV_FILE}"; then
+    ${SUDO} sed '/^GOBLIN_SERVER_INTERNAL_SECRET=/d' "${ENV_FILE}" | write_private_file "${ENV_FILE}"
+  fi
+}
+
 write_env_file() {
   local host="$1" port="$2" data_dir="$3"
-  ${SUDO} mkdir -p "${ENV_DIR}"
-  local secret
-  if [[ -f "${ENV_FILE}" ]]; then
-    # Preserve the existing secret so browser sessions survive reinstalls.
-    secret="$(${SUDO} grep -oP '^GOBLIN_SERVER_INTERNAL_SECRET=\K.*' "${ENV_FILE}" || true)"
-  fi
-  if [[ -z "${secret:-}" ]]; then
-    secret="$("${NODE_BIN}" -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')"
-  fi
-  ${SUDO} tee "${ENV_FILE}" >/dev/null <<EOF
-GOBLIN_SERVER_INTERNAL_SECRET=${secret}
+  write_private_file "${ENV_FILE}" <<EOF
 GOBLIN_SERVER_HOST=${host}
 GOBLIN_SERVER_PORT=${port}
 ${data_dir:+GOBLIN_SERVER_DATA_DIR=${data_dir}}
 EOF
-  ${SUDO} chmod 600 "${ENV_FILE}"
   log "env file written: ${ENV_FILE}"
 }
 
@@ -85,10 +106,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=$(id -un)
+User=${SERVICE_USER}
 WorkingDirectory=${REPO_ROOT}
 EnvironmentFile=${ENV_FILE}
 Environment=PATH=${node_dir}:${bun_dir}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=GOBLIN_SERVER_SECRET_ON_STDIN=1
+UnsetEnvironment=GOBLIN_SERVER_INTERNAL_SECRET
+StandardInput=file:${SECRET_FILE}
+StandardOutput=journal
+StandardError=journal
 ExecStart=${NODE_BIN} ${REPO_ROOT}/scripts/start-server.ts
 Restart=on-failure
 RestartSec=5s
@@ -145,9 +171,11 @@ cmd_install() {
       *) fail "unknown install option: $1" ;;
     esac
   done
+  require_service_user
   require_node
   require_bun
   build
+  prepare_startup_credential
   write_env_file "${host}" "${port}" "${data_dir}"
   write_unit
   start_and_verify install
@@ -162,6 +190,7 @@ cmd_update() {
     esac
   done
   [[ -f "${UNIT_PATH}" ]] || fail "service not installed yet; run: $0 install"
+  require_service_user
   require_node
   require_bun
   cd "${REPO_ROOT}"
@@ -173,6 +202,7 @@ cmd_update() {
     fi
   fi
   build
+  prepare_startup_credential
   write_unit
   start_and_verify update
 }
@@ -181,7 +211,7 @@ cmd_uninstall() {
   ${SUDO} systemctl disable --now "${SERVICE_NAME}" 2>/dev/null || true
   ${SUDO} rm -f "${UNIT_PATH}"
   ${SUDO} systemctl daemon-reload
-  log "service removed. Env file kept at ${ENV_FILE} (delete manually if unwanted)."
+  log "service removed. Settings and startup credential kept in ${ENV_DIR}."
 }
 
 cmd="${1:-auto}"

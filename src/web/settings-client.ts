@@ -30,6 +30,7 @@ import type {
   TelegramOutputCompletionNotificationContext,
 } from '#/shared/rpc.ts'
 import type { ColorTheme } from '#/shared/color-theme.ts'
+import type { GeneratedOpenApiKey, OpenApiKeyStatus } from '#/shared/open-api-keys.ts'
 import type { ExecResult } from '#/shared/git-types.ts'
 import type { RepoSettingsEntry } from '#/shared/repo-settings.ts'
 import {
@@ -43,6 +44,14 @@ import type { RepoSessionEntry } from '#/shared/remote-repo.ts'
 
 export async function getSettingsSnapshot(): Promise<SettingsSnapshot> {
   return await fetchServerJson<SettingsSnapshot>('/api/settings')
+}
+
+export function getOpenApiKeyStatus(): Promise<OpenApiKeyStatus> {
+  return fetchServerJson('/api/settings/open-api-key')
+}
+
+export function generateOpenApiKey(replace: boolean): Promise<GeneratedOpenApiKey> {
+  return postServerJson('/api/settings/open-api-key', { replace })
 }
 
 export async function setWebAccessSettings(input: WebAccessSettingsUpdateInput): Promise<WebAccessSettingsSnapshot> {

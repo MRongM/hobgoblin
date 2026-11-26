@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import type { Readable } from 'node:stream'
+import type { Readable, Writable } from 'node:stream'
 import path from 'node:path'
 import { app } from 'electron'
 import { createStartupDiagnostics, type StartupDiagnostics } from '#/main/startup-diagnostics.ts'
@@ -21,7 +21,7 @@ interface EmbeddedServerRuntime {
   clientId: string
 }
 
-type ServerChildProcess = ChildProcessByStdio<null, Readable, Readable>
+type ServerChildProcess = ChildProcessByStdio<Writable, Readable, Readable>
 
 let serverProcess: ServerChildProcess | null = null
 let runtime: EmbeddedServerRuntime | null = null
@@ -165,10 +165,11 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
         ...command.env,
         GOBLIN_SERVER_HOST: host,
         GOBLIN_SERVER_PORT: String(port),
-        GOBLIN_SERVER_INTERNAL_SECRET: secret,
+        GOBLIN_SERVER_INTERNAL_SECRET: undefined,
+        GOBLIN_SERVER_SECRET_ON_STDIN: '1',
         GOBLIN_SERVER_DATA_DIR: app.getPath('userData'),
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
     serverProcess = proc
     pipeProcessLogs(proc, log)
@@ -181,6 +182,8 @@ export async function startEmbeddedServer(): Promise<EmbeddedServerRuntime | nul
       log.log('embedded-server-process-error', { name: error.name, message: error.message })
       console.error('[server] process failed', error)
     })
+    proc.stdin.on('error', () => {})
+    proc.stdin.end(secret)
     try {
       await waitForServer(url, SERVER_READY_TIMEOUT_MS)
       runtime = { host, port, url, secret, clientId }

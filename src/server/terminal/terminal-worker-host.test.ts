@@ -8,9 +8,11 @@ class FakeWorker extends EventEmitter {
   sent: TerminalWorkerRequest[] = []
   killed = false
   sendResult = true
+  sendError: Error | null = null
 
-  send(message: TerminalWorkerRequest): boolean {
+  send(message: TerminalWorkerRequest, callback?: (error: Error | null) => void): boolean {
     this.sent.push(message)
+    callback?.(this.sendError)
     return this.sendResult
   }
 
@@ -238,11 +240,41 @@ describe('worker-backed terminal host', () => {
   test('includes last worker failure context when request send fails', async () => {
     const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any, now: () => 123 })
     worker.sendResult = false
+    worker.sendError = new Error('IPC closed')
 
     await expect(
       host.write('client_1', { sessionId: 'term_123456789012', data: 'ls', attachmentId: 'attachment_a' }),
     ).rejects.toThrow('Terminal worker unavailable (send-failed: action=write)')
   })
+
+  test.each(['explicit', 'automatic'])(
+    'waits without resending %s multi-byte input under backpressure',
+    async (mode) => {
+      const host = new WorkerBackedTerminalHost({ spawnWorker: () => worker as any })
+      worker.sendResult = false
+      const input = {
+        action: 'write',
+        repoId: '/example',
+        sessionId: 'term_123456789012',
+        ...(mode === 'explicit' ? { controlId: 'd9b1016b-cab6-4565-8d6f-d571574aea87' } : {}),
+        requestId: '05b66225-eed2-4729-85de-52c7a677fc99',
+        data: '你好'.repeat(30_000),
+      } as const
+      const promise = host.openApiControl('client_1', input)
+      const requests = worker.sent.filter((message) => message.type === 'request')
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ action: 'open-api-control', input })
+      const payload = { ok: true, action: 'write' } as const
+      worker.emit('message', {
+        type: 'response',
+        requestId: requests[0]!.requestId,
+        ok: true,
+        payload,
+      } satisfies TerminalWorkerMessage)
+      await expect(promise).resolves.toEqual(payload)
+      expect(worker.sent.filter((message) => message.type === 'request')).toHaveLength(1)
+    },
+  )
 
   test('reports diagnostics for worker lifecycle state', async () => {
     vi.useFakeTimers()

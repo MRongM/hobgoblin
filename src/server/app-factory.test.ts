@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import type { ConversationOpenApiOptions } from '#/server/routes/conversation-open-api.ts'
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 
 const mocks = vi.hoisted(() => ({
@@ -293,6 +294,74 @@ describe('server app html bootstrap', () => {
     expect(response.status).toBe(200)
     expect(webCapabilityFromHtml(html)).toBe(cookie!.split('=')[1])
     expect(webCapabilityFromHtml(html)).not.toBe('secret')
+  })
+
+  test('requires a signed-in Web or desktop capability to administer OpenAPI keys', async () => {
+    const { createApp } = await import('#/server/app-factory.ts')
+    const { hashWebAccessPassword } = await import('#/server/modules/web-access-auth.ts')
+    const keys = {
+      status: vi.fn(() => ({ status: 'configured' as const })),
+      authorize: vi.fn(() => 'authorized' as const),
+      generate: vi.fn(async (_replace: boolean) => ({ key: 'example-muse-key', status: 'configured' as const })),
+    }
+    const app = createApp({
+      version: '0.1.0',
+      startedAt: Date.now(),
+      internalSecret: 'example-desktop-secret',
+      terminalHost: terminalHostStub,
+      conversationOpenApi: { keys, store: {} as ConversationOpenApiOptions['store'] },
+    })
+    const settings = 'http://127.0.0.1:32100/api/settings'
+    const keyUrl = `${settings}/open-api-key`
+    const capabilityHeaders = (secret: string) => ({
+      'content-type': 'application/json',
+      'x-goblin-internal-secret': secret,
+    })
+    const generate = (secret: string, replace: boolean) =>
+      app.request(keyUrl, { method: 'POST', headers: capabilityHeaders(secret), body: JSON.stringify({ replace }) })
+
+    const page = await app.request('http://127.0.0.1:32100/')
+    const anonymous = webCapabilityFromHtml(await page.text())
+    expect((await app.request(`${settings}/prefs`, { headers: capabilityHeaders(anonymous) })).status).toBe(200)
+    expect((await app.request(keyUrl, { headers: capabilityHeaders(anonymous) })).status).toBe(401)
+    expect((await generate(anonymous, false)).status).toBe(401)
+    expect((await generate(anonymous, true)).status).toBe(401)
+    expect(
+      (
+        await app.request(`${settings}/web-access`, {
+          method: 'POST',
+          headers: capabilityHeaders(anonymous),
+          body: JSON.stringify({ enabled: true, username: 'guest', password: 'example-password' }),
+        })
+      ).status,
+    ).toBe(401)
+    expect(keys.status).not.toHaveBeenCalled()
+    expect(keys.generate).not.toHaveBeenCalled()
+    expect(
+      (
+        await app.request(keyUrl, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer example-muse-key', 'content-type': 'application/json' },
+          body: JSON.stringify({ replace: true }),
+        })
+      ).status,
+    ).toBe(401)
+
+    expect((await generate('example-desktop-secret', false)).status).toBe(201)
+    mocks.getServerWebAccessCredentials.mockResolvedValue({
+      enabled: true,
+      username: 'operator',
+      passwordHash: await hashWebAccessPassword('example-password'),
+    })
+    const login = await app.request('http://127.0.0.1:32100/auth/login', {
+      method: 'POST',
+      body: new URLSearchParams({ username: 'operator', password: 'example-password', next: '/' }),
+    })
+    const signedIn = login.headers.get('set-cookie')?.match(/^goblin_web_session=([^;]+)/u)?.[1]
+    expect(signedIn).toBeTruthy()
+    expect((await app.request(keyUrl, { headers: capabilityHeaders(signedIn!) })).status).toBe(200)
+    expect((await generate(signedIn!, true)).status).toBe(201)
+    expect(keys.generate.mock.calls).toEqual([[false], [true]])
   })
 
   test('marks api responses as non-cacheable', async () => {

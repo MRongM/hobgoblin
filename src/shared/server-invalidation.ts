@@ -1,7 +1,13 @@
 import { isRepoQueryInvalidationEvent, type RepoQueryInvalidationEvent } from '#/shared/repo-query-invalidation.ts'
 import type { BranchWorkspaceActiveOperation } from '#/shared/branch-workspaces.ts'
 
-export const SETTINGS_INVALIDATION_SCOPES = ['settings-snapshot', 'external-apps', 'i18n', 'theme'] as const
+export const SETTINGS_INVALIDATION_SCOPES = [
+  'settings-snapshot',
+  'external-apps',
+  'i18n',
+  'theme',
+  'open-api-keys',
+] as const
 
 export type SettingsInvalidationScope = (typeof SETTINGS_INVALIDATION_SCOPES)[number]
 
@@ -37,7 +43,7 @@ export type ServerInvalidationEvent =
   | WorkspaceInvalidationEvent
 
 export function isSettingsInvalidationScope(value: unknown): value is SettingsInvalidationScope {
-  return value === 'settings-snapshot' || value === 'external-apps' || value === 'i18n' || value === 'theme'
+  return SETTINGS_INVALIDATION_SCOPES.some((scope) => scope === value)
 }
 
 export function isSettingsInvalidationEvent(value: unknown): value is SettingsInvalidationEvent {

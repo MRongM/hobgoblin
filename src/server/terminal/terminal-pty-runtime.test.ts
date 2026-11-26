@@ -25,6 +25,61 @@ afterEach(() => {
 })
 
 describe('spawnTerminalPtyRuntime', () => {
+  test('starts a terminal AI directly through the local login shell', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    vi.stubEnv('SHELL', '/bin/zsh')
+    spawnMock.mockReturnValue(terminalPty('codex'))
+    expect(spawnTerminalPtyRuntime({ cwd: '/workspace', cols: 80, rows: 24, agentProvider: 'codex' }).ok).toBe(true)
+    expect(spawnMock).toHaveBeenCalledWith(
+      '/bin/zsh',
+      ['-lic', 'exec codex'],
+      expect.objectContaining({ cwd: '/workspace' }),
+    )
+  })
+
+  test('uses the system shell on Linux when SHELL is unset', () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    vi.stubEnv('SHELL', undefined)
+    spawnMock.mockReturnValue(terminalPty('claude'))
+    expect(spawnTerminalPtyRuntime({ cwd: '/workspace', cols: 80, rows: 24, agentProvider: 'claude' }).ok).toBe(true)
+    expect(spawnMock).toHaveBeenCalledWith(
+      '/bin/sh',
+      ['-lic', 'exec claude'],
+      expect.objectContaining({ cwd: '/workspace' }),
+    )
+  })
+
+  test.each([
+    [
+      'wsl',
+      ['--cd', 'C:\\workspace'],
+      ['--cd', 'C:\\workspace', '--exec', 'sh', '-lc', expect.stringContaining('exec claude')],
+    ],
+    ['powershell-core', ['-NoLogo'], ['-NoLogo', '-Command', 'claude']],
+    ['windows-powershell', ['-NoLogo'], ['-NoLogo', '-Command', 'claude']],
+    ['cmd', [], ['/d', '/c', 'claude']],
+  ])('starts a terminal AI with the Windows %s adapter', (kind, args, expected) => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    const command = 'C:\\Tools\\shell.exe'
+    resolveWindowsShellCandidatesMock.mockReturnValue([{ kind, command, args }])
+    spawnMock.mockReturnValue(terminalPty('claude'))
+    expect(spawnTerminalPtyRuntime({ cwd: 'C:\\workspace', cols: 80, rows: 24, agentProvider: 'claude' }).ok).toBe(true)
+    expect(spawnMock).toHaveBeenCalledWith(command, expected, expect.objectContaining({ useConptyDll: true }))
+  })
+
+  test('starts the PTY without inherited server credentials', () => {
+    vi.stubEnv('GOBLIN_SERVER_INTERNAL_SECRET', 'example-internal-secret')
+    vi.stubEnv('GOBLIN_OPEN_API_TOKEN', 'example-open-api-token')
+    vi.stubEnv('GOBLIN_OPEN_API_CONTROL_TOKEN', 'example-control-token')
+    spawnMock.mockReturnValue(terminalPty('shell'))
+
+    expect(spawnTerminalPtyRuntime({ command: 'shell', cwd: process.cwd(), cols: 80, rows: 24 }).ok).toBe(true)
+    const env = spawnMock.mock.calls[0]?.[2].env
+    expect(env.TERM).toBe('xterm-256color')
+    expect(env).not.toHaveProperty('GOBLIN_SERVER_INTERNAL_SECRET')
+    expect(env).not.toHaveProperty('GOBLIN_OPEN_API_TOKEN')
+    expect(env).not.toHaveProperty('GOBLIN_OPEN_API_CONTROL_TOKEN')
+  })
   test('starts the first resolved PowerShell candidate on Windows', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     resolveWindowsShellCandidatesMock.mockReturnValue([

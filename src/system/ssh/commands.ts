@@ -1,5 +1,7 @@
 import path from 'node:path'
 import { execa, ExecaError } from 'execa'
+import { PassThrough } from 'node:stream'
+import type { TerminalAgentProvider } from '#/shared/terminal.ts'
 import {
   FILE_TRANSFER_MAX_FILE_BYTES,
   FILE_TRANSFER_MAX_TOTAL_BYTES,
@@ -44,6 +46,7 @@ export type RemoteCommandKind =
   | { type: 'printHome' }
   | { type: 'checkShell' }
   | { type: 'checkGit' }
+  | { type: 'agentCli'; path: string; command: 'codex' | 'claude'; args: string[]; inputBytes: number }
   | { type: 'tmuxListSessions'; projectRoot: string }
   | { type: 'tmuxKillSessionByName'; projectRoot: string; sessionName: string; serverName?: string }
   | { type: 'tmuxCancelModeBySessionName'; projectRoot: string; sessionName: string; serverName?: string }
@@ -223,6 +226,7 @@ export function buildRemoteCommandInvocation(
     '-T',
     '-o',
     'RequestTTY=no',
+    ...(command.type === 'agentCli' ? ['-o', 'BatchMode=yes'] : []),
     '-o',
     'StrictHostKeyChecking=yes',
     '-o',
@@ -243,6 +247,7 @@ export function buildRemoteTerminalInvocation(
     useTmux?: boolean
     existingTmuxSessionName?: string
     existingTmuxServerName?: string
+    agentProvider?: TerminalAgentProvider
   },
 ): RemoteCommandInvocation {
   const invocation = buildManagedRemoteTerminalInvocation(
@@ -253,10 +258,17 @@ export function buildRemoteTerminalInvocation(
       terminalNumber: options.terminalNumber,
     },
     {
-      sshOptions: ['-o', 'StrictHostKeyChecking=yes', '-o', `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`],
+      sshOptions: [
+        '-o',
+        'StrictHostKeyChecking=yes',
+        '-o',
+        `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SEC}`,
+        ...(options.agentProvider ? ['-o', 'BatchMode=yes'] : []),
+      ],
       useTmux: options.useTmux === true,
       existingTmuxSessionName: options.existingTmuxSessionName,
       existingTmuxServerName: options.existingTmuxServerName,
+      agentProvider: options.agentProvider,
     },
   )
   if (!invocation) throw new Error('Invalid remote terminal invocation')
@@ -286,14 +298,22 @@ export async function runRemoteCommand(
   const invocation = buildRemoteCommandInvocation(target, command)
   const wslEnvironment =
     target.transport === 'wsl' ? buildWslProcessEnvironment(options?.wslEnvironment, process.env) : undefined
+  // Keep the transport stdin open after the prompt. The remote supervisor uses
+  // EOF to stop the provider when the SSH or WSL client is cancelled.
+  const agentInput = command.type === 'agentCli' ? new PassThrough() : undefined
+  if (agentInput) agentInput.write(options?.stdin ?? '')
   try {
     const { stdout, stderr } = await execa(invocation.command, invocation.args, {
       timeout: options?.timeoutMs ?? SSH_COMMAND_TIMEOUT_MS,
       cancelSignal: options?.signal,
       forceKillAfterDelay: 500,
-      input: options?.stdin,
+      input: agentInput ?? options?.stdin,
       maxBuffer: options?.maxBuffer ?? 2 * 1024 * 1024,
-      ...(wslEnvironment ? { env: wslEnvironment } : {}),
+      ...(command.type === 'agentCli'
+        ? { env: { ...wslEnvironment, GOBLIN_SERVER_INTERNAL_SECRET: undefined } }
+        : wslEnvironment
+          ? { env: wslEnvironment }
+          : {}),
     })
     return { ok: true, stdout: stdout.trimEnd(), stderr: stderr.trimEnd() }
   } catch (err) {
@@ -307,6 +327,8 @@ export async function runRemoteCommand(
       return { ok: false, stdout, stderr, message: 'timeout', timedOut: true }
     }
     return { ok: false, stdout, stderr, message: stderr || e.message || 'unknown' }
+  } finally {
+    agentInput?.destroy()
   }
 }
 
@@ -367,6 +389,34 @@ function scriptForCommand(command: RemoteCommandKind): string {
       return `printf '%s\\n' ok`
     case 'checkGit':
       return 'command -v git'
+    case 'agentCli': {
+      if (!Number.isSafeInteger(command.inputBytes) || command.inputBytes < 1)
+        throw new TypeError('error.invalid-arguments')
+      const invocation = [command.command, ...command.args].map(shellQuote).join(' ')
+      return [
+        `cd ${shellQuote(command.path)} || exit 1`,
+        'umask 077',
+        'prompt_file=$(mktemp) || exit 1',
+        'trap \'rm -f "$prompt_file"\' EXIT',
+        `head -c ${command.inputBytes} > "$prompt_file" || exit 1`,
+        `[ "$(wc -c < "$prompt_file")" -eq ${command.inputBytes} ] || exit 1`,
+        'unset GOBLIN_SERVER_INTERNAL_SECRET GOBLIN_OPEN_API_TOKEN GOBLIN_OPEN_API_CONTROL_TOKEN',
+        'exec 3<&0',
+        `${invocation} < "$prompt_file" 3<&- &`,
+        'agent_pid=$!',
+        '(',
+        '  IFS= read -r unused <&3',
+        '  kill -TERM "$agent_pid" || exit 0',
+        '  sleep 1',
+        '  kill -KILL "$agent_pid"',
+        ') >/dev/null 2>&1 &',
+        'watcher_pid=$!',
+        'wait "$agent_pid"',
+        'status=$?',
+        'kill "$watcher_pid" 2>/dev/null || :',
+        'exit "$status"',
+      ].join('\n')
+    }
     case 'tmuxListSessions':
       return tmuxListSessionsScript(command.projectRoot)
     case 'tmuxListHostSessions':

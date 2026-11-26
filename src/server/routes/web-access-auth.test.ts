@@ -89,6 +89,7 @@ function fakeAuth(overrides: Partial<WebAccessAuth> = {}): WebAccessAuth {
     createPageCapability: async () => null,
     authenticate: async () => null,
     validateToken: async () => false,
+    validateAuthenticatedToken: async () => false,
     revokeToken: () => {},
     revokeAll: () => {},
     ...overrides,

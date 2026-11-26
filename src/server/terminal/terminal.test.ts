@@ -11,6 +11,7 @@ import {
   getServerTerminalOutputExcerpt,
   getServerTerminalSessionSnapshot,
   handleRealtimeServerMessage,
+  handleServerTerminalOpenApiControl,
   listServerTerminalSessions,
   markServerTelegramTerminalInputTarget,
   openServerTmuxSessions,
@@ -27,6 +28,7 @@ import {
   unregisterTerminalSocket,
   writeServerTerminal,
 } from '#/server/terminal/terminal.ts'
+import { TERMINAL_CONTROL_TTL_MS } from '#/server/terminal/terminal-open-api-control.ts'
 
 const branchWorkspaceSourceMocks = vi.hoisted(() => ({
   readBranchWorkspaceManifests: vi.fn(),
@@ -163,6 +165,75 @@ async function createTerminalSession(
 }
 
 describe('server terminal sessions', () => {
+  test('leases terminal input to an API client and returns it to the connected controller', async () => {
+    const clientId = 'client_1'
+    const attachmentId = 'attachment_desktop'
+    const socket = { send: vi.fn(), close: vi.fn() }
+    registerTerminalSocket(clientId, attachmentId, socket)
+    const sessionId = await createTerminalSession(clientId)
+    const size = { cols: 80, rows: 24 }
+    expect(takeoverServerTerminal(clientId, { sessionId, attachmentId, ...size }).ok).toBe(true)
+
+    const acquire = { action: 'acquire' as const, conversationId: 'conversation_a', sessionId }
+    const control = handleServerTerminalOpenApiControl(clientId, acquire)
+    expect(control).toMatchObject({ ok: true, action: 'acquire', terminalSessionId: sessionId })
+    if (!control.ok || control.action !== 'acquire') throw new Error('missing terminal control')
+    const { controlId } = control
+    const write = { ...acquire, action: 'write' as const, controlId, data: 'Example prompt\r' }
+    expect(handleServerTerminalOpenApiControl(clientId, { ...acquire, conversationId: 'conversation_b' })).toEqual({
+      ok: false,
+      reason: 'control_in_use',
+    })
+    expect(handleServerTerminalOpenApiControl(clientId, { ...write, conversationId: 'conversation_b' })).toEqual({
+      ok: false,
+      reason: 'control_lost',
+    })
+    expect(writeServerTerminal(clientId, { sessionId, attachmentId, data: 'blocked' })).toBe(false)
+    expect(handleServerTerminalOpenApiControl(clientId, write)).toEqual({ ok: true, action: 'write' })
+    await Promise.resolve()
+    expect(mockPtys[0]?.write).toHaveBeenCalledWith(write.data)
+    expect(mockPtys[0]?.kill).not.toHaveBeenCalled()
+    mockPtys[0]?.emitData('\x1b[6n')
+    await vi.waitFor(() => expect(mockPtys[0]?.write).toHaveBeenCalledWith('\x1b[1;1R'))
+
+    const release = { action: 'release' as const, controlId, conversationId: acquire.conversationId }
+    expect(handleServerTerminalOpenApiControl(clientId, release)).toEqual({ ok: true, action: 'release' })
+    expect(writeServerTerminal(clientId, { sessionId, attachmentId, data: 'desktop' })).toBe(true)
+    expect(handleServerTerminalOpenApiControl(clientId, write)).toEqual({ ok: false, reason: 'control_lost' })
+  })
+
+  test('returns control after expiry and respects a subsequent desktop takeover', async () => {
+    const clientId = 'client_1'
+    const original = 'attachment_desktop'
+    const other = 'attachment_viewer'
+    registerTerminalSocket(clientId, original, { send: vi.fn(), close: vi.fn() })
+    registerTerminalSocket(clientId, other, { send: vi.fn(), close: vi.fn() })
+    const sessionId = await createTerminalSession(clientId)
+    const size = { cols: 80, rows: 24 }
+    expect(takeoverServerTerminal(clientId, { sessionId, attachmentId: original, ...size }).ok).toBe(true)
+    vi.useFakeTimers()
+
+    const acquire = { action: 'acquire' as const, conversationId: 'conversation_a', sessionId }
+    const expired = handleServerTerminalOpenApiControl(clientId, acquire)
+    if (!expired.ok || expired.action !== 'acquire') throw new Error('missing terminal control')
+    await vi.advanceTimersByTimeAsync(TERMINAL_CONTROL_TTL_MS)
+    expect(writeServerTerminal(clientId, { sessionId, attachmentId: original, data: 'restored' })).toBe(true)
+
+    const reclaimed = handleServerTerminalOpenApiControl(clientId, acquire)
+    if (!reclaimed.ok || reclaimed.action !== 'acquire') throw new Error('missing terminal control')
+    expect(takeoverServerTerminal(clientId, { sessionId, attachmentId: other, ...size }).ok).toBe(true)
+    expect(
+      handleServerTerminalOpenApiControl(clientId, {
+        ...acquire,
+        action: 'write',
+        controlId: reclaimed.controlId,
+        data: 'blocked',
+      }),
+    ).toEqual({ ok: false, reason: 'control_lost' })
+    expect(writeServerTerminal(clientId, { sessionId, attachmentId: original, data: 'blocked' })).toBe(false)
+    expect(writeServerTerminal(clientId, { sessionId, attachmentId: other, data: 'current controller' })).toBe(true)
+  })
+
   test('routes Telegram input only to the latest focused controlling attachment without fallback', async () => {
     const socketA = { send: vi.fn(), close: vi.fn() }
     const socketB = { send: vi.fn(), close: vi.fn() }
@@ -382,6 +453,61 @@ describe('server terminal sessions', () => {
       expect.stringContaining(`tmux -L '${serverName}' attach-session -t '=${terminalTwo}'`),
     ])
   })
+
+  test.skipIf(process.platform === 'win32')(
+    'starts a local tmux agent in a new slot without attaching a detached shell',
+    async () => {
+      tmuxCleanupMocks.previewAssociatedTmuxSessions.mockResolvedValueOnce({
+        ok: true,
+        targetPath: '/repo-linked',
+        sessions: [{ terminalNumber: 1 }],
+      })
+      const terminal = await createServerTerminal('client_1', {
+        repoRoot: '/repo',
+        branch: 'feature',
+        worktreePath: '/repo-linked',
+        kind: 'additional',
+        launchMode: 'tmux-if-available',
+        agentProvider: 'claude',
+      })
+      expect(terminal).toMatchObject({
+        ok: true,
+        action: 'created',
+        key: '/repo\0/repo-linked\0terminal-2',
+        sessions: [expect.objectContaining({ agentProvider: 'claude', tmuxBacked: true })],
+      })
+      const [, args] = vi.mocked(spawn).mock.calls[0]!
+      expect(args).toEqual(['-lc', expect.stringContaining('exec claude')])
+      expect(args?.[1]).toContain('new-session')
+      expect(args?.[1]).not.toContain('has-session')
+      if (!terminal.ok) throw new Error('expected agent terminal to open')
+      const closeTmuxSession = vi.fn(async () => ({ ok: true as const, status: 'closed' as const }))
+      await expect(
+        closeServerTerminal(
+          'client_1',
+          { sessionId: terminal.sessionId, expectedRepoId: '/other', closeTmuxSession: true },
+          { closeTmuxSession },
+        ),
+      ).resolves.toMatchObject({ ok: false })
+      expect(closeTmuxSession).not.toHaveBeenCalled()
+      await expect(
+        closeServerTerminal(
+          'client_1',
+          { sessionId: terminal.sessionId, expectedRepoId: '/repo', closeTmuxSession: true },
+          { closeTmuxSession },
+        ),
+      ).resolves.toMatchObject({ ok: true })
+      expect(closeTmuxSession).toHaveBeenCalledWith({
+        projectRoot: '/repo',
+        itemPath: '/repo-linked',
+        sessionName: buildTmuxSessionName({
+          projectRoot: '/repo',
+          workingDirectory: '/repo-linked',
+          terminalNumber: 2,
+        }),
+      })
+    },
+  )
 
   test('falls back to a free internal slot and blocks unsafe tmux closure when the hash no longer matches', async () => {
     const occupied = await createServerTerminal('client_1', {
@@ -1742,15 +1868,15 @@ describe('server terminal sessions', () => {
 
   test('returns a bounded canonical output excerpt for a valid server session', async () => {
     const sessionId = await createTerminalSession('client_1')
-    mockPtys[0]?.emitData('build passed')
+    const latestOutput = 'x'.repeat(8_192 - 'build passed'.length) + 'build passed'
+    mockPtys[0]?.setProcess('codex')
+    mockPtys[0]?.emitData(`older output ${latestOutput}`)
 
-    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 400 })).resolves.toMatchObject({
-      sessionId,
-      output: 'build passed',
-      sequence: 1,
-    })
+    const excerpt = await getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 8_192 })
+    expect(excerpt).toMatchObject({ sessionId, sequence: 1 })
+    expect(excerpt?.output).toBe(latestOutput)
     await expect(getServerTerminalOutputExcerpt({ sessionId: 'invalid', maxCharacters: 400 })).resolves.toBeNull()
-    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 4_097 })).resolves.toBeNull()
+    await expect(getServerTerminalOutputExcerpt({ sessionId, maxCharacters: 8_193 })).resolves.toBeNull()
   })
 
   test('cleans up disconnected sessions after the reconnect grace period elapses', async () => {

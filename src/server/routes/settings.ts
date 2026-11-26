@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
+import * as v from 'valibot'
 import { getServerExternalAppsSnapshot } from '#/server/modules/external-apps.ts'
+import { publishSettingsInvalidation } from '#/server/modules/invalidation-broker.ts'
 import { getServerI18nSnapshot } from '#/server/modules/i18n.ts'
+import type { OpenApiKeyStore } from '#/server/modules/open-api-key-source.ts'
 import { openAppConfigDirectoryInEditor } from '#/server/modules/settings-external-actions.ts'
 import { getSettingsSnapshot } from '#/server/modules/settings-snapshot.ts'
 import { getServerSettingsPrefs } from '#/server/modules/settings-source.ts'
@@ -27,6 +30,7 @@ const WEB_ACCESS_ERROR_CODES = new Set([
   'password-too-long',
 ])
 const TELEGRAM_SETTINGS_ERROR_CODES = new Set(['configuration-incomplete', 'invalid-input'])
+const GenerateOpenApiKeySchema = v.strictObject({ replace: v.boolean() })
 
 function readWebAccessErrorCode(error: unknown): string | null {
   const code = (error as { code?: unknown } | null)?.code
@@ -42,6 +46,7 @@ export function createSettingsRoutes(
   settingsState: ServerSettingsState,
   options: {
     revokeAllWebSessions?: () => void
+    openApiKeys?: OpenApiKeyStore
     onTelegramRuntimeConfigChanged?: () => void | Promise<void>
     onWindowsInternalTerminalShellChanged?: (preference: WindowsInternalTerminalShellPref) => void
   } = {},
@@ -53,6 +58,19 @@ export function createSettingsRoutes(
   app.post('/external-apps/refresh', async (c) => c.json(await getServerExternalAppsSnapshot(c.req.raw.signal)))
   app.post('/open-app-config-editor', async (c) => c.json(await openAppConfigDirectoryInEditor()))
   app.get('/prefs', async (c) => c.json(await getServerSettingsPrefs()))
+  app.get('/open-api-key', (c) => {
+    if (!options.openApiKeys) return c.json({ error: 'open_api_key_management_unavailable' }, 503)
+    return c.json(options.openApiKeys.status())
+  })
+  app.post('/open-api-key', async (c) => {
+    if (!options.openApiKeys) return c.json({ error: 'open_api_key_management_unavailable' }, 503)
+    const input = v.safeParse(GenerateOpenApiKeySchema, await c.req.json().catch(() => null))
+    if (!input.success) return c.json({ error: 'invalid_request' }, 400)
+    const result = await options.openApiKeys.generate(input.output.replace)
+    if (!result) return c.json({ error: 'open_api_key_exists' }, 409)
+    publishSettingsInvalidation(['open-api-keys'])
+    return c.json(result, 201)
+  })
   app.get('/lan', async (c) => {
     const host = process.env.GOBLIN_SERVER_HOST?.trim() || '127.0.0.1'
     const port = Number(process.env.GOBLIN_SERVER_PORT) || 32200

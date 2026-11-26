@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import path from 'node:path'
 import {
+  type TerminalAgentProvider,
   cloneTerminalController,
   normalizeTerminalSize,
   resolveTerminalOwnership,
@@ -65,6 +66,7 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   attachmentId?: string
   attachmentConnected?: boolean
   forceNew?: boolean
+  agentProvider?: TerminalAgentProvider
   command?: string
   args?: string[]
   windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
@@ -79,6 +81,7 @@ interface TerminalSession<TOwner extends string | number> {
   scope: string
   key: string
   cwd: string
+  agentProvider?: TerminalAgentProvider
   command?: string
   args?: string[]
   windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
@@ -99,6 +102,7 @@ interface TerminalSession<TOwner extends string | number> {
   phase: TerminalSessionPhase
   message: string | null
   hasUserInput: boolean
+  lastInteractiveInputAt?: number
   /** Display order within the worktree for tab strip sorting. */
   displayOrder: number
   /** Input queue ensures ordered PTY writes even with multiple concurrent callers. */
@@ -154,6 +158,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       scope: input.scope,
       key: input.key,
       cwd,
+      agentProvider: input.agentProvider,
       command: input.command,
       args: input.args,
       windowsInternalTerminalShell: input.windowsInternalTerminalShell,
@@ -196,19 +201,26 @@ export class TerminalSessionManager<TOwner extends string | number> {
     return spawnResult
   }
 
-  writeSession(ownerId: TOwner, sessionId: string, data: string, attachmentId?: string, userIntent = true): boolean {
+  writeSession(
+    ownerId: TOwner,
+    sessionId: string,
+    data: string,
+    attachmentId?: string,
+    { userIntent = true, immediate = false, interactive = false } = {},
+  ): boolean {
     if (!isValidTerminalSessionId(sessionId) || !isValidTerminalWriteData(data)) return false
     const session = this.getSession(ownerId, sessionId)
     if (!session?.pty) return false
     if (!attachmentId) return false
     if (!authorizeTerminalAttachment(session, attachmentId, 'write').ok) return false
-    if (userIntent && data && !session.hasUserInput) {
-      session.hasUserInput = true
-      this.sink.onUserInput?.(ownerId, { sessionId: session.id })
-    }
-    session.inputQueue.push(data)
-    this.scheduleInputFlush(session)
-    return true
+    if (interactive && userIntent && data) session.lastInteractiveInputAt = performance.now()
+    return this.writeInput(session, data, userIntent, immediate)
+  }
+
+  writeScopedInput(scope: string, sessionId: string, data: string): boolean {
+    const session = this.getOpenSessionInScope(scope, sessionId)
+    if (!session || !isValidTerminalWriteData(data)) return false
+    return this.writeInput(session, data, true, true)
   }
 
   attachSession(
@@ -363,6 +375,40 @@ export class TerminalSessionManager<TOwner extends string | number> {
     }
   }
 
+  takeTemporaryControl(ownerId: TOwner, sessionId: string, attachmentId: string): (() => void) | null {
+    const session = this.getSession(ownerId, sessionId)
+    if (!session?.pty || session.phase !== 'open') return null
+    const previousAttachmentId = session.controller?.attachmentId
+    if (!this.takeoverSession(ownerId, sessionId, session.cols, session.rows, attachmentId, true).ok) return null
+
+    // The server's terminal model answers terminal queries while an HTTP client owns input.
+    const emulatorReplies = session.render.model?.term.onData((data) => {
+      this.writeSession(ownerId, sessionId, data, attachmentId, { userIntent: false })
+    })
+    return () => {
+      emulatorReplies?.dispose()
+      this.returnTemporaryControl(ownerId, sessionId, attachmentId, previousAttachmentId)
+    }
+  }
+
+  private returnTemporaryControl(
+    ownerId: TOwner,
+    sessionId: string,
+    attachmentId: string,
+    previousAttachmentId?: string,
+  ): void {
+    const session = this.getSession(ownerId, sessionId)
+    if (!session) return
+    session.attachments.delete(attachmentId)
+    if (session.controller?.attachmentId !== attachmentId) return
+    session.controller = null
+    if (previousAttachmentId && session.attachments.get(previousAttachmentId)?.connected) {
+      this.applyOwnershipEffect(session, claimTerminalAttachmentControl(session, previousAttachmentId))
+    } else {
+      this.emitOwnership(session)
+    }
+  }
+
   pruneScope(ownerId: TOwner, scope: string, liveKeys: Set<string>): void {
     for (const session of Array.from(this.sessionsById.values())) {
       const key = terminalPruneKey(session.key)
@@ -402,6 +448,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
           cwd: session.cwd,
           controller: cloneTerminalController(session.controller),
           processName: session.processName,
+          ...(session.agentProvider ? { agentProvider: session.agentProvider } : {}),
           canonicalTitle: session.render.canonicalTitle,
           cols: session.cols,
           rows: session.rows,
@@ -505,6 +552,12 @@ export class TerminalSessionManager<TOwner extends string | number> {
     return session?.ownerId === ownerId ? session : undefined
   }
 
+  getOpenSessionInScope(scope: string, sessionId: string): TerminalSession<TOwner> | undefined {
+    if (!isValidTerminalSessionId(sessionId)) return undefined
+    const session = this.sessionsById.get(sessionId)
+    return session?.scope === scope && session.phase === 'open' && session.pty ? session : undefined
+  }
+
   private closeOwnerKey(ownerId: TOwner, key: string): void {
     const id = this.sessionIdByOwnerKey.get(this.sessionOwnerKey(ownerId, key))
     if (id) this.closeSession(id)
@@ -589,6 +642,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     resetTerminalRenderState(session.render)
     session.processName = ''
     session.windowsPty = undefined
+    session.lastInteractiveInputAt = undefined
     session.inputQueue = []
     session.inputFlushScheduled = false
   }
@@ -601,6 +655,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       cols: session.cols,
       rows: session.rows,
       windowsInternalTerminalShell: session.windowsInternalTerminalShell ?? this.windowsInternalTerminalShell,
+      agentProvider: session.agentProvider,
     })
     if (!spawnResult.ok) {
       this.disposeSessionResources(session)
@@ -668,6 +723,17 @@ export class TerminalSessionManager<TOwner extends string | number> {
     disposeTerminalRenderState(session.render)
   }
 
+  private writeInput(session: TerminalSession<TOwner>, data: string, userIntent: boolean, immediate: boolean): boolean {
+    session.inputQueue.push(data)
+    if (immediate && !this.drainInputQueue(session)) return false
+    this.scheduleInputFlush(session)
+    if (userIntent && data && !session.hasUserInput) {
+      session.hasUserInput = true
+      this.sink.onUserInput?.(session.ownerId, { sessionId: session.id })
+    }
+    return true
+  }
+
   private scheduleInputFlush(session: TerminalSession<TOwner>): void {
     if (session.inputFlushScheduled || session.inputQueue.length === 0 || !session.pty) return
     session.inputFlushScheduled = true
@@ -677,13 +743,15 @@ export class TerminalSessionManager<TOwner extends string | number> {
     })
   }
 
-  private drainInputQueue(session: TerminalSession<TOwner>): void {
-    if (session.inputQueue.length === 0 || !session.pty) return
+  private drainInputQueue(session: TerminalSession<TOwner>): boolean {
+    if (session.inputQueue.length === 0 || !session.pty) return false
     const batch = session.inputQueue.splice(0).join('')
     try {
       session.pty.write(batch)
+      return true
     } catch (err) {
       console.warn('[terminal] failed to write PTY', err)
+      return false
     }
   }
 

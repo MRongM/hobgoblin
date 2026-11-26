@@ -205,7 +205,7 @@ On the first run, the command installs the service. On later runs, it updates th
 
 `0.0.0.0` listens on all network interfaces. Use `127.0.0.1` instead when the service should only be reachable from the local host.
 
-Installation runs `bun install`, builds the Web UI, writes `/etc/systemd/system/hobgoblin.service` and `/etc/hobgoblin/server.env`, then enables and starts the service. The script uses `sudo` when it is not run as root.
+Run the installer as the non-root account that will own the service and its terminals. Installation runs `bun install`, builds the Web UI, writes `/etc/systemd/system/hobgoblin.service` and `/etc/hobgoblin/server.env`, then enables and starts the service. The script uses `sudo` for administrative steps. Systemd reads the root-owned `/etc/hobgoblin/server.secret` over stdin and the server closes that descriptor before creating terminal workers.
 
 Common maintenance commands:
 
@@ -216,7 +216,9 @@ Common maintenance commands:
 ./scripts/serve-systemd.sh uninstall
 ```
 
-The deployment archive has no Git metadata, so use `update --no-pull` after replacing its files with a newer archive. A Git clone may use `update` without that flag to attempt `git pull --ff-only`. `uninstall` stops and removes the service but keeps `/etc/hobgoblin/server.env`; delete that file manually if it is no longer needed.
+The deployment archive has no Git metadata, so use `update --no-pull` after replacing its files with a newer archive. A Git clone may use `update` without that flag to attempt `git pull --ff-only`. The first update from a service that stored its internal credential in `server.env` rotates that credential and removes the old entry. `uninstall` stops and removes the service and keeps its configuration in `/etc/hobgoblin`.
+
+To set up Web sign-in on a fresh standalone server, a host administrator sends a local `POST /api/settings/web-access` with JSON fields `enabled: true`, `username`, and `password`. Supply the startup credential from `/etc/hobgoblin/server.secret` in the `x-goblin-internal-secret` request header. Then sign in from the Web UI to manage the OpenAPI key.
 
 ## Links
 

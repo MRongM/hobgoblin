@@ -37,6 +37,7 @@ import {
   type TerminalOpenTmuxSessionsResult,
 } from '#/shared/terminal.ts'
 import {
+  TERMINAL_OUTPUT_EXCERPT_MAX_CHARACTERS,
   TERMINAL_SIZE_LIMITS,
   isValidTerminalAttachmentId,
   isValidTerminalNotifyBellInput,
@@ -74,6 +75,7 @@ import {
   type TelegramTerminalInputSubmissionResult,
 } from '#/shared/telegram-terminal-input.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
+import { createTerminalOpenApiControl } from '#/server/terminal/terminal-open-api-control.ts'
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
@@ -135,6 +137,9 @@ const manager = new TerminalSessionManager<string>({
     if (repoRoot) broker.broadcastGlobal({ type: 'sessions-changed', repoRoot })
   },
 })
+
+const openApiControl = createTerminalOpenApiControl(manager, (sessionId) => closeServerTerminalSessions([sessionId]))
+export const handleServerTerminalOpenApiControl = openApiControl.handle
 
 export function configureServerTerminal(input: {
   windowsInternalTerminalShell: WindowsInternalTerminalShellPref
@@ -345,7 +350,10 @@ export function writeServerTerminal(clientId: string, input: TerminalWriteInput)
   ) {
     return false
   }
-  return manager.writeSession(clientId, input.sessionId, input.data, input.attachmentId, input.userIntent !== false)
+  return manager.writeSession(clientId, input.sessionId, input.data, input.attachmentId, {
+    userIntent: input.userIntent !== false,
+    interactive: true,
+  })
 }
 
 export function markServerTelegramTerminalInputTarget(
@@ -402,7 +410,7 @@ export async function submitServerTelegramTerminalInput(text: string): Promise<T
     })
     return { ok: false, code: 'target-lost' }
   }
-  const written = manager.writeSession(target.clientId, target.sessionId, `${text}\r`, target.attachmentId, true)
+  const written = manager.writeSession(target.clientId, target.sessionId, `${text}\r`, target.attachmentId)
   if (!written) return { ok: false, code: 'write-failed' }
   return { ok: true, terminal: { index: target.terminalIndex } }
 }
@@ -512,6 +520,13 @@ export async function closeServerTerminal(
   }
   const session = manager.getSession(clientId, input.sessionId)
   if (!session) return { ok: true }
+  if (
+    input.expectedRepoId !== undefined &&
+    (!isValidRepoLocator(input.expectedRepoId) ||
+      manager.getOpenSessionInScope(terminalSessionScope(input.expectedRepoId), session.id) !== session)
+  ) {
+    return { ok: false, message: 'error.invalid-arguments' }
+  }
   if (input.closeTmuxSession === true) {
     if (!session.tmuxSessionName || !session.tmuxWorkingDirectory) {
       return { ok: false, message: 'error.terminal-tmux-unavailable' }
@@ -600,7 +615,13 @@ export async function getServerTerminalOutputExcerpt(
   input: TerminalOutputExcerptInput,
 ): Promise<TerminalOutputExcerpt | null> {
   if (!isValidTerminalSessionId(input?.sessionId)) return null
-  if (!Number.isInteger(input?.maxCharacters) || input.maxCharacters < 1 || input.maxCharacters > 4_096) return null
+  if (
+    !Number.isInteger(input.maxCharacters) ||
+    input.maxCharacters < 1 ||
+    input.maxCharacters > TERMINAL_OUTPUT_EXCERPT_MAX_CHARACTERS
+  ) {
+    return null
+  }
   return await manager.outputExcerpt(input.sessionId, input.maxCharacters)
 }
 
@@ -653,6 +674,7 @@ export function handleRealtimeServerMessage(
 
 export function closeAllServerTerminalSessions(): void {
   clearTelegramTerminalInputTarget()
+  openApiControl.shutdown()
   connectionState.shutdown()
   broker.disconnectAll()
   manager.closeAll()
