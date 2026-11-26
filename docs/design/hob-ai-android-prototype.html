@@ -1,0 +1,857 @@
+<!doctype html>
+<!-- Compare three Android navigation layouts for the same Hob AI conversation flow. -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Hob AI · Android 交互预览</title>
+<style>
+  :root {
+    --ink: #22243a;
+    --muted: #5e6279;
+    --line: #e2e2ee;
+    --paper: #fbfaff;
+    --white: #fff;
+    --accent: #5046a6;
+    --accent-soft: #eeebfc;
+    --green: #256452;
+    --green-soft: #e5f2ed;
+    --mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: #e8eaf5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  button, input, textarea { font: inherit; }
+  button { cursor: pointer; color: inherit; }
+  button:disabled { cursor: default; opacity: .5; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  button { -webkit-tap-highlight-color: transparent; }
+  h1, h2, h3, p { margin: 0; }
+  code { font-family: var(--mono); }
+  [hidden] { display: none !important; }
+
+  .review {
+    min-height: 100svh; display: grid; grid-template-columns: minmax(285px, 375px) 412px;
+    justify-content: center; align-items: center; gap: clamp(36px, 8vw, 118px);
+    padding: 28px 32px 78px;
+    background-color: #e8eaf5;
+    background-image: radial-gradient(#bec5dd 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .review-copy { align-self: center; }
+  .prototype-label {
+    display: inline-flex; background: #f7f7ff; color: #414568; border: 1px solid #cbd0e6;
+    padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 650;
+    letter-spacing: .015em;
+  }
+  .review-copy h1 { font-size: clamp(37px, 5vw, 65px); line-height: 1.12; letter-spacing: -.055em; margin: 20px 0 15px; }
+  .review-copy h1 span { display: block; color: var(--accent); }
+  .review-copy > p { max-width: 340px; color: #4c506a; font-size: 15px; }
+  .review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 35px; }
+  .review-actions button {
+    border: 1px solid #cbd0e6; border-radius: 9px; padding: 8px 12px;
+    background: #f9f9ff; font-size: 13px; font-weight: 650;
+  }
+  .review-actions button:hover { border-color: var(--accent); }
+  .variant-note { padding: 11px 0 11px 15px; border-left: 3px solid var(--accent); }
+  .variant-note strong { display: block; font-size: 15px; }
+  .variant-note p { margin-top: 4px; color: #4c506a; font-size: 13px; max-width: 32ch; }
+
+  .phone {
+    width: 100%; height: clamp(580px, calc(100svh - 110px), 810px);
+    min-width: 0; position: relative; overflow: hidden; isolation: isolate;
+    border: 8px solid #292d48; border-radius: 36px; background: var(--paper);
+    box-shadow: 0 22px 48px #33356129, 0 2px 5px #292d4838;
+  }
+  .device-status {
+    position: absolute; z-index: 1; inset: 0 0 auto; height: 29px; padding: 0 20px;
+    display: flex; justify-content: space-between; align-items: center; background: var(--paper);
+    font: 700 11px/1 var(--mono); pointer-events: none;
+  }
+  .battery { width: 16px; height: 8px; border: 1px solid currentColor; border-radius: 2px; position: relative; }
+  .battery::before { content: ""; position: absolute; inset: 1px 3px 1px 1px; border-radius: 1px; background: currentColor; }
+  .battery::after { content: ""; position: absolute; width: 2px; height: 3px; top: 1.5px; right: -3px; background: currentColor; }
+  #app { position: absolute; inset: 29px 0 0; }
+  .app-page { width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+  .screen-scroll { overflow: auto; min-height: 0; flex: 1; overscroll-behavior: contain; scrollbar-width: thin; }
+  .appbar {
+    flex: none; display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 5px 12px;
+    border-bottom: 1px solid var(--line); background: var(--paper);
+  }
+  .appbar h2 { font-size: 16px; font-weight: 720; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .appbar h2 small { display: block; color: var(--muted); font-size: 11px; font-weight: 550; line-height: 1.4; }
+  .icon-button {
+    border: 0; background: transparent; border-radius: 12px; flex: none;
+    width: 44px; height: 44px; display: grid; place-items: center; color: #484c69;
+  }
+  .icon-button:hover { background: var(--accent-soft); }
+  .icon { position: relative; width: 20px; height: 20px; display: inline-block; flex: none; color: currentColor; }
+  .icon::after, .icon::before { content: ""; position: absolute; }
+  .icon-menu::before { width: 16px; height: 2px; top: 5px; left: 2px; border-radius: 2px; background: currentColor; box-shadow: 0 4px currentColor; }
+  .icon-menu::after { width: 11px; height: 2px; top: 13px; left: 2px; border-radius: 2px; background: currentColor; }
+  .icon-plus::before, .icon-plus::after { background: currentColor; border-radius: 2px; }
+  .icon-plus::before { width: 14px; height: 2px; top: 9px; left: 3px; }
+  .icon-plus::after { width: 2px; height: 14px; top: 3px; left: 9px; }
+  .icon-back::before, .icon-next::before { width: 8px; height: 8px; border: solid currentColor; border-width: 0 2px 2px 0; top: 5px; left: 6px; transform: rotate(135deg); }
+  .icon-next::before { transform: rotate(-45deg); left: 4px; }
+  .icon-send::before { width: 8px; height: 8px; border: solid currentColor; border-width: 2px 0 0 2px; top: 4px; left: 6px; transform: rotate(45deg); }
+  .icon-send::after { width: 2px; height: 13px; left: 9px; top: 4px; background: currentColor; }
+  .icon-close::before, .icon-close::after { width: 15px; height: 2px; top: 9px; left: 2.5px; background: currentColor; transform: rotate(45deg); }
+  .icon-close::after { transform: rotate(-45deg); }
+  .icon-stop::before { inset: 5px; border-radius: 2px; background: currentColor; }
+  .icon-folder::before { inset: 6px 2px 3px; border: 1.5px solid currentColor; border-radius: 2px; }
+  .icon-folder::after { width: 7px; height: 4px; left: 2px; top: 3px; border: 1.5px solid currentColor; border-bottom: 0; border-radius: 2px 2px 0 0; }
+  .icon-chat::before { inset: 2px 3px 4px 2px; border: 1.5px solid currentColor; border-radius: 5px; }
+  .icon-chat::after { width: 5px; height: 5px; left: 5px; top: 12px; background: var(--paper); border: solid currentColor; border-width: 0 0 1.5px 1.5px; transform: skewY(-36deg); }
+  .icon-branch::before { left: 5px; top: 5px; height: 11px; width: 2px; background: currentColor; box-shadow: 7px -3px 0 currentColor; }
+  .icon-branch::after { border: solid currentColor; border-width: 0 2px 2px 0; width: 8px; height: 10px; left: 6px; top: 3px; border-radius: 0 0 6px; }
+  .gear { font-size: 21px; font-family: system-ui, sans-serif; line-height: 1; }
+
+  .primary, .secondary {
+    min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 9px 15px; border: 1px solid transparent; border-radius: 13px; font-weight: 700;
+  }
+  .primary { background: var(--accent); color: var(--white); }
+  .primary:hover { background: #433991; }
+  .secondary { background: var(--white); border-color: var(--line); }
+  .secondary:hover { border-color: var(--accent); }
+  .small-text { color: var(--muted); font-size: 12px; }
+  .mark {
+    width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; flex: none;
+    background: var(--accent-soft); color: var(--accent); font: 750 16px/1 var(--mono);
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #477967; flex: none; }
+  .status-dot.running { box-shadow: 0 0 0 3px #cfe7de; }
+  .home { padding: 18px; }
+  .home-intro { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 1px 0 18px; }
+  .home-intro h3 { font-size: 25px; line-height: 1.22; letter-spacing: -.055em; }
+  .home-intro p { color: var(--muted); font-size: 12px; margin-top: 5px; }
+  .home-intro .primary { min-height: 42px; padding-inline: 10px; white-space: nowrap; font-size: 13px; }
+  .list-heading {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 19px 0 7px; font-size: 12px; font-weight: 750; color: #555a77;
+  }
+  .list-heading:first-child { margin-top: 3px; }
+  .session-list { display: grid; gap: 5px; }
+  .session-item {
+    text-align: start; width: 100%; min-height: 69px; display: flex; align-items: center; gap: 10px;
+    padding: 9px 9px 9px 5px; border: 1px solid transparent; border-bottom-color: var(--line);
+    background: transparent;
+  }
+  .session-item:last-child { border-bottom-color: transparent; }
+  .session-item:hover { background: var(--accent-soft); border-color: transparent; border-radius: 11px; }
+  .session-item.running {
+    border-color: #cde5d9; padding-inline: 10px; border-radius: 14px; background: #ecf6f1;
+  }
+  .session-item.running .mark { background: #d9ede4; color: var(--green); }
+  .session-copy { flex: 1; min-width: 0; }
+  .session-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .session-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .session-time { align-self: flex-start; margin-top: 5px; white-space: nowrap; color: var(--muted); font-size: 11px; }
+  .session-status { display: flex; align-items: center; gap: 5px; color: var(--green); font-size: 11px; white-space: nowrap; }
+  .items-empty { padding: 16px 3px; color: var(--muted); font-size: 13px; }
+  .bottom-nav {
+    flex: none; min-height: 56px; display: flex; justify-content: space-around; align-items: stretch;
+    background: var(--paper); border-top: 1px solid var(--line); padding: 2px 12px;
+  }
+  .bottom-nav button { display: grid; place-content: center; justify-items: center; gap: 3px; min-width: 52px; min-height: 48px; border: 0; background: transparent; color: var(--muted); font-size: 10px; }
+  .bottom-nav button[aria-current] { color: var(--accent); font-weight: 750; }
+  .bottom-nav button[aria-current] .nav-icon { background: var(--accent-soft); }
+  .nav-icon { width: 38px; height: 23px; display: grid; place-items: center; border-radius: 10px; }
+  .device-foot { flex: none; height: 12px; display: grid; place-items: center; background: var(--paper); }
+  .device-foot::after { content: ""; width: 80px; height: 3px; border-radius: 100px; background: #a7aac0; }
+
+  .project-group { border-radius: 14px; border: 1px solid var(--line); overflow: hidden; background: var(--white); margin-bottom: 10px; }
+  .project-group summary { display: flex; align-items: center; gap: 10px; padding: 11px; cursor: pointer; list-style: none; }
+  .project-group summary::-webkit-details-marker { display: none; }
+  .project-group summary .icon-next { margin-left: auto; }
+  .project-group[open] summary .icon-next { transform: rotate(90deg); }
+  .project-group summary strong { display: block; font-size: 14px; }
+  .project-group summary small { color: var(--muted); font-size: 11px; }
+  .project-group .session-list { padding: 0 9px 6px; border-top: 1px solid var(--line); }
+  .project-group .session-item { min-height: 55px; }
+  .project-group .mark { width: 31px; height: 31px; }
+  .project-group .new-project-chat { display: flex; align-items: center; min-height: 44px; margin: 0 8px 4px; padding: 5px 8px; border: 0; background: transparent; gap: 6px; color: var(--accent); font-size: 13px; font-weight: 700; }
+
+  .context-strip {
+    flex: none; min-height: 50px; display: flex; align-items: center; gap: 9px; margin: 8px 14px 1px; padding: 7px 9px;
+    border: 1px solid #dedaf4; border-left: 3px solid #796bc7; border-radius: 5px 11px 11px 5px;
+    color: var(--accent); background: #f2effd;
+  }
+  .context-strip strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .context-strip > div { min-width: 0; }
+  .context-strip small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10px/1.4 var(--mono); color: #555779; }
+  .chat-body { padding: 16px 16px 8px; }
+  .history { display: grid; gap: 16px; }
+  .user-message { justify-self: end; max-width: 83%; padding: 9px 13px; border-radius: 15px 15px 4px 15px; background: #e9e6fb; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 14px; }
+  .assistant-message { overflow-wrap: anywhere; font-size: 14px; }
+  .speaker { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; color: #424666; font-size: 12px; font-weight: 750; }
+  .speaker .mark { width: 23px; height: 23px; border-radius: 7px; font-size: 11px; }
+  .assistant-message p, .assistant-message ul { margin: 5px 0; }
+  .assistant-message ul { padding-left: 19px; }
+  .assistant-message code { font-size: .82em; background: var(--accent-soft); color: #423982; padding: 1px 4px; border-radius: 4px; }
+  .toolcard { overflow: hidden; margin: 8px 0; border: 1px solid var(--line); border-radius: 11px; background: var(--white); }
+  .toolcard summary { min-height: 43px; display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; list-style: none; cursor: pointer; font-size: 12px; font-weight: 700; }
+  .toolcard summary::-webkit-details-marker { display: none; }
+  .toolcard[open] .icon-next { transform: rotate(90deg); }
+  .toolcard ul { list-style: none; margin: 0; padding: 0 10px 7px 14px; font-size: 12px; }
+  .toolcard li { padding: 6px 3px 6px 11px; border-left: 1px solid #d3d3e7; position: relative; }
+  .toolcard li::before { content: ""; position: absolute; left: -4px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: #8072c9; }
+  .run-note { display: flex; align-items: center; gap: 7px; color: var(--green); font-size: 12px; margin-top: 3px; }
+  .live-text { white-space: pre-wrap; }
+  .chat-empty { margin: 10vh auto 0; max-width: 230px; text-align: center; }
+  .chat-empty .mark { margin: 0 auto 11px; width: 47px; height: 47px; font-size: 18px; }
+  .chat-empty h3 { font-size: 18px; margin-bottom: 8px; }
+  .chat-empty p { color: var(--muted); font-size: 13px; }
+  .composer { flex: none; padding: 8px 12px 3px; border-top: 1px solid var(--line); background: var(--paper); }
+  .compose-field { display: flex; align-items: flex-end; gap: 6px; padding: 5px; border: 1px solid #dcdbea; border-radius: 15px; background: var(--white); }
+  .compose-field:focus-within { border-color: var(--accent); }
+  .compose-field textarea { flex: 1; min-width: 0; min-height: 37px; max-height: 92px; resize: none; field-sizing: content; padding: 8px 8px 5px; outline: 0; border: 0; color: var(--ink); background: transparent; font-size: 14px; }
+  .compose-field textarea:focus-visible { outline: 0; }
+  .composer .action { width: 40px; height: 40px; min-height: 40px; padding: 0; border-radius: 11px; flex: none; }
+  .composer-note { color: var(--muted); font-size: 10px; margin: 5px 3px 0; min-height: 15px; }
+  .new-content { margin: 0 auto 5px; padding: 4px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--white); color: var(--accent); font-size: 12px; }
+
+  .picker { padding: 13px 15px; }
+  .search, .field input {
+    width: 100%; min-height: 45px; padding: 8px 11px; border: 1px solid #d7d9e9;
+    border-radius: 11px; background: var(--white); color: var(--ink); font-size: 14px;
+  }
+  .choice-heading { color: var(--muted); font-size: 12px; font-weight: 700; margin: 15px 0 6px; }
+  .target-row {
+    width: 100%; display: flex; align-items: center; gap: 9px; min-height: 57px; padding: 7px 8px;
+    text-align: start; border: 1px solid transparent; border-radius: 11px; background: transparent;
+  }
+  .target-row:hover, .target-row[aria-pressed="true"] { background: var(--accent-soft); border-color: #ded8f8; }
+  .target-row .mark { width: 33px; height: 33px; border-radius: 9px; }
+  .target-row div { flex: 1; min-width: 0; }
+  .target-row strong, .target-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .target-row strong { font-size: 14px; }
+  .target-row small { color: var(--muted); font-size: 11px; }
+  .target-row small code { font-size: 10px; }
+  .check { font-size: 15px; color: var(--accent); font-weight: 750; }
+  .parent-crumb { display: flex; align-items: center; min-height: 44px; border: 0; background: transparent; color: var(--accent); padding-inline: 3px; font-size: 13px; }
+  .nested-group { margin-top: 10px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .picker-bottom, .config-actions { flex: none; padding: 10px 14px 4px; border-top: 1px solid var(--line); background: var(--paper); }
+  .picker-selection { margin: 0 0 7px; color: var(--accent); font-size: 11px; overflow-wrap: anywhere; }
+  .provider-picker { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .provider-picker > span { font-size: 12px; color: var(--muted); margin-right: 3px; }
+  .provider-picker button { min-height: 37px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); font-size: 12px; }
+  .provider-picker button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: #d9d2f8; font-weight: 700; }
+  .picker-bottom .primary, .config-actions .primary, .config-actions .secondary { width: 100%; }
+
+  .config { padding: 16px; }
+  .connection-preview { display: flex; align-items: center; gap: 9px; padding: 10px; margin: 3px 0 15px; border: 1px solid #dbe3df; border-radius: 12px; background: #f0f7f3; font-size: 13px; font-weight: 650; }
+  .connection-preview span:last-child { color: var(--muted); font-weight: 550; overflow-wrap: anywhere; }
+  .field { display: grid; gap: 5px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+  .field input[type="password"], .field input[type="url"] { font-family: var(--mono); font-size: 12px; }
+  .field small { font-size: 11px; font-weight: 550; color: var(--muted); }
+  .test-result { margin-top: 13px; color: var(--green); font-size: 13px; }
+  .test-result.error { color: #9a3547; }
+  .config-actions { display: grid; gap: 7px; }
+
+  .overlay { position: absolute; inset: 0; z-index: 2; display: flex; background: #25274266; }
+  .drawer {
+    width: min(340px, 88%); height: 100%; display: flex; flex-direction: column;
+    box-shadow: 5px 0 22px #2d2a4b29; background: var(--paper); border-radius: 0 17px 17px 0;
+  }
+  .drawer.sheet {
+    height: min(565px, 91%); width: 100%; align-self: flex-end; border-radius: 19px 19px 0 0;
+  }
+  .drawer .home { padding-top: 10px; }
+  .drawer .primary { width: 100%; margin-bottom: 12px; }
+  .drawer .search { margin-bottom: 3px; }
+  .drawer .screen-scroll { margin-top: 1px; }
+  .drawer-footer { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; border-top: 1px solid var(--line); }
+  .drawer-footer span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drawer-footer button { flex: none; min-height: 43px; border: 0; background: none; color: var(--accent); font-size: 12px; font-weight: 700; }
+
+  .switcher {
+    position: fixed; z-index: 5; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 2px; max-width: calc(100% - 18px); padding: 4px;
+    border-radius: 15px; background: #282c46; color: #fff; box-shadow: 0 7px 20px #292d4830;
+  }
+  .switcher button {
+    color: #eff0ff; background: transparent; border: 0; border-radius: 11px;
+    min-height: 40px; padding: 4px 11px; white-space: nowrap; font-size: 12px; font-weight: 650;
+  }
+  .switcher button:hover { background: #414565; }
+  .switcher button[aria-pressed="true"] { background: #e7e5ff; color: #353263; }
+  .switcher button:focus-visible { outline-color: white; }
+  .switcher .arrow { padding-inline: 5px; min-width: 33px; }
+  .switcher .arrow .icon { display: block; }
+  @media (max-width: 760px) {
+    :root { background: var(--paper); }
+    .review { display: block; min-height: 0; padding: 0 0 56px; background: var(--paper); }
+    .review-copy { display: none; }
+    .phone { height: calc(100dvh - 56px); min-height: 420px; border: 0; border-radius: 0; box-shadow: none; }
+    .device-status, .device-foot { display: none; }
+    #app { inset: 0; }
+    .switcher { bottom: 4px; }
+  }
+  @media (max-width: 359px) {
+    .home { padding-inline: 12px; }
+    .home-intro h3 { font-size: 22px; }
+    .switcher button { padding-inline: 7px; }
+  }
+</style>
+</head>
+<body>
+<main class="review">
+  <section class="review-copy" aria-label="交互预览说明">
+    <span class="prototype-label">Android · 可点击原型</span>
+    <h1>Hob AI<span>移动端预览</span></h1>
+    <p>在手机上找到工作位置，把任务交给 Codex 或 Claude，再回到同一个会话继续。</p>
+    <div class="review-actions" aria-label="快速预览">
+      <button type="button" data-action="home">首页</button>
+      <button type="button" data-action="new">新建会话</button>
+      <button type="button" data-action="open-session" data-id="login">示例对话</button>
+      <button type="button" data-action="settings">连接设置</button>
+    </div>
+    <div class="variant-note"><strong id="variant-title"></strong><p id="variant-description"></p></div>
+  </section>
+  <section class="phone" aria-label="Hob AI 手机预览">
+    <div class="device-status" aria-hidden="true"><span>10:24</span><span class="battery"></span></div>
+    <div id="app"></div>
+  </section>
+</main>
+<nav class="switcher" aria-label="切换预览布局">
+  <button class="arrow" type="button" data-action="cycle-variant" data-id="-1" aria-label="上一个预览布局"><span class="icon icon-back" aria-hidden="true"></span></button>
+  <button type="button" data-action="variant" data-id="inbox">会话优先</button>
+  <button type="button" data-action="variant" data-id="projects">项目优先</button>
+  <button type="button" data-action="variant" data-id="chat">对话优先</button>
+  <button class="arrow" type="button" data-action="cycle-variant" data-id="1" aria-label="下一个预览布局"><span class="icon icon-next" aria-hidden="true"></span></button>
+</nav>
+
+<script>
+  const variants = [
+    { id: 'inbox', name: '会话优先', description: '默认打开会话首页。进行中的任务置顶，从左侧抽屉按项目浏览。' },
+    { id: 'projects', name: '项目优先', description: '先看到项目目录，各项目可展开会话。在 AI 入口底部切换项目和最近会话。' },
+    { id: 'chat', name: '对话优先', description: '直接回到上一次对话。需要换任务时，从底部会话列表切换。' },
+  ];
+  const projects = [
+    { id: 'shop', name: '北辰商城', kind: '单仓库', targets: [
+      { id: 'shop-root', title: '主工作树', branch: 'main' },
+      { id: 'shop-login', title: '登录修复', branch: 'feat/login' },
+      { id: 'shop-cart', title: '购物车校验', branch: 'fix/cart' },
+    ] },
+    { id: 'delivery', name: '交付平台', kind: '多仓库工作区', targets: [
+      { id: 'delivery-root', title: '工作区根目录', branch: '' },
+    ], children: [
+      { id: 'delivery-release', name: '发布准备', targets: [
+        { id: 'release-api', title: 'API · 发布工作树', branch: 'feat/release' },
+        { id: 'release-web', title: 'Web · 发布工作树', branch: 'feat/release-ui' },
+      ] },
+      { id: 'delivery-observe', name: '可观测性', targets: [
+        { id: 'observe-api', title: 'API · 事件同步', branch: 'fix/sync' },
+      ] },
+    ] },
+    { id: 'notes', name: '团队笔记', kind: '普通目录', targets: [
+      { id: 'notes-root', title: '项目根目录', branch: '' },
+    ] },
+  ];
+  const targets = projects.flatMap((project) =>
+    project.targets.map((target) => ({ ...target, project }))
+      .concat((project.children || []).flatMap((child) =>
+        child.targets.map((target) => ({ ...target, project, child })),
+      )),
+  );
+  const sessions = [
+    { id: 'sync', title: '检查同步任务的失败重试', target: 'observe-api', provider: 'Claude', time: '刚刚', draft: '', running: true, messages: [
+      { role: 'user', text: '同步任务偶尔跑两次，查一下是否有竞态。' },
+      { role: 'assistant', steps: ['已读取同步任务配置', '正在核对重试条件'], text: '', running: true },
+    ] },
+    { id: 'login', title: '修复登录页超时提示', target: 'shop-login', provider: 'Codex', time: '12 分钟前', draft: '', messages: [
+      { role: 'user', text: '登录请求超时时页面一直转圈，帮我修一下。' },
+      { role: 'assistant', steps: ['检查了登录请求和页面状态', '修改了 2 个文件', '通过 4 项登录测试'],
+        html: '<p><strong>登录超时现在会显示可重试提示。</strong></p><p>我让请求结束时统一清理加载状态，并在超时分支显示「连接超时，重试」。</p><ul><li><code>login.ts</code> 区分超时和认证失败</li><li><code>login.test.ts</code> 覆盖超时后的重试</li></ul>' },
+    ] },
+    { id: 'release', title: '整理发布前的检查项', target: 'release-api', provider: 'Claude', time: '昨天', draft: '', messages: [
+      { role: 'user', text: '给这次 API 发布整理一份上线前的检查清单。' },
+      { role: 'assistant', html: '<p><strong>上线前检查清单</strong></p><ul><li>确认数据库迁移可回滚。</li><li>验证旧客户端仍能读取响应。</li><li>配置错误率监控并记录回滚负责人。</li></ul>' },
+    ] },
+  ];
+  const initialVariant = new URLSearchParams(location.search).get('variant');
+  const state = {
+    variant: variants.some((variant) => variant.id === initialVariant) ? initialVariant : 'inbox',
+    page: 'home', homeTab: 'projects', sessionId: 'login', overlay: false, overlayFilter: '',
+    newDraft: '', targetId: '', provider: 'Codex',
+    pickingProject: '', pickingChild: '', targetFilter: '', pickerTargetId: '', pickerProvider: 'Codex',
+    settingsFrom: 'home', pickerFrom: 'home',
+    address: 'https://hob.example.com', formAddress: 'https://hob.example.com',
+    formKey: 'example-access-key', testResult: '', verified: false,
+  };
+  const app = document.querySelector('#app');
+  const findSession = () => sessions.find((session) => session.id === state.sessionId);
+  const findTarget = (id) => targets.find((target) => target.id === id);
+  const icon = (type) => '<span aria-hidden="true" class="icon icon-' + type + '"></span>';
+  const gear = '<span class="gear" aria-hidden="true">&#9881;</span>';
+  const foot = '<div class="device-foot" aria-hidden="true"></div>';
+  const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character],
+  );
+  function iconButton(action, label, graphic) {
+    return '<button type="button" class="icon-button" data-action="' + action + '" aria-label="' + label + '">' + graphic + '</button>';
+  }
+  function appbar(title, start, end, subtitle) {
+    return '<header class="appbar">' + start + '<h2>' + escapeHtml(title) +
+      (subtitle ? '<small>' + escapeHtml(subtitle) + '</small>' : '') + '</h2>' + end + '</header>';
+  }
+  function primaryButton(action, label, graphic) {
+    return '<button class="primary" type="button" data-action="' + action + '">' + (graphic || '') + label + '</button>';
+  }
+  function locationLabel(target) {
+    return [target.project.name, target.child?.name, target.title].filter(Boolean).join(' / ');
+  }
+  function sessionRow(session) {
+    const target = findTarget(session.target);
+    const mark = session.provider === 'Codex' ? 'C' : '✳';
+    const status = session.running
+      ? '<span class="session-status"><span class="status-dot running"></span>运行中</span>'
+      : '<span class="session-time">' + session.time + '</span>';
+    return '<button type="button" class="session-item' + (session.running ? ' running' : '') +
+      '" data-action="open-session" data-id="' + session.id + '"><span class="mark" aria-hidden="true">' + mark +
+      '</span><span class="session-copy"><strong>' + escapeHtml(session.title) + '</strong><small>' +
+      escapeHtml(locationLabel(target)) + '</small></span>' + status + '</button>';
+  }
+  function groupedSessions(filter = '') {
+    const matching = sessions.filter((session) => {
+      const target = findTarget(session.target);
+      return (session.title + ' ' + locationLabel(target) + ' ' + target.branch).toLocaleLowerCase().includes(filter);
+    });
+    const running = matching.filter((session) => session.running);
+    const recent = matching.filter((session) => !session.running);
+    if (!matching.length) return '<p class="items-empty">没有匹配的会话。</p>';
+    return (running.length ? '<h3 class="list-heading">进行中</h3><div class="session-list">' + running.map(sessionRow).join('') + '</div>' : '') +
+      (recent.length ? '<h3 class="list-heading">最近会话</h3><div class="session-list">' + recent.map(sessionRow).join('') + '</div>' : '');
+  }
+  function projectGroups() {
+    return projects.map((project, index) => {
+      const projectSessions = sessions.filter((session) => findTarget(session.target).project === project);
+      return '<details class="project-group"' + (index === 0 ? ' open' : '') + '><summary><span class="mark">' +
+        icon('folder') + '</span><span><strong>' + project.name + '</strong><small>' + project.kind +
+        ' · ' + projectSessions.length + ' 个会话</small></span>' + icon('next') +
+        '</summary><div class="session-list">' + projectSessions.map(sessionRow).join('') +
+        '<button type="button" class="new-project-chat" data-action="new" data-id="' + project.id + '">' +
+        icon('plus') + '在此项目新建会话</button></div></details>';
+    }).join('');
+  }
+  function navButton(action, label, graphic, selected) {
+    return '<button type="button" data-action="' + action + '"' + (selected ? ' aria-current="page"' : '') +
+      '><span class="nav-icon">' + graphic + '</span>' + label + '</button>';
+  }
+  function homePage() {
+    const projectFirst = state.variant === 'projects';
+    const projectPage = projectFirst && state.homeTab === 'projects';
+    const title = projectPage ? '项目' : 'AI 会话';
+    return appbar('Hob AI', iconButton('drawer', '浏览会话', icon('menu')), iconButton('settings', '连接设置', gear), '') +
+      '<div class="screen-scroll home"><div class="home-intro"><div><h3>' + title +
+      '</h3><p>' + (projectPage ? '选择项目或继续已有会话' : '继续刚才的工作') +
+      '</p></div>' + primaryButton('new', '新建会话', icon('plus')) + '</div>' +
+      (projectPage ? projectGroups() : groupedSessions()) + '</div>' +
+      '<nav class="bottom-nav" aria-label="AI 导航">' +
+      navButton('projects-tab', '项目', icon('folder'), projectPage) +
+      navButton('recent-tab', '会话', icon('chat'), !projectPage) +
+      navButton('settings', '连接', gear, false) + '</nav>' + foot;
+  }
+  function isDraftChat() { return state.sessionId === null; }
+  function thread() {
+    return isDraftChat() ? { target: state.targetId, provider: state.provider, title: '新会话' } : findSession();
+  }
+  function activityCard(message) {
+    if (!message.steps?.length) return '';
+    const title = message.running ? '执行进度' : '执行记录';
+    return '<details class="toolcard"><summary><span>' + title + ' · ' + message.steps.length +
+      ' 步</span>' + icon('next') + '</summary><ul>' +
+      message.steps.map((step) => '<li>' + escapeHtml(step) + '</li>').join('') + '</ul></details>';
+  }
+  function messagesHtml(session) {
+    if (!session?.messages?.length) {
+      return '<div class="chat-empty"><span class="mark" aria-hidden="true">H</span><h3>想让 AI 做什么？</h3>' +
+        '<p>描述要检查、修改或整理的内容。</p></div>';
+    }
+    return '<div class="history">' + session.messages.map((message) => {
+      if (message.role === 'user') return '<div class="user-message">' + escapeHtml(message.text) + '</div>';
+      const output = message.html || (message.text ? '<p class="live-text">' + escapeHtml(message.text) + '</p>' : '');
+      const status = message.running
+        ? '<p class="run-note"><span class="status-dot running"></span>' + escapeHtml(message.steps.at(-1) || '任务已提交') + '</p>'
+        : (message.stopped ? '<p class="small-text">任务已停止。</p>' : '');
+      return '<article class="assistant-message"><header class="speaker"><span class="mark" aria-hidden="true">' +
+        (session.provider === 'Codex' ? 'C' : '✳') + '</span>' + session.provider + '</header>' +
+        status + activityCard(message) + output + '</article>';
+    }).join('') + '</div>';
+  }
+  function composeAction(session) {
+    if (session?.running) {
+      return '<button type="button" class="action secondary" data-action="stop" aria-label="停止任务" title="停止任务">' + icon('stop') + '</button>';
+    }
+    const draft = session?.draft ?? state.newDraft;
+    return '<button class="action primary" type="submit" aria-label="发送" title="发送"' +
+      (draft.trim() ? '' : ' disabled') + '>' + icon('send') + '</button>';
+  }
+  function chatPage() {
+    const current = thread();
+    const target = findTarget(current.target);
+    const chatFirst = state.variant === 'chat';
+    const session = findSession();
+    const draft = session?.draft ?? state.newDraft;
+    return appbar(current.title, chatFirst
+      ? iconButton('drawer', '打开会话列表', icon('menu'))
+      : iconButton('home', '返回列表', icon('back')),
+    iconButton(chatFirst ? 'new' : 'drawer', chatFirst ? '新建会话' : '打开会话列表', icon(chatFirst ? 'plus' : 'menu')), current.provider) +
+      '<section class="context-strip" aria-label="工作位置">' + icon('branch') + '<div><strong>' +
+      escapeHtml(locationLabel(target)) + '</strong><small>' + escapeHtml(target.branch || '根目录') +
+      '</small></div></section><div class="screen-scroll chat-body" id="chat-scroll" tabindex="0" aria-label="对话内容">' +
+      '<div id="messages">' + messagesHtml(session) + '</div></div>' +
+      '<button type="button" class="new-content" data-action="latest" hidden>查看新内容 ↓</button>' +
+      '<form class="composer" id="composer"><div class="compose-field"><textarea id="draft" rows="1" aria-label="消息" placeholder="给 ' +
+      current.provider + ' 发消息">' + escapeHtml(draft) + '</textarea><span id="compose-action">' + composeAction(session) +
+      '</span></div><p class="composer-note">' + (session?.running ? '任务执行中，可以先写下一条消息。' : '使用示例数据 · 发送后模拟回复') +
+      '</p></form>' + foot;
+  }
+  function targetRow(target) {
+    return '<button type="button" class="target-row" data-action="select-target" data-id="' + target.id +
+      '" aria-pressed="' + (state.pickerTargetId === target.id) + '"><span class="mark">' + icon('branch') +
+      '</span><div><strong>' + escapeHtml(target.title) + '</strong><small>' +
+      (target.branch ? '<code>' + escapeHtml(target.branch) + '</code>' : '目录') +
+      '</small></div>' + (state.pickerTargetId === target.id ? '<span class="check" aria-hidden="true">✓</span>' : '') + '</button>';
+  }
+  function pickerChoices() {
+    const project = projects.find((item) => item.id === state.pickingProject);
+    const child = project?.children?.find((item) => item.id === state.pickingChild);
+    const filter = state.targetFilter.trim().toLocaleLowerCase();
+    if (filter) {
+      const results = targets.filter((target) => (!project || target.project === project) &&
+        (!child || target.child === child) && (locationLabel(target) + ' ' + target.branch).toLocaleLowerCase().includes(filter));
+      if (!results.length) return '<p class="items-empty">没有找到匹配的工作位置。</p>';
+      return '<p class="choice-heading">匹配的工作位置</p>' + results.map((target) =>
+        '<div class="nested-group"><p class="small-text">' + escapeHtml([target.project.name, target.child?.name].filter(Boolean).join(' / ')) +
+        '</p>' + targetRow(target) + '</div>',
+      ).join('');
+    }
+    if (!project) {
+      return '<p class="choice-heading">选择项目</p>' + projects.map((item) =>
+        '<button type="button" class="target-row" data-action="pick-project" data-id="' + item.id + '"><span class="mark">' +
+        icon('folder') + '</span><div><strong>' + item.name + '</strong><small>' + item.kind +
+        '</small></div>' + icon('next') + '</button>',
+      ).join('');
+    }
+    const items = findPickerTargets(project, child);
+    return '<button type="button" class="parent-crumb" data-action="' + (child ? 'pick-project' : 'all-projects') +
+      '" data-id="' + project.id + '">' + icon('back') + (child ? project.name : '所有项目') +
+      '</button><h3 class="choice-heading">' + (child ? child.name : project.name) + '</h3>' + items +
+      (!child && project.children?.length
+        ? '<p class="choice-heading">子工作区</p>' + project.children.map((subworkspace) =>
+          '<button type="button" class="target-row" data-action="pick-child" data-id="' + subworkspace.id +
+          '"><span class="mark">' + icon('folder') + '</span><div><strong>' + subworkspace.name +
+          '</strong><small>' + subworkspace.targets.length + ' 个工作位置</small></div>' + icon('next') + '</button>',
+        ).join('')
+        : '');
+  }
+  function findPickerTargets(project, child) {
+    return targets.filter((target) => target.project === project && target.child === child).map(targetRow).join('');
+  }
+  function pickerPage() {
+    const target = findTarget(state.pickerTargetId);
+    return appbar('选择工作位置', iconButton('back-picker', '返回', icon('back')), '', '') +
+      '<div class="screen-scroll picker"><input class="search" id="target-search" type="search" aria-label="搜索工作位置" placeholder="搜索项目、工作树或分支" value="' +
+      escapeHtml(state.targetFilter) + '"><div id="picker-choices">' + pickerChoices() + '</div></div>' +
+      '<div class="picker-bottom"><p class="picker-selection" id="picker-selection"' + (target ? '' : ' hidden') + '>' +
+      (target ? escapeHtml(locationLabel(target)) : '') + '</p><div class="provider-picker" aria-label="选择 AI"><span>AI</span>' +
+      ['Codex', 'Claude'].map((provider) => '<button type="button" data-action="provider" data-id="' +
+        provider + '" aria-pressed="' + (state.pickerProvider === provider) + '">' + provider + '</button>').join('') +
+      '</div><button type="button" class="primary" data-action="confirm-target"' +
+      (state.pickerTargetId ? '' : ' disabled') + '>开始对话</button></div>' + foot;
+  }
+  function settingsPage() {
+    return appbar('连接 Hob 服务', iconButton('back-settings', '返回', icon('back')), '', '') +
+      '<div class="screen-scroll config"><p class="connection-preview"><span class="status-dot"></span>示例服务<span>' +
+      escapeHtml(state.address) + '</span></p>' +
+      '<label class="field">服务地址<input id="server-address" type="url" inputmode="url" spellcheck="false" autocomplete="off" value="' +
+      escapeHtml(state.formAddress) + '"><small>填写手机可访问的 HTTPS 地址。</small></label>' +
+      '<label class="field">访问密钥<input id="server-key" type="password" autocomplete="off" value="' +
+      escapeHtml(state.formKey) + '"><small>实际使用时，从 Hob 的「设置 → 局域网 → OpenAPI 密钥」生成。</small></label>' +
+      '<p class="small-text">演示使用示例地址和密钥，连接测试为本地模拟。</p>' +
+      '<p id="test-result" class="test-result' + (state.testResult && !state.verified ? ' error' : '') +
+      '" role="status">' + escapeHtml(state.testResult) + '</p></div><div class="config-actions">' +
+      '<button type="button" class="secondary" data-action="test-connection">测试连接</button>' +
+      '<button type="button" class="primary" data-action="save-settings"' + (state.verified ? '' : ' disabled') +
+      '>保存并返回</button></div>' + foot;
+  }
+  function drawerPage() {
+    return '<div class="overlay" data-action="dismiss-drawer"><aside class="drawer' +
+      (state.variant === 'chat' ? ' sheet' : '') + '" role="dialog" aria-modal="true" aria-label="会话列表">' +
+      appbar('会话', '', iconButton('close-drawer', '关闭会话列表', icon('close')), '') +
+      '<div class="screen-scroll home">' + primaryButton('new', '新建会话', icon('plus')) +
+      '<input class="search" id="session-search" type="search" aria-label="搜索会话" placeholder="搜索会话、项目或分支" value="' +
+      escapeHtml(state.overlayFilter) + '"><div id="drawer-sessions">' + groupedSessions(state.overlayFilter) +
+      '</div>' + (state.variant === 'chat' ? '' : '<h3 class="list-heading">按项目浏览</h3>' + projectGroups()) +
+      '</div><footer class="drawer-footer"><span class="small-text">' + escapeHtml(state.address) +
+      '</span><button type="button" data-action="settings">连接设置</button></footer>' + foot + '</aside></div>';
+  }
+  function render() {
+    const variant = variants.find((item) => item.id === state.variant);
+    document.querySelector('#variant-title').textContent = variant.name;
+    document.querySelector('#variant-description').textContent = variant.description;
+    document.querySelectorAll('[data-action="variant"]').forEach((button) =>
+      button.setAttribute('aria-pressed', String(button.dataset.id === state.variant)),
+    );
+    const pages = { home: homePage, chat: chatPage, picker: pickerPage, settings: settingsPage };
+    app.innerHTML = '<section class="app-page"' + (state.overlay ? ' inert' : '') + '>' +
+      pages[state.page]() + '</section>' + (state.overlay ? drawerPage() : '');
+    if (state.page === 'chat') scrollToLatest();
+  }
+  function scrollToLatest() {
+    const scroll = document.querySelector('#chat-scroll');
+    if (!scroll) return;
+    scroll.scrollTop = scroll.scrollHeight;
+    document.querySelector('[data-action="latest"]').hidden = true;
+  }
+  function refreshChat(session) {
+    if (state.page !== 'chat' || session.id !== state.sessionId) return;
+    const scroll = document.querySelector('#chat-scroll');
+    const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 38;
+    const opened = [...document.querySelectorAll('.toolcard')].map((card) => card.open);
+    document.querySelector('#messages').innerHTML = messagesHtml(session);
+    document.querySelectorAll('.toolcard').forEach((card, index) => { card.open = opened[index] || false; });
+    document.querySelector('#compose-action').innerHTML = composeAction(session);
+    document.querySelector('.composer-note').textContent = session.running
+      ? '任务执行中，可以先写下一条消息。'
+      : '使用示例数据 · 发送后模拟回复';
+    if (nearBottom) scrollToLatest();
+    else document.querySelector('[data-action="latest"]').hidden = false;
+  }
+  function refreshLists() {
+    if (state.page === 'home' && !state.overlay) render();
+    else if (state.overlay) document.querySelector('#drawer-sessions').innerHTML = groupedSessions(state.overlayFilter);
+  }
+  function selectVariant(id) {
+    state.variant = id;
+    state.overlay = false;
+    state.homeTab = 'projects';
+    if (id === 'chat') {
+      if (!findSession()) state.sessionId = 'login';
+      state.page = 'chat';
+    } else {
+      state.page = 'home';
+    }
+    const url = new URL(location.href);
+    url.searchParams.set('variant', id);
+    try { history.replaceState(null, '', url); } catch { /* Local preview still works on restricted file URLs. */ }
+    render();
+  }
+  function cycleVariant(offset) {
+    const index = variants.findIndex((variant) => variant.id === state.variant);
+    selectVariant(variants[(index + offset + variants.length) % variants.length].id);
+  }
+  function openDrawer() {
+    state.overlay = true;
+    state.overlayFilter = '';
+    render();
+    document.querySelector('[data-action="close-drawer"]').focus();
+  }
+  function closeDrawer() {
+    state.overlay = false;
+    render();
+    document.querySelector('.app-page [data-action="drawer"]')?.focus();
+  }
+  function openPicker(projectId) {
+    state.pickerFrom = state.page;
+    state.page = 'picker';
+    state.overlay = false;
+    state.pickingProject = projectId || '';
+    state.pickingChild = '';
+    state.targetFilter = '';
+    state.pickerTargetId = '';
+    state.pickerProvider = state.provider;
+    render();
+  }
+  function testConnection() {
+    let validAddress = false;
+    try {
+      const address = new URL(state.formAddress.trim());
+      validAddress = address.protocol === 'https:' && !address.username && !address.password;
+    } catch {}
+    state.verified = validAddress && Boolean(state.formKey.trim());
+    state.testResult = state.verified
+      ? '模拟连接成功，已读取示例项目。'
+      : (!validAddress ? '请输入有效的 HTTPS 地址。' : '请填写示例访问密钥。');
+    const result = document.querySelector('#test-result');
+    result.textContent = state.testResult;
+    result.classList.toggle('error', !state.verified);
+    document.querySelector('[data-action="save-settings"]').disabled = !state.verified;
+  }
+  function beginTurn(session, prompt) {
+    const message = { role: 'assistant', steps: ['任务已提交'], text: '', running: true };
+    session.messages.push({ role: 'user', text: prompt }, message);
+    session.running = true;
+    session.time = '刚刚';
+    const updates = [
+      { step: '正在读取工作区上下文' },
+      { step: '正在整理检查结果' },
+      { text: '已完成这轮演示。' },
+      { text: '\n\n你可以继续追问，或在侧栏切换到其他项目的会话。' },
+    ];
+    let index = 0;
+    session.timer = setInterval(() => {
+      const update = updates[index++];
+      if (update.step) message.steps.push(update.step);
+      if (update.text) message.text += update.text;
+      if (index === updates.length) {
+        clearInterval(session.timer);
+        session.running = false;
+        message.running = false;
+        message.steps.push('本轮已完成');
+        refreshLists();
+      }
+      refreshChat(session);
+    }, 640);
+  }
+  function openSession(id) {
+    state.sessionId = id;
+    state.page = 'chat';
+    state.overlay = false;
+    render();
+  }
+  function stopTurn() {
+    const session = findSession();
+    if (!session?.running) return;
+    clearInterval(session.timer);
+    session.running = false;
+    const message = session.messages.at(-1);
+    message.running = false;
+    message.stopped = true;
+    refreshChat(session);
+  }
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-action]');
+    if (!button) return;
+    const { action, id } = button.dataset;
+    if (action === 'dismiss-drawer' && event.target !== button) return;
+    switch (action) {
+      case 'variant': selectVariant(id); break;
+      case 'cycle-variant': cycleVariant(Number(id)); break;
+      case 'home': state.overlay = false; state.page = 'home'; render(); break;
+      case 'drawer': openDrawer(); break;
+      case 'dismiss-drawer':
+      case 'close-drawer': closeDrawer(); break;
+      case 'open-session': openSession(id); break;
+      case 'new': openPicker(id); break;
+      case 'back-picker': state.page = state.pickerFrom; render(); break;
+      case 'all-projects':
+      case 'pick-project':
+        state.pickingProject = action === 'all-projects' ? '' : id;
+        state.pickingChild = ''; state.targetFilter = '';
+        render();
+        break;
+      case 'pick-child': state.pickingChild = id; render(); break;
+      case 'select-target':
+        state.pickerTargetId = id;
+        document.querySelector('#picker-choices').innerHTML = pickerChoices();
+        document.querySelector('#picker-selection').textContent = locationLabel(findTarget(id));
+        document.querySelector('#picker-selection').hidden = false;
+        document.querySelector('[data-action="confirm-target"]').disabled = false;
+        document.querySelector('[data-action="select-target"][aria-pressed="true"]').focus({ preventScroll: true });
+        break;
+      case 'provider':
+        state.pickerProvider = id;
+        document.querySelectorAll('[data-action="provider"]').forEach((item) =>
+          item.setAttribute('aria-pressed', String(item.dataset.id === id)),
+        );
+        break;
+      case 'confirm-target':
+        state.targetId = state.pickerTargetId;
+        state.provider = state.pickerProvider;
+        state.newDraft = '';
+        openSession(null);
+        break;
+      case 'projects-tab':
+        if (state.variant === 'projects') {
+          state.homeTab = 'projects';
+          render();
+        } else {
+          openDrawer();
+          document.querySelector('#drawer-sessions').nextElementSibling?.scrollIntoView({ block: 'start' });
+        }
+        break;
+      case 'recent-tab': state.homeTab = 'recent'; render(); break;
+      case 'settings':
+        state.settingsFrom = state.page;
+        state.page = 'settings'; state.overlay = false;
+        state.formAddress = state.address; state.formKey = 'example-access-key';
+        state.testResult = ''; state.verified = false; render();
+        break;
+      case 'back-settings': state.page = state.settingsFrom; render(); break;
+      case 'test-connection': testConnection(); break;
+      case 'save-settings':
+        if (state.verified) {
+          state.address = new URL(state.formAddress.trim()).origin;
+          state.page = state.settingsFrom;
+          render();
+        }
+        break;
+      case 'stop': stopTurn(); break;
+      case 'latest': scrollToLatest(); break;
+    }
+  });
+  app.addEventListener('input', (event) => {
+    const input = event.target;
+    if (input.id === 'draft') {
+      const session = findSession();
+      if (session) session.draft = input.value;
+      else state.newDraft = input.value;
+      const send = document.querySelector('#compose-action button[type="submit"]');
+      if (send) send.disabled = !input.value.trim();
+    } else if (input.id === 'target-search') {
+      state.targetFilter = input.value;
+      document.querySelector('#picker-choices').innerHTML = pickerChoices();
+    } else if (input.id === 'session-search') {
+      state.overlayFilter = input.value.trim().toLocaleLowerCase();
+      document.querySelector('#drawer-sessions').innerHTML = groupedSessions(state.overlayFilter);
+    } else if (input.id === 'server-address' || input.id === 'server-key') {
+      if (input.id === 'server-address') state.formAddress = input.value;
+      else state.formKey = input.value;
+      state.verified = false;
+      state.testResult = '';
+      document.querySelector('#test-result').textContent = '';
+      document.querySelector('[data-action="save-settings"]').disabled = true;
+    }
+  });
+  app.addEventListener('submit', (event) => {
+    if (event.target.id !== 'composer') return;
+    event.preventDefault();
+    const prompt = document.querySelector('#draft').value.trim();
+    let session = findSession();
+    if (!prompt || session?.running) return;
+    if (!session) {
+      session = {
+        id: 'demo-' + (sessions.length + 1), title: Array.from(prompt.replace(/\s+/g, ' ')).slice(0, 24).join(''),
+        target: state.targetId, provider: state.provider, time: '刚刚', draft: '', messages: [],
+      };
+      sessions.unshift(session);
+      state.sessionId = session.id;
+    }
+    session.draft = '';
+    beginTurn(session, prompt);
+    render();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.overlay) {
+      closeDrawer();
+      return;
+    }
+    if (event.target.closest('input, textarea, [contenteditable]') || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      cycleVariant(event.key === 'ArrowLeft' ? -1 : 1);
+    }
+  });
+  if (state.variant === 'chat') state.page = 'chat';
+  render();
+</script>
+</body>
+</html>
