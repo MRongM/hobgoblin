@@ -88,6 +88,9 @@
     <string name="ai_native_delivery_unknown">Codex 未确认消息是否送达，请查看会话后再尝试。</string>
     <string name="ai_retry_note">可以重试这条消息，确认 Hob 是否已收到。</string>
     <string name="ai_terminals">终端</string>
+    <string name="ai_terminal_untitled">终端</string>
+    <string name="ai_terminal_workspace_value">工作区 %1$s</string>
+    <string name="ai_terminal_branch_value">分支 %1$s</string>
     <string name="ai_terminals_empty">暂无终端记录</string>
     <string name="ai_terminal_records_loading">正在加载终端…</string>
     <string name="ai_terminals_loading">正在加载终端输出…</string>

@@ -24,6 +24,8 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,8 +41,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mrongm.hobgoblin.ai.R
 import com.mrongm.hobgoblin.ai.data.AiApiException
+import com.mrongm.hobgoblin.ai.data.AiProject
 import com.mrongm.hobgoblin.ai.data.AiProvider
 import com.mrongm.hobgoblin.ai.data.AiSession
+import com.mrongm.hobgoblin.ai.data.AiTargetCatalog
 import com.mrongm.hobgoblin.ai.data.AiTerminalRecord
 import com.mrongm.hobgoblin.ai.data.AiTranscriptLine
 import com.mrongm.hobgoblin.ai.data.HobAiClient
@@ -76,6 +80,13 @@ internal fun AiTerminalRecords(
     var refreshing by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     var failure by remember { mutableStateOf<AiFailure?>(null) }
+    var metadataRefresh by remember { mutableIntStateOf(0) }
+    val workspaceIds = records.mapNotNull(AiTerminalRecord::workspaceId).distinct()
+    val titleWorkspaces = records.filter { it.phase == "open" && it.terminalTitle.isNullOrBlank() }
+        .mapNotNull(AiTerminalRecord::workspaceId).distinct()
+    val liveTitles = remember(api) { mutableStateMapOf<String, Map<String, String>>() }
+    var projects by remember(api) { mutableStateOf<Map<String, AiProject>>(emptyMap()) }
+    val catalogs = remember(api) { mutableStateMapOf<String, AiTargetCatalog>() }
 
     suspend fun load(manual: Boolean = false, older: Boolean = false) = lock.withLock {
         val pageCursor = if (older) cursor ?: return@withLock else null
@@ -111,7 +122,43 @@ internal fun AiTerminalRecords(
             load()
         }
     }
-    val refresh: () -> Unit = { if (!refreshing) scope.launch { load(manual = true) } }
+    LaunchedEffect(api, foreground, workspaceIds, metadataRefresh) {
+        if (!foreground || workspaceIds.isEmpty()) return@LaunchedEffect
+        try {
+            projects = api.projects().associateBy(AiProject::id)
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+        }
+        for (workspaceId in workspaceIds) {
+            if (workspaceId !in projects) continue
+            launch {
+                try {
+                    catalogs[workspaceId] = api.targets(workspaceId)
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                }
+            }
+        }
+    }
+    LaunchedEffect(api, foreground, titleWorkspaces, refreshSeconds, metadataRefresh) {
+        if (!foreground) return@LaunchedEffect
+        for (workspaceId in titleWorkspaces) launch {
+            do {
+                try {
+                    liveTitles[workspaceId] = api.liveTerminalTitles(workspaceId)
+                } catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                }
+                if (refreshSeconds > 0) delay(refreshSeconds * 1_000L)
+            } while (refreshSeconds > 0)
+        }
+    }
+    val refresh: () -> Unit = {
+        if (!refreshing) scope.launch {
+            load(manual = true)
+            metadataRefresh++
+        }
+    }
     PullToRefreshBox(refreshing, refresh, Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
             if (failure != null) item {
@@ -125,31 +172,77 @@ internal fun AiTerminalRecords(
                 )
             }
             items(records, key = AiTerminalRecord::id) { terminal ->
+                val workspaceId = terminal.workspaceId
+                val liveTitle = workspaceId?.takeIf { terminal.phase == "open" }
+                    ?.let { liveTitles[it]?.get(terminal.id) }
+                val detail = if (terminal.terminalTitle.isNullOrBlank() && liveTitle != null) {
+                    terminal.copy(terminalTitle = liveTitle)
+                } else terminal
+                val location = workspaceId?.let { catalogs[it] }
+                val worktreeId = terminal.worktreeId
+                val workspace = listOfNotNull(
+                    workspaceId?.let { projects[it]?.name },
+                    worktreeId?.let { location?.subworkspaceFor(it)?.name },
+                ).distinct().joinToString(" / ")
+                val branch = worktreeId?.let { location?.target(it)?.branch }?.takeIf(String::isNotBlank)
                 val opened = remember(terminal.createdAt) {
                     runCatching {
                         DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM)
                             .format(Date.from(Instant.parse(terminal.createdAt)))
                     }.getOrNull()
                 }
-                Row(
-                    Modifier.fillMaxWidth().clickable { onOpen(terminal) }.padding(vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                Column(
+                    Modifier.fillMaxWidth().clickable { onOpen(detail) }.padding(vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(terminal.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                        Text(terminal.cwd, color = AiMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull(terminal.provider?.label, opened).joinToString(" · "), color = AiMuted, fontSize = 12.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            detail.listTitle ?: stringResource(R.string.ai_terminal_untitled),
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            stringResource(when (terminal.phase) {
+                                "open" -> R.string.ai_running
+                                "opening", "restarting" -> R.string.ai_terminal_starting
+                                "error" -> R.string.ai_terminal_failed
+                                "interrupted" -> R.string.ai_terminal_interrupted
+                                else -> R.string.ai_terminal_exited
+                            }),
+                            color = if (terminal.phase == "open") AiRunningInk else AiMuted,
+                            fontSize = 12.sp,
+                        )
                     }
                     Text(
-                        stringResource(when (terminal.phase) {
-                            "open" -> R.string.ai_running
-                            "opening", "restarting" -> R.string.ai_terminal_starting
-                            "error" -> R.string.ai_terminal_failed
-                            "interrupted" -> R.string.ai_terminal_interrupted
-                            else -> R.string.ai_terminal_exited
-                        }),
-                        color = if (terminal.phase == "open") AiRunningInk else AiMuted,
+                        terminal.cwd,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AiMuted,
                         fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (workspace.isNotEmpty() || branch != null) {
+                        val labels = listOfNotNull(
+                            workspace.takeIf(String::isNotEmpty)?.let { stringResource(R.string.ai_terminal_workspace_value, it) },
+                            branch?.let { stringResource(R.string.ai_terminal_branch_value, it) },
+                        )
+                        Text(
+                            labels.joinToString(" · "),
+                            color = AiMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Text(
+                        listOfNotNull(terminal.provider?.label, opened).joinToString(" · "),
+                        color = AiMuted,
+                        fontSize = 12.sp,
+                    )
+                    Text(
+                        stringResource(R.string.ai_session_id_value, terminal.id),
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AiMuted, fontFamily = FontFamily.Monospace, fontSize = 10.sp,
                     )
                 }
                 HorizontalDivider(color = AiLine)

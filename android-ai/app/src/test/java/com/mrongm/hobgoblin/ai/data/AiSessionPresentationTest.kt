@@ -53,5 +53,17 @@ class AiSessionPresentationTest {
         assertEquals("project", row.copy(cwd = "C:\\Work\\project", terminalTitle = null).title)
     }
 
+    @Test
+    fun preservesTheTerminalTitleAndOmitsAnExactDirectorySuffixInTheList() {
+        val row = AiTerminalRecord("term_example", "/work/project", "open", "", AiProvider.Codex, "Build docs | project")
+
+        assertEquals("Build docs", row.listTitle)
+        assertEquals("Build docs | project", row.title)
+        assertEquals("Build docs", row.copy(terminalTitle = "Build docs | /work/project").listTitle)
+        assertEquals("Review | integration", row.copy(terminalTitle = "Review | integration").listTitle)
+        assertEquals(null, row.copy(terminalTitle = "project").listTitle)
+        assertEquals(null, row.copy(terminalTitle = null).listTitle)
+    }
+
     private fun session(id: String) = AiSession(id, "workspace", "worktree", AiProvider.Codex, "", "ready", null, emptyList())
 }

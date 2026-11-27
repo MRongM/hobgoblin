@@ -88,6 +88,9 @@
     <string name="ai_native_delivery_unknown">Codex did not confirm the message. Check the conversation before trying again.</string>
     <string name="ai_retry_note">Retry this message to check whether Hob received it.</string>
     <string name="ai_terminals">Terminals</string>
+    <string name="ai_terminal_untitled">Terminal</string>
+    <string name="ai_terminal_workspace_value">Workspace %1$s</string>
+    <string name="ai_terminal_branch_value">Branch %1$s</string>
     <string name="ai_terminals_empty">No terminal records</string>
     <string name="ai_terminal_records_loading">Loading terminals…</string>
     <string name="ai_terminals_loading">Loading terminal output…</string>

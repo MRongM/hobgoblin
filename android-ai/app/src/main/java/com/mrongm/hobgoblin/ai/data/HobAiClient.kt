@@ -138,10 +138,23 @@ internal data class AiTerminalRecord(
     val createdAt: String,
     val provider: AiProvider?,
     val terminalTitle: String? = null,
+    val workspaceId: String? = null,
+    val worktreeId: String? = null,
 ) {
-    val title: String
+    private val directoryName: String
+        get() = cwd.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\').ifBlank { cwd }
+
+    private val reportedTitle: String?
         get() = terminalTitle?.trim()?.takeIf(String::isNotEmpty)
-            ?: cwd.trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\').ifBlank { cwd }
+
+    val title: String get() = reportedTitle ?: directoryName
+
+    val listTitle: String?
+        get() {
+            val raw = reportedTitle ?: return null
+            val withoutDirectory = raw.removeSuffix(" | $cwd").removeSuffix(" | $directoryName")
+            return withoutDirectory.takeUnless { it == cwd || it == directoryName }
+        }
 }
 
 internal data class AiTerminalPage(val records: List<AiTerminalRecord>, val nextCursor: Long?)
@@ -161,16 +174,24 @@ internal class HobAiClient(private val connection: AiConnection) {
     suspend fun terminalRecords(cursor: Long? = null): AiTerminalPage {
         val json = get("/terminal-records" + if (cursor == null) "" else "?cursor=$cursor")
         return AiTerminalPage(
-            json.getJSONArray("records").objects {
+            json.getJSONArray("records").objects { row ->
+                val provider = row.optionalString("agentProvider") ?: row.optionalString("detectedAgentProvider")
                 AiTerminalRecord(
-                    it.getString("id"), it.getString("cwd"), it.getString("phase"), it.getString("createdAt"),
-                    AiProvider.entries.firstOrNull { provider -> provider.wireName == it.optionalString("agentProvider") },
-                    it.optionalString("title"),
+                    row.getString("id"), row.getString("cwd"), row.getString("phase"), row.getString("createdAt"),
+                    AiProvider.entries.firstOrNull { it.wireName == provider },
+                    row.optionalString("title"),
+                    row.optionalString("workspaceId"),
+                    row.optionalString("worktreeId"),
                 )
             },
             if (json.isNull("nextCursor")) null else json.getLong("nextCursor"),
         )
     }
+
+    suspend fun liveTerminalTitles(workspaceId: String): Map<String, String> =
+        get("/workspaces/${segment(workspaceId)}/terminals").getJSONArray("terminals").objects { row ->
+            row.optionalString("title")?.takeIf(String::isNotBlank)?.let { row.getString("id") to it }
+        }.filterNotNull().toMap()
 
     suspend fun terminalTranscript(id: String, afterSeq: Long? = null, beforeSeq: Long? = null): AiTranscriptPage {
         require(TerminalIdPattern.matches(id)) { "Invalid terminal identifier" }
