@@ -3,11 +3,13 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, expect, test, vi } from 'vitest'
 import { createApp } from '#/server/app-factory.ts'
 import type { AgentProviderResult } from '#/server/modules/agent-open-api-provider.ts'
 import { createAgentOpenApiRuntime } from '#/server/modules/agent-open-api-runtime.ts'
 import { registerBranchWorkspaceFolder } from '#/server/modules/branch-workspace-source.ts'
+import type { CodexHistoryTurn } from '#/server/modules/codex-session-history.ts'
 import { createConversationOpenApiStore } from '#/server/modules/conversation-open-api-source.ts'
 import { createOpenApiKeySource } from '#/server/modules/open-api-key-source.ts'
 import { workspacePublicId } from '#/server/modules/workspace-public-id.ts'
@@ -371,6 +373,69 @@ test.skipIf(process.platform === 'win32')('reads the exact native Codex thread w
 
   expect((await get(workspace + '/sessions?native=1&refresh=1')).status).toBe(200)
   expect(listNative).toHaveBeenCalledTimes(2)
+})
+
+test.skipIf(process.platform === 'win32')('fills in replies for previously imported native Codex turns', async () => {
+  const updatedAt = Math.floor(Date.now() / 1_000)
+  const thread = () => ({ id: providerSessionId, cwd: realpathSync(fixtures.cwd), preview: '', updatedAt })
+  const history: CodexHistoryTurn[] = [
+    { id: 'first-desktop-turn', prompt: 'First question', reply: '', state: 'cancelled' },
+    { id: 'second-desktop-turn', prompt: 'Second question', reply: '', state: 'cancelled' },
+  ]
+  const read = vi.fn(async () => ({ thread: thread(), turns: history }))
+  const { get, workspace } = await setup(
+    vi.fn<RunProvider>(),
+    { list: async () => [], listNative: async () => [thread()], read },
+    { list: async () => [], send: async () => ({ outcome: 'unavailable' }) },
+  )
+  const { sessions } = await (await get(workspace + '/sessions?native=1')).json()
+  expect(sessions).toHaveLength(1)
+  const sessionPath = `${prefix}/sessions/${sessions[0].id}?native=1`
+  const initial = await (await get(sessionPath)).json()
+  expect(initial.messages.map(({ role }: { role: string }) => role)).toEqual(['user', 'user'])
+  expect(initial.latestTurn.state).toBe('cancelled')
+
+  const db = new DatabaseSync(path.join(fixtures.cwd, 'conversations.sqlite'))
+  try {
+    db.prepare('UPDATE messages SET turn_request_id = NULL WHERE id = ?').run(initial.messages[0].id)
+  } finally {
+    db.close()
+  }
+
+  read.mockResolvedValue({
+    thread: thread(),
+    turns: [
+      {
+        ...history[0]!,
+        reply: 'First update\n\nFirst answer',
+        state: 'completed',
+        messages: [
+          { role: 'user', content: 'First question' },
+          { role: 'assistant', content: 'First update' },
+          { role: 'assistant', content: 'First answer' },
+        ],
+      },
+      { ...history[1]!, reply: 'Second answer', state: 'completed' },
+    ],
+  })
+  const refreshed = await (await get(sessionPath)).json()
+  expect(refreshed.messages).toMatchObject([
+    { id: initial.messages[0].id, role: 'user', content: 'First question' },
+    { role: 'assistant', content: 'First update' },
+    { role: 'assistant', content: 'First answer' },
+    { id: initial.messages[1].id, role: 'user', content: 'Second question' },
+    { role: 'assistant', content: 'Second answer' },
+  ])
+  expect(refreshed.latestTurn).toMatchObject({ requestId: initial.latestTurn.requestId, state: 'completed' })
+  expect(refreshed.revision).toBeGreaterThan(initial.revision)
+  const repeated = await (await get(sessionPath)).json()
+  expect(repeated.messages).toEqual(refreshed.messages)
+  expect(repeated.revision).toBe(refreshed.revision)
+
+  read.mockResolvedValueOnce({ thread: thread(), turns: history })
+  const stale = await (await get(sessionPath)).json()
+  expect(stale.messages).toEqual(refreshed.messages)
+  expect(stale.revision).toBe(refreshed.revision)
 })
 
 test.skipIf(process.platform === 'win32')(

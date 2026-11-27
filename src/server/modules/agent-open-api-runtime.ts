@@ -794,7 +794,7 @@ export function createAgentOpenApiRuntime(
     },
     getSession(id: string) {
       const session = store.getAgentSession(id)
-      const conversation = session && store.getConversation(id)
+      const conversation = session && store.getConversation(id, Boolean(session.nativeCodex))
       return session && conversation ? { ...projectSession(session), messages: conversation.messages } : null
     },
     getSessionStatus(id: string) {

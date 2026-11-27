@@ -210,9 +210,11 @@ function readMessage(db: DatabaseSync, conversationId: string, id: string): Conv
   return row ? decodeMessage(row) : null
 }
 
-function readMessages(db: DatabaseSync, conversationId: string): ConversationMessage[] {
+function readMessages(db: DatabaseSync, conversationId: string, groupByTurn = false): ConversationMessage[] {
+  // A recovered native reply has a newer storage sequence than the turn it belongs to.
+  const order = groupByTurn ? 'min(sequence) OVER (PARTITION BY coalesce(turn_request_id, id)), sequence' : 'sequence'
   return db
-    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY sequence`)
+    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY ${order}`)
     .all(conversationId)
     .map(decodeMessage)
 }
@@ -282,12 +284,30 @@ function importedTurnRequestId(providerSessionId: string, turnId: string): strin
   return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-')
 }
 
-function writeCodexHistoryTurns(
+type ImportedCodexTurn = CodexHistoryTurn & { requestId: string }
+type CodexMessage = NonNullable<CodexHistoryTurn['messages']>[number]
+
+function codexMessages(turn: CodexHistoryTurn): CodexMessage[] {
+  if (turn.messages) return turn.messages
+  const messages: CodexMessage[] = [{ role: 'user', content: turn.prompt }]
+  if (turn.reply) messages.push({ role: 'assistant', content: turn.reply })
+  return messages
+}
+
+function writeCodexMessages(
   db: DatabaseSync,
   id: string,
-  turns: Array<CodexHistoryTurn & { requestId: string }>,
-  updatedAt: number,
+  requestId: string,
+  messages: CodexMessage[],
+  started: string,
+  completed: string,
 ) {
+  for (const { role, content } of messages) {
+    writeAgentMessage(db, id, role, content, role === 'user' ? started : completed, requestId)
+  }
+}
+
+function writeCodexHistoryTurns(db: DatabaseSync, id: string, turns: ImportedCodexTurn[], updatedAt: number) {
   const addTurn = db.prepare(
     `INSERT INTO agent_turns (request_id, conversation_id, prompt, state, error, created_at, finished_at)
      VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (request_id) DO NOTHING`,
@@ -300,24 +320,67 @@ function writeCodexHistoryTurns(
     const error = state === 'failed' ? 'provider_failed' : null
     if (!addTurn.run(turn.requestId, id, JSON.stringify(turn.prompt), state, error, started, completed).changes)
       continue
-    if (turn.messages) {
-      for (const message of turn.messages) {
-        writeAgentMessage(
-          db,
-          id,
-          message.role,
-          message.content,
-          message.role === 'user' ? started : completed,
-          turn.requestId,
-        )
-      }
-    } else {
-      writeAgentMessage(db, id, 'user', turn.prompt, started, turn.requestId)
-      if (turn.reply) writeAgentMessage(db, id, 'assistant', turn.reply, completed, turn.requestId)
-    }
+    writeCodexMessages(db, id, turn.requestId, codexMessages(turn), started, completed)
     wroteTurns = true
   }
   return wroteTurns
+}
+
+function fillInCodexHistoryTurns(db: DatabaseSync, id: string, turns: ImportedCodexTurn[], updatedAt: number) {
+  if (!turns.length) return false
+  const storedTurns = db
+    .prepare('SELECT request_id AS requestId, state, created_at AS started FROM agent_turns WHERE conversation_id = ?')
+    .all(id) as Array<{ requestId: string; state: string; started: string }>
+  const turnsById = new Map(storedTurns.map((turn) => [turn.requestId, turn]))
+  const counts = db
+    .prepare(
+      `SELECT turn_request_id AS requestId, count(*) AS count FROM messages
+       WHERE conversation_id = ? AND turn_request_id IS NOT NULL GROUP BY turn_request_id`,
+    )
+    .all(id) as Array<{ requestId: string; count: number }>
+  const countsByTurn = new Map(counts.map(({ requestId, count }) => [requestId, count]))
+  const readTurnMessages = db.prepare(
+    'SELECT role, content FROM messages WHERE conversation_id = ? AND turn_request_id = ? ORDER BY sequence',
+  )
+  const linkLegacyPrompt = db.prepare(
+    `UPDATE messages SET turn_request_id = ? WHERE id = (
+       SELECT id FROM messages
+       WHERE conversation_id = ? AND turn_request_id IS NULL AND role = 'user' AND created_at = ? AND content = ?
+       GROUP BY conversation_id HAVING count(*) = 1
+     )`,
+  )
+  const completeTurn = db.prepare(
+    "UPDATE agent_turns SET state = 'completed', error = NULL, finished_at = ? WHERE request_id = ?",
+  )
+  let changed = false
+  for (const turn of turns) {
+    const stored = turnsById.get(turn.requestId)
+    if (!stored) continue
+    const messages = codexMessages(turn)
+    const completed = (turn.state ?? 'completed') === 'completed' && stored.state !== 'completed'
+    let count = countsByTurn.get(turn.requestId) ?? 0
+    const firstMessage = messages[0]
+    // Older versions wrote the prompt without a turn ID. Link it when its timestamp and text agree.
+    if (!count && completed && firstMessage?.role === 'user') {
+      count = Number(linkLegacyPrompt.run(turn.requestId, id, stored.started, JSON.stringify(firstMessage.content)).changes)
+    }
+    if (!count) continue
+    if (messages.length < count || (!completed && messages.length === count)) continue
+    // A temporary snapshot may omit data. Only extend a matching, already stored prefix.
+    const previous = readTurnMessages.all(id, turn.requestId)
+    if (
+      previous.some(({ role, content }, index) => {
+        const message = messages[index]!
+        return role !== message.role || content !== JSON.stringify(message.content)
+      })
+    )
+      continue
+    const finished = new Date((turn.completedAt ?? updatedAt) * 1_000).toISOString()
+    writeCodexMessages(db, id, turn.requestId, messages.slice(count), stored.started, finished)
+    if (completed) completeTurn.run(finished, turn.requestId)
+    changed = true
+  }
+  return changed
 }
 
 export function createConversationOpenApiStore(file: string) {
@@ -616,8 +679,9 @@ export function createConversationOpenApiStore(file: string) {
               Number(native),
             )
           }
+          const filledInTurns = existing && native && fillInCodexHistoryTurns(db, id, imported, updatedAt)
           const wroteTurns = writeCodexHistoryTurns(db, id, newTurns, updatedAt)
-          if (existing && wroteTurns) {
+          if (existing && (wroteTurns || filledInTurns)) {
             touchConversation(db, id, new Date().toISOString())
           }
           return readAgentSession(db, id)
@@ -832,11 +896,11 @@ export function createConversationOpenApiStore(file: string) {
       return conversation
     },
 
-    getConversation(id: string): Conversation | null {
+    getConversation(id: string, groupByTurn = false): Conversation | null {
       const db = getDatabase()
       return transaction(db, () => {
         const conversation = readConversation(db, id)
-        return conversation ? { ...conversation, messages: readMessages(db, id) } : null
+        return conversation ? { ...conversation, messages: readMessages(db, id, groupByTurn) } : null
       })
     },
 
