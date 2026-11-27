@@ -4,8 +4,9 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/hob_ai_icon"
+        android:icon="@mipmap/hob_ai_launcher"
         android:label="@string/ai_app_name"
+        android:roundIcon="@mipmap/hob_ai_launcher"
         android:supportsRtl="true"
         android:theme="@style/HobAiTheme"
         android:usesCleartextTraffic="false">
