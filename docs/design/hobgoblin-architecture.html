@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Hobgoblin 项目架构与数据流</title>
+    <style>
+      :root {
+        --paper: #f2f5f6;
+        --surface: #fff;
+        --ink: #15283d;
+        --muted: #495d6d;
+        --line: #ccd7dc;
+        --blue: #203e62;
+        --teal: #086b62;
+        --teal-soft: #e2f4ee;
+        --ochre: #824612;
+        --ochre-soft: #f9eddc;
+        --measure: 1160px;
+        font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--paper);
+        line-height: 1.65;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+      body { margin: 0; }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 { line-height: 1.24; }
+      a { color: var(--teal); text-underline-offset: 0.2em; }
+      a:hover { text-decoration-thickness: 2px; }
+      :focus-visible { outline: 3px solid #168f82; outline-offset: 4px; }
+      code, .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+      code { font-size: 0.9em; overflow-wrap: anywhere; }
+      .frame { width: min(var(--measure), calc(100% - 64px)); margin-inline: auto; }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+      }
+      .topbar .frame { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 62px; }
+      .brand { font-size: 18px; font-weight: 750; letter-spacing: -0.03em; }
+      nav { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; }
+      nav a { color: var(--blue); font-weight: 650; text-decoration: none; }
+      nav a:hover { text-decoration: underline; }
+
+      header { background: var(--blue); color: white; padding: 54px 0 46px; }
+      .masthead { display: grid; grid-template-columns: 1.3fr 0.85fr; gap: 36px; align-items: center; }
+      .stamp { color: #c7eee5; font-size: 13px; font-weight: 700; }
+      h1 { font-size: clamp(34px, 5.8vw, 64px); letter-spacing: -0.06em; margin: 10px 0 12px; }
+      .intro { max-width: 32em; color: #e2ebf4; font-size: clamp(16px, 2vw, 19px); }
+      .snapshot { margin: 0; padding: 5px 0 5px 24px; border-left: 1px solid #6987a8; }
+      .snapshot div + div { margin-top: 12px; }
+      .snapshot dt { color: #c7eee5; font-size: 13px; font-weight: 700; }
+      .snapshot dd { margin: 0; font-size: 14px; color: #eff7ff; }
+
+      main { padding: 32px 0 48px; }
+      main > section + section { margin-top: 38px; }
+      h2 { font-size: clamp(25px, 4vw, 36px); letter-spacing: -0.04em; margin-bottom: 10px; }
+      h3 { font-size: 18px; }
+      .section-note { color: var(--muted); margin-bottom: 16px; }
+      .block { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+
+      .map { padding: 20px; }
+      .map-labels, .lane {
+        display: grid;
+        grid-template-columns: 1fr 0.88fr 1.28fr;
+        gap: 12px;
+      }
+      .map-labels { color: var(--muted); font-size: 12px; font-weight: 700; padding: 0 14px 8px; }
+      .lane {
+        min-width: 0;
+        margin: 0;
+        align-items: stretch;
+        text-decoration: none;
+        color: var(--ink);
+        border-radius: 10px;
+      }
+      .lane + .lane { margin-top: 8px; }
+      .lane:hover, .lane[aria-current="true"] { background: var(--teal-soft); }
+      .lane > span { position: relative; background: #f3f6f8; border: 1px solid #e2e8eb; padding: 11px 13px; border-radius: 8px; }
+      .lane > span:nth-child(2) { background: var(--teal-soft); color: #075d55; }
+      .lane > span:last-child { background: #e9eff7; color: var(--blue); }
+      .lane.direct > span:nth-child(2), .lane.direct > span:last-child { background: var(--ochre-soft); color: var(--ochre); }
+      .lane:hover > span, .lane[aria-current="true"] > span { border-color: #73ada4; }
+      .lane > span + span::before { content: "→"; position: absolute; inset-inline-start: -15px; top: 10px; color: #425c70; }
+      .lane strong, .lane small { display: block; }
+      .lane small { color: var(--muted); font-size: 13px; line-height: 1.45; margin-top: 3px; }
+      .map-tail {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        align-items: baseline;
+        margin: 14px 0 0;
+        padding: 12px 12px 0;
+        border-top: 1px solid var(--line);
+        font-size: 14px;
+      }
+      .map-tail strong { color: var(--blue); }
+      .map-tail span { color: var(--muted); }
+
+      .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .tile { padding: 17px 18px; }
+      .tile p { color: var(--muted); margin-top: 8px; }
+      .tile pre { margin: 10px 0 0; white-space: pre-wrap; color: var(--blue); font-size: 13px; line-height: 1.6; }
+      .sources { margin-top: 12px; font-size: 13px; }
+
+      .flow-list { overflow: hidden; }
+      details { padding: 0 16px; }
+      details + details { border-top: 1px solid var(--line); }
+      summary { cursor: pointer; padding: 13px 2px; font-weight: 700; }
+      summary::marker { color: var(--teal); }
+      details[open] summary { color: var(--teal); }
+      .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: 0 0 14px; list-style: none; counter-reset: step; gap: 10px; }
+      .steps li { padding: 12px; border: 1px solid #e0e7ec; border-radius: 8px; background: #f5f7f9; counter-increment: step; font-size: 14px; }
+      .steps li::before { content: counter(step, decimal-leading-zero); font: 700 12px "SFMono-Regular", Consolas, monospace; color: var(--teal); display: block; margin-bottom: 6px; }
+      .steps strong { display: block; margin-bottom: 3px; }
+      .steps p { color: var(--muted); }
+      .flow-source { font-size: 13px; margin: 0 0 14px; }
+      .process-tree { margin: 0 0 10px; padding: 11px 13px; background: #eef3f8; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--blue); }
+      .process-note { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+
+      .data-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+      .data-list > div { padding: 14px; }
+      .data-list dt { font-weight: 750; }
+      .data-list dd { margin: 5px 0 0; font-size: 14px; color: var(--muted); }
+      .data-list code { color: var(--blue); }
+      .status-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      .status-grid .tile { border-top: 3px solid var(--teal); }
+      .status-grid .tile:last-child { border-top-color: var(--ochre); }
+      .status-grid p { font-size: 14px; }
+      .check { margin-top: 12px; color: var(--muted); font-size: 14px; }
+      footer { border-top: 1px solid var(--line); padding: 16px 0 30px; color: var(--muted); font-size: 13px; }
+
+      @media (max-width: 800px) {
+        .frame { width: calc(100% - 32px); }
+        .masthead { grid-template-columns: 1fr; gap: 24px; }
+        header { padding: 33px 0; }
+        .snapshot { padding-left: 14px; }
+        .data-list, .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 540px) {
+        html { scroll-padding-top: 68px; }
+        .frame { width: calc(100% - 24px); }
+        .topbar .frame { display: block; padding: 5px 0 7px; min-height: 0; }
+        nav { gap: 3px 12px; font-size: 12px; }
+        main { padding-top: 24px; }
+        main > section + section { margin-top: 28px; }
+        .map { padding: 10px; }
+        .map-labels { display: none; }
+        .lane { display: block; padding: 7px; border: 1px solid var(--line); }
+        .lane > span { display: block; padding: 7px 10px; margin: 0; }
+        .lane > span + span { margin-top: 5px; }
+        .lane > span + span::before { content: none; }
+        .two-col, .steps, .data-list, .status-grid { grid-template-columns: 1fr; }
+        .map-tail { padding: 9px 2px 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="frame">
+        <span class="brand">Hobgoblin</span>
+        <nav aria-label="页面目录">
+          <a href="#topology">系统总图</a>
+          <a href="#workspaces">工作区</a>
+          <a href="#flows">数据流</a>
+          <a href="#state">状态与存储</a>
+          <a href="#release">现状</a>
+        </nav>
+      </div>
+    </div>
+
+    <header>
+      <div class="frame masthead">
+        <div>
+          <p class="stamp mono">项目快照 · 2026-11-26</p>
+          <h1>Hobgoblin 项目架构</h1>
+          <p class="intro">把多个 Git 项目、工作树、终端和 AI 会话放到可切换的工作上下文中。代码与命令由工作目录所属的本机、SSH 主机或受支持的 WSL 环境执行。</p>
+        </div>
+        <dl class="snapshot">
+          <div><dt>稳定基线</dt><dd><code>v2.4.0</code> · <code>31f8e6b1</code></dd></div>
+          <div><dt>当前源码</dt><dd><code>feat/20261008-feat</code> · 含尚未提交的 Android AI、后台会话与 OpenAPI 改动</dd></div>
+          <div><dt>本机部署</dt><dd>Mac 运行稳定版。手机已安装新 Hob AI 调试包，待服务端更新后联调。</dd></div>
+        </dl>
+      </div>
+    </header>
+
+    <main class="frame">
+      <section id="topology" aria-labelledby="topology-title">
+        <h2 id="topology-title">系统总图</h2>
+        <p class="section-note">点任一行查看它的通信和执行过程。</p>
+        <div class="block map">
+          <div class="map-labels" aria-hidden="true"><span>入口</span><span>通信</span><span>接收方</span></div>
+          <a class="lane" href="#desktop-flow" data-flow="desktop-flow">
+            <span><strong>桌面主应用</strong><small>Electron · macOS / Windows</small></span>
+            <span><strong>Electron IPC</strong><small>Preload 提供受限的原生能力</small></span>
+            <span><strong>Electron 主进程</strong><small>窗口、菜单、剪贴板、启动服务端</small></span>
+          </a>
+          <a class="lane" href="#repo-flow" data-flow="repo-flow">
+            <span><strong>桌面界面与 Web 浏览器</strong><small>同一套 React SPA</small></span>
+            <span><strong>HTTP + WebSocket</strong><small>业务请求与数据失效通知</small></span>
+            <span><strong>Hobgoblin 服务端</strong><small>Node.js · Hono · Git / 文件 / 设置 / 工作区</small></span>
+          </a>
+          <a class="lane" href="#terminal-flow" data-flow="terminal-flow">
+            <span><strong>桌面与 Web 终端</strong><small>xterm.js</small></span>
+            <span><strong>WebSocket</strong><small>输入、输出、尺寸、连接状态</small></span>
+            <span><strong>Hobgoblin 服务端 → 终端 worker</strong><small>子进程 IPC · node-pty · Shell / SSH / tmux</small></span>
+          </a>
+          <a class="lane" href="#agent-flow" data-flow="agent-flow">
+            <span><strong>Hob AI、桌面 AI 面板与外部客户端</strong><small>Android AI 版 · 桌面 · Muse 等</small></span>
+            <span><strong>HTTP API</strong><small>Bearer Key 或桌面内部鉴权</small></span>
+            <span><strong>Hobgoblin 服务端 → 后台 AI Runtime</strong><small>Codex / Claude CLI · SQLite 会话历史</small></span>
+          </a>
+          <a class="lane direct" href="#ssh-flow" data-flow="ssh-flow">
+            <span><strong>Android 终端版</strong><small>原生 Kotlin / Compose · Termux 终端组件</small></span>
+            <span><strong>SSH</strong><small>SSHJ · 远程 PTY · 端口转发</small></span>
+            <span><strong>远程 SSH 主机</strong><small>Shell / Git worktree / tmux</small></span>
+          </a>
+          <p class="map-tail"><strong>平台包</strong><span>独立 Windows 版也有自己的 Electron、Web 和服务端源码，开发入口在 <code>windows/</code>。正式 Windows 安装器由根目录主应用构建。</span></p>
+        </div>
+      </section>
+
+      <section id="workspaces" aria-labelledby="workspace-title">
+        <h2 id="workspace-title">项目、子工作区、分支与工作树</h2>
+        <div class="two-col">
+          <article class="block tile">
+            <h3>项目是导航和工作上下文</h3>
+            <p>入口可以是单个 Git 仓库、普通目录或多仓库工作区。根目录可以打开终端，也可以选择成员仓库或某个工作树进入更具体的上下文。</p>
+            <pre>项目根目录
+├─ 根级终端与共享文件
+├─ 成员仓库 → 分支 / Git worktree
+└─ 注册子工作区
+   ├─ 独立 Git 仓库
+   └─ 已链接的 Git worktree</pre>
+          </article>
+          <article class="block tile">
+            <h3>子工作区是一个已登记的目录</h3>
+            <p>服务端保存目录位置、标识和排序。刷新时重新扫描实际存在的独立仓库和 worktree，读取各自分支。Git 仓库继续独立拥有提交、远端、分支及 Git 写操作。</p>
+            <p>分支是 Git 引用，工作树是磁盘上的检出目录。应用保留之前的分支工作区兼容逻辑，新登记目录允许成员使用不同分支。</p>
+            <p class="sources"><a href="../../CONTEXT.md#folder-based-subworkspace-model">领域模型</a> · <a href="../../src/server/modules/branch-workspace-source.ts">子工作区登记</a></p>
+          </article>
+        </div>
+      </section>
+
+      <section id="flows" aria-labelledby="flow-title">
+        <h2 id="flow-title">从操作到执行结果</h2>
+        <p class="section-note">展开任一流程，查看各进程和客户端之间传递的数据。</p>
+        <div class="block flow-list">
+          <details id="desktop-flow" open>
+            <summary>桌面启动与原生 IPC</summary>
+            <ol class="steps">
+              <li><strong>主进程启动服务端</strong><p>Electron 以 Node 模式派生服务端子进程，传入监听配置和内部凭据。独立 Web 部署通过 <code>serve.sh</code> 启动同一个服务端实现。</p></li>
+              <li><strong>界面加载 React</strong><p>桌面窗口加载 SPA，经 Preload <code>contextBridge</code> 获取启动信息和受限 IPC。Git、文件和终端数据由服务端接口返回。</p></li>
+              <li><strong>原生动作走 Electron IPC</strong><p>剪贴板、窗口和外部应用等能力由主进程执行。Chromium 另运行 Renderer、GPU 和网络 Helper，终端 worker 有独立的生命周期。</p></li>
+            </ol>
+            <pre class="process-tree">Hobgoblin · Electron 主进程
+├─ Hobgoblin · Node 服务端
+│  └─ Hobgoblin · 终端 worker → Shell / AI CLI
+├─ Hobgoblin Helper · GPU
+├─ Hobgoblin Helper · 网络
+└─ Hobgoblin Helper (Renderer) · React 界面</pre>
+            <p class="process-note">本次 macOS 实测有 6 个应用进程。加上终端拉起的 2 个 zsh 和 3 个 codex，进程树共 11 个。终端与额外窗口的数量会影响进程数。</p>
+            <p class="flow-source"><a href="../../src/main/server-manager.ts">服务端进程启动</a> · <a href="../../src/preload/preload.cjs">Preload IPC</a> · <a href="../../scripts/start-server.ts">独立部署入口</a></p>
+          </details>
+          <details id="repo-flow">
+            <summary>工作区、Git 与文件变更</summary>
+            <ol class="steps">
+              <li><strong>界面取快照或提交操作</strong><p>React 通过 <code>/api/repo</code> 或 <code>/api/workspace</code> 读取分支、工作树、文件和状态，也从这些边界提交相应操作。</p></li>
+              <li><strong>服务端执行</strong><p>路由验证请求，业务模块调用本机 Git、文件系统或 SSH 目标。后台 fetch 由服务端调度，同一仓库的网络任务按仓库协调。</p></li>
+              <li><strong>通知其他界面刷新</strong><p><code>/ws/invalidation</code> 通知发生变化的范围，各界面重新请求对应快照。React Query / Zustand 保存本地缓存和界面投影。</p></li>
+            </ol>
+            <p class="flow-source"><a href="../../src/server/routes/repo.ts">Git 路由</a> · <a href="../../src/server/routes/workspace.ts">工作区路由</a> · <a href="../state-sync.md">状态同步规则</a></p>
+          </details>
+          <details id="terminal-flow">
+            <summary>桌面或 Web 打开交互式终端</summary>
+            <ol class="steps">
+              <li><strong>界面连接已有终端或新建</strong><p>xterm.js 通过 <code>/ws/terminal</code> 绑定会话。终端上下文确定项目、工作目录以及本机、SSH 或 Windows Shell 目标。</p></li>
+              <li><strong>终端 worker 持有 PTY</strong><p>服务端通过 Node 子进程 IPC 转发请求。worker 用 node-pty 打开进程并维护终端会话、控制权和近期输出。</p></li>
+              <li><strong>键盘输入与输出实时传输</strong><p>输入和尺寸变化传给 PTY，输出经原连接回到界面。选用 tmux 时，符合恢复条件的会话可重新连接到同一个 tmux 进程。</p></li>
+            </ol>
+            <p class="flow-source"><a href="../../src/server/routes/realtime.ts">WebSocket 路由</a> · <a href="../../src/server/terminal/terminal-worker-host.ts">Worker IPC</a> · <a href="../../src/server/terminal/terminal-pty-runtime.ts">PTY 启动</a></p>
+          </details>
+          <details id="agent-flow">
+            <summary>桌面和 Hob AI 接续后台会话</summary>
+            <ol class="steps">
+              <li><strong>选执行目标并发送消息</strong><p>新版 Hob AI 用 <code>/api/open/v1</code>，桌面 AI 面板用 <code>/api/agent-sessions</code>。会话绑定项目、目标目录和 Provider。</p></li>
+              <li><strong>服务端运行 CLI 并写入 SQLite</strong><p>同一个 Runtime 保存 prompt、请求 ID 和执行状态，在本地目录或 SSH 主机执行 Codex / Claude。后续轮次使用 Provider 会话 ID 恢复上下文。</p></li>
+              <li><strong>各端读回同一条会话</strong><p>客户端轮询状态，检测到进展后读结构化消息。Muse 的专用兼容入口 <code>/api/open/v1/muse</code> 共享后端会话存储。</p></li>
+            </ol>
+            <p class="flow-source"><a href="../conversation-open-api.md">接入文档</a> · <a href="../../src/server/modules/agent-open-api-runtime.ts">会话运行时</a> · <a href="hob-ai-architecture.html">Android AI 详细演示</a></p>
+          </details>
+          <details id="ssh-flow">
+            <summary>Android 终端版直接操作远程主机</summary>
+            <ol class="steps">
+              <li><strong>手机保存 SSH Host</strong><p>Android 终端版在本机管理 SSH Host、项目、保留终端及排序。SSH 身份采用 Android 端的安全存储。</p></li>
+              <li><strong>SSHJ 建立远程能力</strong><p>应用经 SSH 查询远程路径、Git 项目与工作树，打开远程 PTY 或设置端口转发。</p></li>
+              <li><strong>终端与 tmux 流程</strong><p>Termux 组件渲染字节流。tmux 页枚举目标主机支持的会话，并可按原身份重新连接。</p></li>
+            </ol>
+            <p class="flow-source"><a href="../../android/app/build.gradle.kts">旧 Android 构建配置</a> · <a href="../../CONTEXT.md">Android 领域说明</a></p>
+          </details>
+          <details id="integrations-flow">
+            <summary>项目入口、端口转发与通知</summary>
+            <ol class="steps">
+              <li><strong>桌面和编辑器</strong><p><code>hob</code> CLI 把本地路径交给桌面应用打开或导入。文件区域可以预览文件和差异，并将路径和行号传给配置的编辑器。</p></li>
+              <li><strong>远程开发端口</strong><p>主应用通过服务端端口转发路由管理 SSH 隧道，Android 终端版使用自己的 SSH 连接管理转发。</p></li>
+              <li><strong>Telegram</strong><p>服务端将配置启用的终端事件发到 Telegram，支持终端通知和受配置控制的远程终端输入。</p></li>
+            </ol>
+            <p class="flow-source"><a href="../../bin/hob">macOS 命令行入口</a> · <a href="../../src/server/routes/port-forwarding.ts">端口转发</a> · <a href="../../src/server/modules/telegram-terminal-input-runtime.ts">Telegram 输入运行时</a></p>
+          </details>
+        </div>
+      </section>
+
+      <section id="state" aria-labelledby="state-title">
+        <h2 id="state-title">数据由谁持有</h2>
+        <p class="section-note">桌面和 Web 的实时状态以所连接的服务实例为准。后台会话在同一服务实例内共享。</p>
+        <dl class="data-list">
+          <div class="block"><dt>代码、分支与工作树</dt><dd>本机、远端或 WSL 上的文件系统与 Git 元数据。应用读取快照，Git 操作落到实际仓库。</dd></div>
+          <div class="block"><dt>应用配置与恢复信息</dt><dd>服务端数据目录中的 <code>server-settings.json</code>、<code>workspace-configs.json</code>、<code>branch-workspaces.json</code>。打开项目与布局可在下次启动恢复。</dd></div>
+          <div class="block"><dt>交互式终端</dt><dd>worker 内存中的会话、控制权与近期输出。选择 tmux 时，实际 shell 会话由目标主机的 tmux 管理。</dd></div>
+          <div class="block"><dt>会话记录、消息与 AI 轮次</dt><dd>服务端 <code>conversation-open-api/conversations.sqlite</code>。消息与轮次按创建时间保留 30 天，会话 30 天未更新后清理。</dd></div>
+          <div class="block"><dt>接入身份</dt><dd>桌面内部凭据、Web 登录会话和外部 Bearer Key 分别在对应入口验证。服务端保存 OpenAPI Key 摘要。</dd></div>
+          <div class="block"><dt>客户端偏好</dt><dd>React 本地保存交互状态。Android 各包独立保存自身配置，Hob AI 在手机上加密保存连接密钥。</dd></div>
+        </dl>
+        <p class="sources"><a href="../state-sync.md">状态分层</a> · <a href="../../src/server/common/data-dir.ts">各平台数据目录</a> · <a href="../../src/server/modules/conversation-open-api-source.ts">会话存储与保留策略</a></p>
+      </section>
+
+      <section id="release" aria-labelledby="release-title">
+        <h2 id="release-title">代码布局与目前进度</h2>
+        <div class="status-grid">
+          <article class="block tile">
+            <h3>主应用与正式交付</h3>
+            <p><code>src/main</code> 与 <code>src/preload</code> 管桌面壳，<code>src/web</code> 管 React 界面，<code>src/server</code> 管服务端，<code>src/system</code> 封装系统集成，<code>src/shared</code> 定义共享类型和契约。</p>
+            <p>发布工作流用根目录代码构建 macOS 和 Windows 安装包，并准备 Linux Server Mode 源码包。原 Android 发布任务构建 <code>android/</code>。</p>
+          </article>
+          <article class="block tile">
+            <h3>独立平台包</h3>
+            <p><code>windows/</code> 是自包含的 Windows 开发和验证工程。<code>android/</code> 是 SSH 终端版。<code>android-ai/</code> 是独立 AI 客户端，当前真机版本为 <code>0.1.0</code> 调试包。</p>
+            <p>当前源码已实现注册子工作区发现、桌面和手机共用后台会话、通用 OpenAPI 与 Muse 兼容入口。</p>
+          </article>
+          <article class="block tile">
+            <h3>构建与联调</h3>
+            <p>新版 macOS 构建已在隔离环境验证接口，Hob AI 调试 APK 已装真机。运行中的 Mac 仍是 <code>v2.4.0</code>，新版工作区发现和接续对话等待升级服务端后真机联调。</p>
+          </article>
+        </div>
+        <p class="check">最近一次验证中，类型检查、架构边界检查、40 项相关接口测试和 Android 构建通过。全量测试有 120 项基线失败，跟此次 OpenAPI 改动前的基线对照未发现新增失败。</p>
+        <p class="sources"><a href="../../CONTEXT.md">源码目录与开发命令</a> · <a href="../../.github/workflows/release.yml">正式发布工作流</a> · <a href="../../windows/README.md">独立 Windows 工程</a></p>
+      </section>
+    </main>
+
+    <footer>
+      <div class="frame">依据当前工作区源码、项目设计文档和本机验证整理。页面可离线查看。</div>
+    </footer>
+
+    <script>
+      const lanes = document.querySelectorAll("[data-flow]");
+      function openFlow(id) {
+        const details = document.getElementById(id);
+        if (!(details instanceof HTMLDetailsElement)) return;
+        details.open = true;
+        for (const lane of lanes) {
+          if (lane.dataset.flow === id) lane.setAttribute("aria-current", "true");
+          else lane.removeAttribute("aria-current");
+        }
+      }
+      for (const lane of lanes) {
+        lane.addEventListener("click", () => openFlow(lane.dataset.flow));
+      }
+      window.addEventListener("hashchange", () => openFlow(window.location.hash.slice(1)));
+      openFlow(window.location.hash.slice(1));
+    </script>
+  </body>
+</html>

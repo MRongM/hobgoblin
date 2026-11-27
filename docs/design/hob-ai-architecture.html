@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hob AI · 架构与数据流转</title>
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #f3f3fa;
+    --panel: #fff;
+    --ink: #232439;
+    --muted: #60647a;
+    --line: #dddfed;
+    --accent: #4f459e;
+    --accent-soft: #ede9ff;
+    --green: #255d4e;
+    --green-soft: #e7f3ed;
+    --code: #282940;
+    --mono: "SF Mono", Consolas, monospace;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: var(--paper); }
+  main { max-width: 1180px; margin: auto; padding: 28px clamp(14px, 4vw, 48px) 40px; }
+  header.hero { padding: 12px 0 23px; border-bottom: 1px solid var(--line); }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: clamp(27px, 5vw, 47px); line-height: 1.13; letter-spacing: -.045em; }
+  .hero p { margin-top: 10px; color: var(--muted); max-width: 64ch; }
+  h2 { font-size: 17px; line-height: 1.4; }
+  h3 { font-size: 14px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .44; }
+  button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  code, pre { font-family: var(--mono); }
+  code { overflow-wrap: anywhere; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  .state-note { display:flex; align-items: center; gap: 8px; margin-top: 17px; color: var(--green); font-size: 13px; font-weight: 650; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 100%; background: #508c77; flex: none; }
+  .scenarios { display: flex; flex-wrap: wrap; gap: 7px; margin: 21px 0 13px; }
+  .scenarios button, .controls button {
+    min-height: 44px; padding: 6px 13px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel); font-size: 13px; font-weight: 650;
+  }
+  .scenarios button[aria-pressed="true"], .controls button.primary {
+    color: white; background: var(--accent); border-color: var(--accent);
+  }
+  .scenarios button:hover, .controls button:hover:not(:disabled) { border-color: var(--accent); }
+  .stage {
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+    min-width: 0; gap: 14px; align-items: start;
+  }
+  .surface { min-width: 0; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); }
+  .diagram { padding: 15px; }
+  .diagram-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+  .legend { color: var(--muted); font-size: 11px; display: flex; align-items: center; gap: 5px; }
+  .legend::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--accent-soft); border: 1px solid var(--accent); }
+  .nodes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+  .node { min-width: 0; min-height: 68px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 11px; background: #f9f9fd; }
+  .node strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+  .node span { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+  .node.active { background: var(--accent-soft); border-color: var(--accent); }
+  .node[data-node="store"].active, .node[data-node="registry"].active { background: var(--green-soft); border-color: #407963; }
+  .node.bridge, .caption.bridge { grid-column: 1 / -1; }
+  .caption {
+    min-height: 23px; display: flex; gap: 5px; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; text-align: center;
+  }
+  .caption::before { content: "↓"; font-size: 15px; color: var(--accent); line-height: 1; }
+  .branches { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+  .edge-note { font-size: 11px; color: var(--muted); margin: 10px 0 1px; }
+  .trace { padding: 15px; }
+  .trace-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  #counter { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 14px; }
+  .steps button { min-width: 35px; height: 35px; border: 1px solid var(--line); border-radius: 7px; background: #f9f9fd; font: 600 12px var(--mono); }
+  .steps button[aria-current="step"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .description { min-height: 48px; margin-top: 5px; color: var(--muted); }
+  .trace-code {
+    min-height: 165px; max-height: 330px; margin: 12px 0 0; padding: 11px;
+    border-radius: 10px; background: var(--code); color: #f1efff;
+    font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto;
+  }
+  .views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+  .view { border: 1px solid var(--line); border-radius: 9px; padding: 7px 9px; min-width: 0; }
+  .view span { color: var(--muted); display: block; font-size: 11px; }
+  .view strong { font-size: 12px; overflow-wrap: anywhere; }
+  .controls { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; margin-top: 12px; }
+  .reference { margin-top: 16px; }
+  details { min-width: 0; padding: 10px 13px; border-top: 1px solid var(--line); }
+  details:first-child { border-top: 0; }
+  summary { min-height: 33px; align-content: center; cursor: pointer; font-weight: 650; }
+  details p, details li { color: var(--muted); font-size: 13px; }
+  details p { padding: 1px 0 8px; }
+  details ul { margin: 4px 0 8px; padding-left: 20px; }
+  details li + li { margin-top: 5px; }
+  .source-links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 7px 0; font-size: 12px; }
+  @media (max-width: 760px) {
+    main { padding-top: 17px; }
+    .stage { grid-template-columns: minmax(0, 1fr); }
+    .steps button { min-height: 44px; min-width: 44px; }
+    .description { min-height: 0; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .node { transition: background-color .18s ease, border-color .18s ease; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <h1>Hob AI 架构与数据流转</h1>
+    <p>Mac 和 Android 使用同一个后台会话 ID。Hob 服务负责工作位置解析、执行、保存与状态查询。</p>
+    <div class="state-note"><span class="dot" aria-hidden="true"></span>新构建已通过接口验证 · 正在运行的 Mac 服务待切换</div>
+  </header>
+
+  <nav class="scenarios" aria-label="选择演示">
+    <button type="button" data-case="sync">跨端续聊</button>
+    <button type="button" data-case="workspace">子工作区</button>
+    <button type="button" data-case="retention">滚动保留</button>
+  </nav>
+
+  <div class="stage">
+    <section class="surface diagram" aria-labelledby="diagram-title">
+      <div class="diagram-head">
+        <h2 id="diagram-title">系统架构</h2>
+        <span class="legend">当前步骤经过的组件</span>
+      </div>
+      <div class="nodes">
+        <div class="node" data-node="desktop"><strong>Mac 桌面 · AI 会话</strong><span>Electron 内的 React 界面</span></div>
+        <div class="node" data-node="phone"><strong>Android · Hob AI</strong><span>独立应用 · Jetpack Compose</span></div>
+        <div class="caption">本机 HTTP · 内部凭证</div>
+        <div class="caption">HTTPS 接入 · OpenAPI Key</div>
+        <div class="node bridge" data-node="server"><strong>Mac 上的 Hono 服务</strong><span>桌面 /api/agent-sessions · 手机 /api/open/v1</span></div>
+        <div class="caption bridge">两个入口调用同一运行时</div>
+        <div class="node bridge" data-node="runtime"><strong>后台 AI 会话服务</strong><span>校验工作位置 · 去重 · 执行 · 取消</span></div>
+      </div>
+      <div class="nodes branches">
+        <div class="caption">持久化会话与结果</div>
+        <div class="caption">读取注册与当前 Git 状态</div>
+        <div class="node" data-node="store"><strong>SQLite 会话库</strong><span>会话、消息、轮次 · 30 天滚动保留</span></div>
+        <div class="node" data-node="registry"><strong>子工作区注册表和 Git</strong><span>注册文件夹、根目录及当前成员</span></div>
+        <div class="caption bridge">后台服务在选中目录启动 Agent</div>
+        <div class="node bridge" data-node="cli"><strong>Codex / Claude CLI</strong><span>在工作位置所在的执行主机运行，保留 Provider 会话 ID</span></div>
+      </div>
+      <p class="edge-note">桌面 Electron 主进程负责窗口和原生操作。桌面终端通过 WebSocket 与 Hono 通信，Hono 再经 Node IPC 访问 PTY 子进程。</p>
+    </section>
+
+    <section class="surface trace" aria-labelledby="step-title">
+      <div class="trace-top"><h2 id="case-title"></h2><span id="counter" aria-label="步骤进度"></span></div>
+      <div id="steps" class="steps" aria-label="选择步骤"></div>
+      <div aria-live="polite">
+        <h3 id="step-title"></h3>
+        <p id="description" class="description"></p>
+        <pre id="trace-code" class="trace-code"></pre>
+        <div class="views">
+          <div class="view"><span id="left-label"></span><strong id="left-value"></strong></div>
+          <div class="view"><span id="right-label"></span><strong id="right-value"></strong></div>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="previous" type="button">上一步</button>
+        <button id="play" type="button">播放</button>
+        <button id="next" class="primary" type="button">下一步</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="surface reference" aria-label="架构补充">
+    <details>
+      <summary>会话如何保持一致</summary>
+      <ul>
+        <li>打开会话后，两端用 <code>GET /sessions/{sessionId}/status</code> 查状态。运行中约每 1.5 秒查询一次，空闲约每 4 秒。状态或最新轮次变化后才读取完整消息。</li>
+        <li>发送为异步请求。重试同一次发送沿用 <code>requestId</code>，停止按会话 ID 和轮次 ID 定位。</li>
+        <li>端内的会话列表按各自周期刷新。手机回到前台会重新读取服务端状态。</li>
+      </ul>
+    </details>
+    <details>
+      <summary>数据库与保留期限</summary>
+      <p>Hob 的数据目录包含 <code>conversation-open-api/conversations.sqlite</code>。它存储后台会话元数据、消息和执行轮次。清理在服务启动时检查，运行中每分钟检查一次，请求读写数据库时也会检查到期记录。当前历史接口一次返回该会话保留期内的完整消息。</p>
+      <p>Codex 可以输出逐行 JSON 事件。当前 Provider 适配读取最终回复并保存到 SQLite。部署版的跨端状态通过 HTTP 轮询获取。</p>
+    </details>
+    <details>
+      <summary>客户端边界和当前部署状态</summary>
+      <p>手机配置 HTTPS 服务地址和 OpenAPI Key。这次联调环境的 HTTPS 入口通过 Cloudflare Tunnel 转发到 Mac 上的 Hono。</p>
+      <p>Hob AI 是独立包名的 Android 应用。原生 SSH、tmux 终端由旧 Android 应用管理。桌面的 AI 会话入口与终端入口各自访问对应的会话服务。</p>
+      <p>示例步骤使用虚构数据。新构建已验证同一会话能跨端续聊，也已用打包产物验证两个接口能读到同一个注册子工作区。已安装的设备仍待切换到新构建并联调。</p>
+      <div class="source-links">
+        <a href="../../src/server/routes/background-agent-sessions.ts">共享会话路由</a>
+        <a href="../../src/server/modules/agent-open-api-runtime.ts">后台运行时</a>
+        <a href="../../src/server/modules/conversation-open-api-source.ts">会话存储</a>
+        <a href="../../src/web/components/DesktopAgentSessions.tsx">桌面会话界面</a>
+      </div>
+    </details>
+  </section>
+</main>
+<script>
+  const sharedId = '示例会话 S1';
+  const scenarios = {
+    sync: {
+      title: '跨端续聊',
+      labels: ['Mac 会话', 'Android 会话'],
+      steps: [
+        {
+          title: 'Mac 发送第一条消息',
+          text: '桌面选中工作位置后提交消息。服务端保存用户消息和运行状态，并用第一次的请求 ID 作为会话 ID。',
+          nodes: ['desktop', 'server', 'runtime', 'store'],
+          code: 'POST /api/agent-sessions/workspaces/{workspaceId}/sessions\n{ mode: "background", provider: "codex",\n  worktreeId: "T1", requestId: "R1",\n  prompt: "检查发布测试" }\n\n202 Accepted\n{ sessionId: "S1", requestId: "R1" }\nS1 是 R1 对应的会话标识。',
+          values: [sharedId + ' · 运行中', '等待刷新会话列表'],
+        },
+        {
+          title: 'Agent 在选定目录完成任务',
+          text: 'Hob 在工作位置所在主机运行 CLI。完成后写入最终回复，并保存用于后续续聊的 Provider 会话 ID。',
+          nodes: ['runtime', 'cli', 'store'],
+          code: 'Codex CLI · cwd = 选中的工作位置\n\nSQLite\nagent_sessions  S1 → Provider 会话 P1\nagent_turns     R1 → completed\nmessages         S1 → 用户消息、AI 回复',
+          values: [sharedId + ' · 已完成', '等待刷新会话列表'],
+        },
+        {
+          title: 'Android 打开同一条会话',
+          text: '手机用 OpenAPI Key 查询项目下的会话。打开 S1 后，服务端返回刚才在 Mac 发出的消息和 AI 回复。',
+          nodes: ['phone', 'server', 'runtime', 'store'],
+          code: 'GET /api/open/v1/workspaces/{workspaceId}/sessions\nGET /api/open/v1/sessions/S1\n\n200 OK\n{ id: "S1", status: "ready",\n  messages: [用户消息, AI 回复] }',
+          values: [sharedId + ' · 两条消息', sharedId + ' · 两条消息'],
+        },
+        {
+          title: 'Android 发送追问',
+          text: '这次提交使用新请求 ID R2，仍然绑定 S1。服务端用原 Provider 会话 P1 续聊。',
+          nodes: ['phone', 'server', 'runtime', 'cli', 'store'],
+          code: 'POST /api/open/v1/sessions/S1/turns\n{ requestId: "R2", prompt: "继续检查测试" }\n\nS1 → Provider 会话 P1\nR2 → working',
+          values: [sharedId + ' · 等待状态刷新', sharedId + ' · 追问运行中'],
+        },
+        {
+          title: 'Mac 轮询后显示更新',
+          text: 'Mac 读到最新轮次变成 R2 后加载消息。在结果写入后，两端看到同一条追问和最终回复。',
+          nodes: ['desktop', 'phone', 'server', 'store'],
+          code: 'GET /api/agent-sessions/sessions/S1/status\nlatestTurn.requestId = R2\nlatestTurn.state = completed\n\nGET /api/agent-sessions/sessions/S1\n{ id: "S1", messages: [原消息, 原回复, 追问, 新回复] }',
+          values: [sharedId + ' · 四条消息', sharedId + ' · 四条消息'],
+        },
+      ],
+    },
+    workspace: {
+      title: '子工作区识别',
+      labels: ['手机选择器', '服务端执行位置'],
+      steps: [
+        {
+          title: '选择父项目',
+          text: '手机查询这个项目的可执行位置。接口同时返回项目自身的工作树以及该项目注册的子工作区。',
+          nodes: ['phone', 'server', 'runtime'],
+          code: 'GET /api/open/v1/workspaces/{workspaceId}/targets\n\n{ worktrees: [...], subworkspaces: [...] }',
+          values: ['已选择「交付平台」', '正在读取目录'],
+        },
+        {
+          title: '读取注册的子工作区',
+          text: 'Hob 复用桌面读取路径，按父项目查找已注册文件夹。注册数据负责目录身份和顺序。',
+          nodes: ['server', 'runtime', 'registry'],
+          code: 'branch-workspaces.json\n\n父项目  交付平台\n└─ 已注册文件夹  发布准备\n   目录 ID  group-demo',
+          values: ['项目下出现「发布准备」', '根目录已登记'],
+        },
+        {
+          title: '发现当前 Git 成员',
+          text: '服务端从文件系统和 Git 读取当前可用成员，以及各成员实际检出的分支。手机用相同结果展示目录和分支。',
+          nodes: ['runtime', 'registry', 'phone'],
+          code: '发布准备\n├─ 根目录        T1\n├─ API 工作树    T2   feat/release\n└─ Web 工作树    T3   feat/release-ui',
+          values: ['可展开根目录和两个成员', '已解析 T1、T2、T3'],
+        },
+        {
+          title: '以所选成员启动会话',
+          text: '手机提交不透明的位置 ID。Hob 在已注册目录的当前快照中核对它，再把解析后的实际目录传给 CLI。',
+          nodes: ['phone', 'server', 'runtime', 'registry', 'cli'],
+          code: 'POST .../workspaces/{workspaceId}/sessions\n{ mode: "background", worktreeId: "T2", ... }\n\n执行目录 → 发布准备 / API 工作树\n当前分支 → feat/release',
+          values: ['聊天顶部显示项目／子工作区／成员', '在 API 工作树执行'],
+        },
+      ],
+    },
+    retention: {
+      title: '会话滚动保留',
+      labels: ['可查消息和轮次', '会话状态'],
+      steps: [
+        {
+          title: '第 0 天 · 记下第一轮',
+          text: '用户消息和待执行轮次一起写进数据库，任务完成时追加 AI 回复。',
+          nodes: ['runtime', 'store'],
+          code: 'conversations   S1  updated_at = 第 0 天\nagent_sessions  S1  Provider 会话元数据\nagent_turns     R1  created_at = 第 0 天\nmessages        S1  第一轮两条消息',
+          values: ['第一轮', '存在 · 最近更新第 0 天'],
+        },
+        {
+          title: '第 10 天 · 续聊刷新会话时间',
+          text: '第二轮的创建时间是第 10 天。会话最近更新时间随本轮写入而更新。',
+          nodes: ['desktop', 'phone', 'runtime', 'store'],
+          code: 'conversations   S1  updated_at = 第 10 天\nagent_turns     R1  created_at = 第 0 天\nagent_turns     R2  created_at = 第 10 天',
+          values: ['第一轮、第二轮', '存在 · 最近更新第 10 天'],
+        },
+        {
+          title: '第 30 天 · 第一轮过期',
+          text: '第一轮的消息和轮次已到 30 天。第二轮和会话元数据仍在保留期内。',
+          nodes: ['server', 'store'],
+          code: '定时清理 / 请求前检查\n\nDELETE messages    WHERE created_at <= 截止时间\nDELETE agent_turns WHERE created_at <= 截止时间\n\n截止时间 = 当前时刻 - 30 天',
+          values: ['第二轮', '存在 · 距最后更新 20 天'],
+        },
+        {
+          title: '第 40 天 · 会话过期',
+          text: '如果第 10 天后一直没有更新，第 40 天时该会话达到 30 天不活跃期限，会话及关联记录被清理。',
+          nodes: ['server', 'store'],
+          code: 'DELETE conversations WHERE updated_at <= 截止时间\n\nSQLite 外键级联清理\n会话元数据 · 剩余消息 · 剩余轮次',
+          values: ['已清理', '续聊时显示会话不可用'],
+        },
+      ],
+    },
+  };
+  const byId = (id) => document.getElementById(id);
+  const caseButtons = [...document.querySelectorAll('[data-case]')];
+  const nodes = [...document.querySelectorAll('[data-node]')];
+  const stepButtons = byId('steps');
+  let currentCase = 'sync';
+  let step = 0;
+  let timer = null;
+
+  function stop() {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+    byId('play').textContent = '播放';
+  }
+
+  function render() {
+    const current = scenarios[currentCase];
+    const selected = current.steps[step];
+    byId('case-title').textContent = current.title;
+    byId('counter').textContent = (step + 1) + ' / ' + current.steps.length;
+    byId('step-title').textContent = selected.title;
+    byId('description').textContent = selected.text;
+    byId('trace-code').textContent = selected.code;
+    byId('left-label').textContent = current.labels[0];
+    byId('right-label').textContent = current.labels[1];
+    byId('left-value').textContent = selected.values[0];
+    byId('right-value').textContent = selected.values[1];
+    byId('previous').disabled = step === 0;
+    byId('next').disabled = step === current.steps.length - 1;
+    caseButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.case === currentCase)));
+    nodes.forEach((node) => node.classList.toggle('active', selected.nodes.includes(node.dataset.node)));
+    [...stepButtons.children].forEach((button, index) => {
+      if (index === step) button.setAttribute('aria-current', 'step');
+      else button.removeAttribute('aria-current');
+    });
+  }
+
+  function selectCase(id) {
+    stop();
+    currentCase = id;
+    step = 0;
+    stepButtons.replaceChildren();
+    scenarios[id].steps.forEach((item, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = String(index + 1);
+      button.setAttribute('aria-label', '第 ' + (index + 1) + ' 步 · ' + item.title);
+      button.addEventListener('click', () => { stop(); step = index; render(); });
+      stepButtons.append(button);
+    });
+    render();
+  }
+
+  caseButtons.forEach((button) => button.addEventListener('click', () => selectCase(button.dataset.case)));
+  byId('previous').addEventListener('click', () => { stop(); step--; render(); });
+  byId('next').addEventListener('click', () => { stop(); step++; render(); });
+  byId('play').addEventListener('click', () => {
+    if (timer !== null) {
+      stop();
+      return;
+    }
+    if (step === scenarios[currentCase].steps.length - 1) {
+      step = 0;
+      render();
+    }
+    byId('play').textContent = '暂停';
+    timer = setInterval(() => {
+      step++;
+      render();
+      if (step === scenarios[currentCase].steps.length - 1) stop();
+    }, 1500);
+  });
+  selectCase('sync');
+</script>
+</body>
+</html>
