@@ -386,21 +386,20 @@ describe('discoverWorkspaceRepositories', () => {
     })
   })
 
-  test('reports missing configured repositories as unavailable candidates', async () => {
+  test('distinguishes absent configured repositories from entries that are present but unavailable', async () => {
     const root = await createTemporaryRoot()
     const api = await createGitDirectory(root, 'api')
+    const broken = await createGitDirectory(root, 'broken')
     const probeRepository = vi.fn(
-      async (cwd: string): Promise<ProbeResult> => ({
-        ok: true,
-        root: cwd,
-        name: path.basename(cwd),
-        isGitRepo: cwd !== root,
-      }),
+      async (cwd: string): Promise<ProbeResult> =>
+        cwd === broken
+          ? { ok: false, message: 'error.path-permission-denied' }
+          : { ok: true, root: cwd, name: path.basename(cwd), isGitRepo: cwd !== root },
     )
 
     const result = await discoverWorkspaceRepositories(root, {
       probeRepository,
-      readConfig: async () => ({ kind: 'ready', config: { repo: ['api', 'web'] } }),
+      readConfig: async () => ({ kind: 'ready', config: { repo: ['api', 'web', 'broken'] } }),
     })
 
     expect(result).toEqual({
@@ -409,10 +408,11 @@ describe('discoverWorkspaceRepositories', () => {
       repositories: [{ id: api, name: 'api' }],
       candidates: [
         { id: api, name: 'api', selected: true, available: true },
-        { id: path.join(root, 'web'), name: 'web', selected: true, available: false },
+        { id: path.join(root, 'web'), name: 'web', selected: true, available: false, pathMissing: true },
+        { id: broken, name: 'broken', selected: true, available: false },
       ],
-      configuration: { kind: 'ready', config: { repo: ['api', 'web'] } },
-      skipped: [],
+      configuration: { kind: 'ready', config: { repo: ['api', 'web', 'broken'] } },
+      skipped: [{ path: broken, message: 'error.path-permission-denied' }],
     })
   })
 

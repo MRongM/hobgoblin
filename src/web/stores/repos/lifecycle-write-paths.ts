@@ -620,7 +620,7 @@ export function applyWorkspaceDiscoveryResult(
             )
         : result.configuration.kind === 'ready'
           ? effectiveCandidates
-              .filter((candidate) => !options.pruneUnavailable || candidate.available)
+              .filter((candidate) => candidate.available || (!options.pruneUnavailable && !candidate.pathMissing))
               .map((candidate) => candidate.id)
           : []
     const repositoryIdSet = new Set(repositoryIds)

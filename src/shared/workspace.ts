@@ -18,6 +18,8 @@ export type WorkspaceConfigSnapshot =
 export interface WorkspaceRepositoryCandidate extends WorkspaceRepositoryEntry {
   selected: boolean
   available: boolean
+  /** The configured name was absent from a successful local directory listing. */
+  pathMissing?: true
 }
 
 export interface WorkspaceDiscoveryIssue {

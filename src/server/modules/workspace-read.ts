@@ -150,7 +150,7 @@ async function discoverLocalWorkspaceRepositories(
     if ('id' in result) repositories.push(result)
     else skipped.push(result)
   }
-  return await projectWorkspaceDiscovery(
+  const discovery = await projectWorkspaceDiscovery(
     rootId,
     repositories,
     skipped,
@@ -158,6 +158,15 @@ async function discoverLocalWorkspaceRepositories(
     configuration,
     excludedRepositoryNames,
   )
+  const directoryEntryNames = new Set(entries.map((entry) => entry.name))
+  return {
+    ...discovery,
+    candidates: discovery.candidates.map((candidate) =>
+      !candidate.available && !directoryEntryNames.has(candidate.name)
+        ? { ...candidate, pathMissing: true }
+        : candidate,
+    ),
+  }
 }
 
 async function discoverRemoteWorkspaceRepositories(
@@ -344,7 +353,7 @@ async function projectWorkspaceDiscovery(
   dependencies: WorkspaceDiscoveryDependencies,
   configurationOverride?: WorkspaceConfigSnapshot,
   excludedRepositoryNames: ReadonlySet<string> = new Set(),
-): Promise<WorkspaceDiscoveryResult> {
+): Promise<Extract<WorkspaceDiscoveryResult, { ok: true }>> {
   const configuration = configurationOverride ?? (await readWorkspaceConfiguration(rootId, dependencies))
   if (configuration.kind === 'missing') {
     return {

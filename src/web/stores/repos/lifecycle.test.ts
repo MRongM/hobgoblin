@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { normalizeRemoteRepoRef, normalizeRemoteTarget, remoteRepoSessionEntry } from '#/shared/remote-repo.ts'
+import {
+  localRepoSessionEntry,
+  normalizeRemoteRepoRef,
+  normalizeRemoteTarget,
+  remoteRepoSessionEntry,
+} from '#/shared/remote-repo.ts'
 import { emptyRepo, replaceRepo } from '#/web/stores/repos/helpers.ts'
 import { useReposStore } from '#/web/stores/repos/store.ts'
 import type { BranchSnapshotInfo } from '#/web/types.ts'
@@ -266,6 +271,49 @@ describe('repo lifecycle', () => {
     expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([api, web])
     expect(useReposStore.getState().repos[api]?.availability.phase).toBe('unavailable')
     expect(useReposStore.getState().repos[web]?.workspaceRootId).toBe(root)
+  })
+
+  test.each(['open', 'restore'])('does not show absent configured local members on %s', async (entryPoint) => {
+    const root = '/tmp/gbl-workspace'
+    const api = `${root}/api`
+    const web = `${root}/web`
+    const inaccessible = `${root}/inaccessible`
+    let memberPresent = false
+    installGoblin({
+      probe: (cwd: string) => ({ ok: true, root: cwd, name: 'workspace', isGitRepo: cwd !== root }),
+      'workspace.import': () => ({
+        ok: true,
+        rootId: root,
+        repositories: [{ id: api, name: 'api' }, ...(memberPresent ? [{ id: web, name: 'web' }] : [])],
+        candidates: [
+          { id: api, name: 'api', selected: true, available: true },
+          {
+            id: web,
+            name: 'web',
+            selected: true,
+            ...(memberPresent ? { available: true } : { available: false, pathMissing: true }),
+          },
+          { id: inaccessible, name: 'inaccessible', selected: true, available: false },
+        ],
+        configuration: { kind: 'ready', config: { repo: ['api', 'web', 'inaccessible'] } },
+        skipped: [{ path: inaccessible, message: 'error.path-permission-denied' }],
+      }),
+    })
+
+    const store = useReposStore.getState()
+    if (entryPoint === 'open') await store.ensureWorkspaceOpen(root)
+    else await store.hydrateSession([localRepoSessionEntry(root)], root)
+
+    expect(useReposStore.getState().workspaceProjects[root]).toMatchObject({
+      repositoryIds: [api, inaccessible],
+      configuredRepositoryNames: ['api', 'web', 'inaccessible'],
+    })
+    expect(useReposStore.getState().repos[inaccessible]?.availability.phase).toBe('unavailable')
+
+    memberPresent = true
+    await store.ensureWorkspaceOpen(root)
+    expect(useReposStore.getState().workspaceProjects[root]?.repositoryIds).toEqual([api, web, inaccessible])
+    expect(useReposStore.getState().repos[web]?.availability.phase).toBe('available')
   })
 
   test('manual rescan removes unavailable configured members from the workspace list', async () => {
