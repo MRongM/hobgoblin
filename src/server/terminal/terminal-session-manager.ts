@@ -47,6 +47,15 @@ import {
 } from '#/server/terminal/terminal-render-state.ts'
 import { spawnTerminalPtyRuntime, type TerminalPtyRuntime } from '#/server/terminal/terminal-pty-runtime.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
+import { parseRemoteRepoId } from '#/shared/remote-repo.ts'
+import { workspacePublicId } from '#/server/modules/workspace-public-id.ts'
+import { detectTerminalAgent } from '#/server/terminal/terminal-registry-model.ts'
+import type {
+  TerminalLifecycleEvent,
+  TerminalRecordTitle,
+  TerminalRecordReason,
+  TerminalRegistryLocation,
+} from '#/server/terminal/terminal-registry-model.ts'
 import type {
   TerminalPathRelocationResult,
   TerminalSessionLocation,
@@ -61,12 +70,14 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
   scope: string
   key: string
   cwd: string
+  registryLocation?: TerminalRegistryLocation
   cols: number
   rows: number
   attachmentId?: string
   attachmentConnected?: boolean
   forceNew?: boolean
   agentProvider?: TerminalAgentProvider
+  restartDisabled?: boolean
   command?: string
   args?: string[]
   windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
@@ -77,11 +88,15 @@ export interface TerminalEnsureSessionInput<TOwner extends string | number> {
 
 interface TerminalSession<TOwner extends string | number> {
   id: string
+  executionId: string
+  detectedAgentProvider?: TerminalAgentProvider
   ownerId: TOwner
   scope: string
   key: string
   cwd: string
+  registryLocation?: TerminalRegistryLocation
   agentProvider?: TerminalAgentProvider
+  restartDisabled?: boolean
   command?: string
   args?: string[]
   windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride
@@ -93,6 +108,7 @@ interface TerminalSession<TOwner extends string | number> {
   rows: number
   pty: TerminalPtyRuntime | null
   windowsPty?: TerminalWindowsPty
+  usesWsl?: true
   disposables: Array<{ dispose: () => void }>
   render: TerminalRenderState
   processName: string
@@ -114,9 +130,11 @@ interface TerminalSession<TOwner extends string | number> {
 export interface TerminalEventSink<TOwner extends string | number> {
   onOutput(ownerId: TOwner, event: TerminalOutputEvent): void
   onTitle?(ownerId: TOwner, event: { sessionId: string; canonicalTitle: string | null }): void
+  onRecordTitle?(event: TerminalRecordTitle): void
   onExit(ownerId: TOwner, event: TerminalExitEvent): void
   onOwnership?(ownerId: TOwner, event: TerminalOwnershipEvent): void
   onUserInput?(ownerId: TOwner, event: { sessionId: string }): void
+  onLifecycle?(event: TerminalLifecycleEvent, repoId: string): void
 }
 
 export class TerminalSessionManager<TOwner extends string | number> {
@@ -154,11 +172,14 @@ export class TerminalSessionManager<TOwner extends string | number> {
     const id = createSessionId()
     const session: TerminalSession<TOwner> = {
       id,
+      executionId: crypto.randomUUID(),
       ownerId,
       scope: input.scope,
       key: input.key,
       cwd,
+      registryLocation: input.registryLocation,
       agentProvider: input.agentProvider,
+      restartDisabled: input.restartDisabled,
       command: input.command,
       args: input.args,
       windowsInternalTerminalShell: input.windowsInternalTerminalShell,
@@ -193,6 +214,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
         session.rows = effect.resizeTo.rows
       }
     }
+    this.emitLifecycle(session)
     const spawnResult = this.spawnSessionPty(session)
     if (!spawnResult.ok) {
       this.closeSession(id)
@@ -298,6 +320,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
     if (!size) return { ok: false, message: 'error.invalid-arguments' }
     const session = this.getSession(ownerId, sessionId)
     if (!session) return { ok: false, message: 'error.invalid-arguments' }
+    if (session.restartDisabled) return { ok: false, message: 'error.unavailable' }
     if (attachmentId) {
       registerTerminalAttachment(session, attachmentId, size.cols, size.rows, attachmentConnected)
       const authority = authorizeTerminalAttachment(session, attachmentId, 'restart')
@@ -306,9 +329,12 @@ export class TerminalSessionManager<TOwner extends string | number> {
     } else {
       return { ok: false, message: 'error.invalid-arguments' }
     }
+    if (session.phase === 'open') this.emitLifecycle(session, 'restarted', 'closed')
+    session.executionId = crypto.randomUUID()
     session.phase = 'restarting'
     session.message = null
     this.resetSessionState(session, size.cols, size.rows)
+    this.emitLifecycle(session)
     const spawnResult = this.spawnSessionPty(session)
     if (!spawnResult.ok) return spawnResult
     return this.attachResult(session)
@@ -320,9 +346,10 @@ export class TerminalSessionManager<TOwner extends string | number> {
     return true
   }
 
-  closeSession(sessionId: string): void {
+  closeSession(sessionId: string, reason: 'closed' | 'exited' = 'closed'): void {
     const session = this.sessionsById.get(sessionId)
     if (!session) return
+    if (session.phase !== 'error') this.emitLifecycle(session, reason, 'closed')
     session.phase = 'closed'
     session.message = null
     this.sessionsById.delete(sessionId)
@@ -511,6 +538,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
       scopes.add(update.scope)
       Object.assign(session, update)
       this.sessionIdByOwnerKey.set(this.sessionOwnerKey(session.ownerId, session.key), session.id)
+      this.emitLifecycle(session, session.phase === 'error' ? 'launch_failed' : null)
     }
     result.scopes = [...scopes]
     return result
@@ -641,10 +669,62 @@ export class TerminalSessionManager<TOwner extends string | number> {
     session.rows = rows
     resetTerminalRenderState(session.render)
     session.processName = ''
+    session.detectedAgentProvider = undefined
     session.windowsPty = undefined
+    session.usesWsl = undefined
     session.lastInteractiveInputAt = undefined
     session.inputQueue = []
     session.inputFlushScheduled = false
+  }
+
+  private emitLifecycle(
+    session: TerminalSession<TOwner>,
+    reason: TerminalRecordReason | null = null,
+    phase = session.phase,
+  ): void {
+    if (!this.sink.onLifecycle) return
+    const { repoId, worktreePath } = session.registryLocation ?? {
+      repoId: session.scope,
+      worktreePath: parseWorktreePathFromKey(session.key) ?? session.cwd,
+    }
+    const remote = parseRemoteRepoId(repoId)
+    this.sink.onLifecycle(
+      {
+        id: session.id,
+        executionId: session.executionId,
+        workspaceId: workspacePublicId(repoId),
+        worktreeId: workspacePublicId(`${repoId}\0${worktreePath}`),
+        cwd: remote ? worktreePath : session.cwd,
+        title: session.render.canonicalTitle?.slice(0, 256) ?? null,
+        backend: {
+          transport: remote ? (remote.transport ?? 'ssh') : session.usesWsl ? 'wsl' : 'local',
+          kind: session.tmuxSessionName ? 'tmux' : 'pty',
+          ...(session.windowsPty?.backend ? { windowsPty: session.windowsPty.backend } : {}),
+        },
+        agentProvider: session.agentProvider ?? null,
+        ...(session.detectedAgentProvider ? { detectedAgentProvider: session.detectedAgentProvider } : {}),
+        phase,
+        reason,
+      },
+      repoId,
+    )
+  }
+
+  private emitTitle(session: TerminalSession<TOwner>, canonicalTitle: string | null): void {
+    this.sink.onTitle?.(session.ownerId, { sessionId: session.id, canonicalTitle })
+    this.sink.onRecordTitle?.({
+      terminalId: session.id,
+      executionId: session.executionId,
+      title: canonicalTitle?.slice(0, 256) ?? null,
+    })
+  }
+
+  private detectAgent(session: TerminalSession<TOwner>, title: string | null): void {
+    if (!this.sink.onLifecycle || session.agentProvider || session.detectedAgentProvider) return
+    const provider = detectTerminalAgent(session.processName, title)
+    if (!provider) return
+    session.detectedAgentProvider = provider
+    this.emitLifecycle(session)
   }
 
   private spawnSessionPty(session: TerminalSession<TOwner>): TerminalAttachResult {
@@ -661,17 +741,20 @@ export class TerminalSessionManager<TOwner extends string | number> {
       this.disposeSessionResources(session)
       session.phase = 'error'
       session.message = spawnResult.message
+      this.emitLifecycle(session, 'launch_failed')
       return spawnResult
     }
     session.pty = spawnResult.runtime
     session.windowsPty = spawnResult.windowsPty
+    session.usesWsl = spawnResult.wsl
     session.processName = session.pty.processName()
     session.phase = 'open'
     session.message = null
     session.render.model = createTerminalRenderModel(session.cols, session.rows, session.windowsPty)
     session.disposables.push(
       bindTerminalRenderTitle(session.render, (canonicalTitle) => {
-        this.sink.onTitle?.(session.ownerId, { sessionId: session.id, canonicalTitle })
+        this.emitTitle(session, canonicalTitle)
+        this.detectAgent(session, canonicalTitle)
       }),
     )
     session.disposables.push(
@@ -680,6 +763,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
         const previousProcessName = session.processName
         const processName = session.pty?.processName() ?? 'terminal'
         session.processName = processName
+        if (previousProcessName !== processName) this.detectAgent(session, null)
         const canonicalTitleBeforeWrite = session.render.canonicalTitle
         const titleEventVersionBeforeWrite = session.render.titleEventVersion
         queueTerminalRenderWrite(session.render, data, () => {
@@ -690,9 +774,7 @@ export class TerminalSessionManager<TOwner extends string | number> {
             session.processName,
             canonicalTitleBeforeWrite,
             titleEventVersionBeforeWrite,
-            (canonicalTitle) => {
-              this.sink.onTitle?.(session.ownerId, { sessionId: session.id, canonicalTitle })
-            },
+            (canonicalTitle) => this.emitTitle(session, canonicalTitle),
           )
         })
         this.sink.onOutput(session.ownerId, { sessionId: session.id, data, seq, processName })
@@ -700,11 +782,15 @@ export class TerminalSessionManager<TOwner extends string | number> {
     )
     session.disposables.push(
       session.pty.onExit(() => {
+        if (session.pty !== spawnResult.runtime) return
         session.pty = null
         this.sink.onExit(session.ownerId, { sessionId: session.id })
-        this.closeSession(session.id)
+        this.closeSession(session.id, 'exited')
       }),
     )
+    const detected = !session.agentProvider && detectTerminalAgent(session.processName, null)
+    if (detected) session.detectedAgentProvider = detected
+    this.emitLifecycle(session)
     return this.attachResult(session)
   }
 

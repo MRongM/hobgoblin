@@ -26,7 +26,7 @@ export interface SpawnTerminalPtyRuntimeInput {
 }
 
 export type SpawnTerminalPtyRuntimeResult =
-  | { ok: true; runtime: TerminalPtyRuntime; windowsPty?: TerminalWindowsPty }
+  | { ok: true; runtime: TerminalPtyRuntime; windowsPty?: TerminalWindowsPty; wsl?: true }
   | { ok: false; message: string }
 
 const NODE_PTY_CONPTY_DEFAULT_BUILD = 18309
@@ -55,7 +55,12 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
           term,
           process.platform === 'win32' ? path.win32.basename(candidate.command) : undefined,
         )
-        return windowsPty ? { ok: true, runtime, windowsPty } : { ok: true, runtime }
+        return {
+          ok: true,
+          runtime,
+          ...(windowsPty ? { windowsPty } : {}),
+          ...(candidate.wsl ? { wsl: true } : {}),
+        }
       } catch (error) {
         lastError = error
       }
@@ -77,7 +82,7 @@ export function spawnTerminalPtyRuntime(input: SpawnTerminalPtyRuntimeInput): Sp
 
 function resolveTerminalPtySpawnCandidates(
   input: SpawnTerminalPtyRuntimeInput,
-): Array<{ command: string; args: string[] }> {
+): Array<{ command: string; args: string[]; wsl?: true }> {
   if (input.command) {
     return [
       {
@@ -101,7 +106,7 @@ function resolveTerminalPtySpawnCandidates(
             ? ['/d', '/c', input.agentProvider]
             : [...candidate.args, '-Command', input.agentProvider]
         : (input.args ?? candidate.args)
-      return { command: candidate.command, args }
+      return { command: candidate.command, args, ...(candidate.kind === 'wsl' ? { wsl: true } : {}) }
     })
   }
 

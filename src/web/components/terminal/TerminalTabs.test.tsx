@@ -3,17 +3,27 @@
 import { act } from 'react'
 import type { ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { TerminalTabs } from '#/web/components/terminal/TerminalTabs.tsx'
 import type { TerminalSessionSummary } from '#/web/components/terminal/types.ts'
 import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 
 const toastError = vi.hoisted(() => vi.fn())
-const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform }))
+const platformState = vi.hoisted(() => ({ hostPlatform: 'linux' as NodeJS.Platform, runtimeKind: 'web' }))
+const fetchServerJson = vi.hoisted(() => vi.fn())
 
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
 vi.mock('#/web/bootstrap.ts', () => ({
-  getInitialBootstrap: () => ({ hostPlatform: platformState.hostPlatform }),
+  getInitialBootstrap: () => ({
+    hostPlatform: platformState.hostPlatform,
+    runtime: { kind: platformState.runtimeKind },
+  }),
+}))
+vi.mock('#/web/lib/server-fetch.ts', () => ({
+  fetchServerJson,
+  postServerJson: vi.fn(),
+  ServerRequestError: Error,
 }))
 
 let container: HTMLDivElement | null = null
@@ -26,6 +36,8 @@ const reactActEnvironment = globalThis as typeof globalThis & {
 beforeEach(() => {
   useTerminalStashStore.setState({ stashedTerminals: {} })
   platformState.hostPlatform = 'linux'
+  platformState.runtimeKind = 'web'
+  fetchServerJson.mockReset()
   reactActEnvironment.IS_REACT_ACT_ENVIRONMENT = true
   vi.useFakeTimers()
   toastError.mockClear()
@@ -57,6 +69,36 @@ afterEach(() => {
 })
 
 describe('TerminalTabs', () => {
+  test.each([
+    { layout: 'empty', sessions: [], responsiveCompact: false },
+    { layout: 'expanded', sessions: [session()], responsiveCompact: false },
+    { layout: 'compact', sessions: [session()], responsiveCompact: true },
+  ])('omits the AI session controls from the $layout desktop terminal bar', ({ sessions, responsiveCompact }) => {
+    platformState.runtimeKind = 'electron'
+    fetchServerJson.mockResolvedValue({ sessions: [] })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: 0 } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TerminalTabs
+          worktreeTerminalKey={'/repo\0/repo/worktree'}
+          detailId="detail"
+          panelActive
+          responsiveCompact={responsiveCompact}
+          sessions={sessions}
+          onNew={() => {}}
+          onSelect={() => {}}
+          onScrollToBottom={() => {}}
+          onClose={() => {}}
+          onReorder={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+    const terminalControl = responsiveCompact ? 'terminal.sessions' : 'terminal.new'
+    expect(container?.querySelector(`button[aria-label="${terminalControl}"]`)).not.toBeNull()
+    expect(container?.querySelector('button[aria-label="agent-sessions.import-codex"]')).toBeNull()
+    expect(fetchServerJson).not.toHaveBeenCalled()
+  })
+
   test('keeps terminal creation available when the last tab is stashed', async () => {
     const onSelect = vi.fn()
     const onClose = vi.fn()

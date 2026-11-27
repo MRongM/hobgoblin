@@ -6,8 +6,8 @@ export const TERMINAL_CONTROL_TTL_MS = 5 * 60 * 1000
 export const TERMINAL_CONTROL_MAX_INPUTS = 1_024
 export const TERMINAL_INTERACTIVE_INPUT_IDLE_MS = 2_000
 
-export type MuseControlAction =
-  | { action: 'acquire' }
+export type WorkspaceTerminalControlAction =
+  | { action: 'acquire'; avoidRecentInput?: true }
   | { action: 'close' }
   | { action: 'write'; requestId: string; data: string }
   | { action: 'write'; controlId: string; requestId: string; data: string }
@@ -17,10 +17,22 @@ export type TerminalOpenApiControlInput =
   | { action: 'acquire'; conversationId: string; sessionId: string }
   | { action: 'write'; conversationId: string; sessionId: string; controlId: string; data: string }
   | { action: 'release'; conversationId: string; controlId: string }
-  | (MuseControlAction & { repoId: string; sessionId: string })
+  | ((WorkspaceTerminalControlAction | { action: 'status' }) & {
+      repoId: string
+      sessionId: string
+      expectedExecutionId?: string
+    })
 
 export type TerminalOpenApiControlResult =
   | { ok: true; action: 'acquire'; controlId: string; terminalSessionId: string; expiresAt: string }
+  | {
+      ok: true
+      action: 'status'
+      executionId: string
+      controller: 'desktop' | 'api' | null
+      connected: boolean
+      expiresAt: string | null
+    }
   | { ok: true; action: 'write' | 'release' | 'close' }
   | {
       ok: false
@@ -118,6 +130,25 @@ export function createTerminalOpenApiControl(
             ? manager.getSession(clientId, input.sessionId)
             : manager.getOpenSessionInScope(repoId, input.sessionId)
           : undefined
+      if (
+        'expectedExecutionId' in input &&
+        input.expectedExecutionId !== undefined &&
+        session?.executionId !== input.expectedExecutionId
+      )
+        return { ok: false, reason: 'session_unavailable' }
+      if (input.action === 'status') {
+        if (!session) return { ok: false, reason: 'session_unavailable' }
+        const controller = session.controller
+        const lease = controls.get(controller?.attachmentId ?? '')
+        return {
+          ok: true,
+          action: 'status',
+          executionId: session.executionId,
+          controller: lease ? 'api' : controller ? 'desktop' : null,
+          connected: controller?.status === 'connected',
+          expiresAt: lease ? new Date(lease.expiresAt).toISOString() : null,
+        }
+      }
       if (input.action === 'write' && !('controlId' in input)) {
         return session ? writeOnce(session, input.requestId, input.data) : { ok: false, reason: 'session_unavailable' }
       }
@@ -135,6 +166,13 @@ export function createTerminalOpenApiControl(
           if (active.expiresAt > Date.now()) return { ok: false, reason: 'control_in_use' }
           release(active)
         }
+        if (
+          'avoidRecentInput' in input &&
+          input.avoidRecentInput &&
+          session.lastInteractiveInputAt !== undefined &&
+          performance.now() - session.lastInteractiveInputAt < TERMINAL_INTERACTIVE_INPUT_IDLE_MS
+        )
+          return { ok: false, reason: 'interactive_input_active' }
 
         const controlId = randomUUID()
         const attachmentId = `openapi_${controlId}`
@@ -193,12 +231,12 @@ export function createTerminalOpenApiControl(
         release(control)
         return { ok: false, reason: 'control_lost' }
       }
-      const muse = 'repoId' in input
+      const workspaceScoped = 'repoId' in input
       const accepted = manager.writeSession(session.ownerId, session.id, input.data, control.attachmentId, {
-        immediate: muse,
+        immediate: workspaceScoped,
       })
       if (requestId && digest) control.writes.set(requestId, { digest, accepted })
-      if (!muse && !accepted) return { ok: false, reason: 'session_unavailable' }
+      if (!workspaceScoped && !accepted) return { ok: false, reason: 'session_unavailable' }
       return writeResult(accepted)
     },
 

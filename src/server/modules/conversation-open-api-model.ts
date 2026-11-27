@@ -1,6 +1,9 @@
 import * as v from 'valibot'
 import { TERMINAL_AGENT_PROVIDERS, TerminalSessionIdSchema } from '#/shared/terminal.ts'
 
+export const CONVERSATION_DELETE_MODES = ['stop-background', 'remove-desktop-copy'] as const
+export type ConversationDeleteMode = (typeof CONVERSATION_DELETE_MODES)[number]
+
 export const CONVERSATION_PROVIDERS = TERMINAL_AGENT_PROVIDERS
 export const CONVERSATION_STATUSES = ['ready', 'working'] as const
 export const CONVERSATION_MESSAGE_ROLES = ['user', 'assistant'] as const
@@ -41,7 +44,7 @@ export const TerminalControlInputSchema = v.strictObject({
 })
 export const AcquireTerminalControlSchema = v.strictObject({ terminalSessionId: TerminalSessionIdSchema })
 export const TerminalControlIdSchema = v.pipe(v.string(), v.uuid())
-export const MuseTerminalInputSchema = v.strictObject({
+export const WorkspaceTerminalInputSchema = v.strictObject({
   ...TerminalControlInputSchema.entries,
   requestId: TerminalControlIdSchema,
 })

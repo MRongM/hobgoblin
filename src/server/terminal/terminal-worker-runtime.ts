@@ -13,6 +13,8 @@ const terminalWorkerRuntimeLogger = serverLogger.child({ module: 'terminal-worke
 
 export interface TerminalWorkerRuntimeOptions {
   service: TerminalFacade
+  configureTranscript?(): void
+  acknowledgeTranscript?(): void
   emit(message: TerminalWorkerMessage): void
   exit(code: number): void
 }
@@ -29,6 +31,11 @@ export class TerminalWorkerRuntime {
     if (!message || typeof message !== 'object') return
     if (message.type === 'configure') {
       this.options.service.configure({ windowsInternalTerminalShell: message.windowsInternalTerminalShell })
+      if (message.captureTranscript) this.options.configureTranscript?.()
+      return
+    }
+    if (message.type === 'terminal-transcript-ack') {
+      this.options.acknowledgeTranscript?.()
       return
     }
     if (message.type === 'socket-register') {

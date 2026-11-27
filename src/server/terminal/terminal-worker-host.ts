@@ -38,6 +38,10 @@ import type {
 import { isValidTerminalAttachmentId } from '#/shared/terminal.ts'
 import { normalizeWindowsInternalTerminalShellPref, type WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import { serverLogger } from '#/server/logger.ts'
+import type { TerminalRegistry } from '#/server/terminal/terminal-registry-source.ts'
+import type { TerminalLifecycleEvent } from '#/server/terminal/terminal-registry-model.ts'
+import type { TerminalTranscriptInput } from '#/server/terminal/terminal-transcript-model.ts'
+import type { TerminalTranscript } from '#/server/terminal/terminal-transcript-source.ts'
 import type {
   TerminalPathRelocationInput,
   TerminalPathRelocationResult,
@@ -58,6 +62,10 @@ export interface WorkerBackedTerminalHostOptions {
   setTimer?: (callback: () => void, delayMs: number) => WorkerTimerHandle
   clearTimer?: (timer: WorkerTimerHandle) => void
   windowsInternalTerminalShell?: WindowsInternalTerminalShellPref
+  terminalRegistry?: Pick<TerminalRegistry, 'record' | 'recordTitles' | 'interruptWorker'>
+  terminalTranscript?: Pick<TerminalTranscript, 'append' | 'finish'>
+  observeTerminal?: (event: TerminalLifecycleEvent, repoId: string) => void
+  onTerminalWorkerStop?: () => void
 }
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
@@ -86,6 +94,8 @@ function defaultSpawnWorker(workerEntry: string): TerminalWorkerChildProcess {
 export class WorkerBackedTerminalHost implements ServerTerminalHost {
   private readonly options: WorkerBackedTerminalHostOptions
   private worker: TerminalWorkerChildProcess | null = null
+  private workerId: string | null = null
+  private pendingTranscript: TerminalTranscriptInput[] | undefined
   private readonly pending = new Map<string, PendingRequest<unknown>>()
   private readonly sockets = new Map<string, ServerTerminalSocket>()
   private readonly socketMeta = new Map<string, { clientId: string; attachmentId: string }>()
@@ -244,6 +254,7 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     this.clearRestartTimer()
     const worker = this.worker
     this.worker = null
+    this.recordWorkerStop('server_stopped')
     terminalWorkerLogger.info(
       { pid: worker?.pid, pendingRequests: this.pending.size, sockets: this.socketMeta.size },
       'shutting down terminal worker host',
@@ -308,16 +319,21 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     this.clearRestartTimer()
     if (this.worker) return this.worker
     const worker = this.options.spawnWorker?.() ?? defaultSpawnWorker(this.resolveWorkerEntry())
+    this.worker = worker
+    this.workerId = crypto.randomUUID()
     this.workerStartedAt = this.now()
     terminalWorkerLogger.info(
       { pid: worker.pid, restartAttempts: this.restartAttempts, sockets: this.socketMeta.size },
       'spawned terminal worker',
     )
     worker.on('message', (message) => {
+      if (this.worker !== worker) return
       this.handleWorkerMessage(message as TerminalWorkerMessage)
     })
     worker.once('exit', (code, signal) => {
-      if (this.worker === worker) this.worker = null
+      if (this.worker !== worker) return
+      this.worker = null
+      this.recordWorkerStop('worker_lost')
       const uptimeMs = Math.max(0, this.now() - this.workerStartedAt)
       this.lastExitCode = code ?? null
       this.lastExitSignal = signal ?? null
@@ -347,6 +363,7 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
       if (!this.shuttingDown && this.socketMeta.size > 0) this.scheduleRestart()
     })
     worker.once('error', (error) => {
+      if (this.worker !== worker) return
       this.lastWorkerFailure = {
         kind: 'error',
         at: this.now(),
@@ -356,13 +373,13 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
         { err: error, pid: worker.pid, pendingRequests: this.pending.size, sockets: this.socketMeta.size },
         'terminal worker process error',
       )
-      if (this.worker === worker) this.worker = null
+      this.worker = null
+      this.recordWorkerStop('worker_lost')
       for (const pending of this.pending.values())
         pending.reject(error instanceof Error ? error : new Error(String(error)))
       this.pending.clear()
       if (!this.shuttingDown && this.socketMeta.size > 0) this.scheduleRestart()
     })
-    this.worker = worker
     this.sendWorkerConfiguration(worker)
     for (const [socketId, meta] of this.socketMeta.entries()) {
       worker.send?.({ type: 'socket-register', socketId, clientId: meta.clientId, attachmentId: meta.attachmentId })
@@ -375,6 +392,7 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
       worker.send?.({
         type: 'configure',
         windowsInternalTerminalShell: this.windowsInternalTerminalShell,
+        ...(this.options.terminalTranscript ? { captureTranscript: true } : {}),
       }) ?? false
     if (sent) return
     this.lastWorkerFailure = {
@@ -389,6 +407,32 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
   }
 
   private handleWorkerMessage(message: TerminalWorkerMessage): void {
+    if (message.type === 'terminal-lifecycle') {
+      if (this.workerId) this.options.terminalRegistry?.record(this.workerId, message.event)
+      try {
+        this.options.observeTerminal?.(message.event, message.repoId)
+      } catch (error) {
+        terminalWorkerLogger.warn({ err: error }, 'Unable to update the terminal agent session')
+      }
+      return
+    }
+    if (message.type === 'terminal-record-titles') {
+      if (this.workerId) this.options.terminalRegistry?.recordTitles(this.workerId, message.updates)
+      return
+    }
+    if (message.type === 'terminal-transcript') {
+      const worker = this.worker
+      const { inputs } = message
+      this.pendingTranscript = inputs
+      setImmediate(() => {
+        if (!worker || this.worker !== worker || this.pendingTranscript !== inputs) return
+        this.flushPendingTranscript()
+        worker.send?.({ type: 'terminal-transcript-ack' }, (error) => {
+          if (error) terminalWorkerLogger.warn({ err: error }, 'Unable to acknowledge terminal transcript batch')
+        })
+      })
+      return
+    }
     if (message.type === 'response') {
       const pending = this.pending.get(message.requestId)
       if (!pending) return
@@ -406,6 +450,30 @@ export class WorkerBackedTerminalHost implements ServerTerminalHost {
     }
     if (message.type === 'socket-close') {
       this.sockets.get(message.socketId)?.close(message.code, message.reason)
+    }
+  }
+
+  private recordWorkerStop(reason: 'worker_lost' | 'server_stopped'): void {
+    if (!this.workerId) return
+    this.options.terminalRegistry?.interruptWorker(this.workerId, reason)
+    this.options.onTerminalWorkerStop?.()
+    this.workerId = null
+    this.flushPendingTranscript()
+    try {
+      this.options.terminalTranscript?.finish()
+    } catch (error) {
+      terminalWorkerLogger.warn({ err: error }, 'Unable to finish terminal transcripts')
+    }
+  }
+
+  private flushPendingTranscript(): void {
+    const inputs = this.pendingTranscript
+    this.pendingTranscript = undefined
+    if (!inputs) return
+    try {
+      this.options.terminalTranscript?.append(inputs)
+    } catch (error) {
+      terminalWorkerLogger.warn({ err: error }, 'Unable to persist terminal transcript batch')
     }
   }
 

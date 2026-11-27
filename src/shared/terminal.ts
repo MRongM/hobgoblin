@@ -94,6 +94,8 @@ export interface TerminalCreateInput {
   rows?: number
   attachmentId?: string
   agentProvider?: TerminalAgentProvider
+  /** Internal desktop route only. */
+  codexResumeId?: string
 }
 
 export interface TerminalOpenTmuxSessionsInput {

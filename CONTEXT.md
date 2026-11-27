@@ -20,6 +20,21 @@ _Avoid_: independent Windows version, Windows mode, shared Windows adaptation
 An architecture-qualified Windows installer published in the versioned Hobgoblin GitHub Release and built from the primary application Windows version. It is distinct from package-local independent Windows build outputs and temporary Windows test artifacts.
 _Avoid_: independent Windows release asset, Windows test artifact, primary Windows test build
 
+**Background AI session**:
+A server-owned Codex or Claude conversation bound to a project and work location. Hob AI for Android reads its identity, retained messages, and current run status through the OpenAPI. Permanently deleting a running background session requires explicit confirmation to stop its current turn. Interactive terminal sessions have their own lifecycle.
+
+**Synced native Codex session**:
+A Codex CLI conversation that keeps its original thread identity and work location. Hobgoblin records the retained text turns and shows the live thread state in Hob AI. A mobile follow-up to a connected native session belongs to the same thread and appears in the original desktop terminal. Deleting the synced record in Hobgoblin hides it from automatic discovery and preserves the native Codex transcript and any running desktop turn.
+
+**Terminal-linked AI session**:
+An AI session associated with a specific execution of a Hob terminal record. Launch configuration creates an explicit link, a recognized process name or title creates a detected link, and a user action creates a manual link. A verified Codex thread supplies structured turns and messages. The terminal execution supplies its own transcript and control state.
+
+**Terminal record**:
+The durable lifecycle record of one terminal managed by the Hob terminal worker. Its identity survives an explicit terminal restart. A **terminal execution** identifies one PTY launch attempt within that record. A worker loss leaves its last execution recorded as interrupted. The registry tracks the terminal's launch location, backend, and lifecycle phase.
+
+**Terminal transcript**:
+The retained readable output of a Hob terminal record, including the execution that produced each line. Its output sequence is the cursor for resuming reads. The Hob host retains the transcript and indicates when a reader's requested history contains a gap.
+
 **Android terminals tab**:
 The Android main-navigation destination that lists every retained Host temporary terminal and Project terminal by descending retained-terminal opened time so the newest item is first and an existing session can be reopened quickly. Each item shows that opened time in localized relative form, and its header status badge distinguishes running (green), disconnected/failed (red), exited (gray), and starting (neutral) states while preserving a text label. It is distinct from the terminal tabs inside the desktop/web terminal topbar, does not create or manually reorder sessions, and may explicitly close or delete one retained terminal after confirmation.
 _Avoid_: Terminal manager, terminal creator, internal terminal tab
@@ -91,6 +106,17 @@ _Avoid_: Project root, socket scan result, tmux session name
 **Terminal topbar**:
 The top row of the terminal area, containing terminal tabs and terminal-level actions.
 _Avoid_: Terminal toolbar, detail toolbar
+
+**AI session entry in the terminal topbar**:
+A desktop entry for an AI conversation in the current working location. It appears when the session becomes available, shows its existing progress or history when selected, and lets the user resume the same conversation in a terminal.
+_Avoid_: Auto-started terminal, duplicate AI conversation
+
+**Imported Codex conversation**:
+A Codex conversation that the user selected from a desktop working location to make available to Hobgoblin clients. It keeps the same Codex conversation identity when it is shown or continued on another device.
+_Avoid_: Automatic terminal history import, text capture
+
+**Desktop terminal continuation**:
+A shared Codex conversation resumed in a native terminal from its entry in the desktop terminal topbar. The terminal owns prompt submission while it is open. Clients can read the saved history throughout and can send again after the terminal exits and the server saves the last completed turns.
 
 **Stashed terminal**:
 An internal terminal explicitly hidden from its worktree's terminal tabs while its session continues to run. The current project's terminal topbar provides a fixed list of its stashed terminals across workspaces and worktrees; restoring one returns it to its original context and selects it. Stashing is a restorable presentation choice, distinct from closing a terminal or ending its process.
@@ -449,7 +475,7 @@ A project rooted at a readable non-Git directory, either local or reached throug
 _Avoid_: Monorepo, repository group, nested repository
 
 **Configured workspace**:
-A multi-repository workspace whose durable, ordered repository membership is initialized from every discovered repository primary worktree and automatically appends newly discovered primary worktrees. Membership is stored in Hobgoblin application data; unavailable existing members remain explicit until workspace configuration recovery, and repository order controls workspace navigation, persisted branch workspace results, and destructive member-operation order.
+A multi-repository workspace whose durable, ordered repository membership is initialized from every discovered repository primary worktree and automatically appends newly discovered primary worktrees. Hobgoblin application data stores the membership. A successful local scan omits absent directory entries from the workspace repository list while retaining their registration and order. Repository order controls workspace navigation, persisted branch workspace results, and destructive member-operation order.
 _Avoid_: Saved scan, repository registry, primary repository
 
 **Workspace configuration recovery**:

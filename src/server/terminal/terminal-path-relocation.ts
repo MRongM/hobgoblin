@@ -9,6 +9,7 @@ import {
 import { windowsPathIdentityKey } from '#/shared/path-semantics.ts'
 import { parseTerminalIdIndex } from '#/shared/terminal.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
+import type { TerminalRegistryLocation } from '#/server/terminal/terminal-registry-model.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import {
   buildExistingTmuxAttachShellCommand,
@@ -32,6 +33,7 @@ export interface TerminalSessionLocation {
   scope: string
   key: string
   cwd: string
+  registryLocation?: TerminalRegistryLocation
   command?: string
   args?: string[]
   tmuxSessionName: string | null
@@ -42,7 +44,10 @@ export interface TerminalSessionLocation {
   rows: number
 }
 
-export type TerminalSessionLocationUpdate = Pick<TerminalSessionLocation, 'scope' | 'key' | 'cwd' | 'command' | 'args'>
+export type TerminalSessionLocationUpdate = Pick<
+  TerminalSessionLocation,
+  'scope' | 'key' | 'cwd' | 'command' | 'args' | 'registryLocation'
+>
 
 export function validateTerminalPathRelocation(input: TerminalPathRelocationInput): void {
   if (
@@ -97,6 +102,16 @@ export function createTerminalPathRelocator(input: TerminalPathRelocationInput, 
       cwd: host ? session.cwd : relocatePath(session.cwd),
       command: session.command,
       args: session.args,
+    }
+    if (session.registryLocation) {
+      const { repoId, worktreePath } = session.registryLocation
+      const remoteRepo = parseRemoteRepoId(repoId)
+      update.registryLocation = {
+        repoId: remoteRepo
+          ? normalizeRemoteRepoId({ ...remoteRepo, remotePath: relocatePath(remoteRepo.remotePath) })
+          : relocatePath(repoId),
+        worktreePath: relocatePath(worktreePath),
+      }
     }
     const terminalNumber = parseTerminalIdIndex(terminalId)
     if (host) {

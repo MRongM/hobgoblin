@@ -112,6 +112,7 @@ describe('conversation OpenAPI', () => {
 
   test('uses the legacy terminal control key for both conversations and control', async () => {
     const openApiControl = vi.fn<NonNullable<ServerTerminalHost['openApiControl']>>((_clientId, input) => {
+      if (input.action === 'status') return { ok: false, reason: 'session_unavailable' }
       if (input.action === 'acquire') {
         return {
           ok: true,

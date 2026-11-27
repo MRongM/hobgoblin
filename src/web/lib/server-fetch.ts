@@ -6,6 +6,15 @@ interface EmbeddedServerConfig {
   secret: string
 }
 
+export class ServerRequestError extends Error {
+  readonly status: number
+
+  constructor(status: number) {
+    super(`Server request failed: HTTP ${status}`)
+    this.status = status
+  }
+}
+
 function getEmbeddedServer(): EmbeddedServerConfig | null {
   const server = getInitialBootstrap().initialServer
   if (!server?.url || !server?.secret) return null
@@ -28,7 +37,7 @@ export async function fetchServerJson<T>(path: string, init?: RequestInit): Prom
       ...(init?.headers ?? {}),
     },
   })
-  if (!response.ok) throw new Error(`Server request failed: HTTP ${response.status}`)
+  if (!response.ok) throw new ServerRequestError(response.status)
   return (await response.json()) as T
 }
 

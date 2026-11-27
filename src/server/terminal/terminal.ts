@@ -76,6 +76,7 @@ import {
 } from '#/shared/telegram-terminal-input.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import { createTerminalOpenApiControl } from '#/server/terminal/terminal-open-api-control.ts'
+import type { TerminalLifecycleEvent, TerminalRecordTitle } from '#/server/terminal/terminal-registry-model.ts'
 
 const TERMINAL_CLIENT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 const TERMINAL_ID_RE = /^[A-Za-z0-9_-]{1,64}$/
@@ -96,6 +97,21 @@ interface TelegramTerminalInputTarget {
 
 let telegramTerminalInputTarget: TelegramTerminalInputTarget | null = null
 let telegramTerminalInputTargetVersion = 0
+let terminalLifecycleListener: ((event: TerminalLifecycleEvent, repoId: string) => void) | undefined
+let terminalRecordTitleListener: ((event: TerminalRecordTitle) => void) | undefined
+let terminalTranscriptListener: ((terminalId: string, data: string) => void) | undefined
+
+export function setServerTerminalLifecycleListener(listener: typeof terminalLifecycleListener): void {
+  terminalLifecycleListener = listener
+}
+
+export function setServerTerminalRecordTitleListener(listener: typeof terminalRecordTitleListener): void {
+  terminalRecordTitleListener = listener
+}
+
+export function setServerTerminalTranscriptListener(listener: typeof terminalTranscriptListener): void {
+  terminalTranscriptListener = listener
+}
 
 function clearTelegramTerminalInputTarget(
   matches?: Partial<Pick<TelegramTerminalInputTarget, 'clientId' | 'sessionId' | 'attachmentId'>>,
@@ -109,11 +125,18 @@ function clearTelegramTerminalInputTarget(
 }
 
 const manager = new TerminalSessionManager<string>({
+  onLifecycle(event, repoId) {
+    terminalLifecycleListener?.(event, repoId)
+  },
   onOutput(clientId, event) {
     broker.broadcast(clientId, { type: 'output', event })
+    terminalTranscriptListener?.(event.sessionId, event.data)
   },
   onTitle(clientId, event) {
     broker.broadcast(clientId, { type: 'title', event })
+  },
+  onRecordTitle(event) {
+    terminalRecordTitleListener?.(event)
   },
   onExit(clientId, event) {
     clearTelegramTerminalInputTarget({ clientId, sessionId: event.sessionId })

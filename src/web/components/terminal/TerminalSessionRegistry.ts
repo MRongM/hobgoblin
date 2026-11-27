@@ -1,4 +1,6 @@
 import type { FilePathTarget } from '#/shared/file-path-target.ts'
+import { AGENT_SESSIONS_PREFIX } from '#/shared/agent-sessions.ts'
+import { postServerJson } from '#/web/lib/server-fetch.ts'
 import { setTerminalFocused } from '#/web/terminal-focus.ts'
 import { useTerminalStashStore } from '#/web/components/terminal/terminal-stash-store.ts'
 import { ManagedTerminalSession } from '#/web/components/terminal/ManagedTerminalSession.ts'
@@ -374,7 +376,37 @@ export class TerminalSessionRegistry {
     base: TerminalSessionBase,
     launchMode: TerminalLaunchMode = 'native',
     windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
-  ): Promise<string> => {
+  ): Promise<string> =>
+    this.openTerminal(base, (input) =>
+      terminalBridge.create({
+        ...input,
+        kind:
+          this.sessionSummaries(worktreeTerminalKey(base.repoRoot, base.worktreePath)).length === 0
+            ? 'primary'
+            : 'additional',
+        launchMode,
+        ...(windowsInternalTerminalShell ? { windowsInternalTerminalShell } : {}),
+      }),
+    )
+
+  resumeAgentTerminal = (base: TerminalSessionBase, projectRoot: string, id: string): Promise<string> =>
+    this.openTerminal(
+      base,
+      (input) =>
+        postServerJson(`${AGENT_SESSIONS_PREFIX}/sessions/${encodeURIComponent(id)}/terminal`, {
+          ...input,
+          projectRoot,
+        }),
+      true,
+    )
+
+  private async openTerminal(
+    base: TerminalSessionBase,
+    create: (
+      input: TerminalSessionBase & { attachmentId: string; cols: number; rows: number },
+    ) => Promise<TerminalCatalogMutationResult>,
+    reuseExisting = false,
+  ): Promise<string> {
     const attachmentId = readOrCreateWebTerminalAttachmentId()
     const terminalWorktreeKey = worktreeTerminalKey(base.repoRoot, base.worktreePath)
     const geometry = this.measureCreateGeometry(terminalWorktreeKey)
@@ -390,12 +422,7 @@ export class TerminalSessionRegistry {
     }
     this.beginTerminalCreation(terminalWorktreeKey)
     try {
-      const result = await terminalBridge.create({
-        ...requestInput,
-        kind: this.sessionSummaries(terminalWorktreeKey).length === 0 ? 'primary' : 'additional',
-        launchMode,
-        ...(windowsInternalTerminalShell ? { windowsInternalTerminalShell } : {}),
-      })
+      const result = await create(requestInput)
       if (!result.ok) {
         throw new Error(result.message)
       }
@@ -403,6 +430,14 @@ export class TerminalSessionRegistry {
         throw new Error('error.terminal-create-failed')
       }
       const createdKey = canonicalTerminalSessionKey(result.key) ?? result.key
+      if (
+        reuseExisting &&
+        result.action === 'reused' &&
+        this.sessions.get(createdKey)?.currentSessionId() === result.sessionId
+      ) {
+        this.selectTerminal(terminalWorktreeKey, createdKey)
+        return createdKey
+      }
       this.setPreferredSelectedTerminalKey(terminalWorktreeKey, createdKey)
       this.reconcileServerSessions(
         base.repoRoot,

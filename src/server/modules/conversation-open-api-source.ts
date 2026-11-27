@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -8,8 +8,10 @@ import type {
   AgentTurnRecord,
   AgentTurnInput,
   AgentWorkspaceTarget,
+  TerminalAgentLink,
 } from '#/server/modules/agent-open-api-model.ts'
 import type { AgentProviderResult } from '#/server/modules/agent-open-api-provider.ts'
+import type { CodexHistoryTurn } from '#/server/modules/codex-session-history.ts'
 import { serverLogger } from '#/server/logger.ts'
 import type {
   Conversation,
@@ -28,11 +30,13 @@ const CONVERSATION_COLUMNS = `
 `
 const MESSAGE_COLUMNS = 'id, role, content, created_at AS createdAt, updated_at AS updatedAt'
 const AGENT_COLUMNS = `c.id, c.provider, c.created_at AS createdAt, c.updated_at AS updatedAt,
+  c.revision, a.terminal_id AS terminalId,
   a.workspace_id AS workspaceId, a.worktree_id AS worktreeId, a.repo_id AS repoId, a.cwd,
-  a.provider_session_id AS providerSessionId, a.closed_at AS closedAt`
+  a.provider_session_id AS providerSessionId, a.closed_at AS closedAt, a.native_codex AS nativeCodex,
+  a.terminal_execution_id AS terminalExecutionId, a.terminal_link_source AS terminalLinkSource`
 const TURN_COLUMNS = `request_id AS requestId, conversation_id AS sessionId, prompt, state, error,
   created_at AS createdAt, finished_at AS finishedAt`
-const HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+export const HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 const HISTORY_CLEANUP_INTERVAL_MS = 60 * 1000
 
 function openDatabase(file: string): DatabaseSync {
@@ -71,6 +75,7 @@ function openDatabase(file: string): DatabaseSync {
         repo_id TEXT NOT NULL,
         cwd TEXT NOT NULL,
         provider_session_id TEXT,
+        native_codex INTEGER NOT NULL DEFAULT 0,
         closed_at TEXT
       );
       CREATE INDEX IF NOT EXISTS agent_sessions_by_workspace ON agent_sessions(workspace_id);
@@ -86,18 +91,52 @@ function openDatabase(file: string): DatabaseSync {
       );
       CREATE INDEX IF NOT EXISTS agent_turns_by_session ON agent_turns(conversation_id, sequence);
       CREATE INDEX IF NOT EXISTS agent_turns_by_creation ON agent_turns(created_at);
+      CREATE TABLE IF NOT EXISTS native_codex_deliveries (
+        request_id TEXT PRIMARY KEY NOT NULL,
+        conversation_id TEXT NOT NULL REFERENCES agent_sessions(conversation_id) ON DELETE CASCADE,
+        prompt TEXT NOT NULL,
+        turn_id TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS hidden_codex_threads (
+        workspace_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, thread_id)
+      );
     `)
     transaction(
       db,
       () => {
-        if (
-          !db
-            .prepare('PRAGMA table_info(agent_sessions)')
-            .all()
-            .some((column) => column.name === 'closed_at')
-        ) {
-          db.exec('ALTER TABLE agent_sessions ADD COLUMN closed_at TEXT')
-        }
+        const conversationColumns = db
+          .prepare('PRAGMA table_info(conversations)')
+          .all()
+          .map(({ name }) => name)
+        const agentColumns = db
+          .prepare('PRAGMA table_info(agent_sessions)')
+          .all()
+          .map(({ name }) => name)
+        const messageColumns = db
+          .prepare('PRAGMA table_info(messages)')
+          .all()
+          .map(({ name }) => name)
+        if (!conversationColumns.includes('revision'))
+          db.exec('ALTER TABLE conversations ADD COLUMN revision INTEGER NOT NULL DEFAULT 1')
+        if (!agentColumns.includes('closed_at')) db.exec('ALTER TABLE agent_sessions ADD COLUMN closed_at TEXT')
+        if (!agentColumns.includes('native_codex'))
+          db.exec('ALTER TABLE agent_sessions ADD COLUMN native_codex INTEGER NOT NULL DEFAULT 0')
+        if (!agentColumns.includes('terminal_execution_id'))
+          db.exec('ALTER TABLE agent_sessions ADD COLUMN terminal_execution_id TEXT')
+        if (!agentColumns.includes('terminal_id')) db.exec('ALTER TABLE agent_sessions ADD COLUMN terminal_id TEXT')
+        if (!agentColumns.includes('terminal_link_source'))
+          db.exec('ALTER TABLE agent_sessions ADD COLUMN terminal_link_source TEXT')
+        if (!messageColumns.includes('turn_request_id')) db.exec('ALTER TABLE messages ADD COLUMN turn_request_id TEXT')
+        db.exec(`
+          CREATE UNIQUE INDEX IF NOT EXISTS agent_sessions_by_terminal_execution ON agent_sessions(terminal_execution_id);
+          CREATE TRIGGER IF NOT EXISTS conversation_advance_revision AFTER UPDATE ON conversations
+          WHEN new.revision = old.revision BEGIN
+            UPDATE conversations SET revision = old.revision + 1 WHERE id = new.id;
+          END;
+        `)
       },
       true,
     )
@@ -129,6 +168,7 @@ function pruneExpiredHistory(db: DatabaseSync, now: number): number {
       db.prepare('DELETE FROM conversations WHERE updated_at <= ?').run(cutoff)
       db.prepare('DELETE FROM messages WHERE created_at <= ?').run(cutoff)
       db.prepare('DELETE FROM agent_turns WHERE created_at <= ?').run(cutoff)
+      db.prepare('DELETE FROM native_codex_deliveries WHERE created_at <= ?').run(cutoff)
 
       const { oldest } = db
         .prepare(
@@ -203,6 +243,17 @@ function readAgentSession(db: DatabaseSync, id: string): AgentSessionRecord | nu
   )
 }
 
+function readTerminalAgentSession(db: DatabaseSync, executionId: string): AgentSessionRecord | null {
+  return (
+    (db
+      .prepare(
+        `SELECT ${AGENT_COLUMNS}
+    FROM agent_sessions a JOIN conversations c ON c.id = a.conversation_id WHERE a.terminal_execution_id = ?`,
+      )
+      .get(executionId) as unknown as AgentSessionRecord | undefined) ?? null
+  )
+}
+
 function decodeAgentTurn(row: unknown): AgentTurnRecord | null {
   if (!row) return null
   const turn = row as AgentTurnRecord
@@ -215,11 +266,58 @@ function writeAgentMessage(
   role: CreateMessage['role'],
   content: string,
   date: string,
+  requestId: string,
 ): void {
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(randomUUID(), id, role, JSON.stringify(content), date, date)
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, updated_at, turn_request_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(randomUUID(), id, role, JSON.stringify(content), date, date, requestId)
+}
+
+function importedTurnRequestId(providerSessionId: string, turnId: string): string {
+  const bytes = createHash('sha256').update(providerSessionId).update('\0').update(turnId).digest().subarray(0, 16)
+  bytes[6] = (bytes[6]! & 0x0f) | 0x80
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-')
+}
+
+function writeCodexHistoryTurns(
+  db: DatabaseSync,
+  id: string,
+  turns: Array<CodexHistoryTurn & { requestId: string }>,
+  updatedAt: number,
+) {
+  const addTurn = db.prepare(
+    `INSERT INTO agent_turns (request_id, conversation_id, prompt, state, error, created_at, finished_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (request_id) DO NOTHING`,
+  )
+  let wroteTurns = false
+  for (const turn of turns) {
+    const started = new Date((turn.startedAt ?? updatedAt) * 1_000).toISOString()
+    const completed = new Date((turn.completedAt ?? updatedAt) * 1_000).toISOString()
+    const state = turn.state ?? 'completed'
+    const error = state === 'failed' ? 'provider_failed' : null
+    if (!addTurn.run(turn.requestId, id, JSON.stringify(turn.prompt), state, error, started, completed).changes)
+      continue
+    if (turn.messages) {
+      for (const message of turn.messages) {
+        writeAgentMessage(
+          db,
+          id,
+          message.role,
+          message.content,
+          message.role === 'user' ? started : completed,
+          turn.requestId,
+        )
+      }
+    } else {
+      writeAgentMessage(db, id, 'user', turn.prompt, started, turn.requestId)
+      if (turn.reply) writeAgentMessage(db, id, 'assistant', turn.reply, completed, turn.requestId)
+    }
+    wroteTurns = true
+  }
+  return wroteTurns
 }
 
 export function createConversationOpenApiStore(file: string) {
@@ -264,8 +362,143 @@ export function createConversationOpenApiStore(file: string) {
         .all(workspaceId) as unknown as AgentSessionRecord[]
     },
 
+    agentSessionsPage(
+      workspaceIds: string[],
+      limit: number,
+      cursor: Pick<AgentSessionRecord, 'id' | 'updatedAt'> | undefined,
+      search: string,
+      matchingWorkspaceIds: string[],
+    ): AgentSessionRecord[] {
+      const searchClause = search
+        ? `AND (a.workspace_id IN (SELECT value FROM json_each(?))
+          OR instr(lower(a.cwd), lower(?)) > 0
+          OR instr(lower(c.provider), lower(?)) > 0
+          OR instr(lower((SELECT json_extract(t.prompt, '$') FROM agent_turns t
+            WHERE t.conversation_id = c.id ORDER BY t.sequence DESC LIMIT 1)), lower(?)) > 0)`
+        : ''
+      return getDatabase()
+        .prepare(
+          `SELECT ${AGENT_COLUMNS} FROM agent_sessions a JOIN conversations c ON c.id = a.conversation_id
+           WHERE a.closed_at IS NULL AND a.workspace_id IN (SELECT value FROM json_each(?))
+           AND (? IS NULL OR c.updated_at < ? OR (c.updated_at = ? AND c.id > ?))
+           ${searchClause}
+           ORDER BY c.updated_at DESC, c.id ASC LIMIT ?`,
+        )
+        .all(
+          JSON.stringify(workspaceIds),
+          cursor?.updatedAt ?? null,
+          cursor?.updatedAt ?? null,
+          cursor?.updatedAt ?? null,
+          cursor?.id ?? null,
+          ...(search ? [JSON.stringify(matchingWorkspaceIds), search, search, search] : []),
+          limit,
+        ) as unknown as AgentSessionRecord[]
+    },
+
     getAgentSession(id: string): AgentSessionRecord | null {
       return readAgentSession(getDatabase(), id)
+    },
+    getTerminalAgentSession(executionId: string): AgentSessionRecord | null {
+      return readTerminalAgentSession(getDatabase(), executionId)
+    },
+
+    bindTerminalAgent(
+      target: AgentWorkspaceTarget,
+      link: TerminalAgentLink,
+      provider: CreateConversation['provider'],
+      existingId?: string,
+    ): AgentSessionRecord | null {
+      const db = getDatabase()
+      return transaction(
+        db,
+        () => {
+          const bound = readTerminalAgentSession(db, link.executionId)
+          const selected = existingId ? readAgentSession(db, existingId) : null
+          if (
+            existingId &&
+            (!selected ||
+              selected.closedAt ||
+              selected.provider !== provider ||
+              selected.workspaceId !== target.workspaceId ||
+              selected.worktreeId !== target.worktreeId)
+          )
+            return null
+          if (bound && !bound.closedAt && bound.provider !== provider) {
+            const correctDetection =
+              link.source === 'manual' &&
+              bound.terminalLinkSource === 'detected' &&
+              !bound.providerSessionId &&
+              !db.prepare('SELECT 1 FROM messages WHERE conversation_id = ?').get(bound.id)
+            if (!correctDetection) return null
+          }
+          if (bound && (!selected || bound.id === selected.id)) {
+            if (bound.closedAt) return null
+            if (link.source !== 'manual' || bound.terminalLinkSource !== 'detected') return bound
+          }
+
+          const now = new Date().toISOString()
+          if (bound && selected && bound.id !== selected.id) {
+            // Keep the provider's existing identity and retire the empty execution placeholder.
+            if (bound.providerSessionId || db.prepare('SELECT 1 FROM messages WHERE conversation_id = ?').get(bound.id))
+              return null
+            db.prepare(
+              'UPDATE agent_sessions SET terminal_id = NULL, terminal_execution_id = NULL, terminal_link_source = NULL, closed_at = ? WHERE conversation_id = ?',
+            ).run(now, bound.id)
+            db.prepare('UPDATE conversations SET terminal_session_id = NULL, updated_at = ? WHERE id = ?').run(
+              now,
+              bound.id,
+            )
+          }
+          const id = selected?.id ?? bound?.id ?? link.executionId
+          if (!selected && !bound) {
+            db.prepare(
+              `INSERT INTO conversations (id, provider, status, created_at, updated_at)
+            VALUES (?, ?, 'ready', ?, ?)`,
+            ).run(id, provider, now, now)
+            db.prepare(
+              `INSERT INTO agent_sessions (conversation_id, workspace_id, worktree_id, repo_id, cwd)
+            VALUES (?, ?, ?, ?, ?)`,
+            ).run(id, target.workspaceId, target.worktreeId, target.repoId, target.cwd)
+          }
+          db.prepare(
+            'UPDATE agent_sessions SET terminal_id = ?, terminal_execution_id = ?, terminal_link_source = ? WHERE conversation_id = ?',
+          ).run(link.terminalId, link.executionId, link.source, id)
+          db.prepare('UPDATE conversations SET terminal_session_id = ?, provider = ?, updated_at = ? WHERE id = ?').run(
+            link.terminalId,
+            provider,
+            now,
+            id,
+          )
+          return readAgentSession(db, id)
+        },
+        true,
+      )
+    },
+
+    listAgentTurns(id: string, limit: number, before?: number) {
+      return getDatabase()
+        .prepare(
+          `SELECT sequence AS seq, ${TURN_COLUMNS} FROM agent_turns
+        WHERE conversation_id = ? AND (? IS NULL OR sequence < ?)
+        ORDER BY sequence DESC LIMIT ?`,
+        )
+        .all(id, before ?? null, before ?? null, limit)
+        .map((row) => ({ ...decodeAgentTurn(row)!, seq: Number(row.seq) }))
+    },
+
+    listAgentMessages(id: string, limit: number, before?: number) {
+      return getDatabase()
+        .prepare(
+          `SELECT sequence AS seq, turn_request_id AS turnRequestId, ${MESSAGE_COLUMNS} FROM messages
+        WHERE conversation_id = ? AND (? IS NULL OR sequence < ?)
+        ORDER BY sequence DESC LIMIT ?`,
+        )
+        .all(id, before ?? null, before ?? null, limit)
+        .map(({ seq, turnRequestId, ...row }) => ({
+          ...decodeMessage(row),
+          seq: Number(seq),
+          turnRequestId: typeof turnRequestId === 'string' ? turnRequestId : null,
+        }))
     },
 
     getLatestAgentTurn(id: string): AgentTurnRecord | null {
@@ -282,6 +515,185 @@ export function createConversationOpenApiStore(file: string) {
     getAgentTurn(requestId: string): AgentTurnRecord | null {
       return decodeAgentTurn(
         getDatabase().prepare(`SELECT ${TURN_COLUMNS} FROM agent_turns WHERE request_id = ?`).get(requestId),
+      )
+    },
+
+    readTurnReply(sessionId: string, requestId: string): string | null {
+      const row = getDatabase()
+        .prepare(
+          `
+        SELECT content FROM messages WHERE conversation_id = ? AND turn_request_id = ? AND role = 'assistant'
+        ORDER BY sequence DESC LIMIT 1
+      `,
+        )
+        .get(sessionId, requestId)
+      return row ? (JSON.parse(String(row.content)) as string) : null
+    },
+
+    listHiddenCodexThreads(workspaceId: string): Set<string> {
+      const rows = getDatabase()
+        .prepare('SELECT thread_id FROM hidden_codex_threads WHERE workspace_id = ?')
+        .all(workspaceId) as Array<{ thread_id: string }>
+      return new Set(rows.map(({ thread_id }) => thread_id))
+    },
+
+    importCodexSession(
+      target: AgentWorkspaceTarget,
+      providerSessionId: string,
+      turns: CodexHistoryTurn[],
+      updatedAt: number,
+      native = false,
+    ) {
+      const db = getDatabase()
+      return transaction(
+        db,
+        () => {
+          if (
+            native &&
+            db
+              .prepare('SELECT 1 FROM hidden_codex_threads WHERE workspace_id = ? AND thread_id = ?')
+              .get(target.workspaceId, providerSessionId)
+          )
+            return null
+          const existing = db
+            .prepare(
+              `SELECT ${AGENT_COLUMNS} FROM agent_sessions a JOIN conversations c ON c.id = a.conversation_id
+              WHERE a.provider_session_id = ? AND c.provider = 'codex'
+              ORDER BY (a.closed_at IS NOT NULL), c.updated_at DESC LIMIT 1`,
+            )
+            .get(providerSessionId) as unknown as AgentSessionRecord | undefined
+          if (
+            existing &&
+            (existing.closedAt ||
+              existing.workspaceId !== target.workspaceId ||
+              existing.worktreeId !== target.worktreeId)
+          )
+            return null
+          const cutoff = Date.now() - HISTORY_RETENTION_MS
+          const retained = turns.filter((turn) => (turn.completedAt ?? turn.startedAt ?? updatedAt) * 1_000 >= cutoff)
+          if (retained.length === 0 && !native) return existing ?? null
+          const id = existing?.id ?? randomUUID()
+          const lastDate = new Date(updatedAt * 1_000).toISOString()
+          const imported = retained.map((turn) => ({
+            ...turn,
+            requestId: importedTurnRequestId(providerSessionId, turn.id),
+          }))
+          let newTurns = imported
+          if (existing) {
+            const latest = db
+              .prepare(
+                'SELECT request_id AS id, state FROM agent_turns WHERE conversation_id = ? ORDER BY sequence DESC LIMIT 1',
+              )
+              .get(id) as { id: string; state: string } | undefined
+            if (latest?.state === 'working') return null
+            if (native && !existing.nativeCodex) {
+              db.prepare('UPDATE agent_sessions SET native_codex = 1 WHERE conversation_id = ?').run(id)
+            }
+            const anchor = imported.findIndex((turn) => turn.requestId === latest?.id)
+            newTurns =
+              anchor >= 0
+                ? imported.slice(anchor + 1)
+                : latest
+                  ? imported.filter((turn) => (turn.startedAt ?? 0) * 1_000 >= Date.parse(existing.updatedAt))
+                  : imported
+          } else {
+            const firstDate = new Date((retained[0]?.startedAt ?? updatedAt) * 1_000).toISOString()
+            db.prepare(
+              `INSERT INTO conversations (id, provider, status, created_at, updated_at)
+               VALUES (?, 'codex', 'ready', ?, ?)`,
+            ).run(id, firstDate, lastDate)
+            db.prepare(
+              `INSERT INTO agent_sessions
+               (conversation_id, workspace_id, worktree_id, repo_id, cwd, provider_session_id, native_codex)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            ).run(
+              id,
+              target.workspaceId,
+              target.worktreeId,
+              target.repoId,
+              target.cwd,
+              providerSessionId,
+              Number(native),
+            )
+          }
+          const wroteTurns = writeCodexHistoryTurns(db, id, newTurns, updatedAt)
+          if (existing && wroteTurns) {
+            touchConversation(db, id, new Date().toISOString())
+          }
+          return readAgentSession(db, id)
+        },
+        true,
+      )
+    },
+
+    getNativeCodexDelivery(requestId: string) {
+      const row = getDatabase()
+        .prepare(
+          `SELECT conversation_id AS sessionId, prompt, turn_id AS turnId, created_at AS createdAt
+         FROM native_codex_deliveries WHERE request_id = ?`,
+        )
+        .get(requestId) as { sessionId: string; prompt: string; turnId: string | null; createdAt: string } | undefined
+      return row ? { ...row, prompt: JSON.parse(row.prompt) as string } : null
+    },
+
+    reserveNativeCodexDelivery(id: string, input: AgentTurnInput): void {
+      getDatabase()
+        .prepare(
+          'INSERT INTO native_codex_deliveries (request_id, conversation_id, prompt, created_at) VALUES (?, ?, ?, ?)',
+        )
+        .run(input.requestId, id, JSON.stringify(input.prompt), new Date().toISOString())
+    },
+
+    settleNativeCodexDelivery(requestId: string, turnId: string | null): void {
+      const db = getDatabase()
+      if (turnId === null) {
+        db.prepare('DELETE FROM native_codex_deliveries WHERE request_id = ?').run(requestId)
+      } else {
+        db.prepare('UPDATE native_codex_deliveries SET turn_id = ? WHERE request_id = ?').run(turnId, requestId)
+      }
+    },
+
+    readDeliveredCodexTurn(id: string, providerSessionId: string, requestId: string): AgentTurnRecord | null {
+      const receipt = this.getNativeCodexDelivery(requestId)
+      if (!receipt?.turnId || receipt.sessionId !== id) return null
+      const turn = this.getAgentTurn(importedTurnRequestId(providerSessionId, receipt.turnId))
+      return turn
+        ? { ...turn, requestId }
+        : {
+            requestId,
+            sessionId: id,
+            prompt: receipt.prompt,
+            createdAt: receipt.createdAt,
+            state: 'working',
+            error: null,
+            finishedAt: null,
+          }
+    },
+
+    appendCodexTerminalTurns(id: string, providerSessionId: string, turns: CodexHistoryTurn[], updatedAt: number) {
+      const db = getDatabase()
+      transaction(
+        db,
+        () => {
+          const session = readAgentSession(db, id)
+          if (
+            session?.closedAt !== null ||
+            session.provider !== 'codex' ||
+            session.providerSessionId !== providerSessionId
+          )
+            return
+          const cutoff = Date.now() - HISTORY_RETENTION_MS
+          const retained = turns
+            .filter((turn) => (turn.completedAt ?? turn.startedAt ?? updatedAt) * 1_000 >= cutoff)
+            .map((turn) => ({ ...turn, requestId: importedTurnRequestId(providerSessionId, turn.id) }))
+          if (writeCodexHistoryTurns(db, id, retained, updatedAt)) {
+            db.prepare("UPDATE conversations SET status = 'ready', updated_at = ? WHERE id = ?").run(
+              new Date().toISOString(),
+              id,
+            )
+          }
+        },
+        true,
       )
     },
 
@@ -313,7 +725,7 @@ export function createConversationOpenApiStore(file: string) {
             `INSERT INTO agent_turns (request_id, conversation_id, prompt, state, created_at)
           VALUES (?, ?, ?, 'working', ?)`,
           ).run(input.requestId, id, JSON.stringify(input.prompt), now)
-          writeAgentMessage(db, id, 'user', input.prompt, now)
+          writeAgentMessage(db, id, 'user', input.prompt, now, input.requestId)
           db.prepare(`UPDATE conversations SET status = 'working', updated_at = ? WHERE id = ?`).run(now, id)
           const session = readAgentSession(db, id)
           if (!session) throw new Error('Agent session was not created')
@@ -341,7 +753,7 @@ export function createConversationOpenApiStore(file: string) {
               result.providerSessionId,
               id,
             )
-            writeAgentMessage(db, id, 'assistant', result.reply, now)
+            writeAgentMessage(db, id, 'assistant', result.reply, now, requestId)
           }
           db.prepare(`UPDATE conversations SET status = 'ready', updated_at = ? WHERE id = ?`).run(now, id)
         },
@@ -467,9 +879,22 @@ export function createConversationOpenApiStore(file: string) {
       return row ? decodeConversation(row) : null
     },
 
-    deleteConversation(id: string): boolean {
-      const { changes } = getDatabase().prepare('DELETE FROM conversations WHERE id = ?').run(id)
-      return Number(changes) > 0
+    deleteConversation(id: string, hideCodexThread = false): boolean {
+      const db = getDatabase()
+      return transaction(
+        db,
+        () => {
+          const session = readAgentSession(db, id)
+          if (session?.provider === 'codex' && session.providerSessionId && (session.nativeCodex || hideCodexThread)) {
+            db.prepare('INSERT OR IGNORE INTO hidden_codex_threads (workspace_id, thread_id) VALUES (?, ?)').run(
+              session.workspaceId,
+              session.providerSessionId,
+            )
+          }
+          return Number(db.prepare('DELETE FROM conversations WHERE id = ?').run(id).changes) > 0
+        },
+        true,
+      )
     },
 
     listMessages(conversationId: string): ConversationMessage[] | null {

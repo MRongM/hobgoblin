@@ -13,6 +13,7 @@ import {
   type ConversationOpenApiOptions,
 } from '#/server/routes/conversation-open-api.ts'
 import { createHealthRoutes } from '#/server/routes/health.ts'
+import { createDesktopAgentRoutes } from '#/server/routes/desktop-agent-sessions.ts'
 import { createPortForwardingRoutes } from '#/server/routes/port-forwarding.ts'
 import { createRemoteRoutes } from '#/server/routes/remote.ts'
 import { createRealtimeRoutes } from '#/server/routes/realtime.ts'
@@ -32,6 +33,7 @@ import { resolveI18nSnapshot } from '#/shared/i18n/snapshot.ts'
 import { initialSettingsFromSnapshot } from '#/shared/settings-defaults.ts'
 import type { LangPref } from '#/shared/rpc.ts'
 import type { RendererBootstrapSnapshot } from '#/shared/bootstrap.ts'
+import { AGENT_SESSIONS_PREFIX } from '#/shared/agent-sessions.ts'
 
 export interface ServerAppOptions {
   version: string
@@ -169,6 +171,14 @@ export function createApp(options: ServerAppOptions): Hono {
   )
   app.all('/api/open/*', (c) => c.json({ error: { code: 'not_found', message: 'OpenAPI route not found' } }, 404))
   app.use(
+    AGENT_SESSIONS_PREFIX + '/*',
+    cors({
+      origin: '*',
+      allowHeaders: ['Content-Type', 'x-goblin-internal-secret'],
+      allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    }),
+  )
+  app.use(
     '/api/*',
     cors({
       origin: '*',
@@ -189,6 +199,17 @@ export function createApp(options: ServerAppOptions): Hono {
   app.use('/api/repo/*', capabilityMiddleware)
   app.use('/api/workspace/*', capabilityMiddleware)
   app.use('/api/port-forwarding/*', capabilityMiddleware)
+  if (options.conversationOpenApi?.agents) {
+    app.route(
+      AGENT_SESSIONS_PREFIX,
+      createDesktopAgentRoutes(
+        options.conversationOpenApi.agents,
+        administrationMiddleware,
+        options.terminalHost,
+        terminalClientId,
+      ),
+    )
+  }
   app.route(
     '/api/settings',
     createSettingsRoutes(settingsState, {

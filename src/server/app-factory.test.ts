@@ -302,7 +302,7 @@ describe('server app html bootstrap', () => {
     const keys = {
       status: vi.fn(() => ({ status: 'configured' as const })),
       authorize: vi.fn(() => 'authorized' as const),
-      generate: vi.fn(async (_replace: boolean) => ({ key: 'example-muse-key', status: 'configured' as const })),
+      generate: vi.fn(async (_replace: boolean) => ({ key: 'example-open-api-key', status: 'configured' as const })),
     }
     const app = createApp({
       version: '0.1.0',
@@ -341,7 +341,7 @@ describe('server app html bootstrap', () => {
       (
         await app.request(keyUrl, {
           method: 'POST',
-          headers: { Authorization: 'Bearer example-muse-key', 'content-type': 'application/json' },
+          headers: { Authorization: 'Bearer example-open-api-key', 'content-type': 'application/json' },
           body: JSON.stringify({ replace: true }),
         })
       ).status,

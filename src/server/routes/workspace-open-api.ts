@@ -1,17 +1,13 @@
 import { Hono, type Context } from 'hono'
 import * as v from 'valibot'
-import {
-  AgentTurnInputSchema,
-  CreateAgentSessionSchema,
-  CreateMuseTerminalSchema,
-  StartTerminalAgentSchema,
-} from '#/server/modules/agent-open-api-model.ts'
+import { CreateTerminalSchema, StartTerminalAgentSchema } from '#/server/modules/agent-open-api-model.ts'
 import type { AgentOpenApiRuntime } from '#/server/modules/agent-open-api-runtime.ts'
-import { MuseTerminalInputSchema, TerminalControlIdSchema } from '#/server/modules/conversation-open-api-model.ts'
+import { detectTerminalAgent } from '#/server/terminal/terminal-registry-model.ts'
+import { WorkspaceTerminalInputSchema, TerminalControlIdSchema } from '#/server/modules/conversation-open-api-model.ts'
 import type { ConversationOpenApiStore } from '#/server/modules/conversation-open-api-source.ts'
 import type { OpenApiKeyStore } from '#/server/modules/open-api-key-source.ts'
-import { CONVERSATION_OPEN_API_PREFIX } from '#/server/routes/conversation-open-api-document.ts'
-import { museOpenApiDocument } from '#/server/routes/muse-open-api-document.ts'
+import { createBackgroundAgentRoutes } from '#/server/routes/background-agent-sessions.ts'
+import { createNativeSessionTerminalRoutes } from '#/server/routes/native-session-terminal.ts'
 import {
   errorResponse,
   limitBody,
@@ -22,7 +18,7 @@ import {
 import type { ServerTerminalHost } from '#/server/terminal/terminal-host.ts'
 import type {
   CallTerminalControl,
-  MuseControlAction,
+  WorkspaceTerminalControlAction,
   TerminalOpenApiControlResult,
 } from '#/server/terminal/terminal-open-api-control.ts'
 import {
@@ -37,7 +33,7 @@ const TERMINAL_PATH = `${TERMINALS}/:terminalId`
 const TERMINAL_AGENTS = '/workspaces/:workspaceId/terminal-sessions'
 const TERMINAL_AGENT_PATH = `${TERMINAL_AGENTS}/:terminalId`
 
-export interface MuseTerminalInventory {
+export interface WorkspaceTerminalInventory {
   list: (repoId: string) => ReturnType<ServerTerminalHost['listSessions']>
   excerpt: ServerTerminalHost['getOutputExcerpt']
   create?: (input: TerminalCreateInput) => Promise<TerminalSessionSummary | null>
@@ -45,17 +41,12 @@ export interface MuseTerminalInventory {
 }
 
 function terminalSummary(terminal: TerminalSessionSummary, conversationId: string | null) {
-  const command = terminal.processName
-    .split(/[\\/]/)
-    .at(-1)
-    ?.replace(/\.exe$/i, '')
-    .toLowerCase()
   return {
     id: terminal.sessionId,
     phase: terminal.phase,
     processName: terminal.processName,
     title: terminal.canonicalTitle,
-    provider: terminal.agentProvider ?? (command === 'codex' || command === 'claude' ? command : null),
+    provider: terminal.agentProvider ?? detectTerminalAgent(terminal.processName, terminal.canonicalTitle) ?? null,
     conversationId,
   }
 }
@@ -64,44 +55,23 @@ function notFound(c: Context, target: 'workspace' | 'session' | 'turn' | 'termin
   return errorResponse(c, 404, `${target}_not_found`, `Hobgoblin ${target} not found`)
 }
 
-function accepted(c: Context, result: Awaited<ReturnType<AgentOpenApiRuntime['create']>>) {
-  if (!result.ok) {
-    const code = result.error
-    const status = code === 'unavailable' ? 503 : code.endsWith('_not_found') ? 404 : 409
-    const message =
-      code === 'session_working'
-        ? 'The session is working. Read its status before sending a new prompt.'
-        : code === 'session_closed'
-          ? 'The agent session is closed.'
-          : code === 'request_conflict'
-            ? 'This request ID has already been used for a different turn.'
-            : code === 'unavailable'
-              ? 'The agent runtime is unavailable.'
-              : 'The requested workspace, worktree or session is unavailable.'
-    return errorResponse(c, status, code, message)
-  }
-  const { sessionId, requestId } = result
-  c.header('Location', `${CONVERSATION_OPEN_API_PREFIX}/muse/sessions/${sessionId}/turns/${requestId}`)
-  return c.json({ sessionId, requestId }, 202)
-}
-
-export function createMuseConnectorRoutes(options: {
+export function createWorkspaceOpenApiRoutes(options: {
   keys: OpenApiKeyStore
   agents: AgentOpenApiRuntime
   store: ConversationOpenApiStore
-  terminals?: MuseTerminalInventory
+  prefix: string
+  terminals?: WorkspaceTerminalInventory
   callControl?: CallTerminalControl
 }) {
-  const { keys, agents, store, terminals, callControl } = options
+  const { keys, agents, store, prefix, terminals, callControl } = options
   const routes = new Hono()
-  routes.get('/openapi.json', (c) => c.json(museOpenApiDocument))
   const authorize = requireBearer(keys, true)
 
   async function listOpenTerminals(repoId: string) {
     return ((await terminals?.list(repoId)) ?? []).filter((entry) => entry.phase === 'open')
   }
 
-  async function terminalControl(c: Context, action: MuseControlAction, agentOnly = false) {
+  async function terminalControl(c: Context, action: WorkspaceTerminalControlAction, agentOnly = false) {
     if (!callControl) return errorResponse(c, 503, 'terminal_control_disabled', 'OpenAPI terminal control is disabled')
     const { workspaceId, terminalId, controlId } = c.req.param()
     if (!v.is(TerminalSessionIdSchema, terminalId)) return notFound(c, 'terminal')
@@ -150,7 +120,7 @@ export function createMuseConnectorRoutes(options: {
     if (result.action !== action.action) throw new Error('Unexpected terminal control response')
     if (result.action === 'write') return c.json({ accepted: true, delivery: 'unconfirmed' }, 202)
     if (result.action !== 'acquire') return c.body(null, 204)
-    const location = `${CONVERSATION_OPEN_API_PREFIX}/muse/workspaces/${workspaceId}/terminals/${terminalId}/control/${result.controlId}`
+    const location = `${prefix}/workspaces/${workspaceId}/terminals/${terminalId}/control/${result.controlId}`
     c.header('Location', location)
     return c.json(
       { controlId: result.controlId, terminalSessionId: result.terminalSessionId, expiresAt: result.expiresAt },
@@ -159,7 +129,7 @@ export function createMuseConnectorRoutes(options: {
   }
 
   async function writeTerminal(c: Context, agentOnly = false) {
-    const input = await readBody(c, MuseTerminalInputSchema)
+    const input = await readBody(c, WorkspaceTerminalInputSchema)
     if (input instanceof Response) return input
     const controlId = c.req.param('controlId')
     return terminalControl(
@@ -196,7 +166,7 @@ export function createMuseConnectorRoutes(options: {
   async function createTerminal(c: Context, agent: boolean) {
     if (!terminals?.create)
       return errorResponse(c, 503, 'terminal_control_disabled', 'Terminal creation is unavailable')
-    const input = await readBody(c, agent ? StartTerminalAgentSchema : CreateMuseTerminalSchema)
+    const input = await readBody(c, agent ? StartTerminalAgentSchema : CreateTerminalSchema)
     if (input instanceof Response) return input
     const workspace = await agents.workspace(c.req.param('workspaceId') ?? '')
     if (!workspace) return notFound(c, 'workspace')
@@ -224,28 +194,11 @@ export function createMuseConnectorRoutes(options: {
     if (!terminal)
       return errorResponse(c, 409, 'terminal_create_failed', 'Unable to open a terminal on the selected worktree')
     const collection = agent ? 'terminal-sessions' : 'terminals'
-    c.header(
-      'Location',
-      `${CONVERSATION_OPEN_API_PREFIX}/muse/workspaces/${workspace.id}/${collection}/${terminal.sessionId}`,
-    )
-    return c.json(terminalSummary(terminal, null), 201)
+    c.header('Location', `${prefix}/workspaces/${workspace.id}/${collection}/${terminal.sessionId}`)
+    const link = agent ? store.conversationIdsByTerminal([terminal.sessionId]).get(terminal.sessionId) : undefined
+    return c.json(terminalSummary(terminal, link ?? null), 201)
   }
 
-  routes.get('/workspaces', authorize, async (c) => c.json({ workspaces: await agents.listWorkspaces() }))
-  routes.get('/workspaces/:workspaceId/worktrees', authorize, async (c) => {
-    const worktrees = await agents.listWorktrees(c.req.param('workspaceId'), c.req.raw.signal)
-    return worktrees ? c.json({ worktrees }) : notFound(c, 'workspace')
-  })
-  routes.get('/workspaces/:workspaceId/sessions', authorize, async (c) => {
-    const workspace = await agents.workspace(c.req.param('workspaceId'))
-    if (!workspace) return notFound(c, 'workspace')
-    const open = await listOpenTerminals(workspace.repoId)
-    const linked = store.conversationIdsByTerminal(open.map((entry) => entry.sessionId))
-    return c.json({
-      sessions: agents.listSessions(workspace.id),
-      terminals: open.map((entry) => terminalSummary(entry, linked.get(entry.sessionId) ?? null)),
-    })
-  })
   routes.get(TERMINALS, authorize, (c) => listTerminals(c))
   routes.post(TERMINALS, authorize, limitBody, (c) => createTerminal(c, false))
   routes.get(TERMINAL_PATH, authorize, (c) => readTerminal(c))
@@ -263,34 +216,20 @@ export function createMuseConnectorRoutes(options: {
   routes.delete(`${TERMINAL_PATH}/control/:controlId`, authorize, (c) =>
     terminalControl(c, { action: 'release', controlId: c.req.param('controlId') }),
   )
-  routes.post('/workspaces/:workspaceId/sessions', authorize, limitBody, async (c) => {
-    const input = await readBody(c, CreateAgentSessionSchema)
-    if (input instanceof Response) return input
-    return accepted(c, await agents.create(c.req.param('workspaceId'), input))
-  })
-  routes.get('/sessions/:sessionId', authorize, (c) => {
-    const session = agents.getSession(c.req.param('sessionId'))
-    return session ? c.json(session) : notFound(c, 'session')
-  })
-  routes.delete('/sessions/:sessionId', authorize, (c) =>
-    agents.closeSession(c.req.param('sessionId')) ? c.body(null, 204) : notFound(c, 'session'),
+  routes.route(
+    '/',
+    createBackgroundAgentRoutes({
+      agents,
+      authorize,
+      prefix,
+      callControl,
+      async readTerminals(repoId) {
+        const open = await listOpenTerminals(repoId)
+        const linked = store.conversationIdsByTerminal(open.map((entry) => entry.sessionId))
+        return open.map((entry) => terminalSummary(entry, linked.get(entry.sessionId) ?? null))
+      },
+    }),
   )
-  routes.post('/sessions/:sessionId/turns', authorize, limitBody, async (c) => {
-    const input = await readBody(c, AgentTurnInputSchema)
-    if (input instanceof Response) return input
-    return accepted(c, await agents.continue(c.req.param('sessionId'), input))
-  })
-  routes.get('/sessions/:sessionId/turns/:requestId', authorize, (c) => {
-    const { sessionId, requestId } = c.req.param()
-    const turn = agents.getTurn(sessionId, requestId)
-    return turn ? c.json(turn) : notFound(c, 'turn')
-  })
-  routes.delete('/sessions/:sessionId/turns/:requestId', authorize, (c) => {
-    const { sessionId, requestId } = c.req.param()
-    const result = agents.cancelTurn(sessionId, requestId)
-    if (result.ok) return c.json(result.turn)
-    if (result.error === 'turn_not_found') return notFound(c, 'turn')
-    return errorResponse(c, 409, result.error, 'The agent turn is no longer running')
-  })
+  routes.route('/', createNativeSessionTerminalRoutes({ agents, authorize, prefix, callControl }))
   return routes
 }

@@ -163,6 +163,7 @@ export interface TerminalSessionContextValue {
     windowsInternalTerminalShell?: WindowsInternalTerminalShellOverride,
   ) => Promise<string>
   restoreTmuxSessions: (base: TerminalSessionBase) => Promise<number>
+  resumeAgentTerminal?: (base: TerminalSessionBase, projectRoot: string, id: string) => Promise<string>
   selectTerminal: (worktreeTerminalKey: string, key: string) => void
   scrollToBottom: (key: string) => void
   pageTmux: (key: string, direction: TerminalTmuxPageDirection) => void

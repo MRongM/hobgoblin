@@ -11,6 +11,7 @@ import {
 } from '#/server/routes/open-api-http.ts'
 import {
   AcquireTerminalControlSchema,
+  CONVERSATION_DELETE_MODES,
   ConversationFiltersSchema,
   CreateConversationSchema,
   CreateMessageSchema,
@@ -21,19 +22,28 @@ import {
 } from '#/server/modules/conversation-open-api-model.ts'
 import type { ConversationOpenApiStore } from '#/server/modules/conversation-open-api-source.ts'
 import type { AgentOpenApiRuntime } from '#/server/modules/agent-open-api-runtime.ts'
-import { createMuseConnectorRoutes, type MuseTerminalInventory } from '#/server/routes/muse-connector.ts'
+import { createWorkspaceOpenApiRoutes, type WorkspaceTerminalInventory } from '#/server/routes/workspace-open-api.ts'
+import { workspaceOpenApiComponents, workspaceOpenApiPaths } from '#/server/routes/workspace-open-api-document.ts'
 import { museOpenApiDocument } from '#/server/routes/muse-open-api-document.ts'
 import type { OpenApiKeyStore } from '#/server/modules/open-api-key-source.ts'
 import {
   CONVERSATION_OPEN_API_PREFIX,
   conversationOpenApiDocument,
+  terminalRegistryOpenApiPaths,
+  terminalTranscriptOpenApiPaths,
 } from '#/server/routes/conversation-open-api-document.ts'
 import type { CallTerminalControl } from '#/server/terminal/terminal-open-api-control.ts'
+import type { TerminalRegistry } from '#/server/terminal/terminal-registry-source.ts'
+import type { TerminalTranscript } from '#/server/terminal/terminal-transcript-source.ts'
+import { createTerminalRegistryRoutes } from '#/server/routes/terminal-registry.ts'
+import { createOpenAiChatCompatibilityRoutes } from '#/server/routes/openai-chat-compat.ts'
 
 export interface ConversationOpenApiOptions {
   keys: OpenApiKeyStore
   store: ConversationOpenApiStore
   agents?: AgentOpenApiRuntime
+  terminalRegistry?: Pick<TerminalRegistry, 'has' | 'list'>
+  terminalTranscript?: Pick<TerminalTranscript, 'list'>
 }
 
 function missingConversation(c: Context) {
@@ -104,7 +114,7 @@ function addControlRoutes(routes: Hono, options: ConversationOpenApiOptions, cal
 export function createConversationOpenApiRoutes(
   options?: ConversationOpenApiOptions,
   callControl?: CallTerminalControl,
-  terminals?: MuseTerminalInventory,
+  terminals?: WorkspaceTerminalInventory,
 ) {
   const routes = new Hono()
   routes.use(
@@ -116,22 +126,32 @@ export function createConversationOpenApiRoutes(
       exposeHeaders: ['Location', 'WWW-Authenticate'],
     }),
   )
-  routes.get('/openapi.json', (c) =>
-    c.json(
-      options?.agents
+  routes.get('/openapi.json', (c) => {
+    const document = options?.agents
+      ? {
+          ...conversationOpenApiDocument,
+          info: {
+            ...conversationOpenApiDocument.info,
+            title: 'Hobgoblin OpenAPI',
+            description: 'Access workspaces, background AI sessions, interactive terminals, and conversation records.',
+          },
+          paths: { ...conversationOpenApiDocument.paths, ...workspaceOpenApiPaths },
+          components: workspaceOpenApiComponents,
+        }
+      : conversationOpenApiDocument
+    return c.json(
+      options?.terminalRegistry
         ? {
-            ...conversationOpenApiDocument,
+            ...document,
             paths: {
-              ...conversationOpenApiDocument.paths,
-              ...Object.fromEntries(
-                Object.entries(museOpenApiDocument.paths).filter(([path]) => path.startsWith('/muse/')),
-              ),
+              ...document.paths,
+              ...terminalRegistryOpenApiPaths,
+              ...(options.terminalTranscript ? terminalTranscriptOpenApiPaths : {}),
             },
-            components: museOpenApiDocument.components,
           }
-        : conversationOpenApiDocument,
-    ),
-  )
+        : document,
+    )
+  })
 
   routes.onError((error, c) => {
     serverLogger.error({ err: error }, 'Conversation OpenAPI request failed')
@@ -145,11 +165,18 @@ export function createConversationOpenApiRoutes(
     return routes
   }
   const { store } = options
-  if (options.agents)
+  if (options.terminalRegistry)
+    routes.route('/', createTerminalRegistryRoutes(options.keys, options.terminalRegistry, options.terminalTranscript))
+  if (options.agents) {
+    const workspaceOptions = { keys: options.keys, agents: options.agents, store, terminals, callControl }
+    routes.route('/', createWorkspaceOpenApiRoutes({ ...workspaceOptions, prefix: CONVERSATION_OPEN_API_PREFIX }))
+    routes.route('/', createOpenAiChatCompatibilityRoutes({ agents: options.agents, store, keys: options.keys }))
+    routes.get('/muse/openapi.json', (c) => c.json(museOpenApiDocument))
     routes.route(
       '/muse',
-      createMuseConnectorRoutes({ keys: options.keys, agents: options.agents, store, terminals, callControl }),
+      createWorkspaceOpenApiRoutes({ ...workspaceOptions, prefix: `${CONVERSATION_OPEN_API_PREFIX}/muse` }),
     )
+  }
   addControlRoutes(routes, options, callControl)
   routes.use('/conversations/*', requireBearer(options.keys))
 
@@ -179,8 +206,27 @@ export function createConversationOpenApiRoutes(
     return conversation ? c.json(conversation) : missingConversation(c)
   })
 
-  routes.delete('/conversations/:conversationId', (c) => {
+  routes.delete('/conversations/:conversationId', async (c) => {
     const id = c.req.param('conversationId')
+    const mode = c.req.query('mode')
+    if (mode !== undefined) {
+      if (!v.is(v.picklist(CONVERSATION_DELETE_MODES), mode)) {
+        return errorResponse(c, 400, 'invalid_request', 'Invalid conversation delete mode')
+      }
+      if (!options.agents) return errorResponse(c, 503, 'unavailable', 'Agent session management is unavailable')
+      const result = options.agents.deleteAgentConversation(id, mode)
+      if (result === 'deleted') return c.body(null, 204)
+      if (result === 'conversation_not_found') return missingConversation(c)
+      const messages = {
+        desktop_terminal_active: 'The session belongs to a desktop terminal',
+        session_changed: 'The session is no longer connected to a desktop terminal',
+        session_working: 'An agent operation for this session is still in progress',
+      }
+      return errorResponse(c, 409, result, messages[result])
+    }
+    await options.agents?.synchronizeNativeSession(id)
+    if (options.agents?.isTerminalActive(id))
+      return errorResponse(c, 409, 'desktop_terminal_active', 'The session is open in a desktop terminal')
     if (options.agents?.isWorking(id))
       return errorResponse(
         c,

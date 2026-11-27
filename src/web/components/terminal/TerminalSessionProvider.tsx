@@ -258,6 +258,7 @@ export function TerminalSessionProvider({
     () => ({
       createTerminal: registry.createTerminal,
       restoreTmuxSessions: registry.restoreTmuxSessions,
+      resumeAgentTerminal: registry.resumeAgentTerminal,
       selectTerminal: registry.selectTerminal,
       scrollToBottom: registry.scrollToBottom,
       pageTmux: registry.pageTmux,

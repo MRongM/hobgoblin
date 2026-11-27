@@ -24,6 +24,8 @@ import type {
   TerminalWriteInput,
 } from '#/shared/terminal.ts'
 import type { TelegramTerminalInputSubmissionResult } from '#/shared/telegram-terminal-input.ts'
+import type { TerminalLifecycleEvent, TerminalRecordTitle } from '#/server/terminal/terminal-registry-model.ts'
+import type { TerminalTranscriptInput } from '#/server/terminal/terminal-transcript-model.ts'
 import type { WindowsInternalTerminalShellPref } from '#/shared/settings.ts'
 import type {
   TerminalOpenApiControlInput,
@@ -93,7 +95,9 @@ export type TerminalWorkerRequest =
   | {
       type: 'configure'
       windowsInternalTerminalShell: WindowsInternalTerminalShellPref
+      captureTranscript?: true
     }
+  | { type: 'terminal-transcript-ack' }
   | {
       type: 'socket-register'
       socketId: string
@@ -136,6 +140,9 @@ export type TerminalWorkerFailureMessage = {
 export type TerminalWorkerMessage =
   | TerminalWorkerSuccessMessage
   | TerminalWorkerFailureMessage
+  | { type: 'terminal-lifecycle'; event: TerminalLifecycleEvent; repoId: string }
+  | { type: 'terminal-record-titles'; updates: TerminalRecordTitle[] }
+  | { type: 'terminal-transcript'; inputs: TerminalTranscriptInput[] }
   | {
       type: 'socket-send'
       socketId: string

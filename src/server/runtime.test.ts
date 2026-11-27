@@ -129,6 +129,13 @@ describe('server runtime', () => {
       options: {
         workerEntry: '/tmp/entrypoints/terminal-worker.ts',
         windowsInternalTerminalShell: 'auto',
+        terminalRegistry: expect.objectContaining({
+          record: expect.any(Function),
+          interruptWorker: expect.any(Function),
+        }),
+        terminalTranscript: expect.objectContaining({ append: expect.any(Function) }),
+        observeTerminal: expect.any(Function),
+        onTerminalWorkerStop: expect.any(Function),
       },
     })
     expect(mocks.createApp).toHaveBeenCalledWith(

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import * as v from 'valibot'
 import { getWorktrees } from '#/system/git/worktrees.ts'
 import { readBranchWorkspaceManifests } from '#/server/modules/branch-workspace-source.ts'
 import { workspaceRootId } from '#/server/modules/workspace-paths.ts'
@@ -7,9 +8,11 @@ import { isValidBranch, isValidCwd, isValidRepoLocator } from '#/shared/input-va
 import { resolveRepositoryRemoteTarget } from '#/system/remote/target.ts'
 import { buildRemoteTerminalInvocation } from '#/system/ssh/commands.ts'
 import { buildManagedLocalTerminalInvocation } from '#/system/local-terminal.ts'
+import { resolveProviderExecutable } from '#/system/commit-message-ai.ts'
 import { isRemoteRepoId, parseRemoteRepoId } from '#/shared/remote-repo.ts'
 import type { TmuxCleanupPreviewResult, TmuxSessionRecord } from '#/shared/tmux-cleanup.ts'
 import { terminalSessionScope } from '#/server/terminal/terminal-scope.ts'
+import type { TerminalRegistryLocation } from '#/server/terminal/terminal-registry-model.ts'
 import {
   TERMINAL_AGENT_PROVIDERS,
   type TerminalAgentProvider,
@@ -45,6 +48,7 @@ interface EnsureTerminalCatalogInput {
   existingTmuxSession?: TmuxSessionRecord
   tmuxCloseSupported?: boolean
   agentProvider?: TerminalAgentProvider
+  codexResumeId?: string
 }
 
 type EnsureTerminalCatalogResult =
@@ -74,6 +78,7 @@ interface TerminalCatalogEnsureSessionInput {
   scope: string
   key: string
   cwd: string
+  registryLocation: TerminalRegistryLocation
   cols: number
   rows: number
   attachmentId?: string
@@ -86,6 +91,16 @@ interface TerminalCatalogEnsureSessionInput {
   tmuxWorkingDirectory?: string
   tmuxCloseSupported?: boolean
   agentProvider?: TerminalAgentProvider
+  restartDisabled?: boolean
+}
+
+interface TerminalCatalogLaunchContext {
+  terminalId: string
+  cols: number
+  rows: number
+  targetSessionKey: string
+  action: TerminalCatalogAction
+  registryLocation: TerminalRegistryLocation
 }
 
 interface TerminalCatalogManager {
@@ -119,6 +134,15 @@ class TerminalCatalog {
     if (!isValidRepoLocator(input.repoRoot)) return { ok: false, message: 'error.invalid-arguments' }
     if (!(isValidBranch(input.branch) || input.branch === '')) return { ok: false, message: 'error.invalid-arguments' }
     if (!isValidCwd(input.worktreePath)) return { ok: false, message: 'error.invalid-arguments' }
+    if (
+      input.codexResumeId !== undefined &&
+      (input.agentProvider !== 'codex' ||
+        input.launchMode !== 'native' ||
+        process.platform === 'win32' ||
+        isRemoteRepoId(input.repoRoot) ||
+        !v.is(v.pipe(v.string(), v.uuid()), input.codexResumeId))
+    )
+      return { ok: false, message: 'error.invalid-arguments' }
     const targetAuthorization = await authorizeBranchWorkspaceTerminalTarget(input)
     if (!targetAuthorization.ok) return targetAuthorization
     const repoRoot = normalizeTerminalRepoRoot(input.repoRoot)
@@ -140,11 +164,19 @@ class TerminalCatalog {
         ? 'restored'
         : 'reused'
       : 'created'
+    const context = {
+      terminalId,
+      cols,
+      rows,
+      targetSessionKey,
+      action,
+      registryLocation: { repoId: input.repoRoot, worktreePath: targetAuthorization.worktreePath },
+    }
 
     if (isRemoteRepoId(repoRoot)) {
-      return await this.ensureRemote(clientId, canonicalInput, { terminalId, cols, rows, targetSessionKey, action })
+      return await this.ensureRemote(clientId, canonicalInput, context)
     }
-    return await this.ensureLocal(clientId, canonicalInput, { terminalId, cols, rows, targetSessionKey, action })
+    return await this.ensureLocal(clientId, canonicalInput, context)
   }
 
   async create(clientId: string, input: TerminalCreateInput): Promise<TerminalCatalogMutationResult> {
@@ -246,7 +278,8 @@ class TerminalCatalog {
       const key = sessionKey(canonicalInput.repoRoot, canonicalInput.worktreePath, terminalId)
       usedKeys.add(key)
       const result = await this.ensureOrRestore(clientId, {
-        ...canonicalInput,
+        ...input,
+        worktreePath: targetAuthorization.worktreePath,
         terminalId,
         launchMode: 'tmux-if-available',
         existingTmuxSession: tmuxSession,
@@ -319,13 +352,7 @@ class TerminalCatalog {
   private async ensureRemote(
     clientId: string,
     input: EnsureTerminalCatalogInput,
-    context: {
-      terminalId: string
-      cols: number
-      rows: number
-      targetSessionKey: string
-      action: TerminalCatalogAction
-    },
+    context: TerminalCatalogLaunchContext,
   ): Promise<EnsureTerminalCatalogResult> {
     const ref = parseRemoteRepoId(input.repoRoot)
     if (!ref) return { ok: false, message: 'error.ssh-config-changed' }
@@ -353,6 +380,7 @@ class TerminalCatalog {
       scope: input.repoRoot,
       key: context.targetSessionKey,
       cwd: process.cwd(),
+      registryLocation: context.registryLocation,
       cols: context.cols,
       rows: context.rows,
       attachmentId: input.attachmentId,
@@ -377,13 +405,7 @@ class TerminalCatalog {
   private async ensureLocal(
     clientId: string,
     input: EnsureTerminalCatalogInput,
-    context: {
-      terminalId: string
-      cols: number
-      rows: number
-      targetSessionKey: string
-      action: TerminalCatalogAction
-    },
+    context: TerminalCatalogLaunchContext,
   ): Promise<EnsureTerminalCatalogResult> {
     if (input.targetKind === 'branch-workspace') {
       return await this.ensureLocalSession(clientId, input, {
@@ -398,6 +420,7 @@ class TerminalCatalog {
         ...context,
         repoRoot,
         worktreePath: repoRoot,
+        registryLocation: { ...context.registryLocation, worktreePath: context.registryLocation.repoId },
       })
     }
 
@@ -417,24 +440,19 @@ class TerminalCatalog {
       ...context,
       repoRoot,
       worktreePath,
+      registryLocation: { ...context.registryLocation, worktreePath: resolved.path },
     })
   }
 
   private async ensureLocalSession(
     clientId: string,
     input: EnsureTerminalCatalogInput,
-    context: {
-      terminalId: string
-      cols: number
-      rows: number
-      targetSessionKey: string
-      action: TerminalCatalogAction
-      repoRoot: string
-      worktreePath: string
-    },
+    context: TerminalCatalogLaunchContext & { repoRoot: string; worktreePath: string },
   ): Promise<EnsureTerminalCatalogResult> {
     const terminalNumber = parseTerminalIdIndex(context.terminalId)
     if (terminalNumber === null) return { ok: false, message: 'error.invalid-arguments' }
+    const resumeExecutable = input.codexResumeId ? await resolveProviderExecutable('codex') : null
+    if (input.codexResumeId && !resumeExecutable) return { ok: false, message: 'error.unavailable' }
     const useTmux = normalizeTerminalLaunchMode(input.launchMode) === 'tmux-if-available'
     const invocation = buildManagedLocalTerminalInvocation(
       {
@@ -455,13 +473,15 @@ class TerminalCatalog {
       scope: context.repoRoot,
       key: context.targetSessionKey,
       cwd: context.worktreePath,
+      registryLocation: context.registryLocation,
       cols: context.cols,
       rows: context.rows,
       attachmentId: input.attachmentId,
       attachmentConnected: this.options.attachmentIsConnected(clientId, input.attachmentId),
       forceNew: context.action === 'created',
-      command: invocation?.command,
-      args: invocation?.args,
+      command: resumeExecutable ?? invocation?.command,
+      args: input.codexResumeId ? ['resume', input.codexResumeId] : invocation?.args,
+      restartDisabled: Boolean(input.codexResumeId),
       windowsInternalTerminalShell: input.windowsInternalTerminalShell,
       agentProvider: input.agentProvider,
       ...(invocation

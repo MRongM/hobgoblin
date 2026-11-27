@@ -1,4 +1,5 @@
 import {
+  CONVERSATION_DELETE_MODES,
   CONVERSATION_MESSAGE_ROLES,
   CONVERSATION_PROVIDERS,
   CONVERSATION_REQUEST_MAX_BYTES,
@@ -7,6 +8,7 @@ import {
   TERMINAL_CONTROL_INPUT_MAX_LENGTH,
 } from '#/server/modules/conversation-open-api-model.ts'
 import { TERMINAL_CONTROL_TTL_MS } from '#/server/terminal/terminal-open-api-control.ts'
+import { TERMINAL_RECORD_PHASES, TERMINAL_RECORD_REASONS } from '#/server/terminal/terminal-registry-model.ts'
 import { TERMINAL_SESSION_ID_RE } from '#/shared/terminal.ts'
 
 export const CONVERSATION_OPEN_API_PREFIX = '/api/open/v1'
@@ -71,6 +73,98 @@ const authResponses = {
 }
 const notFound = response('Conversation or message not found', schemaRef('Error'))
 const invalidRequest = response('Invalid request fields or JSON', schemaRef('Error'))
+
+export const terminalRegistryOpenApiPaths = {
+  '/terminal-records': {
+    get: {
+      operationId: 'listHobgoblinTerminalRecords',
+      summary: 'Read a page of Hob terminal worker records',
+      parameters: [
+        { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } },
+        { name: 'cursor', in: 'query', schema: { type: 'integer', minimum: 1 } },
+        { name: 'workspaceId', in: 'query', schema: { type: 'string', pattern: '^[a-f0-9]{24}$' } },
+        { name: 'state', in: 'query', schema: { type: 'string', enum: ['running', 'exited'] } },
+      ],
+      responses: {
+        200: response(
+          'Terminal records in descending registration order',
+          object({
+            records: {
+              type: 'array',
+              items: object({
+                id: terminalSessionId,
+                executionId: id,
+                workspaceId: { type: 'string' },
+                worktreeId: { type: 'string' },
+                cwd: { type: 'string' },
+                title: { type: ['string', 'null'] },
+                backend: object(
+                  {
+                    transport: { type: 'string', enum: ['local', 'ssh', 'wsl'] },
+                    kind: { type: 'string', enum: ['pty', 'tmux'] },
+                    windowsPty: { type: 'string', enum: ['conpty', 'winpty'] },
+                  },
+                  ['transport', 'kind'],
+                ),
+                agentProvider: { anyOf: [provider, { type: 'null' }] },
+                phase: { type: 'string', enum: TERMINAL_RECORD_PHASES },
+                reason: { enum: [...TERMINAL_RECORD_REASONS, null] },
+                revision: { type: 'integer', minimum: 1 },
+                lastEventSeq: { type: 'integer', minimum: 1 },
+                ...timestamps,
+                executionStartedAt: timestamps.createdAt,
+              }),
+            },
+            nextCursor: { type: ['integer', 'null'] },
+          }),
+        ),
+        ...authResponses,
+        400: invalidRequest,
+        503: response('Terminal registry or terminal access is unavailable', schemaRef('Error')),
+      },
+    },
+  },
+}
+
+const transcriptText = {
+  executionId: id,
+  text: { type: ['string', 'null'] },
+  truncated: { type: 'boolean' },
+}
+
+export const terminalTranscriptOpenApiPaths = {
+  '/terminal-records/{terminalId}/transcript': {
+    get: {
+      operationId: 'readHobgoblinTerminalTranscript',
+      summary: 'Read retained terminal output or the delta after a cursor',
+      parameters: [
+        { name: 'terminalId', in: 'path', required: true, schema: terminalSessionId },
+        { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200, default: 100 } },
+        { name: 'afterSeq', in: 'query', schema: { type: 'integer', minimum: 0 } },
+        { name: 'beforeSeq', in: 'query', schema: { type: 'integer', minimum: 1 } },
+      ],
+      responses: {
+        200: response(
+          'Terminal transcript page in ascending output order',
+          object({
+            source: { type: 'string', enum: ['pty'] },
+            lines: { type: 'array', items: object({ seq: { type: 'integer', minimum: 1 }, ...transcriptText }) },
+            nextAfterSeq: { type: 'integer', minimum: 0 },
+            hasMoreBefore: { type: 'boolean' },
+            hasMoreAfter: { type: 'boolean' },
+            gap: { type: 'boolean' },
+            tail: { anyOf: [object(transcriptText), { type: 'null' }] },
+          }),
+        ),
+        ...authResponses,
+        400: invalidRequest,
+        404: response('Terminal record not found', schemaRef('Error')),
+        503: response('Terminal transcript or terminal access is unavailable', schemaRef('Error')),
+      },
+    },
+  },
+}
+
 const writeResponses = {
   400: invalidRequest,
   413: response('Request body is too large', schemaRef('Error')),
@@ -147,10 +241,20 @@ export const conversationOpenApiDocument = {
       },
       delete: {
         operationId: 'deleteConversation',
+        parameters: [
+          {
+            name: 'mode',
+            in: 'query',
+            description:
+              'Use stop-background after confirming cancellation of a managed background task. Use remove-desktop-copy to delete the Hob record while preserving the desktop Codex thread and its execution.',
+            schema: { type: 'string', enum: CONVERSATION_DELETE_MODES },
+          },
+        ],
         responses: {
           204: { description: 'Conversation and its messages deleted' },
+          400: invalidRequest,
           404: notFound,
-          409: response('A managed agent turn is still working', schemaRef('Error')),
+          409: response('The session state conflicts with the requested deletion', schemaRef('Error')),
           ...authResponses,
         },
       },
