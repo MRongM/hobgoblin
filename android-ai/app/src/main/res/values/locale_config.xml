@@ -1,0 +1,8 @@
+<resources>
+    <string name="ai_app_name" translatable="false">Hob AI</string>
+    <style name="HobAiTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FBFAFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>
